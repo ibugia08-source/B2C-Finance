@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="B2C Finance">
+  <defs>
+    <linearGradient id="bf-hex" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B48CFF"/><stop offset="48%" stop-color="#8A4CFF"/><stop offset="100%" stop-color="#6F2CFF"/>
+    </linearGradient>
+    <linearGradient id="bf-hi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#C8B3FF"/><stop offset="1" stop-color="#8A4CFF"/></linearGradient>
+    <linearGradient id="bf-lo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6F2CFF"/><stop offset="1" stop-color="#3A1486"/></linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="0 0 0 0 0.54 0 0 0 0 0.30 0 0 0 0 1 0 0 0 .5 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <mask id="b-cut">
+      <path d="M148 70 L364 70 L472 256 L364 442 L148 442 L40 256 Z" fill="#fff"/>
+      <path fill-rule="evenodd" fill="#000" d="M175 150 L300 150 C338 150 338 212 302 250 C342 254 352 292 352 310 C352 344 326 362 296 362 L175 362 Z M210 184 L292 184 C312 184 312 222 290 236 L210 236 Z M210 278 L298 278 C320 278 322 330 296 330 L210 330 Z"/>
+    </mask>
+  </defs>
+  <g filter="url(#glow)">
+    <g mask="url(#b-cut)">
+      <path d="M148 70 L364 70 L472 256 L364 442 L148 442 L40 256 Z" fill="url(#bf-hex)"/>
+      <path d="M40 256 L148 70 L256 256 Z" fill="url(#bf-hi)" opacity="0.55"/>
+      <path d="M364 70 L472 256 L256 256 Z" fill="url(#bf-hi)" opacity="0.30"/>
+      <path d="M472 256 L364 442 L256 256 Z" fill="url(#bf-lo)" opacity="0.65"/>
+      <path d="M148 442 L40 256 L256 256 Z" fill="url(#bf-lo)" opacity="0.40"/>
+    </g>
+    <path d="M148 70 L364 70 L472 256 L364 442 L148 442 L40 256 Z" fill="none" stroke="#C8B3FF" stroke-width="3" opacity="0.35"/>
+  </g>
+</svg>

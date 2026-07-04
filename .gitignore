@@ -1,0 +1,19 @@
+node_modules
+.next
+.env
+*.db
+*.db-journal
+.DS_Store
+prisma/migrations/dev.db*
+
+# backups locais do banco
+dev.db.bak-*
+*.bak
+
+# cache incremental do TypeScript
+tsconfig.tsbuildinfo
+.vercel
+.env*
+
+# backups dos scripts de correção de dados
+backups/

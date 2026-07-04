@@ -1,0 +1,219 @@
+"use server";
+import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
+
+const PersonSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1),
+  type: z.enum(["pessoal", "empresa", "terceiro", "familiar"]).default("pessoal"),
+  notes: z.string().optional().nullable(),
+});
+
+export async function savePerson(formData: FormData) {
+  const parsed = PersonSchema.parse({
+    id: formData.get("id") || undefined,
+    name: formData.get("name"),
+    type: formData.get("type") || "pessoal",
+    notes: formData.get("notes") || null,
+  });
+  if (parsed.id) {
+    await prisma.person.update({
+      where: { id: parsed.id },
+      data: { name: parsed.name, type: parsed.type, notes: parsed.notes ?? null },
+    });
+  } else {
+    await prisma.person.create({
+      data: { name: parsed.name, type: parsed.type, notes: parsed.notes ?? null },
+    });
+  }
+  revalidatePath("/pessoas");
+}
+
+export async function deletePerson(id: string) {
+  await prisma.person.delete({ where: { id } });
+  revalidatePath("/pessoas");
+}
+
+const PaymentSchema = z.object({
+  personId: z.string().min(1),
+  amount: z.number().positive(),
+  paidAt: z.date(),
+  method: z.enum(["PIX", "TRANSFER", "CASH", "OTHER"]),
+  accountId: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+/**
+ * Registra pagamento da pessoa e amortiza Receivables abertos por ordem de vencimento.
+ * O valor pago reduz primeiro o vencimento mais antigo. Se sobra, distribui no próximo.
+ * Receivables totalmente quitados viram "pago"; parcialmente quitados são reduzidos.
+ */
+export async function registerPersonPayment(formData: FormData) {
+  const paidAt =
+    parseDateBR(String(formData.get("paidAt") || "")) ?? new Date();
+  const parsed = PaymentSchema.parse({
+    personId: String(formData.get("personId") || ""),
+    amount: parseBRL(String(formData.get("amount") || "0")),
+    paidAt,
+    method: String(formData.get("method") || "PIX"),
+    accountId: (formData.get("accountId") as string) || null,
+    notes: (formData.get("notes") as string) || null,
+  });
+
+  const payment = await prisma.personPayment.create({
+    data: {
+      personId: parsed.personId,
+      amount: parsed.amount,
+      paidAt: parsed.paidAt,
+      method: parsed.method,
+      accountId: parsed.accountId,
+      notes: parsed.notes,
+    },
+  });
+
+  // Amortizar Receivables abertos
+  let remaining = parsed.amount;
+  const open = await prisma.receivable.findMany({
+    where: {
+      personId: parsed.personId,
+      status: { in: ["aberto", "atrasado", "renegociado"] },
+    },
+    orderBy: { dueDate: "asc" },
+    include: { transaction: true },
+  });
+
+  for (const r of open) {
+    if (remaining <= 0) break;
+    if (r.amount <= remaining) {
+      remaining -= r.amount;
+      await prisma.receivable.update({
+        where: { id: r.id },
+        data: { status: "pago", paidAt: parsed.paidAt },
+      });
+      // Marca a transação relacionada como reembolsada/paga (devia → reembolsado)
+      if (r.transactionId) {
+        await prisma.transaction.update({
+          where: { id: r.transactionId },
+          data: { status: "reembolsado" },
+        });
+      }
+    } else {
+      // Quitação parcial: reduz o valor restante
+      await prisma.receivable.update({
+        where: { id: r.id },
+        data: { amount: r.amount - remaining },
+      });
+      remaining = 0;
+    }
+  }
+
+  revalidatePath("/pessoas");
+  revalidatePath(`/pessoas/${parsed.personId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/transacoes");
+
+  return { ok: true, paymentId: payment.id, leftover: remaining };
+}
+
+export async function deletePersonPayment(id: string) {
+  const p = await prisma.personPayment.findUnique({ where: { id } });
+  if (!p) return;
+  await prisma.personPayment.delete({ where: { id } });
+  revalidatePath("/pessoas");
+  revalidatePath(`/pessoas/${p.personId}`);
+}
+
+const TxStatusSchema = z.enum([
+  "pendente",
+  "pago",
+  "devendo",
+  "reembolsado",
+  "cancelado",
+]);
+
+export async function setPersonTxStatus(transactionId: string, status: string) {
+  const s = TxStatusSchema.parse(status);
+  const tx = await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { status: s },
+  });
+
+  // Se virou "pago" ou "reembolsado", encerra Receivable se houver
+  if (s === "pago" || s === "reembolsado") {
+    const r = await prisma.receivable.findFirst({ where: { transactionId } });
+    if (r && r.status !== "pago") {
+      await prisma.receivable.update({
+        where: { id: r.id },
+        data: { status: "pago", paidAt: new Date() },
+      });
+    }
+  }
+
+  revalidatePath("/pessoas");
+  if (tx.responsibleId) revalidatePath(`/pessoas/${tx.responsibleId}`);
+  revalidatePath("/transacoes");
+  revalidatePath("/dashboard");
+  if (tx.cardId) revalidatePath(`/cartoes/${tx.cardId}`);
+}
+
+export async function setPersonTxCategory(
+  transactionId: string,
+  categoryId: string | null
+) {
+  const tx = await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { categoryId: categoryId || null },
+  });
+  revalidatePath("/pessoas");
+  if (tx.responsibleId) revalidatePath(`/pessoas/${tx.responsibleId}`);
+  revalidatePath("/transacoes");
+  if (tx.cardId) revalidatePath(`/cartoes/${tx.cardId}`);
+}
+
+/**
+ * Gera texto de cobrança WhatsApp-friendly.
+ * Lista Receivables em aberto + sugestão de data de pagamento (5 dias úteis aproximados).
+ */
+export async function generateBillingText(personId: string): Promise<string> {
+  const person = await prisma.person.findUnique({ where: { id: personId } });
+  if (!person) return "";
+
+  const open = await prisma.receivable.findMany({
+    where: {
+      personId,
+      status: { in: ["aberto", "atrasado", "renegociado"] },
+    },
+    orderBy: { dueDate: "asc" },
+    include: { transaction: true },
+  });
+
+  const total = open.reduce((s, r) => s + r.amount, 0);
+
+  const suggested = new Date();
+  suggested.setDate(suggested.getDate() + 5);
+  const suggestedStr = suggested.toLocaleDateString("pt-BR");
+
+  if (open.length === 0) {
+    return `Olá, ${person.name}. No momento não há valores em aberto. ✅`;
+  }
+
+  const lines = open
+    .map((r) => {
+      const desc = r.transaction?.description ?? r.notes ?? "Pendência";
+      return `- ${desc} — ${formatBRL(r.amount)}`;
+    })
+    .join("\n");
+
+  return [
+    `Olá, ${person.name}. Segue o resumo dos valores pendentes:`,
+    "",
+    lines,
+    "",
+    `Total em aberto: ${formatBRL(total)}`,
+    `Sugestão de pagamento até: ${suggestedStr}`,
+    "",
+    "Pode enviar por Pix/transferência quando possível. Obrigado!",
+  ].join("\n");
+}

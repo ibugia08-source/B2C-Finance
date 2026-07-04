@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 300" role="img" aria-label="B2C Finance">
+  <defs>
+    <linearGradient id="bf-purple" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#B48CFF"/><stop offset="45%" stop-color="#8A4CFF"/><stop offset="100%" stop-color="#6F2CFF"/></linearGradient>
+    <linearGradient id="bf-silver" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="50%" stop-color="#D9DDE5"/><stop offset="100%" stop-color="#AEB4C0"/></linearGradient>
+  </defs>
+  <g transform="translate(30 34) scale(.45)">
+    <path d="M92 64 L212 28 L388 112 L336 178 L212 126 L212 221 L340 221 L407 287 L340 353 L212 353 L212 386 L394 386 L337 474 L92 448 Z" fill="url(#bf-purple)"/>
+    <path d="M158 128 L214 151 L214 443 L158 430 Z" fill="#1A1230" opacity="0.50"/>
+    <path d="M224 132 L330 176 L304 215 L224 184 Z" fill="#ffffff" opacity="0.18"/>
+    <path d="M224 277 L322 277 L291 322 L224 322 Z" fill="#0A0A0F" opacity="0.45"/>
+  </g>
+  <line x1="285" y1="60" x2="285" y2="240" stroke="#D9DDE5" stroke-width="4" opacity=".72"/>
+  <text x="330" y="128" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="700" fill="url(#bf-silver)" letter-spacing="-2">B2C</text>
+  <text x="330" y="205" font-family="Inter, Arial, sans-serif" font-size="76" font-weight="700" fill="url(#bf-purple)" letter-spacing="-2">Finance</text>
+  <text x="332" y="254" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="500" fill="#AEB4C0">Inteligência financeira. Liberdade real.</text>
+</svg>

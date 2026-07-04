@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Supabase (criado no Storage da Vercel) injeta estas variáveis automaticamente.
+  // url = conexão com pool (queries da aplicação)
+  // directUrl = conexão direta (db push / migrations)
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("USER") // ADMIN | USER
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  person        Person?
+
+  // ===== Multiusuário: dados privados de cada conta (owner) =====
+  ownedAccounts       Account[]            @relation("OwnerAccount")
+  ownedCards          CreditCard[]         @relation("OwnerCreditCard")
+  ownedAccountCards   AccountCard[]        @relation("OwnerAccountCard")
+  ownedTransactions   Transaction[]        @relation("OwnerTransaction")
+  ownedInvoices       CreditCardInvoice[]  @relation("OwnerInvoice")
+  ownedImportBatches  ImportBatch[]        @relation("OwnerImportBatch")
+  ownedIncomes        Income[]             @relation("OwnerIncome")
+  ownedCashBoxes      CashBox[]            @relation("OwnerCashBox")
+  ownedPeople         Person[]             @relation("OwnerPerson")
+  ownedReceivables    Receivable[]         @relation("OwnerReceivable")
+  ownedPayments       PersonPayment[]      @relation("OwnerPersonPayment")
+  ownedGoals          Goal[]               @relation("OwnerGoal")
+  ownedRules          CategorizationRule[] @relation("OwnerRule")
+  ownedInstallments   Installment[]        @relation("OwnerInstallment")
+  ownedCashMovements  CashBoxMovement[]    @relation("OwnerCashMovement")
+  ownedConversations  AIConversation[]     @relation("OwnerAIConversation")
+  ownedMemories       AIMemory[]           @relation("OwnerAIMemory")
+}
+
+model Person {
+  id            String        @id @default(cuid())
+  name          String
+  type          String        @default("pessoal") // pessoal | empresa | terceiro | familiar
+  notes         String?
+  userId        String?       @unique
+  user          User?         @relation(fields: [userId], references: [id])
+  // Dono do registro (conta multiusuário). O nome é único POR dono, não global.
+  ownerId       String?
+  owner         User?         @relation("OwnerPerson", fields: [ownerId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  cards         CreditCard[]  @relation("CardHolder")
+  transactions  Transaction[] @relation("ResponsiblePerson")
+  paid          Transaction[] @relation("PayerPerson")
+  receivables   Receivable[]
+  incomes       Income[]
+  payments      PersonPayment[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+}
+
+model Account {
+  id            String        @id @default(cuid())
+  name          String
+  bank          String?
+  type          String        @default("corrente") // corrente | poupanca | dinheiro | investimento
+  balance       Float         @default(0)
+  active        Boolean       @default(true)
+  ownerId       String?
+  owner         User?         @relation("OwnerAccount", fields: [ownerId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  transactions  Transaction[]
+  incomes       Income[]
+  cashBoxes     CashBox[]
+  cards         CreditCard[]
+  personPayments PersonPayment[]
+
+  @@index([ownerId])
+}
+
+model CreditCard {
+  id              String              @id @default(cuid())
+  name            String
+  bank            String?
+  type            String              @default("pessoal") // pessoal | empresarial | terceiro
+  holderId        String?
+  holder          Person?             @relation("CardHolder", fields: [holderId], references: [id])
+  accountId       String?
+  account         Account?            @relation(fields: [accountId], references: [id])
+  limitTotal      Float                @default(0)
+  closingDay      Int                  @default(1)
+  dueDay          Int                  @default(10)
+  active          Boolean              @default(true)
+  ownerId         String?
+  owner           User?                @relation("OwnerCreditCard", fields: [ownerId], references: [id])
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  transactions    Transaction[]
+  invoices        CreditCardInvoice[]
+  accountCards    AccountCard[]
+
+  @@index([ownerId])
+}
+
+// Cartão (físico ou virtual) que pertence a uma conta bancária (CreditCard).
+// Todos os gastos dos cartões compõem a fatura da conta.
+model AccountCard {
+  id            String      @id @default(cuid())
+  name          String
+  cardId        String
+  card          CreditCard  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  kind          String      @default("fisico") // fisico | virtual
+  lastDigits    String?     // últimos 4 dígitos
+  limit         Float       @default(0)        // limite individual
+  notes         String?
+  ownerId       String?
+  owner         User?       @relation("OwnerAccountCard", fields: [ownerId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  transactions  Transaction[]
+
+  @@index([ownerId])
+}
+
+model Category {
+  id            String        @id @default(cuid())
+  name          String        @unique
+  color         String?
+  kind          String        @default("despesa") // despesa | receita | mista
+  parentId      String?
+  parent        Category?     @relation("CategoryParent", fields: [parentId], references: [id])
+  children      Category[]    @relation("CategoryParent")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  transactions  Transaction[]
+  rules         CategorizationRule[]
+  incomes       Income[]
+}
+
+model Transaction {
+  id              String        @id @default(cuid())
+  date            DateTime
+  description     String
+  amount          Float         // sempre positivo; tipo define sinal
+  type            String        @default("despesa") // despesa | receita | transferencia | ajuste
+  origin          String        @default("cartao") // cartao | pix | debito | boleto | dinheiro
+  cardId          String?
+  card            CreditCard?   @relation(fields: [cardId], references: [id])
+  accountId       String?
+  account         Account?      @relation(fields: [accountId], references: [id])
+  categoryId      String?
+  category        Category?     @relation(fields: [categoryId], references: [id])
+  responsibleId   String?
+  responsible     Person?       @relation("ResponsiblePerson", fields: [responsibleId], references: [id])
+  payerId         String?
+  payer           Person?       @relation("PayerPerson", fields: [payerId], references: [id])
+  belongsTo       String        @default("pessoal") // pessoal | empresa | terceiro | familiar
+  status          String        @default("pendente") // pendente | pago | devendo | reembolsado | cancelado
+  reimbursable    Boolean       @default(false)
+  dueDate         DateTime?     // vencimento (despesas manuais a vencer)
+  notes           String?
+  invoiceId       String?
+  invoice         CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
+  importBatchId   String?
+  importBatch     ImportBatch?  @relation(fields: [importBatchId], references: [id])
+  installments    Installment[]
+  receivables     Receivable[]
+  hash            String?       @unique
+
+  // ===== Parcelamento como METADADO da transação (fatura real importada) =====
+  // "AMAZON 3/10" → installmentNumber=3, installmentTotal=10. NÃO gera
+  // parcelas/faturas futuras no banco; projeções são calculadas em memória.
+  installmentNumber   Int?
+  installmentTotal    Int?
+  // Chave do grupo de parcelamento (mesma compra ao longo dos meses):
+  // sha1(cartão + descrição normalizada + valor da parcela + total de parcelas).
+  installmentGroupKey String?
+  // true quando categoria/pessoa/contexto foram herdados de uma parcela
+  // anterior reconhecida pelo histórico.
+  historyMatched      Boolean   @default(false)
+
+  // Cartão físico/virtual dentro da conta (identificado pelo final do cartão
+  // na fatura, quando possível; fallback manual).
+  accountCardId   String?
+  accountCard     AccountCard?  @relation(fields: [accountCardId], references: [id])
+
+  // Preparação Open Finance: id do registro no sistema de origem.
+  externalId      String?
+
+  // Dono do registro (conta multiusuário).
+  ownerId         String?
+  owner           User?         @relation("OwnerTransaction", fields: [ownerId], references: [id])
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([date])
+  @@index([cardId])
+  @@index([categoryId])
+  @@index([responsibleId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([installmentGroupKey])
+  @@index([accountCardId])
+  @@index([ownerId])
+}
+
+model Installment {
+  id              String      @id @default(cuid())
+  transactionId   String
+  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  number          Int
+  total           Int
+  amount          Float
+  dueDate         DateTime
+  paid            Boolean     @default(false)
+  invoiceId       String?
+  invoice         CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
+  ownerId         String?
+  owner           User?       @relation("OwnerInstallment", fields: [ownerId], references: [id])
+  createdAt       DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([paid, dueDate])
+  @@index([invoiceId])
+  @@index([ownerId])
+}
+
+model CreditCardInvoice {
+  id              String        @id @default(cuid())
+  cardId          String
+  card            CreditCard    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  referenceMonth  Int           // 1-12
+  referenceYear   Int
+  closingDate     DateTime
+  dueDate         DateTime
+  total           Float         @default(0)
+  paid            Float         @default(0)
+  // Total declarado no PDF da fatura (para conferência com a soma importada).
+  declaredTotal   Float?
+  status          String        @default("aberta") // aberta | fechada | paga | atrasada | parcial
+  // Preparação Open Finance: id da fatura no sistema de origem.
+  externalId      String?
+  ownerId         String?
+  owner           User?         @relation("OwnerInvoice", fields: [ownerId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  transactions    Transaction[]
+  installments    Installment[]
+
+  @@unique([cardId, referenceYear, referenceMonth])
+  @@index([status])
+  @@index([dueDate])
+  @@index([ownerId])
+}
+
+model Receivable {
+  id              String        @id @default(cuid())
+  personId        String
+  person          Person        @relation(fields: [personId], references: [id])
+  transactionId   String?
+  transaction     Transaction?  @relation(fields: [transactionId], references: [id])
+  amount          Float
+  dueDate         DateTime
+  paidAt          DateTime?
+  status          String        @default("aberto") // aberto | pago | atrasado | renegociado
+  notes           String?
+  ownerId         String?
+  owner           User?         @relation("OwnerReceivable", fields: [ownerId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([ownerId])
+}
+
+model Income {
+  id              String      @id @default(cuid())
+  description     String      @default("")
+  amount          Float
+  receivedAt      DateTime    @default(now())
+  // Origem do recebimento: BANK_ACCOUNT | PIX | TRANSFER | CASH
+  sourceType      String      @default("BANK_ACCOUNT")
+  // Tipo: SALARY | COMPANY_WITHDRAWAL | CLIENT | REIMBURSEMENT | SALE | LOAN_RECEIVED | OTHER
+  incomeType      String      @default("OTHER")
+  // Status: RECEIVED | EXPECTED | LATE | CANCELED
+  status          String      @default("RECEIVED")
+  accountId       String?
+  account         Account?    @relation(fields: [accountId], references: [id])
+  personId        String?
+  person          Person?     @relation(fields: [personId], references: [id])
+  categoryId      String?
+  category        Category?   @relation(fields: [categoryId], references: [id])
+  notes           String?
+  // Compatibilidade com seed/legado
+  date            DateTime?
+  source          String?
+  ownerId         String?
+  owner           User?       @relation("OwnerIncome", fields: [ownerId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([receivedAt])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model CashBox {
+  id              String              @id @default(cuid())
+  name            String
+  currentAmount   Float               @default(0)
+  targetAmount    Float?
+  // PERSONAL | EMERGENCY | INVESTMENT | COMPANY | GOAL | OTHER
+  type            String              @default("PERSONAL")
+  accountId       String?
+  account         Account?            @relation(fields: [accountId], references: [id])
+  notes           String?
+  ownerId         String?
+  owner           User?               @relation("OwnerCashBox", fields: [ownerId], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  movements       CashBoxMovement[]
+
+  @@index([ownerId])
+}
+
+model PersonPayment {
+  id              String      @id @default(cuid())
+  personId        String
+  person          Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+  amount          Float
+  paidAt          DateTime    @default(now())
+  // PIX | TRANSFER | CASH | OTHER
+  method          String      @default("PIX")
+  accountId       String?
+  account         Account?    @relation(fields: [accountId], references: [id])
+  notes           String?
+  ownerId         String?
+  owner           User?       @relation("OwnerPersonPayment", fields: [ownerId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([personId])
+  @@index([paidAt])
+  @@index([ownerId])
+}
+
+model CashBoxMovement {
+  id              String      @id @default(cuid())
+  cashBoxId       String
+  cashBox         CashBox     @relation(fields: [cashBoxId], references: [id], onDelete: Cascade)
+  // IN | OUT
+  type            String
+  amount          Float
+  date            DateTime    @default(now())
+  description     String?
+  ownerId         String?
+  owner           User?       @relation("OwnerCashMovement", fields: [ownerId], references: [id])
+  createdAt       DateTime    @default(now())
+
+  @@index([cashBoxId])
+  @@index([date])
+  @@index([ownerId])
+}
+
+model Goal {
+  id              String      @id @default(cuid())
+  name            String
+  type            String      @default("economia") // economia | quitacao | investimento | reserva
+  targetAmount    Float
+  currentAmount   Float       @default(0)
+  deadline        DateTime?
+  priority        Int         @default(3) // 1=alta, 5=baixa
+  notes           String?
+  ownerId         String?
+  owner           User?       @relation("OwnerGoal", fields: [ownerId], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([ownerId])
+}
+
+model ImportBatch {
+  id              String        @id @default(cuid())
+  source          String        // csv | xlsx | pdf
+  fileName        String?
+  cardId          String?
+  accountId       String?
+  // Fatura âncora desta importação (quando importado para um cartão/conta).
+  invoiceId       String?
+  referenceMonth  Int?
+  referenceYear   Int?
+  total           Int           @default(0)
+  imported        Int           @default(0)
+  duplicates      Int           @default(0)
+  ownerId         String?
+  owner           User?         @relation("OwnerImportBatch", fields: [ownerId], references: [id])
+  createdAt       DateTime      @default(now())
+
+  transactions    Transaction[]
+
+  @@index([ownerId])
+}
+
+model CategorizationRule {
+  id              String      @id @default(cuid())
+  name            String
+  priority        Int         @default(100)
+  active          Boolean     @default(true)
+
+  // condições
+  descriptionContains String?
+  cardId              String?
+  amountGreaterThan   Float?
+  amountLessThan      Float?
+
+  // ações
+  categoryId          String?
+  category            Category? @relation(fields: [categoryId], references: [id])
+  responsibleName     String?
+  belongsTo           String?
+  reimbursable        Boolean?
+  status              String?
+
+  ownerId         String?
+  owner           User?       @relation("OwnerRule", fields: [ownerId], references: [id])
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([ownerId])
+}
+
+// ===== Assistente de IA (co-piloto financeiro) =====
+
+model AISetting {
+  id           String   @id @default("default") // linha única (singleton)
+  provider     String   @default("openai")      // openai | anthropic | custom
+  baseUrl      String?                            // p/ compatível-OpenAI (OpenRouter, Groq, local…)
+  apiKey       String?
+  model        String   @default("gpt-4o-mini")
+  temperature  Float    @default(0.3)
+  enabled      Boolean  @default(false)
+  updatedAt    DateTime @updatedAt @default(now())
+}
+
+model AIConversation {
+  id        String      @id @default(cuid())
+  title     String?
+  messages  AIMessage[]
+  // Dono da conversa (conta multiusuário). Cada usuário só vê o próprio histórico.
+  ownerId   String?
+  owner     User?       @relation("OwnerAIConversation", fields: [ownerId], references: [id])
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([ownerId])
+}
+
+model AIMessage {
+  id               String         @id @default(cuid())
+  conversationId   String
+  conversation     AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role             String         // user | assistant
+  content          String
+  promptTokens     Int?
+  completionTokens Int?
+  createdAt        DateTime       @default(now())
+
+  @@index([conversationId])
+}
+
+model AIMemory {
+  id        String   @id @default(cuid())
+  kind      String   @default("note") // fact | pattern | preference | alert | note
+  content   String
+  source    String   @default("manual") // auto | manual
+  pinned    Boolean  @default(false)
+  // Dono da memória (conta multiusuário). Cada usuário tem a própria base.
+  ownerId   String?
+  owner     User?    @relation("OwnerAIMemory", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+}
+
+// ===== WhatsApp — agente de IA via gateway (Z-API / Evolution) =====
+
+model WhatsAppSetting {
+  id              String   @id @default("default") // singleton
+  provider        String   @default("zapi")        // zapi | evolution | custom
+  baseUrl         String?
+  instanceId      String?
+  token           String?
+  clientToken     String?                            // header de segurança (Z-API)
+  myNumber        String?                            // número pessoal autorizado (só ele comanda)
+  remindersSecret String?
+  enabled         Boolean  @default(false)
+  updatedAt       DateTime @updatedAt @default(now())
+}
+
+model WhatsAppMessage {
+  id          String   @id @default(cuid())
+  direction   String   // in | out
+  waType      String   @default("text") // text | image | audio | other
+  fromNumber  String?
+  body        String?
+  mediaUrl    String?
+  intent      String?
+  actionTaken String?
+  status      String?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

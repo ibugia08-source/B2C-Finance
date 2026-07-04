@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 760" role="img" aria-label="B2C Finance">
+  <defs>
+    <linearGradient id="bf-purple" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#B48CFF"/><stop offset="45%" stop-color="#8A4CFF"/><stop offset="100%" stop-color="#6F2CFF"/></linearGradient>
+    <linearGradient id="bf-silver" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="50%" stop-color="#D9DDE5"/><stop offset="100%" stop-color="#AEB4C0"/></linearGradient>
+    <filter id="soft-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="8" result="blur"/><feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.54 0 0 0 0 0.30 0 0 0 0 1 0 0 0 .55 0" result="glow"/><feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g transform="translate(190 50) scale(.75)">
+    <path d="M92 64 L212 28 L388 112 L336 178 L212 126 L212 221 L340 221 L407 287 L340 353 L212 353 L212 386 L394 386 L337 474 L92 448 Z" fill="url(#bf-purple)" filter="url(#soft-glow)"/>
+    <path d="M158 128 L214 151 L214 443 L158 430 Z" fill="#1A1230" opacity="0.50"/>
+    <path d="M224 277 L322 277 L291 322 L224 322 Z" fill="#0A0A0F" opacity="0.45"/>
+  </g>
+  <text x="380" y="482" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="96" font-weight="700" fill="url(#bf-silver)" letter-spacing="-2">B2C</text>
+  <text x="380" y="574" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="96" font-weight="700" fill="url(#bf-purple)" letter-spacing="-2">Finance</text>
+  <text x="380" y="640" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="500" fill="#AEB4C0">Inteligência financeira.</text>
+  <text x="380" y="680" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="500" fill="#AEB4C0">Liberdade real.</text>
+</svg>
