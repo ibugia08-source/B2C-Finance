@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -20,6 +21,18 @@ const Schema = z.object({
   categoryId: z.string().nullable().optional(),
   accountId: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  // ===== ERP de agência (opcionais) =====
+  expenseType: z
+    .enum(["FIXED", "VARIABLE", "PAYROLL", "TAX", "TOOL", "ADS", "LOAN", "CARD", "OTHER"])
+    .nullable()
+    .optional(),
+  recurrence: z
+    .enum(["NONE", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL", "CUSTOM"])
+    .nullable()
+    .optional(),
+  clientId: z.string().nullable().optional(),
+  serviceId: z.string().nullable().optional(),
+  costCenterId: z.string().nullable().optional(),
 });
 
 function addMonths(d: Date, n: number): Date {
@@ -50,6 +63,7 @@ async function rebuildInstallments(
 }
 
 export async function saveExpense(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const date = parseDateBR(String(formData.get("date") || "")) ?? new Date();
   const dueRaw = String(formData.get("dueDate") || "");
   const dueDate = dueRaw ? parseDateBR(dueRaw) : null;
@@ -67,6 +81,11 @@ export async function saveExpense(formData: FormData) {
     categoryId: (formData.get("categoryId") as string) || null,
     accountId: (formData.get("accountId") as string) || null,
     notes: (formData.get("notes") as string) || null,
+    expenseType: (formData.get("expenseType") as string) || null,
+    recurrence: (formData.get("recurrence") as string) || null,
+    clientId: (formData.get("clientId") as string) || null,
+    serviceId: (formData.get("serviceId") as string) || null,
+    costCenterId: (formData.get("costCenterId") as string) || null,
   });
 
   const data = {
@@ -83,6 +102,11 @@ export async function saveExpense(formData: FormData) {
     status: parsed.status,
     dueDate: parsed.dueDate ?? null,
     notes: parsed.notes,
+    expenseType: parsed.expenseType ?? null,
+    recurrence: parsed.recurrence ?? null,
+    clientId: parsed.clientId ?? null,
+    serviceId: parsed.serviceId ?? null,
+    costCenterId: parsed.costCenterId ?? null,
     hash: null,
   };
 
@@ -110,6 +134,7 @@ export async function saveExpense(formData: FormData) {
 }
 
 export async function deleteExpense(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.transaction.delete({ where: { id } });
   revalidatePath("/despesas");
   revalidatePath("/dashboard");
@@ -118,6 +143,7 @@ export async function deleteExpense(id: string) {
 }
 
 export async function setExpenseStatus(id: string, status: (typeof STATUS)[number]) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.transaction.update({ where: { id }, data: { status } });
   revalidatePath("/despesas");
   revalidatePath("/dashboard");

@@ -1,11 +1,53 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Marca B2C Finance — assets em /public/brand.
- * Símbolo "B" hexagonal = logo. Mascote "B2C" (pato Old Money) = personagem/assistente.
+ * Marca B2C — assets em /public/brand.
+ * Logomarca oficial = wordmark "B2C" (B2CLogo). Mascote = personagem/assistente.
  */
 
-/** Símbolo "B" hexagonal (logo primária — sidebar, login, favicon). */
+/**
+ * Logomarca oficial da B2C — wordmark "B2C".
+ * Inline SVG (herda a Inter 900 do app) para fidelidade em qualquer tamanho.
+ * variant "blue" = azul sobre branco (padrão) · "white" = para fundos azuis.
+ * Não distorcer, cortar ou aplicar efeitos (diretriz de marca).
+ */
+export function B2CLogo({
+  height = 28,
+  variant = "blue",
+  className,
+}: {
+  height?: number;
+  variant?: "blue" | "white";
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 320 120"
+      height={height}
+      width={(height * 320) / 120}
+      role="img"
+      aria-label="B2C"
+      className={cn("shrink-0 select-none", className)}
+    >
+      <text
+        x="50%"
+        y="97"
+        textAnchor="middle"
+        textLength="300"
+        lengthAdjust="spacingAndGlyphs"
+        fontFamily="Inter, 'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        fontWeight={900}
+        fontSize={118}
+        letterSpacing={-3}
+        fill={variant === "white" ? "#FFFFFF" : "#1E70D3"}
+      >
+        B2C
+      </text>
+    </svg>
+  );
+}
+
+/** Símbolo "B" hexagonal (legado — preferir B2CLogo). */
 export function B2CSymbol({
   size = 32,
   className,

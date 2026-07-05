@@ -5,6 +5,7 @@ import { parseBRL } from "@/lib/format";
 import { getViewer } from "@/lib/auth/viewer";
 
 export async function payInvoice(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const id = String(formData.get("id"));
   const amount = parseBRL(String(formData.get("amount") || "0"));
   const inv = await prisma.creditCardInvoice.findUnique({ where: { id } });
@@ -22,6 +23,7 @@ export async function payInvoice(formData: FormData) {
 }
 
 export async function setInvoiceStatus(id: string, status: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.creditCardInvoice.update({ where: { id }, data: { status } });
   revalidatePath("/importar");
 }

@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -15,6 +16,7 @@ const Schema = z.object({
 });
 
 export async function saveReceivable(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const dueDate = parseDateBR(String(formData.get("dueDate") || "")) ?? new Date();
   const parsed = Schema.parse({
     id: formData.get("id") || undefined,
@@ -54,6 +56,7 @@ export async function saveReceivable(formData: FormData) {
 }
 
 export async function markReceivablePaid(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.receivable.update({
     where: { id },
     data: { status: "pago", paidAt: new Date() },
@@ -63,6 +66,7 @@ export async function markReceivablePaid(id: string) {
 }
 
 export async function deleteReceivable(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.receivable.delete({ where: { id } });
   revalidatePath("/pessoas");
 }

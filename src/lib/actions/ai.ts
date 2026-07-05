@@ -11,6 +11,8 @@ import {
   type ChatMsg,
 } from "@/lib/ai/provider";
 import { buildFinancialSnapshot, snapshotToText, loadMemoryText } from "@/lib/ai/context";
+import { buildAgencySnapshotText } from "@/lib/ai/agency-context";
+import type { Viewer } from "@/lib/auth/viewer";
 
 const SINGLETON_ID = "default";
 const HISTORY_LIMIT = 12;
@@ -61,6 +63,43 @@ Os dados são EXCLUSIVAMENTE deste usuário. Nunca mencione, compare ou suponha 
 ## Formato
 Escreva em Markdown limpo: títulos curtos, listas e **negrito** para destacar números e conclusões. Sem floreio — foco em clareza e ação. Valores sempre em R$ no padrão brasileiro (ex.: R$ 1.234,56).`;
 
+// SYSTEM PROMPT do ADMIN: copiloto financeiro da AGÊNCIA (ERP completo).
+const AGENCY_ROLE = `Você é a **B2C**, copiloto financeiro da **B2C Gestão** — agência de marketing digital do Israel — dentro do ERP **B2C Finance**. Você fala português do Brasil, valores em reais (R$), e conversa com um ADMINISTRADOR da agência.
+
+Seu papel: analisar a operação financeira real da agência, antecipar problemas, projetar caixa, apoiar decisões e priorizar ações — como faria um(a) gestor(a) financeiro(a) experiente de agência.
+
+## Sua fonte de verdade (regra inviolável)
+A cada mensagem, o sistema anexa abaixo:
+- "RETRATO DA AGÊNCIA" — snapshot real e atualizado: faturamento (esperado/recebido/pendente/vencido), MRR, TCV, clientes, contratos e renovações, inadimplência detalhada por cliente, despesas (fixas/variáveis/folha), caixa atual e projeções 30/60/90, ativos/passivos/patrimônio, tendências de 6 meses, rankings por cliente/serviço/categoria, próximos vencimentos e alertas.
+- "RETRATO PESSOAL DO USUÁRIO" — finanças pessoais dele no mesmo app (cartões, faturas, metas).
+- "MEMÓRIA / CONHECIMENTO" — fatos duráveis salvos (metas da agência, limites, regras internas, observações sobre clientes).
+
+Esses blocos são sua ÚNICA fonte de dados. NUNCA invente valores, clientes, contratos ou datas. Se a informação não estiver no retrato, diga explicitamente "não tenho esse dado no snapshot" e indique onde cadastrar/consultar no app (ex.: /clientes, /cobrancas, /relatorios). Prefira "não sei" a estimar.
+
+## Fato × projeção × sugestão (sempre diferencie)
+- **Fato**: número que está no retrato — cite como está.
+- **Projeção**: cálculo derivado (ex.: caixa em 30 dias) — deixe claro que é projeção e qual a base.
+- **Sugestão**: recomendação sua — marque como sugestão e justifique com os números.
+Nunca apresente projeção ou sugestão como se fosse fato.
+
+## Conceitos do ERP (use corretamente)
+- MRR = soma dos valores mensais dos contratos recorrentes vigentes. TCV = valor total dos contratos vendidos no período.
+- Faturamento esperado = cobranças com vencimento no período (competência). Recebido = pagamentos confirmados (caixa).
+- Lucro = receitas − despesas PAGAS. Margem = lucro/receitas. Folha saudável = até 40% da receita.
+- Inadimplência = vencido / total em aberto. Aging: 1-15, 16-30, 31-60, 60+ dias.
+- Projeção de caixa = caixa + cobranças a vencer no horizonte − despesas pendentes − parcelas de dívidas.
+
+## Como responder
+1. Pergunta direta → resposta direta com o número real ("Seu MRR ativo é R$ X").
+2. Análise/relatório → estrutura com títulos, números citados e conclusão acionável.
+3. Decisão ("posso contratar?", "e se eu pagar tudo essa semana?") → simule com os números do retrato, mostre o antes/depois no caixa e no resultado, aponte riscos.
+4. Feche análises com **próximos passos numerados e priorizados por impacto financeiro** (cobrar X libera R$ Y; renovar Z protege R$ W de MRR).
+5. Clientes problemáticos: cruze inadimplência (valor, dias, último contato) com a importância do cliente na receita antes de recomendar tom de cobrança.
+6. Sem dados suficientes (agência recém-cadastrada, módulo vazio) → diga o que falta e como preencher (inclusive via /importacoes).
+
+## Formato
+Markdown limpo, títulos curtos, **negrito** nos números-chave. Valores no padrão brasileiro (R$ 1.234,56). Sem floreio.`;
+
 async function requireConfigured(): Promise<AISettings> {
   const s = await getAISettings();
   if (!isConfigured(s)) {
@@ -71,16 +110,26 @@ async function requireConfigured(): Promise<AISettings> {
   return s;
 }
 
-async function buildSystemPrompt(): Promise<string> {
-  const snapshot = await buildFinancialSnapshot();
-  const memory = await loadMemoryText();
-  const parts = [
-    BASE_ROLE,
-    "\n===== RETRATO FINANCEIRO ATUAL =====\n" + snapshotToText(snapshot),
-  ];
+async function buildSystemPrompt(viewer: Viewer): Promise<string> {
+  const isAdmin = viewer.role === "ADMIN";
+  const [personal, memory, agency] = await Promise.all([
+    buildFinancialSnapshot(),
+    loadMemoryText(),
+    isAdmin ? buildAgencySnapshotText() : Promise.resolve(""),
+  ]);
+
+  const parts: string[] = [];
+  if (isAdmin) {
+    parts.push(AGENCY_ROLE);
+    parts.push("\n===== RETRATO DA AGÊNCIA (B2C GESTÃO) =====\n" + agency);
+    parts.push("\n===== RETRATO PESSOAL DO USUÁRIO =====\n" + snapshotToText(personal));
+  } else {
+    parts.push(BASE_ROLE);
+    parts.push("\n===== RETRATO FINANCEIRO ATUAL =====\n" + snapshotToText(personal));
+  }
   if (memory) {
     parts.push(
-      "\n===== MEMÓRIA / CONHECIMENTO SOBRE O USUÁRIO =====\n" +
+      "\n===== MEMÓRIA / CONHECIMENTO =====\n" +
         memory +
         "\n(Use essas informações para personalizar. Não as contradiga.)"
     );
@@ -153,7 +202,7 @@ export async function sendChatMessage(
   conversationId: string | null,
   content: string
 ): Promise<ChatSendResult> {
-  await getViewer();
+  const viewer = await getViewer();
   const text = content.trim();
   if (!text) return { ok: false, error: "Mensagem vazia." };
 
@@ -194,7 +243,7 @@ export async function sendChatMessage(
 
   let result;
   try {
-    const system = await buildSystemPrompt();
+    const system = await buildSystemPrompt(viewer);
     result = await chatComplete({ settings, system, messages });
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao consultar a IA." };
@@ -239,7 +288,7 @@ export async function clearConversation(conversationId: string) {
 export type InsightsResult = { ok: true; report: string; tokens: number } | { ok: false; error: string };
 
 export async function generateInsights(): Promise<InsightsResult> {
-  await getViewer();
+  const viewer = await getViewer();
   let settings: AISettings;
   try {
     settings = await requireConfigured();
@@ -257,7 +306,7 @@ Use os números reais do retrato financeiro. Seja específico e priorize o que t
 
   let result;
   try {
-    const system = await buildSystemPrompt();
+    const system = await buildSystemPrompt(viewer);
     result = await chatComplete({
       settings,
       system,
@@ -281,6 +330,96 @@ Use os números reais do retrato financeiro. Seja específico e priorize o que t
 
   revalidatePath("/assistente");
   return { ok: true, report, tokens: result.usage.promptTokens + result.usage.completionTokens };
+}
+
+// ---------- Relatórios executivos com IA (admin) ----------
+
+const REPORT_PROMPTS: Record<string, string> = {
+  "resumo-mes": `Gere o RESUMO FINANCEIRO DO MÊS da agência, em markdown, com as seções:
+## Visão geral (faturamento esperado × recebido, lucro, margem, caixa)
+## O que foi bem
+## O que preocupa
+## Números-chave (tabela: indicador | valor | leitura)
+## Próximos passos (numerados, priorizados por impacto)`,
+  "plano-semana": `Monte meu PLANO DE AÇÃO SEMANAL de finanças da agência, em markdown:
+## Cobranças prioritárias (quem, quanto, há quantos dias vencido, tom sugerido)
+## Pagamentos da semana (o que vence em até 7 dias)
+## Renovações para encaminhar
+## Meta da semana (1 número para mover, com base no retrato)
+Cada item com o valor em R$ e o motivo. Se não houver itens numa seção, diga "nada pendente".`,
+  inadimplencia: `Gere o RELATÓRIO DE INADIMPLÊNCIA, em markdown:
+## Panorama (total vencido, % da carteira, nº de clientes)
+## Por cliente (valor, dias de atraso, faixa de aging, último contato, impacto na receita)
+## Estratégia de cobrança sugerida (por faixa de atraso; use os 5 tons: lembrete amigável → cobrança formal)
+## Risco (o que acontece com o caixa se nada for recuperado em 30 dias — deixe claro que é projeção)`,
+  saude: `Gere a ANÁLISE DE SAÚDE FINANCEIRA da agência, em markdown:
+## Diagnóstico (use o score do sistema e explique cada fator, bom e ruim)
+## Comparação com limites saudáveis (folha ≤40%, fixas, inadimplência, caixa)
+## Tendência (melhorando ou piorando? use os 6 meses do retrato)
+## Recomendações (numeradas, com o efeito esperado em R$ quando possível)`,
+  "projecao-caixa": `Gere a PROJEÇÃO DE CAIXA, em markdown:
+## Posição atual (caixa disponível, composição)
+## Projeção 30/60/90 dias (valores do retrato — explique a base de cálculo e marque como PROJEÇÃO)
+## O que entra e o que sai (próximas cobranças e despesas do retrato)
+## Cenários (o que muda se: 1. inadimplentes pagarem; 2. ninguém pagar; 3. despesas atrasarem)
+## Ações para proteger o caixa`,
+  "clientes-criticos": `Gere a ANÁLISE DE CLIENTES CRÍTICOS, em markdown:
+## Critérios usados (inadimplência, atraso, peso na receita, renovação próxima)
+## Clientes em risco (um bloco por cliente: situação, números, histórico de contato, recomendação)
+## Clientes-chave a proteger (maiores geradores de receita e status)
+## Plano de ação por cliente`,
+  despesas: `Gere a ANÁLISE DE DESPESAS, em markdown:
+## Composição (fixas × variáveis × folha, com %)
+## Maiores categorias (do retrato, com valores)
+## O que está pesando (compare com a receita e a tendência de 6 meses)
+## Onde dá para cortar (sugestões concretas, marcadas como SUGESTÃO, com economia estimada em R$)
+## Impacto no lucro se as sugestões forem aplicadas (PROJEÇÃO)`,
+  crescimento: `Gere a ANÁLISE DE CRESCIMENTO, em markdown:
+## Evolução (receita, MRR e lucro nos últimos 6 meses — cite os números)
+## Motor de crescimento (novos clientes, TCV vendido, serviços que mais geram receita)
+## Freios (churn implícito, inadimplência, dependência de poucos clientes — calcule a concentração)
+## Recomendações para crescer com segurança`,
+};
+
+export type AIReportResult =
+  | { ok: true; report: string; tokens: number }
+  | { ok: false; error: string };
+
+export async function generateAIReport(kind: string): Promise<AIReportResult> {
+  const viewer = await requireAdmin();
+  const prompt = REPORT_PROMPTS[kind];
+  if (!prompt) return { ok: false, error: "Tipo de relatório inválido." };
+
+  let settings: AISettings;
+  try {
+    settings = await requireConfigured();
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+
+  try {
+    const system = await buildSystemPrompt(viewer);
+    const result = await chatComplete({
+      settings,
+      system,
+      messages: [
+        {
+          role: "user",
+          content:
+            prompt +
+            "\n\nRegras: use SOMENTE os números do retrato; diferencie fato, projeção e sugestão; se faltar dado para alguma seção, escreva \"sem dados suficientes\" e diga onde cadastrar.",
+        },
+      ],
+      maxTokens: 2000,
+    });
+    return {
+      ok: true,
+      report: result.text,
+      tokens: result.usage.promptTokens + result.usage.completionTokens,
+    };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao gerar relatório." };
+  }
 }
 
 // ---------- Memória / base de conhecimento ----------

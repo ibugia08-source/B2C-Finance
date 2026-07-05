@@ -3,6 +3,7 @@
 // module.parent é falsy — caso comum em bundlers).
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { tryNubankLike } from "./parsers/nubank-like";
+import { tryNubank2026, tryC62026 } from "./parsers/fatura-2026";
 import { tryItauLike } from "./parsers/itau-like";
 import { tryInterLike } from "./parsers/inter-like";
 import { tryGenericStatement } from "./parsers/generic-statement";
@@ -118,10 +119,46 @@ export async function parseInvoicePdf(
     console.info(`[pdf-import] %PDF encontrado no offset ${pdfStart}; lixo inicial removido`);
   }
 
-  // 3. tenta extrair texto
+  // 3. tenta extrair texto.
+  // pagerender customizado: agrupa itens por linha (y) e insere espaço quando
+  // há lacuna horizontal — o render padrão cola descrição e valor
+  // ("TIM*75991826353" + "78,99" → "TIM*7599182635378,99"), o que torna o
+  // parsing ambíguo. Com o espaçamento, cada campo fica separado.
+  const renderPage = async (pageData: any): Promise<string> => {
+    const tc = await pageData.getTextContent();
+    const rows = new Map<number, { x: number; w: number; s: string }[]>();
+    for (const item of tc.items as any[]) {
+      if (!item.str) continue;
+      const x = item.transform[4] as number;
+      const y = item.transform[5] as number;
+      let key: number | null = null;
+      for (const k of Array.from(rows.keys())) {
+        if (Math.abs(k - y) <= 2) { key = k; break; }
+      }
+      if (key == null) { key = y; rows.set(key, []); }
+      rows.get(key)!.push({ x, w: item.width ?? 0, s: item.str });
+    }
+    return Array.from(rows.entries())
+      .sort((a, b) => b[0] - a[0]) // topo da página primeiro
+      .map(([, items]) => {
+        items.sort((a, b) => a.x - b.x);
+        let line = "";
+        let endX: number | null = null;
+        for (const it of items) {
+          if (endX != null && it.x - endX > 1 && line && !line.endsWith(" ") && !it.s.startsWith(" ")) {
+            line += " ";
+          }
+          line += it.s;
+          endX = it.x + it.w;
+        }
+        return line;
+      })
+      .join("\n");
+  };
+
   let parsed;
   try {
-    parsed = await pdfParse(pdfBuffer);
+    parsed = await (pdfParse as any)(pdfBuffer, { pagerender: renderPage });
   } catch (e: any) {
     const technical = e?.message ?? String(e);
     if (process.env.NODE_ENV !== "production") {
@@ -141,7 +178,7 @@ export async function parseInvoicePdf(
     );
   }
 
-  const text = (parsed.text ?? "").trim();
+  const text: string = String(parsed.text ?? "").trim();
   if (!text) {
     if (process.env.NODE_ENV !== "production") {
       console.warn("[pdf-import] PDF sem texto extraível", baseDiag);
@@ -161,18 +198,24 @@ export async function parseInvoicePdf(
 
   const allLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  const candidates = [tryNubankLike, tryItauLike, tryInterLike];
-  let best: PdfParseResult | null = null;
-  for (const fn of candidates) {
-    const r = fn(text);
-    if (r && (!best || r.transactions.length > best.transactions.length)) {
-      best = r;
+  // Parsers ESPECÍFICOS primeiro (layouts 2026 verificados por emissor):
+  // quando casam, vencem — os genéricos capturam linhas demais (pagamentos,
+  // créditos e resumos viram "transações").
+  let best: PdfParseResult | null = tryNubank2026(text) ?? tryC62026(text);
+
+  if (!best) {
+    const candidates = [tryNubankLike, tryItauLike, tryInterLike];
+    for (const fn of candidates) {
+      const r = fn(text);
+      if (r && (!best || r.transactions.length > best!.transactions.length)) {
+        best = r;
+      }
     }
-  }
-  // fallback genérico
-  const generic = tryGenericStatement(text);
-  if (!best || generic.transactions.length > best.transactions.length) {
-    best = generic;
+    // fallback genérico
+    const generic = tryGenericStatement(text);
+    if (!best || generic.transactions.length > best.transactions.length) {
+      best = generic;
+    }
   }
 
   const issuer = detectIssuer(text);

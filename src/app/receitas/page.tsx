@@ -1,7 +1,8 @@
 import { PageHeader } from "@/components/page-header";
+import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, parseMonthParam } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -68,39 +69,48 @@ function statusVariant(s: string): any {
 export default async function ReceitasPage({ searchParams }: { searchParams: Search }) {
   await getViewer();
   const where: any = {};
-  if (searchParams.mes) {
-    const [y, m] = searchParams.mes.split("-").map(Number);
-    if (y && m) {
-      const ref = new Date(y, m - 1, 1);
-      const { start, end } = monthRange(ref);
-      where.receivedAt = { gte: start, lt: end };
-    }
+  const mesParam = parseMonthParam(searchParams.mes);
+  if (mesParam) {
+    const ref = new Date(mesParam.year, mesParam.month - 1, 1);
+    const { start, end } = monthRange(ref);
+    where.receivedAt = { gte: start, lt: end };
   }
   if (searchParams.status) where.status = searchParams.status;
   if (searchParams.origem) where.sourceType = searchParams.origem;
   if (searchParams.pessoa) where.personId = searchParams.pessoa;
 
-  const [incomes, accounts, people, categories] = await Promise.all([
-    prisma.income.findMany({
-      where,
-      orderBy: { receivedAt: "desc" },
-      include: { account: true, person: true, category: true },
-      take: 200,
-    }),
-    prisma.account.findMany({ orderBy: { name: "asc" } }),
-    prisma.person.findMany({ orderBy: { name: "asc" } }),
-    prisma.category.findMany({
-      where: { kind: { in: ["receita", "mista"] } },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  const [incomes, accounts, people, categories, clients, contracts, costCenters] =
+    await Promise.all([
+      prisma.income.findMany({
+        where,
+        orderBy: { receivedAt: "desc" },
+        include: { account: true, person: true, category: true },
+        take: 200,
+      }),
+      prisma.account.findMany({ orderBy: { name: "asc" } }),
+      prisma.person.findMany({ orderBy: { name: "asc" } }),
+      prisma.category.findMany({
+        where: { kind: { in: ["receita", "mista"] } },
+        orderBy: { name: "asc" },
+      }),
+      prisma.client.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.contract.findMany({
+        orderBy: { title: "asc" },
+        select: { id: true, title: true, clientId: true },
+      }),
+      prisma.costCenter.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
 
   // Totais dos cards seguem o período selecionado no filtro (ou mês atual)
   let ref = new Date();
-  if (searchParams.mes) {
-    const [y, m] = searchParams.mes.split("-").map(Number);
-    if (y && m) ref = new Date(y, m - 1, 1);
-  }
+  if (mesParam) ref = new Date(mesParam.year, mesParam.month - 1, 1);
   const { start, end } = monthRange(ref);
   const monthIncomes = await prisma.income.findMany({
     where: { receivedAt: { gte: start, lt: end } },
@@ -120,11 +130,22 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
     <div>
       <PageHeader
         title="Receitas"
-        description="Cadastre todas as suas entradas de dinheiro"
+        description="Receitas extras da operação (upsell, vendas avulsas) — as receitas de contratos entram automaticamente pelas cobranças"
         actions={
-          <IncomeDialog accounts={accounts} people={people} categories={categories} />
+          <IncomeDialog
+            accounts={accounts}
+            people={people}
+            categories={categories}
+            clients={clients}
+            contracts={contracts}
+            costCenters={costCenters}
+          />
         }
       />
+
+      <div className="mb-3 print:hidden">
+        <SavedViews module="receitas" />
+      </div>
 
       <Card className="mb-4">
         <CardContent className="p-4">
@@ -191,6 +212,9 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
                       accounts={accounts}
                       people={people}
                       categories={categories}
+                      clients={clients}
+                      contracts={contracts}
+                      costCenters={costCenters}
                     />
                   </TableCell>
                 </TableRow>
@@ -240,6 +264,9 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
                       accounts={accounts}
                       people={people}
                       categories={categories}
+                      clients={clients}
+                      contracts={contracts}
+                      costCenters={costCenters}
                     />
                   </MobileCardActions>
                 </MobileCard>

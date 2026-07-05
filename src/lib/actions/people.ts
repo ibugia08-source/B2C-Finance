@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
@@ -12,6 +13,7 @@ const PersonSchema = z.object({
 });
 
 export async function savePerson(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const parsed = PersonSchema.parse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
@@ -32,6 +34,7 @@ export async function savePerson(formData: FormData) {
 }
 
 export async function deletePerson(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.person.delete({ where: { id } });
   revalidatePath("/pessoas");
 }
@@ -51,6 +54,7 @@ const PaymentSchema = z.object({
  * Receivables totalmente quitados viram "pago"; parcialmente quitados são reduzidos.
  */
 export async function registerPersonPayment(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const paidAt =
     parseDateBR(String(formData.get("paidAt") || "")) ?? new Date();
   const parsed = PaymentSchema.parse({
@@ -118,6 +122,7 @@ export async function registerPersonPayment(formData: FormData) {
 }
 
 export async function deletePersonPayment(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const p = await prisma.personPayment.findUnique({ where: { id } });
   if (!p) return;
   await prisma.personPayment.delete({ where: { id } });
@@ -134,6 +139,7 @@ const TxStatusSchema = z.enum([
 ]);
 
 export async function setPersonTxStatus(transactionId: string, status: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const s = TxStatusSchema.parse(status);
   const tx = await prisma.transaction.update({
     where: { id: transactionId },
@@ -162,6 +168,7 @@ export async function setPersonTxCategory(
   transactionId: string,
   categoryId: string | null
 ) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const tx = await prisma.transaction.update({
     where: { id: transactionId },
     data: { categoryId: categoryId || null },
@@ -177,6 +184,7 @@ export async function setPersonTxCategory(
  * Lista Receivables em aberto + sugestão de data de pagamento (5 dias úteis aproximados).
  */
 export async function generateBillingText(personId: string): Promise<string> {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const person = await prisma.person.findUnique({ where: { id: personId } });
   if (!person) return "";
 

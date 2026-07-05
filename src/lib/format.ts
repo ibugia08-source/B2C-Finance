@@ -55,6 +55,21 @@ export function parseDateBR(value: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/**
+ * Interpreta um parâmetro "YYYY-MM" (filtros de mês em URL/formulários).
+ * Anos fora de 1990–2100 (ex.: dígito extra digitado no input de mês)
+ * são rejeitados — o Postgres/Prisma não aceita essas datas.
+ */
+export function parseMonthParam(value: string | null | undefined): { year: number; month: number } | null {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{4})-(\d{1,2})$/);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (year < 1990 || year > 2100 || month < 1 || month > 12) return null;
+  return { year, month };
+}
+
 export function monthRange(reference: Date = new Date()) {
   const start = new Date(reference.getFullYear(), reference.getMonth(), 1);
   const end = new Date(reference.getFullYear(), reference.getMonth() + 1, 1);

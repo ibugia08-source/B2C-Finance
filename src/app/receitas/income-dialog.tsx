@@ -21,12 +21,18 @@ export function IncomeDialog({
   accounts,
   people,
   categories,
+  clients = [],
+  contracts = [],
+  costCenters = [],
   initial,
   trigger,
 }: {
   accounts: any[];
   people: any[];
   categories: any[];
+  clients?: { id: string; name: string }[];
+  contracts?: { id: string; title: string; clientId: string }[];
+  costCenters?: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
@@ -148,6 +154,66 @@ export function IncomeDialog({
               <option value="EXPECTED">Previsto</option>
               <option value="LATE">Atrasado</option>
             </Select>
+          </div>
+
+          {/* ===== Classificação gerencial (agência) ===== */}
+          <div className="col-span-2 border-t pt-3 mt-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Gestão da agência (opcional)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Tipo de receita</Label>
+                <Select name="revenueType" defaultValue={initial?.revenueType ?? ""}>
+                  <option value="">—</option>
+                  <option value="MRR">Recorrente (MRR)</option>
+                  <option value="TCV">Contrato fechado (TCV)</option>
+                  <option value="ONE_TIME">Avulsa</option>
+                  <option value="SETUP">Setup</option>
+                  <option value="RECOVERY">Recuperação de inadimplência</option>
+                  <option value="OTHER">Outra</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Competência</Label>
+                <Input
+                  type="month"
+                  name="competence"
+                  defaultValue={
+                    initial?.competenceYear && initial?.competenceMonth
+                      ? `${initial.competenceYear}-${String(initial.competenceMonth).padStart(2, "0")}`
+                      : ""
+                  }
+                />
+              </div>
+              <div>
+                <Label>Cliente</Label>
+                <Select name="clientId" defaultValue={initial?.clientId ?? ""}>
+                  <option value="">—</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Contrato</Label>
+                <Select name="contractId" defaultValue={initial?.contractId ?? ""}>
+                  <option value="">—</option>
+                  {contracts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Centro de custo</Label>
+                <Select name="costCenterId" defaultValue={initial?.costCenterId ?? ""}>
+                  <option value="">—</option>
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
+            </div>
           </div>
 
           <div className="col-span-2">

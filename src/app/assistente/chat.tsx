@@ -16,16 +16,28 @@ const SUGGESTIONS = [
   "Me dê 3 dicas para sobrar mais dinheiro.",
 ];
 
+const AGENCY_SUGGESTIONS = [
+  "Como está a saúde financeira da agência este mês?",
+  "Quais clientes preciso cobrar hoje?",
+  "Qual meu caixa previsto para os próximos 30 dias?",
+  "Quanto tenho de MRR ativo?",
+  "Minha folha está saudável em relação ao faturamento?",
+  "O que preciso fazer essa semana para melhorar meu caixa?",
+];
+
 export function Chat({
   conversationId,
   initialMessages,
   configured,
   initialTokens,
+  agency = false,
 }: {
   conversationId: string | null;
   initialMessages: Msg[];
   configured: boolean;
   initialTokens: number;
+  /** true para admin: sugestões e texto voltados à gestão da agência */
+  agency?: boolean;
 }) {
   const [convId, setConvId] = useState(conversationId);
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -67,12 +79,13 @@ export function Chat({
           <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
             <B2CMascot pose="hero" width={150} className="drop-shadow-xl" />
             <p className="text-sm max-w-sm">
-              Pergunte qualquer coisa sobre suas finanças. O copiloto enxerga suas transações,
-              faturas, gastos, pessoas e metas.
+              {agency
+                ? "Pergunte sobre a operação da agência: faturamento, MRR, inadimplência, contratos, folha, caixa e projeções — tudo com os dados reais."
+                : "Pergunte qualquer coisa sobre suas finanças. O copiloto enxerga suas transações, faturas, gastos, pessoas e metas."}
             </p>
             {configured && (
               <div className="flex flex-wrap gap-2 justify-center max-w-md">
-                {SUGGESTIONS.map((s) => (
+                {(agency ? AGENCY_SUGGESTIONS : SUGGESTIONS).map((s) => (
                   <button
                     key={s}
                     onClick={() => submit(s)}

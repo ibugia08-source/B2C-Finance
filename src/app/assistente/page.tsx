@@ -8,7 +8,8 @@ import { AISettingsDialog } from "./settings-dialog";
 import { Chat } from "./chat";
 import { Insights } from "./insights";
 import { MemoryPanel } from "./memory-panel";
-import { Sparkles, Bot } from "lucide-react";
+import { AIReportsPanel } from "./reports-panel";
+import { Sparkles, Bot, FileBarChart2 } from "lucide-react";
 
 export default async function AssistentePage() {
   // Aberto a qualquer usuário logado. Cada um vê o próprio histórico e memórias
@@ -42,7 +43,11 @@ export default async function AssistentePage() {
     <div>
       <PageHeader
         title="Assistente IA"
-        description="Seu copiloto financeiro: análises, dicas, alertas e relatórios sobre os seus dados."
+        description={
+          isAdmin
+            ? "Copiloto financeiro da B2C Gestão: analisa os dados reais da agência, antecipa problemas e apoia decisões."
+            : "Seu copiloto financeiro: análises, dicas, alertas e relatórios sobre os seus dados."
+        }
         actions={
           <div className="flex items-center gap-2">
             <Badge variant={configured ? "success" : "secondary"}>
@@ -87,11 +92,25 @@ export default async function AssistentePage() {
               initialMessages={initialMessages}
               configured={configured}
               initialTokens={initialTokens}
+              agency={isAdmin}
             />
           </CardContent>
         </Card>
 
         <div className="space-y-4">
+          {isAdmin && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileBarChart2 className="h-4 w-4 text-primary" /> Relatórios executivos com IA
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AIReportsPanel configured={configured} />
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Análise rápida</CardTitle>

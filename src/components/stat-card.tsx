@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent } from "@/lib/ui";
 import { cn } from "@/lib/utils";
 
@@ -6,11 +7,14 @@ export function StatCard({
   value,
   hint,
   intent = "default",
+  href,
 }: {
   title: string;
   value: string;
   hint?: string;
   intent?: "default" | "positive" | "negative" | "warning";
+  /** Torna o card clicável (abre a tela já no contexto certo). */
+  href?: string;
 }) {
   const color =
     intent === "positive"
@@ -30,8 +34,13 @@ export function StatCard({
           ? "from-amber-500/10 to-transparent"
           : "from-primary/10 to-transparent";
 
-  return (
-    <Card className="relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft">
+  const card = (
+    <Card
+      className={cn(
+        "relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft h-full",
+        href && "cursor-pointer hover:ring-1 hover:ring-primary/30"
+      )}
+    >
       <div
         className={cn(
           "pointer-events-none absolute inset-0 bg-gradient-to-br opacity-60",
@@ -51,4 +60,6 @@ export function StatCard({
       </CardContent>
     </Card>
   );
+
+  return href ? <Link href={href}>{card}</Link> : card;
 }

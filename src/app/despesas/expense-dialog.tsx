@@ -21,12 +21,18 @@ export function ExpenseDialog({
   people,
   categories,
   accounts,
+  clients = [],
+  services = [],
+  costCenters = [],
   initial,
   trigger,
 }: {
   people: any[];
   categories: any[];
   accounts: any[];
+  clients?: { id: string; name: string }[];
+  services?: { id: string; name: string }[];
+  costCenters?: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
@@ -149,6 +155,68 @@ export function ExpenseDialog({
                 </option>
               ))}
             </Select>
+          </div>
+
+          {/* ===== Classificação gerencial (agência) ===== */}
+          <div className="col-span-2 border-t pt-3 mt-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              Gestão da agência (opcional)
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label>Tipo de despesa</Label>
+                <Select name="expenseType" defaultValue={initial?.expenseType ?? ""}>
+                  <option value="">—</option>
+                  <option value="FIXED">Fixa</option>
+                  <option value="VARIABLE">Variável</option>
+                  <option value="TOOL">Ferramenta</option>
+                  <option value="ADS">Tráfego / Ads</option>
+                  <option value="TAX">Imposto</option>
+                  <option value="CARD">Cartão</option>
+                  <option value="LOAN">Empréstimo</option>
+                  <option value="PAYROLL">Equipe / Folha</option>
+                  <option value="OTHER">Geral</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Recorrência</Label>
+                <Select name="recurrence" defaultValue={initial?.recurrence ?? ""}>
+                  <option value="">—</option>
+                  <option value="NONE">Única</option>
+                  <option value="MONTHLY">Mensal</option>
+                  <option value="QUARTERLY">Trimestral</option>
+                  <option value="SEMIANNUAL">Semestral</option>
+                  <option value="ANNUAL">Anual</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Cliente vinculado</Label>
+                <Select name="clientId" defaultValue={initial?.clientId ?? ""}>
+                  <option value="">—</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Serviço vinculado</Label>
+                <Select name="serviceId" defaultValue={initial?.serviceId ?? ""}>
+                  <option value="">—</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="sm:col-span-2">
+                <Label>Centro de custo</Label>
+                <Select name="costCenterId" defaultValue={initial?.costCenterId ?? ""}>
+                  <option value="">—</option>
+                  {costCenters.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </Select>
+              </div>
+            </div>
           </div>
 
           <div className="col-span-2">

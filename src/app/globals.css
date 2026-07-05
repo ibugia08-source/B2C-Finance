@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,34 +6,34 @@
 
 @layer base {
   :root {
-    /* B2C Finance — claro (variação secundária) */
-    --background: 240 20% 98%;
-    --foreground: 240 24% 8%;
+    /* B2C Finance — claro (experiência principal · identidade B2C Gestão) */
+    --background: 210 40% 98%;         /* #F8FAFC cinza muito claro */
+    --foreground: 222 47% 11%;         /* #0F172A */
 
     --card: 0 0% 100%;
-    --card-foreground: 240 24% 8%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 24% 8%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 259 100% 59%;          /* roxo primário #6F2CFF */
+    --primary: 212 75% 47%;           /* azul B2C #1E70D3 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 20% 95%;
-    --secondary-foreground: 240 24% 12%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 13%;
 
-    --muted: 240 16% 95%;
-    --muted-foreground: 240 8% 42%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 42%;   /* #64748B */
 
-    --accent: 258 100% 96%;
-    --accent-foreground: 259 60% 32%;
+    --accent: 213 100% 96%;            /* #EAF3FF azul claríssimo */
+    --accent-foreground: 212 70% 30%;
 
-    --destructive: 0 84% 58%;
+    --destructive: 0 74% 50%;          /* #DC2626 */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 16% 90%;
-    --input: 240 16% 90%;
-    --ring: 259 100% 59%;
+    --border: 214 32% 91%;             /* #E2E8F0 */
+    --input: 214 32% 91%;
+    --ring: 212 75% 47%;
 
     --gold: 41 72% 45%;
     --gold-soft: 41 80% 92%;
@@ -42,7 +42,7 @@
   }
 
   .dark {
-    /* B2C Finance — escuro premium (experiência principal) */
+    /* B2C Finance — escuro (opcional, escolha do usuário) */
     --background: 240 24% 5%;          /* #0A0A0F */
     --foreground: 240 16% 94%;         /* #EDEEF2 prata */
 
@@ -52,7 +52,7 @@
     --popover: 240 16% 11%;
     --popover-foreground: 240 16% 94%;
 
-    --primary: 259 100% 64%;           /* roxo #6F2CFF (mais vivo no escuro) */
+    --primary: 212 85% 58%;            /* azul B2C (mais vivo no escuro) */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 240 10% 16%;          /* #2A2A32 */
@@ -61,15 +61,15 @@
     --muted: 240 12% 13%;
     --muted-foreground: 240 10% 66%;
 
-    --accent: 261 55% 24%;             /* roxo profundo (hover suave) */
-    --accent-foreground: 258 100% 92%;
+    --accent: 213 55% 22%;             /* azul profundo (hover suave) */
+    --accent-foreground: 213 100% 92%;
 
     --destructive: 0 84% 60%;          /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 10% 18%;             /* #2A2A32 */
     --input: 240 10% 18%;
-    --ring: 261 100% 68%;
+    --ring: 212 85% 62%;
 
     --gold: 46 65% 55%;                /* dourado premium #D4AF37 */
     --gold-soft: 46 40% 16%;
@@ -115,7 +115,7 @@
   .card-premium {
     background:
       radial-gradient(600px 240px at 100% 0%, hsl(var(--primary) / 0.14), transparent 60%),
-      radial-gradient(500px 220px at 0% 100%, hsl(var(--gold) / 0.08), transparent 60%),
+      radial-gradient(500px 220px at 0% 100%, hsl(var(--primary) / 0.05), transparent 60%),
       hsl(var(--card));
     @apply rounded-xl border shadow-sm transition-shadow hover:shadow-md;
   }
@@ -135,7 +135,7 @@
   .app-shell {
     background:
       radial-gradient(1200px 600px at -10% -10%, hsl(var(--primary) / 0.12), transparent 60%),
-      radial-gradient(900px 500px at 110% 0%, hsl(var(--gold) / 0.06), transparent 55%),
+      radial-gradient(900px 500px at 110% 0%, hsl(var(--primary) / 0.04), transparent 55%),
       hsl(var(--background));
   }
 }
@@ -175,5 +175,20 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Impressão de relatórios: só o conteúdo (tabela/gráfico) vai para o PDF. */
+@media print {
+  aside,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: white !important;
   }
 }

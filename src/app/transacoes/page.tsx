@@ -1,6 +1,10 @@
 import { PageHeader } from "@/components/page-header";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { CategoryDialog } from "@/app/configuracoes/category-dialog";
+import { PieChart } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, parseMonthParam } from "@/lib/format";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,13 +48,11 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
   // Isolamento por dono é automático (extensão do Prisma).
   const where: any = {};
 
-  if (searchParams.mes) {
-    const [y, m] = searchParams.mes.split("-").map(Number);
-    if (y && m) {
-      const ref = new Date(y, m - 1, 1);
-      const { start, end } = monthRange(ref);
-      where.date = { gte: start, lt: end };
-    }
+  const mesParam = parseMonthParam(searchParams.mes);
+  if (mesParam) {
+    const ref = new Date(mesParam.year, mesParam.month - 1, 1);
+    const { start, end } = monthRange(ref);
+    where.date = { gte: start, lt: end };
   }
   if (searchParams.pessoa) where.responsibleId = searchParams.pessoa;
   if (searchParams.cartao) where.cardId = searchParams.cartao;
@@ -75,6 +77,16 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
       <PageHeader
         title="Movimentações"
         description="Histórico de todas as movimentações feitas na plataforma."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <CategoryDialog />
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/relatorios/despesas?agrupar=categoria&periodo=mes">
+                <PieChart className="h-4 w-4 mr-1" /> Gastos por categoria
+              </Link>
+            </Button>
+          </div>
+        }
       />
 
       <Card className="mb-4">

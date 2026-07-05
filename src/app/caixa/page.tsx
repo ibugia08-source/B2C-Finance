@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/page-header";
+import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
@@ -44,6 +45,10 @@ export default async function CaixaPage() {
         description="Gerencie o dinheiro que você guarda e separa"
         actions={<CashBoxDialog accounts={accounts} />}
       />
+
+      <div className="mb-3 print:hidden">
+        <SavedViews module="caixa" />
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard title="Total em caixa" value={formatBRL(totalCaixa)} intent="positive" />

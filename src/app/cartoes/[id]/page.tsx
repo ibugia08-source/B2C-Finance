@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, parseMonthParam } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -98,12 +98,10 @@ export default async function CardDetailPage({
   // fatura real daquele mês; sem fatura, cai para as compras do mês-calendário.
   let refYear = new Date().getFullYear();
   let refMonth = new Date().getMonth() + 1;
-  if (searchParams.mes) {
-    const [y, m] = searchParams.mes.split("-").map(Number);
-    if (y && m >= 1 && m <= 12) {
-      refYear = y;
-      refMonth = m;
-    }
+  const mesParam = parseMonthParam(searchParams.mes);
+  if (mesParam) {
+    refYear = mesParam.year;
+    refMonth = mesParam.month;
   }
   const { start, end } = monthRange(new Date(refYear, refMonth - 1, 1));
 

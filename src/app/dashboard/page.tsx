@@ -1,191 +1,308 @@
+import Link from "next/link";
+import { SavedViews } from "@/components/saved-views";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { getDashboardSummary } from "@/lib/services/calculations";
-import { formatBRL, monthLabel } from "@/lib/format";
-import { Card, CardContent } from "@/lib/ui";
-import { Badge } from "@/components/ui/badge";
+import { prisma } from "@/lib/prisma";
+import { formatBRL } from "@/lib/format";
+import { resolvePeriod } from "@/lib/period";
 import { getViewer } from "@/lib/auth/viewer";
-import { DashboardMonthFilter } from "./month-filter";
-import { MonthlyBarChart } from "@/components/bar-chart";
-import { getMonthlyHistory } from "@/lib/services/history";
+import { markOverdueBillings } from "@/lib/services/billing-metrics";
+import {
+  getExecutiveDashboard,
+  type DashboardFilters as Filters,
+  type DashAlert,
+} from "@/lib/services/dashboard-metrics";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  ChartCard,
+  GroupedBarChart,
+  DivergingBarChart,
+  LineChart,
+  HBarList,
+} from "@/components/charts";
+import { DashboardFilters } from "./dashboard-filters";
+import { PersonalDashboard } from "./personal-dashboard";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  ArrowRight,
+  ListTodo,
+} from "lucide-react";
 
-function pct(value: number) {
-  return `${(value * 100).toFixed(0)}%`;
-}
+type Search = Record<string, string | undefined>;
 
-function endividamentoStatus(taxa: number): {
-  label: string;
-  intent: "positive" | "warning" | "negative";
-} {
-  if (taxa <= 0.3) return { label: "Saudável", intent: "positive" };
-  if (taxa <= 0.5) return { label: "Atenção", intent: "warning" };
-  return { label: "Crítico", intent: "negative" };
-}
+const HEALTH_STYLE: Record<string, { badge: any; bar: string }> = {
+  excelente: { badge: "success", bar: "bg-emerald-500" },
+  saudavel: { badge: "success", bar: "bg-emerald-500" },
+  estavel: { badge: "secondary", bar: "bg-sky-500" },
+  atencao: { badge: "warning", bar: "bg-amber-500" },
+  critica: { badge: "destructive", bar: "bg-red-500" },
+};
 
-function parseMonthRef(mes?: string): Date {
-  if (mes && /^\d{4}-\d{2}$/.test(mes)) {
-    const [year, month] = mes.split("-").map(Number);
-    return new Date(year, month - 1, 1);
+const SEVERITY_DOT: Record<DashAlert["severity"], string> = {
+  high: "bg-red-500",
+  medium: "bg-amber-500",
+  low: "bg-sky-500",
+};
+
+export default async function DashboardPage({ searchParams }: { searchParams?: Search }) {
+  const viewer = await getViewer("/dashboard");
+
+  // USER comum mantém a visão financeira pessoal.
+  if (viewer.role !== "ADMIN") {
+    return <PersonalDashboard mes={searchParams?.mes} />;
   }
-  return new Date();
-}
 
-function toMonthValue(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
+  await markOverdueBillings();
 
-export default async function DashboardPage({
-  searchParams,
-}: {
-  searchParams?: { mes?: string };
-}) {
-  // Multiusuário: todos veem o mesmo dashboard, já escopado aos próprios
-  // dados pela extensão do Prisma (getViewer só garante login).
-  await getViewer("/dashboard");
+  const sp = searchParams ?? {};
+  const period = resolvePeriod(sp);
+  const filters: Filters = {
+    period,
+    clientId: sp.cliente || undefined,
+    serviceId: sp.servico || undefined,
+    costCenterId: sp.cc || undefined,
+    billingStatus: sp.status || undefined,
+    revenueType: sp.treceita || undefined,
+    expenseType: sp.tdespesa || undefined,
+  };
 
-  const ref = parseMonthRef(searchParams?.mes);
-  const [summary, history] = await Promise.all([
-    getDashboardSummary(ref),
-    getMonthlyHistory(),
+  const [data, clients, services, costCenters] = await Promise.all([
+    getExecutiveDashboard(filters),
+    prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.costCenter.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  const {
-    receitas,
-    despesas,
-    faturas,
-    aReceber,
-    porPertenceA: { pessoal, empresa, terceiro: terceiros, familiar: familia },
-    caixa,
-    taxaEndividamento: taxa,
-    sobraReal: sobra,
-    receitasPrevistas: receitasPrev,
-    despesasPrevistas: despesasPrev,
-  } = summary;
+  const { kpis, finance, cash, balance, series, breakdowns, health, alerts, actions } = data;
 
-  const endivStatus = endividamentoStatus(taxa);
+  const hs = HEALTH_STYLE[health.level];
+  const inadPct = Math.round(kpis.inadimplenciaTaxa * 100);
+  const margemPct = Math.round(finance.margem * 100);
+  const folhaPct = Math.round(finance.folhaSobreReceita * 100);
 
   return (
     <div>
       <PageHeader
-        title="B2C Finance"
-        description={`Sua visão financeira consolidada · ${monthLabel(ref)}`}
-        actions={<DashboardMonthFilter current={toMonthValue(ref)} />}
+        title="Dashboard executivo"
+        description={`Saúde financeira da B2C Gestão · ${period.label}`}
       />
 
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Visão geral
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Receita total do mês" value={formatBRL(receitas)} intent="positive" />
-        <StatCard title="Despesas do mês" value={formatBRL(despesas)} intent="negative" />
-        <StatCard
-          title="Total em faturas"
-          value={formatBRL(faturas.openAmount)}
-          hint={`Total: ${formatBRL(faturas.total)}`}
-        />
-        <StatCard title="Total em caixa" value={formatBRL(caixa)} intent="positive" />
-        <StatCard
-          title="Sobra real do mês"
-          value={formatBRL(sobra)}
-          intent={sobra >= 0 ? "positive" : "negative"}
-          hint="Receitas recebidas − despesas pagas − faturas pagas"
-        />
+      <div className="mb-3 print:hidden">
+        <SavedViews module="dashboard" />
       </div>
 
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
-        Histórico ({history.labels.length} meses)
+      <Card className="mb-5">
+        <CardContent className="p-4">
+          <DashboardFilters clients={clients} services={services} costCenters={costCenters} />
+        </CardContent>
+      </Card>
+
+      {/* ===== Saúde financeira ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <Card className="lg:col-span-1">
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+              Saúde financeira
+            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <p className="text-3xl font-bold">{health.score}</p>
+              <Badge variant={hs.badge} className="text-sm">{health.label}</Badge>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden mt-3">
+              <div className={`h-full rounded-full ${hs.bar}`} style={{ width: `${health.score}%` }} />
+            </div>
+            <ul className="mt-4 space-y-1.5">
+              {health.fatores.map((fator, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs">
+                  {fator.ok ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+                  )}
+                  <span className={fator.ok ? "text-muted-foreground" : "text-foreground"}>
+                    {fator.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" /> Alertas
+            </p>
+            {alerts.length === 0 ? (
+              <p className="text-sm text-muted-foreground mt-6 text-center">
+                Nenhum alerta. Tudo em dia. 🎉
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-3">
+                {alerts.map((a, i) => (
+                  <li key={i}>
+                    <Link href={a.href} className="group flex items-start gap-2.5">
+                      <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${SEVERITY_DOT[a.severity]}`} />
+                      <span className="min-w-0">
+                        <span className="text-sm font-medium group-hover:underline flex items-center gap-1">
+                          {a.title}
+                          <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </span>
+                        <span className="block text-xs text-muted-foreground">{a.detail}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5">
+              <ListTodo className="h-3.5 w-3.5" /> Próximas ações
+            </p>
+            {actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground mt-6 text-center">
+                Nenhuma ação pendente sugerida.
+              </p>
+            ) : (
+              <ol className="mt-3 space-y-2.5 list-none">
+                {actions.map((action, i) => (
+                  <li key={i}>
+                    <Link href={action.href} className="group flex items-start gap-2.5 text-sm">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center shrink-0">
+                        {i + 1}
+                      </span>
+                      <span className="group-hover:underline">{action.text}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ===== Comercial & faturamento ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Comercial & faturamento · {period.label}
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard href="/cobrancas" title="Faturamento esperado" value={formatBRL(kpis.faturamentoEsperado)}
+          hint="cobranças com vencimento no período" />
+        <StatCard href="/pagamentos" title="Faturamento recebido" value={formatBRL(kpis.faturamentoRecebido)}
+          intent="positive" hint="pagamentos confirmados" />
+        <StatCard href="/cobrancas?avencer=1" title="Receita pendente" value={formatBRL(kpis.receitaPendente)}
+          hint="em aberto dentro do prazo" />
+        <StatCard href="/inadimplencia" title="Receita vencida" value={formatBRL(kpis.receitaVencida)}
+          intent={kpis.receitaVencida > 0 ? "negative" : "default"} />
+        <StatCard href="/inadimplencia" title="Inadimplência" value={`${inadPct}%`}
+          intent={inadPct > 25 ? "negative" : inadPct > 10 ? "warning" : "positive"}
+          hint="vencido / total em aberto" />
+        <StatCard href="/contratos" title="MRR ativo" value={formatBRL(kpis.mrrAtivo)} intent="positive"
+          hint="recorrência mensal vigente" />
+        <StatCard href="/contratos" title="TCV vendido" value={formatBRL(kpis.tcvVendido)}
+          hint="contratos iniciados no período" />
+        <StatCard href="/clientes" title="Novos clientes" value={String(kpis.novosClientes)} />
+        <StatCard href="/clientes" title="Clientes ativos" value={String(kpis.clientesAtivos)} />
+        <StatCard href="/inadimplencia" title="Clientes inadimplentes" value={String(kpis.clientesInadimplentes)}
+          intent={kpis.clientesInadimplentes > 0 ? "negative" : "positive"} />
+        <StatCard href="/contratos" title="Contratos em renovação" value={String(kpis.contratosEmRenovacao)}
+          intent={kpis.contratosEmRenovacao > 0 ? "warning" : "default"}
+          hint="próximos 30 dias" />
+      </div>
+
+      {/* ===== Resultado do período ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Resultado · {period.label}
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <StatCard href="/despesas" title="Despesas totais" value={formatBRL(finance.despesas)} intent="negative" />
+        <StatCard href="/folha" title="Folha total" value={formatBRL(finance.folhaPeriodo)} />
+        <StatCard href="/folha" title="Folha / faturamento" value={`${folhaPct}%`}
+          intent={folhaPct > 40 ? "negative" : folhaPct > 25 ? "warning" : "positive"} />
+        <StatCard href="/financeiro" title="Lucro / prejuízo" value={formatBRL(finance.lucro)}
+          intent={finance.lucro >= 0 ? "positive" : "negative"}
+          hint="receitas − despesas pagas" />
+        <StatCard href="/financeiro" title="Margem operacional" value={`${margemPct}%`}
+          intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"} />
+      </div>
+
+      {/* ===== Caixa & patrimônio ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Caixa & patrimônio
+      </h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard href="/caixa" title="Caixa atual" value={formatBRL(cash.caixaDisponivel)}
+          intent={cash.caixaDisponivel >= 0 ? "positive" : "negative"}
+          hint="contas + reservas" />
+        <StatCard href="/financeiro" title="Caixa previsto" value={formatBRL(cash.saldoPrevisto)}
+          intent={cash.saldoPrevisto >= 0 ? "positive" : "negative"}
+          hint="+ a receber − a pagar" />
+        <StatCard href="/ativos" title="Ativos" value={formatBRL(balance.ativosTotais)} />
+        <StatCard href="/passivos" title="Passivos" value={formatBRL(balance.passivosTotais)}
+          intent={balance.passivosTotais > 0 ? "negative" : "default"} />
+      </div>
+
+      {/* ===== Gráficos ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Tendências · últimos 12 meses
+      </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <ChartCard title="Receita × despesa por mês">
+          <GroupedBarChart
+            labels={series.labels}
+            series={[
+              { name: "Receitas", colorClass: "bg-emerald-500", values: series.receitas },
+              { name: "Despesas", colorClass: "bg-rose-500", values: series.despesas },
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="Lucro / prejuízo por mês" hint="receitas − despesas pagas">
+          <DivergingBarChart labels={series.labels} values={series.lucro} />
+        </ChartCard>
+        <ChartCard title="MRR ao longo do tempo" hint="contratos recorrentes vigentes em cada mês">
+          <LineChart labels={series.labels} values={series.mrr} />
+        </ChartCard>
+        <ChartCard title="Inadimplência por mês" hint="valores vencidos em aberto, por mês de vencimento">
+          <GroupedBarChart
+            labels={series.labels}
+            series={[{ name: "Vencido em aberto", colorClass: "bg-red-500", values: series.inadimplencia }]}
+          />
+        </ChartCard>
+        <ChartCard title="Folha sobre faturamento" hint="ideal: até 40%">
+          <LineChart
+            labels={series.labels}
+            values={series.folhaPct}
+            stroke="#f59e0b"
+            format={(v) => `${Math.round(v)}%`}
+          />
+        </ChartCard>
+        <ChartCard title="Projeção de caixa" hint="caixa + recebíveis − despesas e parcelas no horizonte">
+          <DivergingBarChart
+            labels={["Hoje", "30 dias", "60 dias", "90 dias"]}
+            values={[cash.caixaDisponivel, cash.projecao30, cash.projecao60, cash.projecao90]}
+          />
+        </ChartCard>
+      </div>
+
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Rankings · {period.label}
       </h2>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Receitas por mês
-            </p>
-            <MonthlyBarChart labels={history.labels} values={history.receitas} tone="income" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Despesas por mês
-            </p>
-            <MonthlyBarChart labels={history.labels} values={history.despesas} tone="expense" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Total em caixa por mês
-            </p>
-            <MonthlyBarChart labels={history.labels} values={history.caixa} tone="cash" />
-          </CardContent>
-        </Card>
-      </div>
-
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
-        Saúde financeira
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Taxa de endividamento
-            </p>
-            <p
-              className={`text-2xl font-bold mt-1 ${
-                endivStatus.intent === "positive"
-                  ? "text-emerald-600"
-                  : endivStatus.intent === "warning"
-                    ? "text-amber-600"
-                    : "text-red-600"
-              }`}
-            >
-              {pct(taxa)}
-            </p>
-            <Badge
-              variant={
-                endivStatus.intent === "positive"
-                  ? "success"
-                  : endivStatus.intent === "warning"
-                    ? "warning"
-                    : "destructive"
-              }
-              className="mt-2"
-            >
-              {endivStatus.label}
-            </Badge>
-            <p className="text-xs text-muted-foreground mt-2">
-              Saudável até 30%, crítico acima de 50%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
-        Previsto
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Previsto a receber"
-          value={formatBRL(receitasPrev + aReceber)}
-          intent="positive"
-        />
-        <StatCard
-          title="Previsto a pagar"
-          value={formatBRL(despesasPrev + faturas.openAmount)}
-          intent="negative"
-        />
-        <StatCard title="Receitas previstas" value={formatBRL(receitasPrev)} />
-        <StatCard title="Despesas previstas" value={formatBRL(despesasPrev)} />
-      </div>
-
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
-        Por categoria de gasto
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Gastos pessoais" value={formatBRL(pessoal)} />
-        <StatCard title="Gastos da empresa" value={formatBRL(empresa)} />
-        <StatCard title="Gastos de terceiros" value={formatBRL(terceiros)} />
-        <StatCard title="Gastos familiares" value={formatBRL(familia)} />
+        <ChartCard title="Despesas por categoria">
+          <HBarList items={breakdowns.despesasPorCategoria} colorClass="bg-rose-500" />
+        </ChartCard>
+        <ChartCard title="Receita por serviço" hint="recebido no período">
+          <HBarList items={breakdowns.receitaPorServico} colorClass="bg-emerald-500" />
+        </ChartCard>
+        <ChartCard title="Receita por cliente" hint="recebido no período">
+          <HBarList items={breakdowns.receitaPorCliente} colorClass="bg-[#1E70D3]" />
+        </ChartCard>
       </div>
     </div>
   );

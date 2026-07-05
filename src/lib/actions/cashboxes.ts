@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -24,6 +25,7 @@ const Schema = z.object({
 });
 
 export async function saveCashBox(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const targetRaw = String(formData.get("targetAmount") || "").trim();
   const parsed = Schema.parse({
     id: formData.get("id") || undefined,
@@ -55,6 +57,7 @@ export async function saveCashBox(formData: FormData) {
 }
 
 export async function deleteCashBox(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.cashBox.delete({ where: { id } });
   revalidatePath("/caixa");
   revalidatePath("/dashboard");
@@ -69,6 +72,7 @@ const MoveSchema = z.object({
 });
 
 export async function registerCashMovement(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const date =
     parseDateBR(String(formData.get("date") || "")) ?? new Date();
 
@@ -107,6 +111,7 @@ export async function registerCashMovement(formData: FormData) {
 }
 
 export async function deleteCashMovement(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const mov = await prisma.cashBoxMovement.findUnique({ where: { id } });
   if (!mov) return;
   const delta = mov.type === "IN" ? -mov.amount : mov.amount;

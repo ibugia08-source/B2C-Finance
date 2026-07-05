@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/page-header";
+import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange, monthLabel } from "@/lib/format";
@@ -68,7 +69,7 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
   if (searchParams.status) tableWhere.status = searchParams.status;
   if (searchParams.pessoa) tableWhere.responsibleId = searchParams.pessoa;
 
-  const [monthExpenses, expenses, people, categories, accounts] = await Promise.all([
+  const [monthExpenses, expenses, people, categories, accounts, clients, services, costCenters] = await Promise.all([
     prisma.transaction.findMany({
       where: monthWhere,
       select: { amount: true, status: true },
@@ -85,6 +86,9 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({ orderBy: { name: "asc" } }),
+    prisma.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.service.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.costCenter.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const totalMes = monthExpenses
@@ -104,9 +108,13 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
         title="Despesas"
         description={`Despesas do dia a dia (débito, pix, dinheiro…) · ${monthLabel(ref)}`}
         actions={
-          <ExpenseDialog people={people} categories={categories} accounts={accounts} />
+          <ExpenseDialog people={people} categories={categories} accounts={accounts} clients={clients} services={services} costCenters={costCenters} />
         }
       />
+
+      <div className="mb-3 print:hidden">
+        <SavedViews module="despesas" />
+      </div>
 
       <Card className="mb-4">
         <CardContent className="p-4">
@@ -172,6 +180,9 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
                         people={people}
                         categories={categories}
                         accounts={accounts}
+                        clients={clients}
+                        services={services}
+                        costCenters={costCenters}
                       />
                     </TableCell>
                   </TableRow>
@@ -221,6 +232,9 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
                         people={people}
                         categories={categories}
                         accounts={accounts}
+                        clients={clients}
+                        services={services}
+                        costCenters={costCenters}
                       />
                     </MobileCardActions>
                   </MobileCard>

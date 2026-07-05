@@ -7,7 +7,7 @@ import { useTransition } from "react";
 import { X, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visibleNavItems, type UserLike } from "./nav-items";
-import { B2CSymbol } from "./mascot";
+import { B2CLogo } from "./mascot";
 import { ThemeToggle } from "./theme-toggle";
 import { logoutAction } from "@/lib/actions/auth";
 
@@ -52,7 +52,7 @@ export function MobileMenu({
           {/* Cabeçalho */}
           <div className="flex items-center justify-between gap-3 border-b px-4 py-3.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              <B2CSymbol size={32} />
+              <B2CLogo height={24} />
               <div className="min-w-0">
                 <Dialog.Title className="text-base font-bold leading-none tracking-tight">
                   B2C <span className="text-primary">Finance</span>

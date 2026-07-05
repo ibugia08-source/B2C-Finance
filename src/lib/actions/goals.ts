@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -16,6 +17,7 @@ const Schema = z.object({
 });
 
 export async function saveGoal(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const deadlineStr = String(formData.get("deadline") || "");
   const deadline = deadlineStr ? parseDateBR(deadlineStr) : null;
   const parsed = Schema.parse({
@@ -58,6 +60,7 @@ export async function saveGoal(formData: FormData) {
 }
 
 export async function deleteGoal(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.goal.delete({ where: { id } });
   revalidatePath("/metas");
 }

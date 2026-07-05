@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { parseBRL } from "@/lib/format";
@@ -18,6 +19,7 @@ const CardSchema = z.object({
 });
 
 export async function saveCard(formData: FormData) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const parsed = CardSchema.parse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
@@ -63,6 +65,7 @@ const QuickAccountSchema = z.object({
 export async function createBankAccountQuick(
   formData: FormData
 ): Promise<{ id: string }> {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   const parsed = QuickAccountSchema.parse({
     name: formData.get("name"),
     bank: formData.get("bank") || null,
@@ -85,6 +88,7 @@ export async function createBankAccountQuick(
 }
 
 export async function quickRenameCard(id: string, name: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   if (!name.trim()) throw new Error("Nome obrigatório");
   await prisma.creditCard.update({ where: { id }, data: { name: name.trim() } });
   revalidatePath("/cartoes");
@@ -92,6 +96,7 @@ export async function quickRenameCard(id: string, name: string) {
 }
 
 export async function deleteCard(id: string) {
+  await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.creditCard.delete({ where: { id } });
   revalidatePath("/cartoes");
 }

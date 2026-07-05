@@ -89,13 +89,13 @@ export function InvoiceImportDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button variant="outline" size="sm">
-            <FileUp className="h-4 w-4 mr-1" /> Importar extrato
+            <FileUp className="h-4 w-4 mr-1" /> Adicionar fatura / extrato
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Importar extrato — {cardName}</DialogTitle>
+          <DialogTitle>Adicionar fatura / extrato — {cardName}</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="csv">

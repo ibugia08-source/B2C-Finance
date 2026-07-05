@@ -22,7 +22,14 @@ export type OwnerContext = {
 
 const storage = new AsyncLocalStorage<OwnerContext>();
 
-/** Executa `fn` com um dono fixado (jobs sem sessão, testes, migração). */
+/**
+ * Executa `fn` com um dono fixado (jobs sem sessão, testes, migração).
+ *
+ * ATENÇÃO: passe uma função `async` que faça `await` das queries DENTRO
+ * dela. Retornar uma PrismaPromise sem await (`() => prisma.x.create(...)`)
+ * faz a query executar FORA do contexto do AsyncLocalStorage — o dono não
+ * resolve e o escopo cai no fail-closed (`__no_owner__`).
+ */
 export function runWithOwner<T>(ownerId: string | null, fn: () => Promise<T>): Promise<T> {
   return storage.run({ ownerId }, fn);
 }

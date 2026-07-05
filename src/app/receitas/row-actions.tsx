@@ -10,11 +10,17 @@ export function IncomeActions({
   accounts,
   people,
   categories,
+  clients = [],
+  contracts = [],
+  costCenters = [],
 }: {
   income: any;
   accounts: any[];
   people: any[];
   categories: any[];
+  clients?: any[];
+  contracts?: any[];
+  costCenters?: any[];
 }) {
   const [pending, start] = useTransition();
   return (
@@ -23,6 +29,9 @@ export function IncomeActions({
         accounts={accounts}
         people={people}
         categories={categories}
+        clients={clients}
+        contracts={contracts}
+        costCenters={costCenters}
         initial={income}
         trigger={
           <Button variant="ghost" size="icon">
