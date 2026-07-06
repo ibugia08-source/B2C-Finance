@@ -69,7 +69,7 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
   if (searchParams.status) tableWhere.status = searchParams.status;
   if (searchParams.pessoa) tableWhere.responsibleId = searchParams.pessoa;
 
-  const [monthExpenses, expenses, people, categories, accounts, clients, services, costCenters] = await Promise.all([
+  const [monthExpenses, expenses, people, categories, accounts, clients, services] = await Promise.all([
     prisma.transaction.findMany({
       where: monthWhere,
       select: { amount: true, status: true },
@@ -88,7 +88,6 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
     prisma.account.findMany({ orderBy: { name: "asc" } }),
     prisma.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.service.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.costCenter.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const totalMes = monthExpenses
@@ -106,9 +105,9 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
     <div>
       <PageHeader
         title="Despesas"
-        description={`Despesas do dia a dia (débito, pix, dinheiro…) · ${monthLabel(ref)}`}
+        description={`Despesas da agência (débito, pix, dinheiro…) · ${monthLabel(ref)}`}
         actions={
-          <ExpenseDialog people={people} categories={categories} accounts={accounts} clients={clients} services={services} costCenters={costCenters} />
+          <ExpenseDialog people={people} categories={categories} accounts={accounts} clients={clients} services={services} />
         }
       />
 
@@ -182,7 +181,6 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
                         accounts={accounts}
                         clients={clients}
                         services={services}
-                        costCenters={costCenters}
                       />
                     </TableCell>
                   </TableRow>
@@ -234,7 +232,6 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
                         accounts={accounts}
                         clients={clients}
                         services={services}
-                        costCenters={costCenters}
                       />
                     </MobileCardActions>
                   </MobileCard>

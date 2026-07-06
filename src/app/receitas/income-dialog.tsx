@@ -23,7 +23,6 @@ export function IncomeDialog({
   categories,
   clients = [],
   contracts = [],
-  costCenters = [],
   initial,
   trigger,
 }: {
@@ -32,7 +31,6 @@ export function IncomeDialog({
   categories: any[];
   clients?: { id: string; name: string }[];
   contracts?: { id: string; title: string; clientId: string }[];
-  costCenters?: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
@@ -201,15 +199,6 @@ export function IncomeDialog({
                   <option value="">—</option>
                   {contracts.map((c) => (
                     <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Centro de custo</Label>
-                <Select name="costCenterId" defaultValue={initial?.costCenterId ?? ""}>
-                  <option value="">—</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </Select>
               </div>

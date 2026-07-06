@@ -1,340 +1,243 @@
-import { PageHeader } from "@/components/page-header";
-import { SavedViews } from "@/components/saved-views";
-import { StatCard } from "@/components/stat-card";
-import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, parseDateBR } from "@/lib/format";
-import {
-  mrrAtivo,
-  tcvVendido,
-  receitaReconhecidaMes,
-  renovacoesProximas,
-  vencidosWhere,
-} from "@/lib/services/contract-metrics";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  MobileCards,
-  MobileCard,
-  MobileCardHeader,
-  MobileCardActions,
-  Field,
-  MobileEmpty,
-} from "@/components/ui/record-card";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/viewer";
-import { ContractDialog } from "./contract-dialog";
-import { ContractActions } from "./row-actions";
-import { ContractFilters } from "./filters";
-import { GenerateAllButton } from "./generate-all-button";
+import { PageHeader } from "@/components/page-header";
+import { prisma } from "@/lib/prisma";
+import { formatBRL, formatDateBR } from "@/lib/format";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  CONTRACT_STATUS_LABEL,
-  CONTRACT_TYPE_LABEL,
-  contractStatusVariant,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { requireAdmin } from "@/lib/auth/viewer";
+import { TemplateUploadDialog } from "./template-upload-dialog";
+import { TemplateActions, type TemplateLite } from "./template-actions";
+import { GeneratedContractActions } from "./generated-actions";
+import {
+  COMMERCIAL_TYPE_LABEL,
+  DURATION_TYPE_LABEL,
+  TEMPLATE_STATUS_LABEL,
+  templateStatusVariant,
+  GENERATED_STATUS_LABEL,
+  generatedStatusVariant,
 } from "./_meta";
+import { Braces, FileText, AlertTriangle } from "lucide-react";
 
-type Search = {
-  status?: string;
-  tipo?: string;
-  cliente?: string;
-  plano?: string;
-  servico?: string;
-  renovacao?: string;
-  vencidos?: string;
-  inicioDe?: string;
-  inicioAte?: string;
-  fimDe?: string;
-  fimAte?: string;
-};
+type Search = { status?: string; tipo?: string; para?: string };
 
-function dateRange(de?: string, ate?: string) {
-  const range: any = {};
-  const d = de ? parseDateBR(de) : null;
-  const a = ate ? parseDateBR(ate) : null;
-  if (d) range.gte = d;
-  if (a) {
-    a.setDate(a.getDate() + 1);
-    range.lt = a;
-  }
-  return Object.keys(range).length ? range : undefined;
-}
-
-export default async function ContratosPage({
-  searchParams,
-}: {
-  searchParams: Search;
-}) {
+/**
+ * Biblioteca de Modelos de Contrato: modelos DOCX com variáveis {{ }}
+ * e histórico de contratos gerados. O acordo comercial (MRR/TCV,
+ * cobranças, renovação) vive em /acordos.
+ */
+export default async function ContratosPage({ searchParams }: { searchParams: Search }) {
   await requireAdmin();
 
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;
-  if (searchParams.tipo) where.type = searchParams.tipo;
-  if (searchParams.cliente) where.clientId = searchParams.cliente;
-  if (searchParams.plano) where.planId = searchParams.plano;
-  if (searchParams.servico) {
-    where.services = { some: { serviceId: searchParams.servico } };
-  }
-  const inicio = dateRange(searchParams.inicioDe, searchParams.inicioAte);
-  if (inicio) where.startDate = inicio;
-  const fim = dateRange(searchParams.fimDe, searchParams.fimAte);
-  if (fim) where.endDate = fim;
-  if (searchParams.renovacao) {
-    const dias = parseInt(searchParams.renovacao, 10) || 30;
-    const limite = new Date();
-    limite.setDate(limite.getDate() + dias);
-    where.status = { in: ["ACTIVE", "RENEWAL"] };
-    where.renewalDate = { not: null, lte: limite };
-  }
-  if (searchParams.vencidos === "1") {
-    Object.assign(where, vencidosWhere());
-  }
+  if (searchParams.tipo) where.commercialType = searchParams.tipo;
 
-  const anoInicio = new Date(new Date().getFullYear(), 0, 1);
-  const anoFim = new Date(new Date().getFullYear() + 1, 0, 1);
+  const [templatesRaw, generatedRaw] = await Promise.all([
+    prisma.contractTemplate.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      include: { _count: { select: { generated: true } } },
+    }),
+    prisma.generatedContract.findMany({
+      orderBy: { generatedAt: "desc" },
+      take: 20,
+      include: {
+        client: { select: { id: true, name: true } },
+        template: { select: { name: true } },
+      },
+    }),
+  ]);
 
-  const [contractsRaw, clients, plansRaw, servicesRaw, mrr, tcvAno, reconhecida, renovacoes] =
-    await Promise.all([
-      prisma.contract.findMany({
-        where,
-        orderBy: [{ status: "asc" }, { startDate: "desc" }],
-        take: 200,
-        include: {
-          client: { select: { id: true, name: true } },
-          plan: { select: { name: true } },
-          services: { include: { service: { select: { name: true } } } },
-        },
-      }),
-      prisma.client.findMany({
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      }),
-      prisma.plan.findMany({
-        where: { active: true },
-        orderBy: { name: "asc" },
-        include: { services: { select: { serviceId: true } } },
-      }),
-      prisma.service.findMany({
-        where: { active: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true, defaultPrice: true },
-      }),
-      mrrAtivo(),
-      tcvVendido(anoInicio, anoFim),
-      receitaReconhecidaMes(),
-      renovacoesProximas(30),
-    ]);
-
-  // Serializações Decimal → number para componentes client
-  const contracts = contractsRaw.map((c) => ({
-    ...c,
-    monthlyValue: Number(c.monthlyValue),
-    totalValue: Number(c.totalValue),
-    setupFee: c.setupFee != null ? Number(c.setupFee) : null,
-    services: c.services.map((s) => ({
-      serviceId: s.serviceId,
-      unitPrice: Number(s.unitPrice),
-      name: s.service.name,
-    })),
-  }));
-  const plans = plansRaw.map((p) => ({
-    id: p.id,
-    name: p.name,
-    type: p.type,
-    recurrence: p.recurrence,
-    monthlyPrice: Number(p.monthlyPrice),
-    setupFee: p.setupFee != null ? Number(p.setupFee) : null,
-    defaultDuration: p.defaultDuration,
-    serviceIds: p.services.map((s) => s.serviceId),
-  }));
-  const services = servicesRaw.map((s) => ({
-    id: s.id,
-    name: s.name,
-    defaultPrice: s.defaultPrice != null ? Number(s.defaultPrice) : null,
+  const templates = templatesRaw.map((t) => ({
+    ...t,
+    monthlyAmount: t.monthlyAmount != null ? Number(t.monthlyAmount) : null,
+    totalAmount: t.totalAmount != null ? Number(t.totalAmount) : null,
+    includedServices: Array.isArray(t.includedServices) ? (t.includedServices as string[]) : [],
+    variableCount: Array.isArray(t.variables) ? (t.variables as unknown[]).length : 0,
+    warningCount: Array.isArray(t.warnings) ? (t.warnings as unknown[]).length : 0,
   }));
 
-  const today = new Date();
-  const isVencido = (c: (typeof contracts)[number]) =>
-    ["ACTIVE", "RENEWAL"].includes(c.status) &&
-    ((c.endDate && new Date(c.endDate) < today) ||
-      (c.renewalDate && new Date(c.renewalDate) < today));
+  const para = searchParams.para ? `?cliente=${searchParams.para}` : "";
 
   return (
     <div>
       <PageHeader
         title="Contratos"
-        description="Receita recorrente e contratual da agência"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <GenerateAllButton />
-            <ContractDialog clients={clients} plans={plans} services={services} />
-          </div>
-        }
+        description="Biblioteca de modelos DOCX e geração de contratos preenchidos"
+        actions={<TemplateUploadDialog />}
       />
-
-      <div className="mb-3 print:hidden">
-        <SavedViews module="contratos" />
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <StatCard title="MRR ativo" value={formatBRL(mrr)} intent="positive"
-          hint="recorrência mensal vigente" />
-        <StatCard title={`TCV vendido (${today.getFullYear()})`} value={formatBRL(tcvAno)}
-          hint="valor contratado no ano" />
-        <StatCard title="Reconhecida no mês" value={formatBRL(reconhecida)}
-          hint="competência (independe do caixa)" />
-        <StatCard
-          title="Renovações ≤ 30d"
-          value={String(renovacoes)}
-          intent={renovacoes > 0 ? "warning" : "default"}
-        />
-      </div>
 
       <Card className="mb-4">
         <CardContent className="p-4">
-          <ContractFilters
-            clients={clients.map((c) => ({ value: c.id, label: c.name }))}
-            plans={plans.map((p) => ({ value: p.id, label: p.name }))}
-            services={services.map((s) => ({ value: s.id, label: s.name }))}
-          />
+          <form className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Status</label>
+              <select
+                name="status"
+                defaultValue={searchParams.status ?? ""}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                {Object.entries(TEMPLATE_STATUS_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Tipo comercial</label>
+              <select
+                name="tipo"
+                defaultValue={searchParams.tipo ?? ""}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Todos</option>
+                {Object.entries(COMMERCIAL_TYPE_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" variant="outline">Filtrar</Button>
+          </form>
         </CardContent>
       </Card>
 
+      {templates.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center text-muted-foreground">
+            <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <p className="font-medium text-foreground">Nenhum modelo de contrato cadastrado.</p>
+            <p className="text-sm mt-1">
+              Envie um modelo em DOCX com variáveis entre chaves — ex.: {"{{Nome da empresa}}"} — para começar.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {templates.map((t) => (
+            <Card key={t.id} className="flex flex-col">
+              <CardContent className="p-5 flex flex-col gap-3 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link href={`/contratos/${t.id}`} className="font-semibold hover:underline block truncate">
+                      {t.name}
+                    </Link>
+                    {t.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">{t.description}</p>
+                    )}
+                  </div>
+                  <Badge variant={templateStatusVariant(t.status)}>
+                    {TEMPLATE_STATUS_LABEL[t.status]}
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 text-xs">
+                  {t.commercialType && (
+                    <Badge variant="secondary">{COMMERCIAL_TYPE_LABEL[t.commercialType]}</Badge>
+                  )}
+                  {t.durationType && (
+                    <Badge variant="outline">{DURATION_TYPE_LABEL[t.durationType]}</Badge>
+                  )}
+                  {t.durationMonths != null && (
+                    <Badge variant="outline">{t.durationMonths} meses</Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  {t.monthlyAmount != null && t.monthlyAmount > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Mensal </span>
+                      <span className="font-medium">{formatBRL(t.monthlyAmount)}</span>
+                    </div>
+                  )}
+                  {t.totalAmount != null && t.totalAmount > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Total </span>
+                      <span className="font-medium">{formatBRL(t.totalAmount)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1">
+                    <Braces className="h-3.5 w-3.5 text-primary" />
+                    {t.variableCount} variável(is)
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Gerados </span>
+                    <span className="font-medium">{t._count.generated}</span>
+                  </div>
+                </div>
+
+                {t.warningCount > 0 && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" /> {t.warningCount} alerta(s) de variável — ver detalhes
+                  </p>
+                )}
+
+                <p className="text-xs text-muted-foreground mt-auto">
+                  Criado em {formatDateBR(t.createdAt)} · atualizado {formatDateBR(t.updatedAt)}
+                </p>
+
+                <div className="border-t pt-2 -mx-1">
+                  <TemplateActions
+                    template={t as unknown as TemplateLite}
+                    generateHref={`/contratos/${t.id}/gerar${para}`}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <h2 className="text-lg font-semibold mt-8 mb-3">Contratos gerados recentemente</h2>
       <Card>
         <CardContent className="p-0">
-          <div className="hidden md:block overflow-x-auto">
+          {generatedRaw.length === 0 ? (
+            <p className="text-center text-muted-foreground py-10 text-sm">
+              Nenhum contrato gerado ainda. Use “Gerar contrato” em um modelo para criar o primeiro.
+            </p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Contrato</TableHead>
                   <TableHead>Cliente</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Mensal</TableHead>
-                  <TableHead className="text-right">TCV</TableHead>
-                  <TableHead>Vigência</TableHead>
-                  <TableHead>Renovação</TableHead>
+                  <TableHead>Modelo</TableHead>
+                  <TableHead>Gerado em</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {contracts.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
-                      Nenhum contrato encontrado. Crie o primeiro contrato para
-                      começar a medir MRR e TCV.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {contracts.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium max-w-[220px]">
-                      <span className="truncate block">{c.title}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {[c.plan?.name && `plano ${c.plan.name}`,
-                          c.services.map((s) => s.name).join(", ")]
-                          .filter(Boolean)
-                          .join(" · ") || "—"}
-                      </span>
-                    </TableCell>
+                {generatedRaw.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell className="font-medium max-w-xs truncate">{g.name}</TableCell>
                     <TableCell>
-                      <Link href={`/clientes/${c.client.id}`} className="hover:underline">
-                        {c.client.name}
-                      </Link>
+                      {g.client ? (
+                        <Link href={`/clientes/${g.client.id}`} className="hover:underline">
+                          {g.client.name}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell>{CONTRACT_TYPE_LABEL[c.type] ?? c.type}</TableCell>
-                    <TableCell className="text-right">
-                      {c.monthlyValue > 0 ? formatBRL(c.monthlyValue) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {c.totalValue > 0 ? formatBRL(c.totalValue) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatDateBR(c.startDate)}
-                      {c.endDate ? ` → ${formatDateBR(c.endDate)}` : " → sem fim"}
-                    </TableCell>
+                    <TableCell className="max-w-[180px] truncate">{g.template?.name ?? "—"}</TableCell>
+                    <TableCell>{formatDateBR(g.generatedAt)}</TableCell>
                     <TableCell>
-                      {c.renewalDate ? formatDateBR(c.renewalDate) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          isVencido(c) ? "destructive" : contractStatusVariant(c.status)
-                        }
-                      >
-                        {isVencido(c) ? "Vencido" : CONTRACT_STATUS_LABEL[c.status]}
+                      <Badge variant={generatedStatusVariant(g.status)}>
+                        {GENERATED_STATUS_LABEL[g.status]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">
-                      <ContractActions
-                        contract={c}
-                        clients={clients}
-                        plans={plans}
-                        services={services}
-                      />
+                    <TableCell>
+                      <GeneratedContractActions contract={g} />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
-
-          <MobileCards>
-            {contracts.length === 0 ? (
-              <MobileEmpty>
-                Nenhum contrato encontrado. Crie o primeiro contrato para começar a
-                medir MRR e TCV.
-              </MobileEmpty>
-            ) : (
-              contracts.map((c) => (
-                <MobileCard key={c.id}>
-                  <MobileCardHeader
-                    title={c.title}
-                    aside={
-                      <Badge
-                        variant={
-                          isVencido(c) ? "destructive" : contractStatusVariant(c.status)
-                        }
-                      >
-                        {isVencido(c) ? "Vencido" : CONTRACT_STATUS_LABEL[c.status]}
-                      </Badge>
-                    }
-                  />
-                  <div className="space-y-1.5">
-                    <Field label="Cliente">{c.client.name}</Field>
-                    <Field label="Tipo">{CONTRACT_TYPE_LABEL[c.type] ?? c.type}</Field>
-                    <Field label="Mensal">
-                      {c.monthlyValue > 0 ? formatBRL(c.monthlyValue) : "—"}
-                    </Field>
-                    <Field label="TCV">
-                      {c.totalValue > 0 ? formatBRL(c.totalValue) : "—"}
-                    </Field>
-                    <Field label="Vigência">
-                      {formatDateBR(c.startDate)}
-                      {c.endDate ? ` → ${formatDateBR(c.endDate)}` : " → sem fim"}
-                    </Field>
-                    <Field label="Renovação">
-                      {c.renewalDate ? formatDateBR(c.renewalDate) : "—"}
-                    </Field>
-                  </div>
-                  <MobileCardActions>
-                    <ContractActions
-                      contract={c}
-                      clients={clients}
-                      plans={plans}
-                      services={services}
-                    />
-                  </MobileCardActions>
-                </MobileCard>
-              ))
-            )}
-          </MobileCards>
+          )}
         </CardContent>
       </Card>
     </div>

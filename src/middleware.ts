@@ -72,11 +72,6 @@ async function isSessionValid(token: string | undefined): Promise<boolean> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Webhook do WhatsApp / cron de lembretes: chamados externamente, sem sessão.
-  if (pathname.startsWith("/api/whatsapp")) {
-    return NextResponse.next();
-  }
-
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const valid = await isSessionValid(token);
 

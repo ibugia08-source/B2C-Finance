@@ -33,7 +33,6 @@ function countMonths(start: Date, end: Date): number {
 const ContractSchema = z.object({
   id: z.string().optional(),
   clientId: z.string().min(1, "Selecione o cliente."),
-  planId: z.string().nullable(),
   title: z.string().trim().min(1, "Informe o título do contrato."),
   type: z.nativeEnum(ContractType),
   status: z.nativeEnum(ContractStatus),
@@ -68,7 +67,6 @@ export async function saveContract(formData: FormData): Promise<ActionResult> {
     const parsed = ContractSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
       clientId: String(formData.get("clientId") ?? ""),
-      planId: clean(formData.get("planId")),
       title: String(formData.get("title") ?? "").trim(),
       type: (clean(formData.get("type")) ?? "MRR") as ContractType,
       status: (clean(formData.get("status")) ?? "ACTIVE") as ContractStatus,
@@ -112,7 +110,6 @@ export async function saveContract(formData: FormData): Promise<ActionResult> {
 
     const data = {
       clientId: parsed.clientId,
-      planId: parsed.planId,
       title: parsed.title,
       type: parsed.type,
       status: parsed.status,
@@ -365,7 +362,7 @@ export async function generateAllBillings(): Promise<ActionResult & { created?: 
 }
 
 function revalidateContracts(clientId?: string) {
-  revalidatePath("/contratos");
+  revalidatePath("/acordos");
   revalidatePath("/clientes");
   if (clientId) revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/dashboard");

@@ -33,19 +33,17 @@ const EXPENSE_TYPE_LABEL: Record<string, string> = {
   OTHER: "Outra",
 };
 
-const ENTITY_PARAMS = ["cliente", "servico", "cc", "status", "treceita", "tdespesa"] as const;
+const ENTITY_PARAMS = ["cliente", "servico", "status", "treceita", "tdespesa"] as const;
 
 type Opt = { id: string; name: string };
 
-/** Filtro global do dashboard executivo: período + cliente/serviço/CC/status/tipos. */
+/** Filtro global do dashboard executivo: período + cliente/serviço/status/tipos. */
 export function DashboardFilters({
   clients,
   services,
-  costCenters,
 }: {
   clients: Opt[];
   services: Opt[];
-  costCenters: Opt[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -87,15 +85,6 @@ export function DashboardFilters({
             <option value="">Todos</option>
             {services.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label className="text-xs">Centro de custo</Label>
-          <Select className={selectCls} value={sp.get("cc") ?? ""} onChange={(e) => setParam("cc", e.target.value)}>
-            <option value="">Todos</option>
-            {costCenters.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </Select>
         </div>

@@ -9,15 +9,16 @@ import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
 
 type Option = { value: string; label: string };
 
+/**
+ * Filtros essenciais da carteira: busca (nome/razão/CNPJ), status,
+ * serviço, segmento e ordenação alfabética. Atalhos em chips para as
+ * visões mais usadas.
+ */
 export function ClientFilters({
   services,
-  owners,
-  cities,
   segments,
 }: {
   services: Option[];
-  owners: string[];
-  cities: string[];
   segments: string[];
 }) {
   const router = useRouter();
@@ -85,13 +86,13 @@ export function ClientFilters({
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 items-end">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
         <form onSubmit={onSearch} className="col-span-2">
           <Label className="text-xs">Buscar</Label>
           <Input
             name="q"
             defaultValue={sp.get("q") ?? ""}
-            placeholder="Nome, doc, e-mail, responsável…"
+            placeholder="Nome, razão social ou CNPJ/CPF…"
           />
         </form>
 
@@ -126,36 +127,6 @@ export function ClientFilters({
         </div>
 
         <div>
-          <Label className="text-xs">Responsável</Label>
-          <Select
-            value={sp.get("responsavel") ?? ""}
-            onChange={(e) => update("responsavel", e.target.value)}
-          >
-            <option value="">Todos</option>
-            {owners.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-xs">Cidade</Label>
-          <Select
-            value={sp.get("cidade") ?? ""}
-            onChange={(e) => update("cidade", e.target.value)}
-          >
-            <option value="">Todas</option>
-            {cities.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
           <Label className="text-xs">Segmento</Label>
           <Select
             value={sp.get("segmento") ?? ""}
@@ -171,20 +142,14 @@ export function ClientFilters({
         </div>
 
         <div>
-          <Label className="text-xs">Entrada de</Label>
-          <Input
-            type="date"
-            defaultValue={sp.get("entradaDe") ?? ""}
-            onChange={(e) => update("entradaDe", e.target.value)}
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Entrada até</Label>
-          <Input
-            type="date"
-            defaultValue={sp.get("entradaAte") ?? ""}
-            onChange={(e) => update("entradaAte", e.target.value)}
-          />
+          <Label className="text-xs">Ordenação</Label>
+          <Select
+            value={sp.get("ordem") ?? "az"}
+            onChange={(e) => update("ordem", e.target.value)}
+          >
+            <option value="az">Nome A–Z</option>
+            <option value="za">Nome Z–A</option>
+          </Select>
         </div>
       </div>
     </div>

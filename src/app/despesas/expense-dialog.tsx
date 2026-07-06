@@ -23,7 +23,6 @@ export function ExpenseDialog({
   accounts,
   clients = [],
   services = [],
-  costCenters = [],
   initial,
   trigger,
 }: {
@@ -32,7 +31,6 @@ export function ExpenseDialog({
   accounts: any[];
   clients?: { id: string; name: string }[];
   services?: { id: string; name: string }[];
-  costCenters?: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
@@ -204,15 +202,6 @@ export function ExpenseDialog({
                   <option value="">—</option>
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="sm:col-span-2">
-                <Label>Centro de custo</Label>
-                <Select name="costCenterId" defaultValue={initial?.costCenterId ?? ""}>
-                  <option value="">—</option>
-                  {costCenters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </Select>
               </div>

@@ -25,6 +25,8 @@ const ClientSchema = z.object({
   segment: z.string().trim().nullable(),
   city: z.string().trim().nullable(),
   state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA).").nullable(),
+  address: z.string().trim().nullable(),
+  legalRepresentative: z.string().trim().nullable(),
   origin: z.string().trim().nullable(),
   salesOwner: z.string().trim().nullable(),
   opsOwner: z.string().trim().nullable(),
@@ -38,7 +40,6 @@ const ClientSchema = z.object({
   status: z.nativeEnum(ClientStatus),
   monthlyValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
   startedAt: z.date().nullable(),
-  personId: z.string().nullable(),
   notes: z.string().trim().nullable(),
 });
 
@@ -61,6 +62,8 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       segment: clean(formData.get("segment")),
       city: clean(formData.get("city")),
       state: clean(formData.get("state"))?.toUpperCase() ?? null,
+      address: clean(formData.get("address")),
+      legalRepresentative: clean(formData.get("legalRepresentative")),
       origin: clean(formData.get("origin")),
       salesOwner: clean(formData.get("salesOwner")),
       opsOwner: clean(formData.get("opsOwner")),
@@ -81,7 +84,6 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         const raw = clean(formData.get("startedAt"));
         return raw == null ? null : parseDateBR(raw);
       })(),
-      personId: clean(formData.get("personId")),
       notes: clean(formData.get("notes")),
     });
 
@@ -94,6 +96,8 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       segment: parsed.segment,
       city: parsed.city,
       state: parsed.state,
+      address: parsed.address,
+      legalRepresentative: parsed.legalRepresentative,
       origin: parsed.origin,
       salesOwner: parsed.salesOwner,
       opsOwner: parsed.opsOwner,
@@ -102,7 +106,6 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       status: parsed.status,
       monthlyValue: parsed.monthlyValue,
       startedAt: parsed.startedAt,
-      personId: parsed.personId,
       notes: parsed.notes,
     };
 
@@ -185,7 +188,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         if (model === "MRR") {
           await prisma.client.update({ where: { id: created.id }, data: { monthlyValue: monthly } });
         }
-        revalidatePath("/contratos");
+        revalidatePath("/acordos");
         revalidatePath("/cobrancas");
       }
     }
@@ -237,7 +240,7 @@ export async function extractClientFromContract(formData: FormData): Promise<Con
       return { ok: false, error: "PDF sem texto legível — envie um contrato digital (não escaneado)." };
 
     const system = `Você extrai dados de contratos de prestação de serviços de uma agência de marketing brasileira. Responda APENAS com um JSON válido (sem markdown, sem comentários) no formato:
-{"name": string|null, "legalName": string|null, "document": string|null, "email": string|null, "phone": string|null, "city": string|null, "state": string|null (sigla UF), "segment": string|null, "paymentModel": "MRR"|"TCV"|null, "contractTotal": string|null (ex: "5100,00"), "contractMonths": string|null (nº de meses do contrato), "paymentDay": string|null (dia de vencimento 1-28), "startedAt": string|null (data de início dd/mm/aaaa), "notes": string|null (resumo de serviços/condições em 1 frase)}
+{"name": string|null, "legalName": string|null, "document": string|null, "email": string|null, "phone": string|null, "city": string|null, "state": string|null (sigla UF), "address": string|null (endereço completo do contratante), "legalRepresentative": string|null (nome do representante legal que assina), "segment": string|null, "paymentModel": "MRR"|"TCV"|null, "contractTotal": string|null (ex: "5100,00"), "contractMonths": string|null (nº de meses do contrato), "paymentDay": string|null (dia de vencimento 1-28), "startedAt": string|null (data de início dd/mm/aaaa), "notes": string|null (resumo de serviços/condições em 1 frase)}
 Regras: "name" é o nome do CONTRATANTE (cliente), nunca da agência/contratada (B2C, B2C Gestão). paymentModel: "MRR" se o pagamento é mensal/recorrente; "TCV" se é valor fechado do projeto. contractTotal: valor TOTAL do contrato (se só houver mensal e prazo, multiplique). Use null quando o dado não estiver no contrato. NUNCA invente.`;
 
     const result = await chatComplete({

@@ -2,10 +2,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Abas do hub de cobranças — unifica Cobranças, Pagamentos e Inadimplência
- * em uma experiência única (rotas preservadas, navegação em 1 clique).
+ * Abas do hub de receita — o fluxo completo em um módulo só:
+ * Acordos (contratos MRR/TCV que geram as cobranças) → Cobranças →
+ * Pagamentos → Inadimplência. Rotas preservadas, navegação em 1 clique.
  */
 const TABS = [
+  { href: "/acordos", label: "Acordos" },
   { href: "/cobrancas", label: "Cobranças" },
   { href: "/pagamentos", label: "Pagamentos" },
   { href: "/inadimplencia", label: "Inadimplência" },

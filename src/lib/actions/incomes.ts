@@ -38,7 +38,6 @@ const Schema = z.object({
     .optional(),
   clientId: z.string().nullable().optional(),
   contractId: z.string().nullable().optional(),
-  costCenterId: z.string().nullable().optional(),
   competenceMonth: z.number().int().min(1).max(12).nullable().optional(),
   competenceYear: z.number().int().min(2000).max(2100).nullable().optional(),
 });
@@ -63,7 +62,6 @@ export async function saveIncome(formData: FormData) {
     revenueType: (formData.get("revenueType") as string) || null,
     clientId: (formData.get("clientId") as string) || null,
     contractId: (formData.get("contractId") as string) || null,
-    costCenterId: (formData.get("costCenterId") as string) || null,
     ...(() => {
       // competência opcional (input month "YYYY-MM"); padrão = mês do recebimento
       const comp = String(formData.get("competence") || "");
@@ -89,7 +87,6 @@ export async function saveIncome(formData: FormData) {
     revenueType: parsed.revenueType ?? null,
     clientId: parsed.clientId ?? null,
     contractId: parsed.contractId ?? null,
-    costCenterId: parsed.costCenterId ?? null,
     competenceMonth: parsed.competenceMonth ?? null,
     competenceYear: parsed.competenceYear ?? null,
     // mantém compat com campos legados

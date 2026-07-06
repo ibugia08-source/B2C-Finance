@@ -61,7 +61,7 @@ export default async function PessoasPage() {
     <div>
       <PageHeader
         title="Pessoas"
-        description="Cadastre e acompanhe gastos, dívidas e pagamentos por pessoa."
+        description="Quem usa os cartões e contas da agência — gastos por responsável, reembolsos e acertos."
         actions={<PersonDialog />}
       />
 

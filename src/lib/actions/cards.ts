@@ -83,7 +83,7 @@ export async function createBankAccountQuick(
     },
   });
   revalidatePath("/cartoes");
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
   return { id: created.id };
 }
 

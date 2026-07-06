@@ -42,7 +42,7 @@ export default async function CaixaPage() {
     <div>
       <PageHeader
         title="Caixa"
-        description="Gerencie o dinheiro que você guarda e separa"
+        description="Reservas da agência — dinheiro guardado e separado (impostos, 13º, fundo de emergência)"
         actions={<CashBoxDialog accounts={accounts} />}
       />
 

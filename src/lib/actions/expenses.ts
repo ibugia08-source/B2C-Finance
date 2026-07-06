@@ -32,7 +32,6 @@ const Schema = z.object({
     .optional(),
   clientId: z.string().nullable().optional(),
   serviceId: z.string().nullable().optional(),
-  costCenterId: z.string().nullable().optional(),
 });
 
 function addMonths(d: Date, n: number): Date {
@@ -85,7 +84,6 @@ export async function saveExpense(formData: FormData) {
     recurrence: (formData.get("recurrence") as string) || null,
     clientId: (formData.get("clientId") as string) || null,
     serviceId: (formData.get("serviceId") as string) || null,
-    costCenterId: (formData.get("costCenterId") as string) || null,
   });
 
   const data = {
@@ -106,7 +104,6 @@ export async function saveExpense(formData: FormData) {
     recurrence: parsed.recurrence ?? null,
     clientId: parsed.clientId ?? null,
     serviceId: parsed.serviceId ?? null,
-    costCenterId: parsed.costCenterId ?? null,
     hash: null,
   };
 

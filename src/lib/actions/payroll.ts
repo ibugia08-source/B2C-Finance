@@ -15,7 +15,6 @@ const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidatePayroll() {
   revalidatePath("/folha");
-  revalidatePath("/financeiro");
   revalidatePath("/despesas");
   revalidatePath("/dashboard");
 }

@@ -249,12 +249,12 @@ export const IMPORT_DEFS: ImportDef[] = [
   // ---------------- Contratos ----------------
   {
     key: "contratos",
-    title: "Contratos",
-    description: "Contratos por cliente (MRR/TCV) — o cliente precisa existir",
+    title: "Acordos comerciais",
+    description: "Acordos comerciais por cliente (MRR/TCV) — o cliente precisa existir",
     instructions: [
       "O cliente é localizado pelo NOME exato (sem diferenciar maiúsculas).",
       "Se informar só o valor total + data fim, o valor mensal é derivado (e vice-versa).",
-      "As cobranças NÃO são geradas na importação — use \"Gerar cobranças\" em /contratos depois.",
+      "As cobranças NÃO são geradas na importação — use \"Gerar cobranças\" em /acordos depois.",
     ],
     columns: [
       { key: "cliente", header: "Cliente", required: true, kind: "text", example: "Empresa Alfa" },

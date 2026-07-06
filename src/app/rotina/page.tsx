@@ -131,11 +131,11 @@ export default async function RotinaPage() {
   for (const r of renewals.slice(0, 2)) {
     tarefas.push({
       text: `Encaminhar renovação de "${r.title}" (${r.client.name}) — ${r.renewalDate ? formatDateBR(r.renewalDate) : ""}`,
-      href: "/contratos",
+      href: "/acordos",
     });
   }
   if (cash.projecao30 < 0)
-    tarefas.push({ text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo", href: "/financeiro" });
+    tarefas.push({ text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo", href: "/cobrancas" });
 
   return (
     <div>

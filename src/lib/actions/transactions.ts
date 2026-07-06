@@ -115,7 +115,7 @@ export async function saveTransaction(formData: FormData) {
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
 }
 
 export async function deleteTransaction(id: string) {
@@ -123,7 +123,7 @@ export async function deleteTransaction(id: string) {
   await prisma.transaction.delete({ where: { id } });
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
 }
 
 export async function setTransactionStatus(id: string, status: string) {

@@ -76,7 +76,7 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
     <div>
       <PageHeader
         title="Movimentações"
-        description="Histórico de todas as movimentações feitas na plataforma."
+        description="Movimentações das contas e cartões da agência."
         actions={
           <div className="flex flex-wrap gap-2">
             <CategoryDialog />

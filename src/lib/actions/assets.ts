@@ -20,7 +20,6 @@ const moneyOrNull = (v: FormDataEntryValue | null) => {
 function revalidateBalance() {
   revalidatePath("/ativos");
   revalidatePath("/passivos");
-  revalidatePath("/financeiro");
   revalidatePath("/dashboard");
 }
 

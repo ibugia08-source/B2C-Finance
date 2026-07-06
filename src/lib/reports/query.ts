@@ -13,7 +13,6 @@ export type ReportQuery = {
   clientId?: string;
   serviceId?: string;
   contractId?: string;
-  costCenterId?: string;
   categoryId?: string;
   responsavel?: string; // texto livre (salesOwner/collector/responsável)
   status?: string; // status do domínio do relatório
@@ -59,7 +58,6 @@ export function parseReportQuery(sp: SearchParams): ReportQuery {
     clientId: sp.cliente || undefined,
     serviceId: sp.servico || undefined,
     contractId: sp.contrato || undefined,
-    costCenterId: sp.cc || undefined,
     categoryId: sp.categoria || undefined,
     responsavel: sp.responsavel || undefined,
     status: sp.status || undefined,

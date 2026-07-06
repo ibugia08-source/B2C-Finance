@@ -33,7 +33,6 @@ export type FilterField =
   | "contrato"
   | "status"
   | "categoria"
-  | "cc"
   | "responsavel"
   | "tipo"
   | "valor"
@@ -279,7 +278,6 @@ async function buildDespesas(q: ReportQuery): Promise<ReportRow[]> {
   };
   if (q.clientId) where.clientId = q.clientId;
   if (q.serviceId) where.serviceId = q.serviceId;
-  if (q.costCenterId) where.costCenterId = q.costCenterId;
   if (q.categoryId) where.categoryId = q.categoryId;
   if (q.tipo) where.expenseType = q.tipo;
   if (q.pago === true) where.status = "pago";
@@ -297,7 +295,6 @@ async function buildDespesas(q: ReportQuery): Promise<ReportRow[]> {
       date: true, description: true, amount: true, status: true,
       dueDate: true, expenseType: true,
       category: { select: { name: true } },
-      costCenter: { select: { name: true } },
       client: { select: { name: true } },
     },
   });
@@ -306,7 +303,6 @@ async function buildDespesas(q: ReportQuery): Promise<ReportRow[]> {
     descricao: t.description,
     categoria: t.category?.name ?? null,
     tipo: t.expenseType ? EXPENSE_TYPE_LABEL[t.expenseType] ?? t.expenseType : null,
-    centroCusto: t.costCenter?.name ?? null,
     cliente: t.client?.name ?? null,
     situacao: t.status === "pago" ? "Paga" : t.status === "pendente" ? "Pendente" : t.status,
     vencimento: t.dueDate,
@@ -532,8 +528,8 @@ export const REPORTS: ReportDef[] = [
   },
   {
     key: "contratos",
-    title: "Contratos",
-    description: "Contratos com valores, vigência e renovação.",
+    title: "Acordos comerciais",
+    description: "Acordos comerciais (contratos MRR/TCV) com valores, vigência e renovação.",
     columns: [
       { key: "cliente", label: "Cliente", kind: "text" },
       { key: "contrato", label: "Contrato", kind: "text" },
@@ -560,20 +556,19 @@ export const REPORTS: ReportDef[] = [
   {
     key: "despesas",
     title: "Despesas",
-    description: "Despesas do período com categoria, tipo e centro de custo.",
+    description: "Despesas do período com categoria e tipo.",
     columns: [
       { key: "data", label: "Data", kind: "date" },
       { key: "descricao", label: "Descrição", kind: "text" },
       { key: "categoria", label: "Categoria", kind: "text" },
       { key: "tipo", label: "Tipo", kind: "text" },
-      { key: "centroCusto", label: "Centro de custo", kind: "text" },
       { key: "cliente", label: "Cliente", kind: "text" },
       { key: "situacao", label: "Situação", kind: "text" },
       { key: "vencimento", label: "Vencimento", kind: "date" },
       { key: "valor", label: "Valor", kind: "money", total: true },
     ],
-    filterFields: ["periodo", "cliente", "servico", "categoria", "cc", "tipo", "valor", "vencimento", "pago"],
-    groupOptions: ["categoria", "tipo", "centroCusto", "cliente", "situacao"],
+    filterFields: ["periodo", "cliente", "servico", "categoria", "tipo", "valor", "vencimento", "pago"],
+    groupOptions: ["categoria", "tipo", "cliente", "situacao"],
     tipoOptions: Object.entries(EXPENSE_TYPE_LABEL).map(([value, label]) => ({ value, label })),
     defaultSort: { key: "data", dir: "desc" },
     build: buildDespesas,

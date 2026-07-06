@@ -36,12 +36,11 @@ export default async function RelatorioPage({
 
   // Opções dos selects (pequenas, só id+nome)
   const needs = (f: string) => def.filterFields.includes(f as any);
-  const [clients, services, contracts, categories, costCenters] = await Promise.all([
+  const [clients, services, contracts, categories] = await Promise.all([
     needs("cliente") ? prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
     needs("servico") ? prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
     needs("contrato") ? prisma.contract.findMany({ select: { id: true, title: true }, orderBy: { title: "asc" } }) : [],
     needs("categoria") ? prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
-    needs("cc") ? prisma.costCenter.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
   ]);
 
   // Gráfico: distribuição da 1ª coluna monetária pela 1ª coluna de texto
@@ -100,7 +99,6 @@ export default async function RelatorioPage({
               services={services}
               contracts={contracts.map((c: any) => ({ id: c.id, name: c.title }))}
               categories={categories}
-              costCenters={costCenters}
             />
           </CardContent>
         </Card>

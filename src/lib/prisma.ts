@@ -4,7 +4,7 @@ import { getOwnerContext, resolveOwnerId } from "@/lib/auth/owner-scope";
 /**
  * Entidades PRIVADAS por usuário (multiusuário). Toda leitura/criação é
  * automaticamente escopada por `ownerId` pela extensão abaixo.
- * Modelos globais (compartilhados): User, Category, AISetting, WhatsApp*, AIMessage.
+ * Modelos globais (compartilhados): User, Category, AISetting, AIMessage.
  * Obs.: AIConversation/AIMemory são privados (histórico e memória do Assistente
  * por usuário); AIMessage segue as conversas do dono via conversationId.
  */
@@ -21,7 +21,6 @@ const OWNED_MODELS = new Set<string>([
   "CashBoxMovement",
   "Person",
   "PersonPayment",
-  "Goal",
   "ImportBatch",
   "CategorizationRule",
   "AIConversation",
@@ -30,14 +29,11 @@ const OWNED_MODELS = new Set<string>([
   "Client",
   "ClientContact",
   "Service",
-  "Plan",
-  "PlanService",
   "Contract",
   "ContractService",
   "Billing",
   "Payment",
   "CollectionHistory",
-  "CostCenter",
   "Employee",
   "Payroll",
   "PayrollItem",
@@ -49,6 +45,11 @@ const OWNED_MODELS = new Set<string>([
   "ExportReport",
   "FinancialAlert",
   "SavedView",
+  // Contratos documentais + dossiê do cliente
+  "ContractTemplate",
+  "GeneratedContract",
+  "ClientDocument",
+  "ClientNote",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

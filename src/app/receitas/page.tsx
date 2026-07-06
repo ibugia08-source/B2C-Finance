@@ -79,7 +79,7 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
   if (searchParams.origem) where.sourceType = searchParams.origem;
   if (searchParams.pessoa) where.personId = searchParams.pessoa;
 
-  const [incomes, accounts, people, categories, clients, contracts, costCenters] =
+  const [incomes, accounts, people, categories, clients, contracts] =
     await Promise.all([
       prisma.income.findMany({
         where,
@@ -100,11 +100,6 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
       prisma.contract.findMany({
         orderBy: { title: "asc" },
         select: { id: true, title: true, clientId: true },
-      }),
-      prisma.costCenter.findMany({
-        where: { active: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
       }),
     ]);
 
@@ -138,7 +133,6 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
             categories={categories}
             clients={clients}
             contracts={contracts}
-            costCenters={costCenters}
           />
         }
       />
@@ -214,7 +208,6 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
                       categories={categories}
                       clients={clients}
                       contracts={contracts}
-                      costCenters={costCenters}
                     />
                   </TableCell>
                 </TableRow>
@@ -266,7 +259,6 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
                       categories={categories}
                       clients={clients}
                       contracts={contracts}
-                      costCenters={costCenters}
                     />
                   </MobileCardActions>
                 </MobileCard>

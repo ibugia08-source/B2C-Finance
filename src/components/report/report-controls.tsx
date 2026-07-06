@@ -22,11 +22,10 @@ export type ReportControlsConfig = {
   services: Opt[];
   contracts: Opt[];
   categories: Opt[];
-  costCenters: Opt[];
 };
 
 const FILTER_PARAM_KEYS = [
-  "cliente", "servico", "contrato", "status", "categoria", "cc", "responsavel",
+  "cliente", "servico", "contrato", "status", "categoria", "responsavel",
   "tipo", "valorMin", "valorMax", "vencDe", "vencAte", "competencia", "pago", "situacao",
 ];
 
@@ -95,12 +94,6 @@ export function ReportControls(cfg: ReportControlsConfig) {
           <FilterSelect label="Categoria" value={sp.get("categoria") ?? ""} onChange={(v) => set("categoria", v)} className={selectCls}>
             <option value="">Todas</option>
             {cfg.categories.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </FilterSelect>
-        )}
-        {has("cc") && (
-          <FilterSelect label="Centro de custo" value={sp.get("cc") ?? ""} onChange={(v) => set("cc", v)} className={selectCls}>
-            <option value="">Todos</option>
-            {cfg.costCenters.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </FilterSelect>
         )}
         {has("status") && cfg.statusOptions && (

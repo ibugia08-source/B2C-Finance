@@ -38,13 +38,12 @@ type Search = {
   q?: string;
   status?: string;
   servico?: string;
-  responsavel?: string;
-  cidade?: string;
   segmento?: string;
   situacao?: string; // inadimplente
   renovacao?: string; // dias
   entradaDe?: string;
   entradaAte?: string;
+  ordem?: string; // az | za
   pagina?: string;
 };
 
@@ -64,14 +63,7 @@ export default async function ClientesPage({
   // ---------- where a partir dos filtros ----------
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;
-  if (searchParams.cidade) where.city = searchParams.cidade;
   if (searchParams.segmento) where.segment = searchParams.segmento;
-  if (searchParams.responsavel) {
-    where.OR = [
-      { salesOwner: searchParams.responsavel },
-      { opsOwner: searchParams.responsavel },
-    ];
-  }
   if (searchParams.q) {
     const q = searchParams.q.trim();
     const like = { contains: q, mode: "insensitive" as const };
@@ -148,10 +140,7 @@ export default async function ClientesPage({
   const [
     clientsRaw,
     total,
-    people,
     services,
-    ownerRows,
-    cityRows,
     segmentRows,
     ativos,
     inadimplentesStatus,
@@ -161,29 +150,16 @@ export default async function ClientesPage({
   ] = await Promise.all([
     prisma.client.findMany({
       where,
-      orderBy: [{ status: "asc" }, { name: "asc" }],
+      // Ordem alfabética (A-Z padrão; ?ordem=za inverte)
+      orderBy: { name: searchParams.ordem === "za" ? "desc" : "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
     prisma.client.count({ where }),
-    prisma.person.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
     prisma.service.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
-    }),
-    prisma.client.findMany({
-      where: { OR: [{ salesOwner: { not: null } }, { opsOwner: { not: null } }] },
-      select: { salesOwner: true, opsOwner: true },
-    }),
-    prisma.client.findMany({
-      where: { city: { not: null } },
-      distinct: ["city"],
-      select: { city: true },
-      orderBy: { city: "asc" },
     }),
     prisma.client.findMany({
       where: { segment: { not: null } },
@@ -230,12 +206,6 @@ export default async function ClientesPage({
     monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
   }));
 
-  const owners = Array.from(
-    new Set(
-      ownerRows.flatMap((r) => [r.salesOwner, r.opsOwner]).filter(Boolean) as string[]
-    )
-  ).sort();
-  const cities = cityRows.map((r) => r.city!).filter(Boolean);
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
 
   const mrrBase = mrrAgg._sum.monthlyValue != null ? Number(mrrAgg._sum.monthlyValue) : 0;
@@ -290,8 +260,6 @@ export default async function ClientesPage({
         <CardContent className="p-4">
           <ClientFilters
             services={services.map((s) => ({ value: s.id, label: s.name }))}
-            owners={owners}
-            cities={cities}
             segments={segments}
           />
         </CardContent>

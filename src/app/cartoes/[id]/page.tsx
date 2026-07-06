@@ -29,7 +29,7 @@ import {
   parcelasFuturasEstimadasPorCartao,
 } from "@/lib/services/calculations";
 import { InvoiceImportDialog } from "../invoice-import-dialog";
-import { DeleteInvoiceButton } from "../../importar/delete-actions";
+import { DeleteInvoiceButton } from "../delete-actions";
 import { ResponsibleSelect } from "./responsible-select";
 import { CardDetailFilters } from "./month-filter";
 import { AccountCardsSection } from "./account-cards-section";

@@ -241,7 +241,7 @@ export default async function CobrancasPage({
                   <TableRow>
                     <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                       Nenhuma cobrança encontrada. Gere cobranças a partir dos
-                      contratos (em /contratos) ou crie uma cobrança manual.
+                      acordos (em /acordos) ou crie uma cobrança manual.
                     </TableCell>
                   </TableRow>
                 )}

@@ -1,6 +1,8 @@
 node_modules
 .next
 .env
+.env.*
+!.env.example
 *.db
 *.db-journal
 .DS_Store
@@ -13,7 +15,7 @@ dev.db.bak-*
 # cache incremental do TypeScript
 tsconfig.tsbuildinfo
 .vercel
-.env*
 
 # backups dos scripts de correção de dados
 backups/
+.uploads

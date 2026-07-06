@@ -15,7 +15,7 @@ import { getDelinquentClients } from "./billing-metrics";
  * Dashboard executivo — agrega os services de métricas existentes
  * (finance/billing/contract-metrics) sob um conjunto único de filtros.
  *
- * Semântica dos filtros de entidade (cliente/serviço/centro de custo/tipos):
+ * Semântica dos filtros de entidade (cliente/serviço/tipos):
  *  - aplicam-se ao bloco comercial (faturamento, pendente, vencido, séries e
  *    rankings), que é por natureza ligado a cliente/serviço;
  *  - caixa e patrimônio são globais da agência (uma conta bancária não
@@ -29,7 +29,6 @@ export type DashboardFilters = {
   period: Period;
   clientId?: string;
   serviceId?: string;
-  costCenterId?: string;
   billingStatus?: string; // BillingStatus
   revenueType?: string; // RevenueType
   expenseType?: string; // ExpenseType
@@ -52,7 +51,6 @@ function expenseWhere(f: DashboardFilters): Record<string, unknown> {
   };
   if (f.clientId) w.clientId = f.clientId;
   if (f.serviceId) w.serviceId = f.serviceId;
-  if (f.costCenterId) w.costCenterId = f.costCenterId;
   if (f.expenseType) w.expenseType = f.expenseType;
   return w;
 }
@@ -61,7 +59,6 @@ function expenseWhere(f: DashboardFilters): Record<string, unknown> {
 function looseIncomeWhere(f: DashboardFilters): Record<string, unknown> {
   const w: Record<string, unknown> = { status: "RECEIVED", billingId: null };
   if (f.clientId) w.clientId = f.clientId;
-  if (f.costCenterId) w.costCenterId = f.costCenterId;
   if (f.revenueType) w.revenueType = f.revenueType;
   return w;
 }
@@ -539,7 +536,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
       severity: "high",
       title: "Caixa projetado negativo",
       detail: `Projeção de 30 dias em ${formatBRL(cash.projecao30)}`,
-      href: "/financeiro",
+      href: "/relatorios/financeiro-mensal",
     });
   if (dueSoon._count > 0)
     alerts.push({
@@ -553,7 +550,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
       severity: "medium",
       title: "Contratos próximos da renovação",
       detail: `${kpis.contratosEmRenovacao} contrato(s) renovam nos próximos 30 dias`,
-      href: "/contratos",
+      href: "/acordos",
     });
   if (finance.folhaSobreReceita > 0.4)
     alerts.push({
@@ -574,7 +571,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
   for (const r of renewals.slice(0, 2)) {
     actions.push({
       text: `Renovar contrato "${r.title}" de ${r.client.name} (vence ${r.renewalDate ? formatDateBR(r.renewalDate) : "em breve"})`,
-      href: "/contratos",
+      href: "/acordos",
     });
   }
   const topCat = breakdowns.despesasPorCategoria[0];
@@ -589,7 +586,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
   if (mrrPrev > 0 && mrrNow < mrrPrev) {
     actions.push({
       text: `Acompanhar queda de MRR: ${formatBRL(mrrNow - mrrPrev)} vs mês anterior`,
-      href: "/contratos",
+      href: "/acordos",
     });
   }
   if (cash.projecao30 < 0) {

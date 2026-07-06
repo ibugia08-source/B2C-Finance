@@ -9,8 +9,8 @@ import { AsyncLocalStorage } from "async_hooks";
  * passar ownerId manualmente em cada query.
  *
  * Fontes do dono, nesta ordem:
- *   1. contexto explícito (runWithOwner) — usado por jobs sem sessão
- *      (WhatsApp, lembretes) e por scripts;
+ *   1. contexto explícito (runWithOwner) — usado por jobs sem
+ *      sessão e por scripts;
  *   2. sessão do usuário logado (cookie), resolvida sob demanda.
  */
 

@@ -33,6 +33,8 @@ const FormSchema = z.object({
   segment: z.string(),
   city: z.string(),
   state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA)"),
+  address: z.string(),
+  legalRepresentative: z.string(),
   origin: z.string(),
   salesOwner: z.string(),
   opsOwner: z.string(),
@@ -76,6 +78,8 @@ export function ClientDialog({
       segment: initial?.segment ?? "",
       city: initial?.city ?? "",
       state: initial?.state ?? "",
+      address: initial?.address ?? "",
+      legalRepresentative: initial?.legalRepresentative ?? "",
       origin: initial?.origin ?? "",
       salesOwner: initial?.salesOwner ?? "",
       opsOwner: initial?.opsOwner ?? "",
@@ -176,6 +180,17 @@ export function ClientDialog({
               <Label>UF</Label>
               <Input {...register("state")} maxLength={2} placeholder="BA" />
               {err.state && <FieldError msg={err.state.message} />}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Endereço (contratos)</Label>
+              <Input {...register("address")} placeholder="rua, nº, bairro, cidade/UF" />
+            </div>
+            <div>
+              <Label>Representante legal</Label>
+              <Input {...register("legalRepresentative")} placeholder="nome do responsável que assina" />
             </div>
           </div>
 

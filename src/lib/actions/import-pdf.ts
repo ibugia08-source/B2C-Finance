@@ -273,7 +273,7 @@ export async function commitPdfImport(formData: FormData): Promise<PdfCommitResu
   revalidatePath("/cartoes");
   revalidatePath(`/cartoes/${cardId}`);
   revalidatePath("/transacoes");
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
   revalidatePath("/dashboard");
 
   return {

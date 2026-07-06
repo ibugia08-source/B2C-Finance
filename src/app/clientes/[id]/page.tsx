@@ -18,11 +18,24 @@ import {
 } from "@/components/ui/table";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { getClientSummaries } from "@/lib/services/client-metrics";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileSignature, Download, HandCoins } from "lucide-react";
 import { ClientDialog } from "../client-dialog";
 import { ClientStatusSelect } from "../status-select";
 import { ContactDialog, ContactActions } from "./contact-dialog";
 import { CLIENT_STATUS_LABEL, clientStatusVariant } from "../_meta";
+import {
+  AttachDocumentDialog,
+  DocumentDeleteButton,
+  NoteDialog,
+  NoteActions,
+} from "./dossier-dialogs";
+import { GeneratedContractActions } from "@/app/contratos/generated-actions";
+import {
+  GENERATED_STATUS_LABEL,
+  generatedStatusVariant,
+  DOCUMENT_TYPE_LABEL,
+  NOTE_TYPE_LABEL,
+} from "@/app/contratos/_meta";
 
 const BILLING_STATUS: Record<string, { label: string; variant: any }> = {
   PENDING: { label: "Em aberto", variant: "warning" },
@@ -66,22 +79,27 @@ export default async function ClientDetailPage({
   const client = await prisma.client.findUnique({
     where: { id: params.id },
     include: {
-      person: true,
       contacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
     },
   });
   if (!client) notFound();
 
-  const [people, contracts, billings, payments, history, incomes, summaryMap] =
+  const [
+    contracts,
+    billings,
+    payments,
+    history,
+    incomes,
+    summaryMap,
+    generatedContracts,
+    documents,
+    contextNotes,
+  ] =
     await Promise.all([
-      prisma.person.findMany({
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      }),
       prisma.contract.findMany({
         where: { clientId: client.id },
         orderBy: [{ status: "asc" }, { startDate: "desc" }],
-        include: { plan: true, services: { include: { service: true } } },
+        include: { services: { include: { service: true } } },
       }),
       prisma.billing.findMany({
         where: { clientId: client.id },
@@ -105,6 +123,19 @@ export default async function ClientDetailPage({
         take: 40,
       }),
       getClientSummaries([params.id]),
+      prisma.generatedContract.findMany({
+        where: { clientId: params.id },
+        orderBy: { generatedAt: "desc" },
+        include: { template: { select: { name: true } } },
+      }),
+      prisma.clientDocument.findMany({
+        where: { clientId: params.id },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.clientNote.findMany({
+        where: { clientId: params.id },
+        orderBy: { updatedAt: "desc" },
+      }),
     ]);
 
   const summary = summaryMap.get(client.id)!;
@@ -150,6 +181,22 @@ export default async function ClientDetailPage({
         }
       />
 
+      {/* Atalhos rápidos */}
+      <div className="flex flex-wrap items-center gap-2 mb-5 print:hidden">
+        <Button size="sm" asChild>
+          <Link href={`/contratos?para=${client.id}`}>
+            <FileSignature className="h-3.5 w-3.5 mr-1" /> Gerar contrato
+          </Link>
+        </Button>
+        <AttachDocumentDialog clientId={client.id} />
+        <NoteDialog clientId={client.id} />
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/cobrancas">
+            <HandCoins className="h-3.5 w-3.5 mr-1" /> Nova cobrança
+          </Link>
+        </Button>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           title="Mensal contratado"
@@ -186,7 +233,12 @@ export default async function ClientDetailPage({
           <TabsList>
             <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
             <TabsTrigger value="contratos">
-              Contratos {contracts.length > 0 && `(${contracts.length})`}
+              Acordos {contracts.length > 0 && `(${contracts.length})`}
+            </TabsTrigger>
+            <TabsTrigger value="documentos">
+              Documentos e Contratos{" "}
+              {generatedContracts.length + documents.length > 0 &&
+                `(${generatedContracts.length + documents.length})`}
             </TabsTrigger>
             <TabsTrigger value="cobrancas">
               Cobranças {billings.length > 0 && `(${billings.length})`}
@@ -196,7 +248,9 @@ export default async function ClientDetailPage({
             </TabsTrigger>
             <TabsTrigger value="servicos">Serviços</TabsTrigger>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="observacoes">Observações</TabsTrigger>
+            <TabsTrigger value="contexto">
+              Contexto {contextNotes.length > 0 && `(${contextNotes.length})`}
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -309,11 +363,6 @@ export default async function ClientDetailPage({
                       <TableRow key={ct.id}>
                         <TableCell className="font-medium">
                           {ct.title}
-                          {ct.plan && (
-                            <p className="text-xs text-muted-foreground">
-                              plano {ct.plan.name}
-                            </p>
-                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={CONTRACT_STATUS[ct.status]?.variant ?? "secondary"}>
@@ -340,6 +389,95 @@ export default async function ClientDetailPage({
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ---------- Documentos e Contratos ---------- */}
+        <TabsContent value="documentos">
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold">Contratos gerados</h2>
+                  <Button size="sm" asChild>
+                    <Link href={`/contratos?para=${client.id}`}>
+                      <FileSignature className="h-3.5 w-3.5 mr-1" /> Gerar novo contrato
+                    </Link>
+                  </Button>
+                </div>
+                {generatedContracts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    Este cliente ainda não possui contratos gerados.
+                    <br />
+                    Você pode gerar um novo contrato a partir de um modelo cadastrado.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {generatedContracts.map((g) => (
+                      <div
+                        key={g.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{g.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {g.template?.name ? `modelo ${g.template.name} · ` : ""}
+                            gerado em {formatDateBR(g.generatedAt)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={generatedStatusVariant(g.status)}>
+                            {GENERATED_STATUS_LABEL[g.status]}
+                          </Badge>
+                          <GeneratedContractActions contract={g} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold">Documentos anexados</h2>
+                  <AttachDocumentDialog clientId={client.id} />
+                </div>
+                {documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    Nenhum documento anexado a este cliente.
+                    <br />
+                    Adicione contratos, comprovantes ou arquivos importantes para manter o histórico organizado.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map((d) => (
+                      <div
+                        key={d.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{d.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {DOCUMENT_TYPE_LABEL[d.documentType]} · {formatDateBR(d.createdAt)}
+                            {d.description ? ` · ${d.description}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" asChild title="Baixar documento">
+                            <a href={`/api/arquivos/documento/${d.id}`}>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                          <DocumentDeleteButton id={d.id} name={d.name} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ---------- Cobranças ---------- */}
@@ -524,26 +662,64 @@ export default async function ClientDetailPage({
           </div>
         </TabsContent>
 
-        {/* ---------- Observações ---------- */}
-        <TabsContent value="observacoes">
-          <Card>
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-semibold">Observações</h2>
-                <ClientDialog
-                  initial={serial}
-                  trigger={
-                    <Button variant="outline" size="sm">
-                      Editar
-                    </Button>
-                  }
-                />
-              </div>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {client.notes || "Sem observações registradas."}
-              </p>
-            </CardContent>
-          </Card>
+        {/* ---------- Contexto do Cliente ---------- */}
+        <TabsContent value="contexto">
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold">Contexto do Cliente</h2>
+                  <NoteDialog clientId={client.id} />
+                </div>
+                {contextNotes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    Nenhuma observação de contexto ainda. Registre histórico
+                    comercial, particularidades do contrato, dados de negociação
+                    e alertas internos para o time.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {contextNotes.map((n) => (
+                      <div key={n.id} className="rounded-lg border p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm">{n.title}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(n.type && NOTE_TYPE_LABEL[n.type]) || "Observação"} ·{" "}
+                              {formatDateBR(n.updatedAt)}
+                            </p>
+                          </div>
+                          <NoteActions clientId={client.id} note={n} />
+                        </div>
+                        <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
+                          {n.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="font-semibold">Observações do cadastro</h2>
+                  <ClientDialog
+                    initial={serial}
+                    trigger={
+                      <Button variant="outline" size="sm">
+                        Editar
+                      </Button>
+                    }
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {client.notes || "Sem observações registradas."}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

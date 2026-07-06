@@ -35,7 +35,6 @@ model User {
   ownedPeople        Person[]             @relation("OwnerPerson")
   ownedReceivables   Receivable[]         @relation("OwnerReceivable")
   ownedPayments      PersonPayment[]      @relation("OwnerPersonPayment")
-  ownedGoals         Goal[]               @relation("OwnerGoal")
   ownedRules         CategorizationRule[] @relation("OwnerRule")
   ownedInstallments  Installment[]        @relation("OwnerInstallment")
   ownedCashMovements CashBoxMovement[]    @relation("OwnerCashMovement")
@@ -46,13 +45,10 @@ model User {
   // ===== ERP de agência (fundação) =====
   ownedClientContacts      ClientContact[]     @relation("OwnerClientContact")
   ownedServices            Service[]           @relation("OwnerService")
-  ownedPlans               Plan[]              @relation("OwnerPlan")
-  ownedPlanServices        PlanService[]       @relation("OwnerPlanService")
   ownedContracts           Contract[]          @relation("OwnerContract")
   ownedContractServices    ContractService[]   @relation("OwnerContractService")
   ownedBillings            Billing[]           @relation("OwnerBilling")
   ownedBillingPayments     Payment[]           @relation("OwnerPayment")
-  ownedCostCenters         CostCenter[]        @relation("OwnerCostCenter")
   ownedEmployees           Employee[]          @relation("OwnerEmployee")
   ownedPayrolls            Payroll[]           @relation("OwnerPayroll")
   ownedPayrollItems        PayrollItem[]       @relation("OwnerPayrollItem")
@@ -65,6 +61,12 @@ model User {
   ownedCollectionHistories CollectionHistory[] @relation("OwnerCollectionHistory")
   ownedFinancialAlerts     FinancialAlert[]    @relation("OwnerFinancialAlert")
   ownedSavedViews          SavedView[]         @relation("OwnerSavedView")
+
+  // ===== Contratos documentais (modelos DOCX) e dossiê do cliente =====
+  ownedContractTemplates  ContractTemplate[]  @relation("OwnerContractTemplate")
+  ownedGeneratedContracts GeneratedContract[] @relation("OwnerGeneratedContract")
+  ownedClientDocuments    ClientDocument[]    @relation("OwnerClientDocument")
+  ownedClientNotes        ClientNote[]        @relation("OwnerClientNote")
 }
 
 model Person {
@@ -86,7 +88,6 @@ model Person {
   receivables  Receivable[]
   incomes      Income[]
   payments     PersonPayment[]
-  clients      Client[]
   employees    Employee[]
 
   @@unique([ownerId, name])
@@ -235,8 +236,6 @@ model Transaction {
   client       Client?         @relation(fields: [clientId], references: [id])
   serviceId    String? // serviço vinculado (rentabilidade por serviço)
   service      Service?        @relation(fields: [serviceId], references: [id])
-  costCenterId String?
-  costCenter   CostCenter?     @relation(fields: [costCenterId], references: [id])
 
   // Dono do registro (conta multiusuário).
   ownerId String?
@@ -254,7 +253,6 @@ model Transaction {
   @@index([installmentGroupKey])
   @@index([accountCardId])
   @@index([clientId])
-  @@index([costCenterId])
   @@index([expenseType])
   @@index([ownerId])
 }
@@ -361,8 +359,6 @@ model Income {
   contract        Contract?    @relation(fields: [contractId], references: [id])
   billingId       String? // cobrança que originou este recebimento (conciliação)
   billing         Billing?     @relation(fields: [billingId], references: [id])
-  costCenterId    String?
-  costCenter      CostCenter?  @relation(fields: [costCenterId], references: [id])
 
   ownerId   String?
   owner     User?    @relation("OwnerIncome", fields: [ownerId], references: [id])
@@ -374,7 +370,6 @@ model Income {
   @@index([clientId])
   @@index([contractId])
   @@index([billingId])
-  @@index([costCenterId])
   @@index([ownerId])
 }
 
@@ -434,23 +429,6 @@ model CashBoxMovement {
 
   @@index([cashBoxId])
   @@index([date])
-  @@index([ownerId])
-}
-
-model Goal {
-  id            String    @id @default(cuid())
-  name          String
-  type          String    @default("economia") // economia | quitacao | investimento | reserva
-  targetAmount  Float
-  currentAmount Float     @default(0)
-  deadline      DateTime?
-  priority      Int       @default(3) // 1=alta, 5=baixa
-  notes         String?
-  ownerId       String?
-  owner         User?     @relation("OwnerGoal", fields: [ownerId], references: [id])
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
   @@index([ownerId])
 }
 
@@ -562,37 +540,6 @@ model AIMemory {
   @@index([ownerId])
 }
 
-// ===== WhatsApp — agente de IA via gateway (Z-API / Evolution) =====
-
-model WhatsAppSetting {
-  id              String   @id @default("default") // singleton
-  provider        String   @default("zapi") // zapi | evolution | custom
-  baseUrl         String?
-  instanceId      String?
-  token           String?
-  clientToken     String? // header de segurança (Z-API)
-  myNumber        String? // número pessoal autorizado (só ele comanda)
-  remindersSecret String?
-  enabled         Boolean  @default(false)
-  updatedAt       DateTime @default(now()) @updatedAt
-}
-
-model WhatsAppMessage {
-  id          String   @id @default(cuid())
-  direction   String // in | out
-  waType      String   @default("text") // text | image | audio | other
-  fromNumber  String?
-  body        String?
-  mediaUrl    String?
-  intent      String?
-  actionTaken String?
-  status      String?
-  error       String?
-  createdAt   DateTime @default(now())
-
-  @@index([createdAt])
-}
-
 // ===================================================================
 // B2C — Módulo de Agência (Etapa 1: Clientes)
 // Cliente é a raiz da espinha comercial: Cliente → Contrato → Cobrança
@@ -621,6 +568,9 @@ model Client {
   segment      String? // segmento / nicho de atuação
   city         String?
   state        String? // UF
+  // Dados usados nos contratos gerados (pré-preenchimento de variáveis)
+  address             String? // endereço completo do contratante
+  legalRepresentative String? // nome do representante legal
   origin       String? // origem comercial: indicação | tráfego | orgânico | ...
   salesOwner   String? // responsável comercial
   opsOwner     String? // responsável operacional
@@ -633,10 +583,6 @@ model Client {
   churnedAt    DateTime? // data de saída (preenchida quando CHURNED)
   notes        String?
 
-  // Reaproveita um contato já cadastrado em Pessoas (opcional).
-  personId String?
-  person   Person? @relation(fields: [personId], references: [id])
-
   // Dono do registro (conta multiusuário / agência).
   ownerId String?
   owner   User?   @relation("OwnerClient", fields: [ownerId], references: [id])
@@ -648,11 +594,15 @@ model Client {
   contacts         ClientContact[]
   contracts        Contract[]
   billings         Billing[]
-  costCenters      CostCenter[]
   commissions      Commission[]
   collectionEvents CollectionHistory[]
   incomes          Income[]
   expenses         Transaction[]
+
+  // ===== Dossiê documental =====
+  generatedContracts GeneratedContract[]
+  documents          ClientDocument[]
+  contextNotes       ClientNote[]
 
   @@index([ownerId])
   @@index([status])
@@ -737,13 +687,6 @@ enum ExpenseType {
   LOAN
   CARD
   OTHER
-}
-
-enum CostCenterType {
-  CLIENT
-  SERVICE
-  DEPARTMENT
-  GENERAL
 }
 
 enum CollectionStatus {
@@ -861,8 +804,6 @@ model Service {
   updatedAt     DateTime @updatedAt
 
   contractServices ContractService[]
-  planServices     PlanService[]
-  costCenters      CostCenter[]
   billings         Billing[]
   transactions     Transaction[]
 
@@ -871,55 +812,11 @@ model Service {
   @@index([ownerId])
 }
 
-// Plano comercial (pacote de entrada: nome + preço mensal + setup).
-model Plan {
-  id              String         @id @default(cuid())
-  name            String
-  description     String?
-  type            ContractType   @default(MRR)
-  recurrence      RecurrenceType @default(MONTHLY)
-  monthlyPrice    Decimal        @default(0) @db.Decimal(14, 2)
-  setupFee        Decimal?       @db.Decimal(14, 2)
-  defaultDuration Int? // duração padrão em meses
-  notes           String?
-  active          Boolean        @default(true)
-  ownerId         String?
-  owner           User?          @relation("OwnerPlan", fields: [ownerId], references: [id])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-
-  contracts Contract[]
-  services  PlanService[]
-
-  @@index([active])
-  @@index([ownerId])
-}
-
-// Serviços inclusos em um plano (N:N).
-model PlanService {
-  id        String   @id @default(cuid())
-  planId    String
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  serviceId String
-  service   Service  @relation(fields: [serviceId], references: [id])
-  quantity  Int      @default(1)
-  ownerId   String?
-  owner     User?    @relation("OwnerPlanService", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-
-  @@unique([planId, serviceId])
-  @@index([planId])
-  @@index([serviceId])
-  @@index([ownerId])
-}
-
 // Contrato do cliente — fonte de MRR (monthlyValue) e TCV (totalValue).
 model Contract {
   id            String         @id @default(cuid())
   clientId      String
   client        Client         @relation(fields: [clientId], references: [id])
-  planId        String?
-  plan          Plan?          @relation(fields: [planId], references: [id])
   title         String
   type          ContractType   @default(MRR)
   status        ContractStatus @default(ACTIVE)
@@ -1063,32 +960,6 @@ model CollectionHistory {
 }
 
 // ===== Custos e resultado ===========================================
-
-// Centro de custo — eixo de rentabilidade (por cliente, serviço,
-// departamento ou geral). Ortogonal a Category (natureza do gasto).
-model CostCenter {
-  id        String         @id @default(cuid())
-  name      String
-  type      CostCenterType @default(GENERAL)
-  clientId  String?
-  client    Client?        @relation(fields: [clientId], references: [id])
-  serviceId String?
-  service   Service?       @relation(fields: [serviceId], references: [id])
-  active    Boolean        @default(true)
-  notes     String?
-  ownerId   String?
-  owner     User?          @relation("OwnerCostCenter", fields: [ownerId], references: [id])
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-
-  transactions Transaction[]
-  incomes      Income[]
-
-  @@index([type])
-  @@index([clientId])
-  @@index([serviceId])
-  @@index([ownerId])
-}
 
 // ===== Folha e comissões ============================================
 
@@ -1326,4 +1197,177 @@ model SavedView {
 enum ViewVisibility {
   PRIVATE // só o criador vê
   GLOBAL // todos os usuários da agência veem
+}
+
+// ===================================================================
+// Contratos documentais — modelos DOCX com variáveis {{ }} e geração
+// de contratos preenchidos. NÃO confundir com Contract (acordo
+// comercial/financeiro MRR-TCV, base de cobranças e renovação).
+// Arquivos ficam no storage (src/lib/storage); o banco guarda só
+// caminho + metadados. Variáveis: Json de TemplateVariable
+// { originalToken, rawName, key, label, type, required, clientField }.
+// ===================================================================
+
+enum ContractTemplateStatus {
+  DRAFT // enviado mas ainda em ajuste
+  ACTIVE // pronto para gerar contratos
+  ARCHIVED // fora de uso, mantido por histórico
+}
+
+enum GeneratedContractStatus {
+  GENERATED // gerado, ainda não enviado
+  SENT // enviado ao cliente
+  SIGNED // assinado
+  CANCELED // cancelado
+  ARCHIVED // arquivado
+}
+
+enum ContractCommercialType {
+  MRR // recorrente mensal
+  TCV // valor total do contrato
+  ONE_TIME // avulso
+  CUSTOM // personalizado
+}
+
+enum BillingModel {
+  MONTHLY // mensal
+  UPFRONT // à vista
+  INSTALLMENTS // parcelado
+  CUSTOM // personalizado
+}
+
+enum ContractDurationType {
+  MONTHLY // mensal
+  QUARTERLY // trimestral
+  SEMIANNUAL // semestral
+  ANNUAL // anual
+  CUSTOM // personalizado
+}
+
+enum ClientDocumentType {
+  CONTRACT // contrato
+  PROPOSAL // proposta
+  RECEIPT // comprovante
+  BRIEFING // briefing
+  LEGAL_DOCUMENT // documento jurídico
+  OTHER // outro
+}
+
+// Modelo de contrato enviado em DOCX (biblioteca de modelos).
+model ContractTemplate {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  // Metadados comerciais (organização/filtros; não substituem o texto)
+  commercialType   ContractCommercialType?
+  billingModel     BillingModel?
+  durationType     ContractDurationType?
+  durationMonths   Int?
+  monthlyAmount    Decimal?                @db.Decimal(14, 2)
+  totalAmount      Decimal?                @db.Decimal(14, 2)
+  defaultDueDay    Int? // dia padrão de vencimento (1-28)
+  includedServices Json? // string[] — serviços incluídos
+  internalNotes    String?
+
+  // Arquivo original (imutável — a geração nunca altera o modelo)
+  originalFileName String
+  filePath         String
+  mimeType         String
+  fileSize         Int
+  fileHash         String?
+
+  // Variáveis {{ }} detectadas + alertas de variáveis pouco claras
+  variables Json // TemplateVariable[]
+  warnings  Json? // string[]
+
+  status ContractTemplateStatus @default(ACTIVE)
+
+  ownerId String?
+  owner   User?   @relation("OwnerContractTemplate", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generated GeneratedContract[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+// Contrato gerado a partir de um modelo (DOCX preenchido).
+model GeneratedContract {
+  id         String            @id @default(cuid())
+  templateId String?
+  template   ContractTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  clientId   String?
+  client     Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  name           String
+  commercialType ContractCommercialType?
+  amount         Decimal?                @db.Decimal(14, 2)
+  startDate      DateTime?
+  dueDay         Int?
+
+  filledVariables   Json // { rawName: valor } usado na geração
+  generatedFileName String
+  generatedFilePath String
+
+  status      GeneratedContractStatus @default(GENERATED)
+  generatedAt DateTime                @default(now())
+
+  ownerId String?
+  owner   User?   @relation("OwnerGeneratedContract", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([clientId])
+  @@index([ownerId])
+  @@index([status])
+}
+
+// Documento anexado ao cliente (contratos assinados, comprovantes...).
+model ClientDocument {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  name         String
+  description  String?
+  documentType ClientDocumentType @default(OTHER)
+  fileName     String
+  filePath     String
+  mimeType     String
+  size         Int
+
+  ownerId String?
+  owner   User?   @relation("OwnerClientDocument", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([ownerId])
+}
+
+// Contexto interno do cliente (observações, negociação, alertas).
+model ClientNote {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  title   String
+  content String
+  type    String? // observacao | comercial | negociacao | atendimento | alerta
+
+  ownerId String?
+  owner   User?   @relation("OwnerClientNote", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([ownerId])
 }

@@ -42,7 +42,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
     catRows,
     recentes,
     invoices,
-    goals,
     pessoasCount,
     cardsCount,
   ] = await Promise.all([
@@ -76,7 +75,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
       include: { card: true },
       take: 12,
     }),
-    prisma.goal.findMany({ orderBy: [{ priority: "asc" }] }),
     prisma.person.count(),
     prisma.creditCard.count(),
   ]);
@@ -131,14 +129,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
       status: i.status,
     })),
     quemMeDeve: devedores.map((d: any) => ({ pessoa: d.name, total: d.total })),
-    metas: goals.map((g) => ({
-      nome: g.name,
-      tipo: g.type,
-      alvo: g.targetAmount,
-      atual: g.currentAmount,
-      pct: g.targetAmount > 0 ? Math.round((g.currentAmount / g.targetAmount) * 100) : 0,
-      prazo: g.deadline ? formatDateBR(g.deadline) : null,
-    })),
     transacoesRecentes: recentes.map((t) => ({
       data: formatDateBR(t.date),
       descricao: t.description,
@@ -196,13 +186,6 @@ export function snapshotToText(s: FinancialSnapshot): string {
   }
   if (s.quemMeDeve.length) {
     lines.push("QUEM ME DEVE: " + s.quemMeDeve.map((d) => `${d.pessoa} ${formatBRL(d.total)}`).join("; ") + ".");
-  }
-  if (s.metas.length) {
-    lines.push(
-      "METAS: " +
-        s.metas.map((m) => `${m.nome} (${m.tipo}) ${m.pct}% — ${formatBRL(m.atual)}/${formatBRL(m.alvo)}${m.prazo ? ` até ${m.prazo}` : ""}`).join("; ") +
-        "."
-    );
   }
   if (s.transacoesRecentes.length) {
     lines.push(

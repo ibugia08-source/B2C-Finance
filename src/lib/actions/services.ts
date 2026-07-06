@@ -51,8 +51,7 @@ export async function saveService(formData: FormData): Promise<ActionResult> {
       saved = await prisma.service.create({ data });
     }
     revalidatePath("/servicos");
-    revalidatePath("/planos");
-    revalidatePath("/contratos");
+    revalidatePath("/acordos");
     return { ok: true, id: saved.id };
   } catch (e: any) {
     return {
@@ -72,10 +71,8 @@ export async function deleteService(id: string): Promise<ActionResult> {
         error: `Serviço em uso por ${inUse} contrato(s). Desative-o em vez de excluir.`,
       };
     }
-    await prisma.planService.deleteMany({ where: { serviceId: id } });
     await prisma.service.deleteMany({ where: { id } });
     revalidatePath("/servicos");
-    revalidatePath("/planos");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o serviço." };

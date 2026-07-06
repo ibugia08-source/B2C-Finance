@@ -50,9 +50,9 @@ const SEVERITY_DOT: Record<DashAlert["severity"], string> = {
 export default async function DashboardPage({ searchParams }: { searchParams?: Search }) {
   const viewer = await getViewer("/dashboard");
 
-  // USER comum mantém a visão financeira pessoal.
+  // USER comum: recepção simples (os módulos financeiros são da agência).
   if (viewer.role !== "ADMIN") {
-    return <PersonalDashboard mes={searchParams?.mes} />;
+    return <PersonalDashboard />;
   }
 
   await markOverdueBillings();
@@ -63,17 +63,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     period,
     clientId: sp.cliente || undefined,
     serviceId: sp.servico || undefined,
-    costCenterId: sp.cc || undefined,
     billingStatus: sp.status || undefined,
     revenueType: sp.treceita || undefined,
     expenseType: sp.tdespesa || undefined,
   };
 
-  const [data, clients, services, costCenters] = await Promise.all([
+  const [data, clients, services] = await Promise.all([
     getExecutiveDashboard(filters),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.costCenter.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const { kpis, finance, cash, balance, series, breakdowns, health, alerts, actions } = data;
 
@@ -95,7 +93,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <DashboardFilters clients={clients} services={services} costCenters={costCenters} />
+          <DashboardFilters clients={clients} services={services} />
         </CardContent>
       </Card>
 
@@ -203,15 +201,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         <StatCard href="/inadimplencia" title="Inadimplência" value={`${inadPct}%`}
           intent={inadPct > 25 ? "negative" : inadPct > 10 ? "warning" : "positive"}
           hint="vencido / total em aberto" />
-        <StatCard href="/contratos" title="MRR ativo" value={formatBRL(kpis.mrrAtivo)} intent="positive"
+        <StatCard href="/acordos" title="MRR ativo" value={formatBRL(kpis.mrrAtivo)} intent="positive"
           hint="recorrência mensal vigente" />
-        <StatCard href="/contratos" title="TCV vendido" value={formatBRL(kpis.tcvVendido)}
+        <StatCard href="/acordos" title="TCV vendido" value={formatBRL(kpis.tcvVendido)}
           hint="contratos iniciados no período" />
         <StatCard href="/clientes" title="Novos clientes" value={String(kpis.novosClientes)} />
         <StatCard href="/clientes" title="Clientes ativos" value={String(kpis.clientesAtivos)} />
         <StatCard href="/inadimplencia" title="Clientes inadimplentes" value={String(kpis.clientesInadimplentes)}
           intent={kpis.clientesInadimplentes > 0 ? "negative" : "positive"} />
-        <StatCard href="/contratos" title="Contratos em renovação" value={String(kpis.contratosEmRenovacao)}
+        <StatCard href="/acordos" title="Contratos em renovação" value={String(kpis.contratosEmRenovacao)}
           intent={kpis.contratosEmRenovacao > 0 ? "warning" : "default"}
           hint="próximos 30 dias" />
       </div>
@@ -225,10 +223,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         <StatCard href="/folha" title="Folha total" value={formatBRL(finance.folhaPeriodo)} />
         <StatCard href="/folha" title="Folha / faturamento" value={`${folhaPct}%`}
           intent={folhaPct > 40 ? "negative" : folhaPct > 25 ? "warning" : "positive"} />
-        <StatCard href="/financeiro" title="Lucro / prejuízo" value={formatBRL(finance.lucro)}
+        <StatCard href="/despesas" title="Lucro / prejuízo" value={formatBRL(finance.lucro)}
           intent={finance.lucro >= 0 ? "positive" : "negative"}
           hint="receitas − despesas pagas" />
-        <StatCard href="/financeiro" title="Margem operacional" value={`${margemPct}%`}
+        <StatCard href="/relatorios/financeiro-mensal" title="Margem operacional" value={`${margemPct}%`}
           intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"} />
       </div>
 
@@ -240,7 +238,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         <StatCard href="/caixa" title="Caixa atual" value={formatBRL(cash.caixaDisponivel)}
           intent={cash.caixaDisponivel >= 0 ? "positive" : "negative"}
           hint="contas + reservas" />
-        <StatCard href="/financeiro" title="Caixa previsto" value={formatBRL(cash.saldoPrevisto)}
+        <StatCard href="/caixa" title="Caixa previsto" value={formatBRL(cash.saldoPrevisto)}
           intent={cash.saldoPrevisto >= 0 ? "positive" : "negative"}
           hint="+ a receber − a pagar" />
         <StatCard href="/ativos" title="Ativos" value={formatBRL(balance.ativosTotais)} />

@@ -232,7 +232,7 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
 
   revalidatePath("/transacoes");
   revalidatePath("/dashboard");
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
   if (cardId) {
     revalidatePath("/cartoes");
     revalidatePath(`/cartoes/${cardId}`);
@@ -291,7 +291,7 @@ export async function deleteImportBatch(id: string) {
     }
   }
 
-  revalidatePath("/importar");
+  revalidatePath("/cartoes");
   revalidatePath("/transacoes");
   revalidatePath("/cartoes");
   if (batch.cardId) revalidatePath(`/cartoes/${batch.cardId}`);

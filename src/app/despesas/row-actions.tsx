@@ -12,7 +12,6 @@ export function ExpenseActions({
   accounts,
   clients = [],
   services = [],
-  costCenters = [],
 }: {
   expense: any;
   people: any[];
@@ -20,7 +19,6 @@ export function ExpenseActions({
   accounts: any[];
   clients?: any[];
   services?: any[];
-  costCenters?: any[];
 }) {
   const [pending, start] = useTransition();
   return (
@@ -32,7 +30,6 @@ export function ExpenseActions({
         accounts={accounts}
         clients={clients}
         services={services}
-        costCenters={costCenters}
         trigger={
           <Button variant="ghost" size="icon">
             <Pencil className="h-4 w-4" />

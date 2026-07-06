@@ -271,13 +271,6 @@ export async function parcelasFuturas() {
   });
 }
 
-export async function progressoMeta(goalId: string) {
-  const g = await prisma.goal.findUnique({ where: { id: goalId } });
-  if (!g) return 0;
-  if (g.targetAmount <= 0) return 0;
-  return Math.min(100, (g.currentAmount / g.targetAmount) * 100);
-}
-
 export async function gastosPorPertenceA(belongsTo: string, reference: Date = new Date()) {
   const { start, end } = monthRange(reference);
   const r = await prisma.transaction.aggregate({
