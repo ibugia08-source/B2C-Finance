@@ -4,12 +4,22 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import {
   getFinanceSummary,
   getCashSummary,
-  getBalanceSummary,
   type FinanceSummary,
   type CashSummary,
-  type BalanceSummary,
 } from "./finance-metrics";
 import { getDelinquentClients } from "./billing-metrics";
+import {
+  getPeriodRevenue,
+  getRenewalOutlook,
+  getLossSummary,
+  type PeriodRevenue,
+  type RenewalWindow,
+  type LossSummary,
+  type RevenueFilters,
+} from "./revenue-metrics";
+import { getUpsellKpis, type UpsellKpis } from "./upsell-metrics";
+import { getExpenseSummary, type ExpenseSummary } from "./expense-metrics";
+import { getMonthDelinquencies } from "./client-metrics";
 
 /**
  * Dashboard executivo — agrega os services de métricas existentes
@@ -32,6 +42,11 @@ export type DashboardFilters = {
   billingStatus?: string; // BillingStatus
   revenueType?: string; // RevenueType
   expenseType?: string; // ExpenseType
+  // ===== Faturamento MRR/TCV (PARTE 2) =====
+  modality?: string; // ClientModality — MRR | TCV
+  salesOwner?: string; // responsável
+  segment?: string; // segmento do cliente
+  clientStatus?: string; // status do cliente
 };
 
 /** Filtro de entidade aplicável a Billing. */
@@ -471,17 +486,78 @@ export type NextAction = { text: string; href: string };
 // Orquestrador — uma chamada, dashboard inteiro
 // ===================================================================
 
+export type ClientsBlock = {
+  ativos: number;
+  pausados: number;
+  perdidos: number; // total histórico (status CHURNED)
+  mrrAtivos: number; // clientes MRR ativos
+  tcvAtivos: number; // clientes TCV ativos
+  devendoMes: number; // inadimplência do mês atual (efetiva, com override)
+  pagosMes: number;
+};
+
 export type ExecutiveDashboard = {
   kpis: CommercialKpis;
   finance: FinanceSummary;
   cash: CashSummary;
-  balance: BalanceSummary;
   series: MonthlySeries;
   breakdowns: Breakdowns;
   health: Health;
   alerts: DashAlert[];
   actions: NextAction[];
+  // ===== PARTE 2-4: faturamento MRR/TCV, renovações e perdas =====
+  revenue: PeriodRevenue;
+  renewalOutlook: RenewalWindow[]; // mês atual, +1, +2, +3
+  losses: LossSummary;
+  // ===== PARTE 7-9: clientes, upsell e despesas =====
+  clients: ClientsBlock;
+  upsell: UpsellKpis;
+  expenses: ExpenseSummary;
 };
+
+/** Contadores de clientes do mês (com override manual de inadimplência). */
+async function getClientsBlock(): Promise<ClientsBlock> {
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear();
+
+  const [ativos, pausados, perdidos, mrrAtivos, tcvAtivos, allClients] =
+    await Promise.all([
+      prisma.client.count({ where: { status: "ACTIVE" } }),
+      prisma.client.count({ where: { status: "PAUSED" } }),
+      prisma.client.count({ where: { status: "CHURNED" } }),
+      prisma.client.count({ where: { status: "ACTIVE", modality: "MRR" } }),
+      prisma.client.count({ where: { status: "ACTIVE", modality: "TCV" } }),
+      prisma.client.findMany({
+        where: { status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] } },
+        select: {
+          id: true,
+          delinquencyOverride: true,
+          delinquencyOverrideMonth: true,
+          delinquencyOverrideYear: true,
+        },
+      }),
+    ]);
+
+  const auto = await getMonthDelinquencies(
+    allClients.map((c) => c.id),
+    curMonth,
+    curYear
+  );
+  let devendoMes = 0;
+  let pagosMes = 0;
+  for (const c of allClients) {
+    const overrideActive =
+      c.delinquencyOverride != null &&
+      c.delinquencyOverrideMonth === curMonth &&
+      c.delinquencyOverrideYear === curYear;
+    const value = overrideActive ? c.delinquencyOverride : auto.get(c.id);
+    if (value === "DEVENDO") devendoMes += 1;
+    else if (value === "PAGO") pagosMes += 1;
+  }
+
+  return { ativos, pausados, perdidos, mrrAtivos, tcvAtivos, devendoMes, pagosMes };
+}
 
 export async function getExecutiveDashboard(f: DashboardFilters): Promise<ExecutiveDashboard> {
   const in7days = new Date();
@@ -491,15 +567,34 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
   const renewLimit = new Date();
   renewLimit.setDate(renewLimit.getDate() + 30);
 
-  const [kpis, finance, cash, balance, series, breakdowns, delinquents, dueSoon, renewals] =
+  const revenueFilters: RevenueFilters = {
+    modality: f.modality,
+    salesOwner: f.salesOwner,
+    serviceId: f.serviceId,
+    segment: f.segment,
+    clientStatus: f.clientStatus,
+    clientId: f.clientId,
+  };
+
+  const [
+    kpis, finance, cash, series, breakdowns, delinquents,
+    revenue, renewalOutlook, losses,
+    clients, upsell, expenses,
+    dueSoon, renewals,
+  ] =
     await Promise.all([
       getCommercialKpis(f),
       getFinanceSummary(f.period),
       getCashSummary(f.period),
-      getBalanceSummary(),
       getMonthlySeries(f),
       getBreakdowns(f),
       getDelinquentClients(),
+      getPeriodRevenue(f.period.start, f.period.end, revenueFilters),
+      getRenewalOutlook([0, 1, 2, 3]),
+      getLossSummary(),
+      getClientsBlock(),
+      getUpsellKpis(f.period.start, f.period.end),
+      getExpenseSummary(f.period.start),
       prisma.transaction.aggregate({
         where: {
           type: "despesa",
@@ -596,5 +691,10 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
     });
   }
 
-  return { kpis, finance, cash, balance, series, breakdowns, health, alerts, actions: actions.slice(0, 6) };
+  return {
+    kpis, finance, cash, series, breakdowns, health,
+    alerts, actions: actions.slice(0, 6),
+    revenue, renewalOutlook, losses,
+    clients, upsell, expenses,
+  };
 }

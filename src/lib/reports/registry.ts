@@ -2,6 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { getDelinquentClients } from "@/lib/services/billing-metrics";
 import {
+  getPeriodRevenue,
+  getRenewalOutlook,
+  getLossSummary,
+} from "@/lib/services/revenue-metrics";
+import { getUpsellKpis } from "@/lib/services/upsell-metrics";
+import { getExpenseSummary } from "@/lib/services/expense-metrics";
+import { limitesUsadosPorCartao } from "@/lib/services/calculations";
+import { formatBRL } from "@/lib/format";
+import {
   type ReportQuery,
   amountRange,
   dueDateRange,
@@ -464,6 +473,388 @@ async function rentabilidade(
 }
 
 // ===================================================================
+// Builders — faturamento MRR/TCV, renovações, perdas, upsell, cartões,
+// projeção e executivo (PARTE 10). Todos usam a camada central de
+// cálculos — nada de regra duplicada aqui.
+// ===================================================================
+
+const MODALITY_LABEL: Record<string, string> = { MRR: "MRR", TCV: "TCV" };
+const UPSELL_LABEL: Record<string, string> = {
+  OPPORTUNITY: "Oportunidade",
+  NEGOTIATION: "Em negociação",
+  WON: "Vendido",
+  LOST: "Perdido",
+  PAUSED: "Pausado",
+};
+
+/** Clientes MRR ativos com valor mensal (base do MRR). */
+async function buildMrr(q: ReportQuery): Promise<ReportRow[]> {
+  const where: Record<string, unknown> = {
+    modality: "MRR",
+    status: { in: ["ACTIVE", "RENEWAL", "DELINQUENT"] },
+  };
+  if (q.clientId) where.id = q.clientId;
+  if (q.responsavel)
+    where.salesOwner = { contains: q.responsavel, mode: "insensitive" };
+  const clients = await prisma.client.findMany({
+    where,
+    orderBy: { name: "asc" },
+    select: {
+      name: true, status: true, segment: true, salesOwner: true,
+      monthlyValue: true, renewalMonth: true,
+    },
+  });
+  return clients.map((c) => ({
+    cliente: c.name,
+    status: CLIENT_STATUS_LABEL[c.status] ?? c.status,
+    segmento: c.segment,
+    responsavel: c.salesOwner,
+    mensal: n(c.monthlyValue),
+    anualizado: n(c.monthlyValue) * 12,
+    renovacao: c.renewalMonth ? String(c.renewalMonth).padStart(2, "0") : null,
+  }));
+}
+
+/** Cobranças TCV do período (valor cheio no mês da adesão/renovação). */
+async function buildTcv(q: ReportQuery): Promise<ReportRow[]> {
+  const { start, end } = q.period;
+  const billings = await prisma.billing.findMany({
+    where: {
+      revenueType: "TCV",
+      status: { not: "CANCELED" },
+      dueDate: { gte: start, lt: end },
+      ...(q.clientId ? { clientId: q.clientId } : {}),
+    },
+    orderBy: { dueDate: "asc" },
+    select: {
+      description: true, amount: true, paidTotal: true, status: true,
+      competenceMonth: true, competenceYear: true, dueDate: true,
+      client: { select: { name: true, salesOwner: true } },
+    },
+  });
+  return billings.map((b) => ({
+    cliente: b.client.name,
+    descricao: b.description,
+    competencia: `${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear}`,
+    vencimento: b.dueDate,
+    responsavel: b.client.salesOwner,
+    situacao: b.status === "PAID" ? "Paga" : b.status === "OVERDUE" ? "Vencida" : "Em aberto",
+    valor: n(b.amount),
+    recebido: n(b.paidTotal),
+  }));
+}
+
+/** Faturamento total mês a mês: MRR + TCV (regra central, sem rateio). */
+async function buildFaturamentoTotal(q: ReportQuery): Promise<ReportRow[]> {
+  const months = monthsInPeriod(q);
+  const rows: ReportRow[] = [];
+  for (const mo of months) {
+    const start = new Date(mo.y, mo.m - 1, 1);
+    const end = new Date(mo.y, mo.m, 1);
+    const r = await getPeriodRevenue(start, end, {
+      salesOwner: q.responsavel ?? undefined,
+      clientId: q.clientId ?? undefined,
+    });
+    rows.push({
+      mes: `${String(mo.m).padStart(2, "0")}/${mo.y}`,
+      mrr: r.mrr,
+      clientesMrr: r.mrrClients,
+      tcv: r.tcv,
+      clientesTcv: r.tcvClients,
+      total: r.total,
+    });
+  }
+  return rows;
+}
+
+/** Renovações — mês atual até 5 meses à frente, por cliente. */
+async function buildRenovacoes(q: ReportQuery): Promise<ReportRow[]> {
+  const outlook = await getRenewalOutlook([0, 1, 2, 3, 4, 5]);
+  const rows: ReportRow[] = [];
+  for (const w of outlook) {
+    for (const c of w.clients) {
+      if (q.responsavel && !(c.salesOwner ?? "").toLowerCase().includes(q.responsavel.toLowerCase()))
+        continue;
+      rows.push({
+        mes: w.label,
+        cliente: c.name,
+        modalidade: c.modality ? MODALITY_LABEL[c.modality] ?? c.modality : null,
+        responsavel: c.salesOwner,
+        status: CLIENT_STATUS_LABEL[c.status] ?? c.status,
+        valorEsperado: c.expected,
+      });
+    }
+  }
+  return rows;
+}
+
+/** Perdas de clientes no período (registros de churn). */
+async function buildPerdas(q: ReportQuery): Promise<ReportRow[]> {
+  const { start, end } = q.period;
+  const losses = await prisma.clientLoss.findMany({
+    where: {
+      lostAt: { gte: start, lt: end },
+      ...(q.clientId ? { clientId: q.clientId } : {}),
+    },
+    orderBy: { lostAt: "desc" },
+    select: {
+      lostAt: true, reason: true, modality: true, salesOwner: true,
+      monthlyValue: true, referenceValue: true,
+      client: { select: { name: true } },
+    },
+  });
+  let rows = losses.map((l) => ({
+    data: l.lostAt,
+    cliente: l.client.name,
+    modalidade: l.modality ? MODALITY_LABEL[l.modality] ?? l.modality : null,
+    responsavel: l.salesOwner,
+    motivo: l.reason,
+    receitaPerdida:
+      l.modality === "TCV"
+        ? n(l.referenceValue) || n(l.monthlyValue)
+        : n(l.monthlyValue) || n(l.referenceValue),
+  }));
+  if (q.responsavel)
+    rows = rows.filter((r) =>
+      (r.responsavel ?? "").toLowerCase().includes(q.responsavel!.toLowerCase())
+    );
+  return rows;
+}
+
+/** Receita perdida por mês (últimos 12 meses). */
+async function buildReceitaPerdida(): Promise<ReportRow[]> {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+  const losses = await prisma.clientLoss.findMany({
+    where: { lostAt: { gte: from } },
+    select: { lostAt: true, modality: true, monthlyValue: true, referenceValue: true },
+  });
+  const byMonth = new Map<string, { count: number; value: number }>();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+    byMonth.set(`${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`, {
+      count: 0,
+      value: 0,
+    });
+  }
+  for (const l of losses) {
+    const key = `${String(l.lostAt.getMonth() + 1).padStart(2, "0")}/${l.lostAt.getFullYear()}`;
+    const cur = byMonth.get(key);
+    if (!cur) continue;
+    cur.count += 1;
+    cur.value +=
+      l.modality === "TCV"
+        ? n(l.referenceValue) || n(l.monthlyValue)
+        : n(l.monthlyValue) || n(l.referenceValue);
+  }
+  return Array.from(byMonth.entries()).map(([mes, v]) => ({
+    mes,
+    clientesPerdidos: v.count,
+    receitaPerdida: v.value,
+  }));
+}
+
+/** Carteira agrupada por responsável (ativos, MRR base, perdas 3m). */
+async function buildClientesPorResponsavel(): Promise<ReportRow[]> {
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2);
+  threeMonthsAgo.setDate(1);
+  const [clients, losses] = await Promise.all([
+    prisma.client.findMany({
+      where: { status: { notIn: ["INACTIVE", "PROSPECT", "LEAD"] } },
+      select: { salesOwner: true, status: true, modality: true, monthlyValue: true },
+    }),
+    prisma.clientLoss.findMany({
+      where: { lostAt: { gte: threeMonthsAgo } },
+      select: { salesOwner: true },
+    }),
+  ]);
+  const agg = new Map<
+    string,
+    { ativos: number; pausados: number; perdidos: number; mrr: number; tcv: number; mrrBase: number; perdas3m: number }
+  >();
+  const get = (owner: string | null) => {
+    const key = owner ?? "Sem responsável";
+    if (!agg.has(key))
+      agg.set(key, { ativos: 0, pausados: 0, perdidos: 0, mrr: 0, tcv: 0, mrrBase: 0, perdas3m: 0 });
+    return agg.get(key)!;
+  };
+  for (const c of clients) {
+    const a = get(c.salesOwner);
+    if (c.status === "ACTIVE" || c.status === "RENEWAL" || c.status === "DELINQUENT") {
+      a.ativos += 1;
+      if (c.modality === "MRR") {
+        a.mrr += 1;
+        a.mrrBase += n(c.monthlyValue);
+      }
+      if (c.modality === "TCV") a.tcv += 1;
+    }
+    if (c.status === "PAUSED") a.pausados += 1;
+    if (c.status === "CHURNED") a.perdidos += 1;
+  }
+  for (const l of losses) get(l.salesOwner).perdas3m += 1;
+  return Array.from(agg.entries()).map(([responsavel, a]) => ({
+    responsavel,
+    clientesAtivos: a.ativos,
+    clientesMrr: a.mrr,
+    clientesTcv: a.tcv,
+    mrrBase: a.mrrBase,
+    pausados: a.pausados,
+    perdidosTotal: a.perdidos,
+    perdas3m: a.perdas3m,
+  }));
+}
+
+/** Oportunidades de upsell (pipeline + fechadas no período). */
+async function buildUpsell(q: ReportQuery): Promise<ReportRow[]> {
+  const upsells = await prisma.upsell.findMany({
+    where: {
+      ...(q.clientId ? { clientId: q.clientId } : {}),
+      ...(q.status ? { status: q.status as any } : {}),
+    },
+    orderBy: [{ status: "asc" }, { expectedCloseAt: "asc" }],
+    select: {
+      title: true, value: true, responsible: true, status: true,
+      expectedCloseAt: true, closedAt: true, createdAt: true,
+      client: { select: { name: true } },
+      service: { select: { name: true } },
+      offer: { select: { name: true } },
+    },
+  });
+  let rows = upsells.map((u) => ({
+    cliente: u.client.name,
+    oportunidade: u.title ?? u.offer?.name ?? u.service?.name ?? "—",
+    alvo: u.offer?.name ?? u.service?.name ?? null,
+    responsavel: u.responsible,
+    status: UPSELL_LABEL[u.status] ?? u.status,
+    criada: u.createdAt,
+    previsao: u.expectedCloseAt,
+    fechada: u.closedAt,
+    valor: n(u.value),
+  }));
+  if (q.responsavel)
+    rows = rows.filter((r) =>
+      (r.responsavel ?? "").toLowerCase().includes(q.responsavel!.toLowerCase())
+    );
+  return rows;
+}
+
+/** Cartões e limites (usado × disponível). */
+async function buildCartoesLimites(): Promise<ReportRow[]> {
+  const cards = await prisma.creditCard.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true, name: true, bank: true, type: true,
+      limitTotal: true, closingDay: true, dueDay: true, active: true,
+    },
+  });
+  const used = await limitesUsadosPorCartao(cards.map((c) => c.id));
+  return cards.map((c) => {
+    const u = used.get(c.id) ?? 0;
+    return {
+      cartao: c.name,
+      banco: c.bank,
+      tipo: c.type,
+      limiteTotal: n(c.limitTotal),
+      limiteUsado: u,
+      limiteDisponivel: Math.max(0, n(c.limitTotal) - u),
+      fechaDia: c.closingDay,
+      venceDia: c.dueDay,
+      situacao: c.active ? "Ativo" : "Inativo",
+    };
+  });
+}
+
+/** Margem operacional por mês (receitas × despesas × folha). */
+async function buildMargemOperacional(q: ReportQuery): Promise<ReportRow[]> {
+  const rows = await buildFinanceiroMensal(q);
+  return rows.map((r) => ({
+    mes: r.mes,
+    receitas: r.receitas,
+    despesas: r.despesas,
+    folha: r.folha,
+    lucro: r.lucro,
+    margem: r.margem,
+  }));
+}
+
+/** Projeção financeira — próximos 6 meses (MRR + renovações TCV − despesas). */
+async function buildProjecaoFinanceira(): Promise<ReportRow[]> {
+  const now = new Date();
+  const outlook = await getRenewalOutlook([0, 1, 2, 3, 4, 5]);
+  const rows: ReportRow[] = [];
+  for (let i = 0; i < 6; i++) {
+    const start = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
+    const [revenue, expenseAgg] = await Promise.all([
+      getPeriodRevenue(start, end, {}),
+      prisma.transaction.aggregate({
+        where: {
+          type: "despesa",
+          status: { not: "cancelado" },
+          dueDate: { gte: start, lt: end },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+    const window = outlook[i];
+    const tcvEsperado = window
+      ? window.clients.filter((c) => c.modality === "TCV").reduce((s, c) => s + c.expected, 0)
+      : 0;
+    const despesasPrevistas = n(expenseAgg._sum.amount);
+    const receitaProjetada = revenue.mrr + Math.max(revenue.tcv, tcvEsperado);
+    rows.push({
+      mes: `${String(start.getMonth() + 1).padStart(2, "0")}/${start.getFullYear()}`,
+      mrrPrevisto: revenue.mrr,
+      tcvEsperado: Math.max(revenue.tcv, tcvEsperado),
+      receitaProjetada,
+      despesasPrevistas,
+      resultadoProjetado: receitaProjetada - despesasPrevistas,
+    });
+  }
+  return rows;
+}
+
+/** Relatório executivo — visão única dos principais indicadores. */
+async function buildExecutivo(q: ReportQuery): Promise<ReportRow[]> {
+  const { start, end } = q.period;
+  const [revenue, outlook, losses, upsell, expenses, clientes, devendo] =
+    await Promise.all([
+      getPeriodRevenue(start, end, {}),
+      getRenewalOutlook([0, 1, 2, 3]),
+      getLossSummary(),
+      getUpsellKpis(start, end),
+      getExpenseSummary(start),
+      prisma.client.count({ where: { status: "ACTIVE" } }),
+      prisma.client.count({ where: { status: "DELINQUENT" } }),
+    ]);
+  const rows: ReportRow[] = [
+    { grupo: "Faturamento", indicador: "Faturamento MRR", valor: formatBRL(revenue.mrr) },
+    { grupo: "Faturamento", indicador: "Faturamento TCV", valor: formatBRL(revenue.tcv) },
+    { grupo: "Faturamento", indicador: "Faturamento total", valor: formatBRL(revenue.total) },
+    { grupo: "Clientes", indicador: "Clientes ativos", valor: String(clientes) },
+    { grupo: "Clientes", indicador: "Clientes MRR ativos", valor: String(revenue.mrrClients) },
+    { grupo: "Clientes", indicador: "Clientes inadimplentes", valor: String(devendo) },
+    ...outlook.map((w) => ({
+      grupo: "Renovações",
+      indicador: `Renovações ${w.label}`,
+      valor: `${w.count} cliente(s) · ${formatBRL(w.expectedTotal)}`,
+    })),
+    { grupo: "Perdas", indicador: "Perdidos no mês", valor: `${losses.currentMonth.count} · ${formatBRL(losses.currentMonth.value)}` },
+    { grupo: "Perdas", indicador: "Perdidos (3 meses)", valor: `${losses.last3Months.count} · ${formatBRL(losses.last3Months.value)}` },
+    { grupo: "Upsell", indicador: "Pipeline aberto", valor: `${upsell.openCount} · ${formatBRL(upsell.openValue)}` },
+    { grupo: "Upsell", indicador: "Ganho no período", valor: `${upsell.wonCount} · ${formatBRL(upsell.wonValue)}` },
+    { grupo: "Upsell", indicador: "Conversão", valor: `${Math.round(upsell.conversionRate * 100)}%` },
+    { grupo: "Despesas", indicador: "Despesas do mês", valor: formatBRL(expenses.total) },
+    { grupo: "Despesas", indicador: "Despesas vencidas", valor: formatBRL(expenses.overdue) },
+    { grupo: "Despesas", indicador: "Débitos de cartão", valor: formatBRL(expenses.invoiceOpenTotal) },
+    { grupo: "Despesas", indicador: "Limite disponível", valor: formatBRL(expenses.creditLimitAvailable) },
+    { grupo: "Resultado", indicador: "Resultado bruto (fat. − desp.)", valor: formatBRL(revenue.total - expenses.total) },
+  ];
+  return rows;
+}
+
+// ===================================================================
 // Registry
 // ===================================================================
 
@@ -622,6 +1013,217 @@ export const REPORTS: ReportDef[] = [
     groupOptions: [],
     defaultSort: { key: "resultado", dir: "desc" },
     build: (q) => rentabilidade(q, "client"),
+  },
+  {
+    key: "mrr",
+    title: "MRR (recorrência)",
+    description: "Clientes MRR ativos com valor mensal e anualizado.",
+    columns: [
+      { key: "cliente", label: "Cliente", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "segmento", label: "Segmento", kind: "text" },
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "mensal", label: "MRR mensal", kind: "money", total: true },
+      { key: "anualizado", label: "Anualizado", kind: "money", total: true },
+      { key: "renovacao", label: "Mês renovação", kind: "text" },
+    ],
+    filterFields: ["cliente", "responsavel"],
+    groupOptions: ["responsavel", "segmento", "status"],
+    defaultSort: { key: "mensal", dir: "desc" },
+    build: buildMrr,
+  },
+  {
+    key: "tcv",
+    title: "TCV (contratos fechados)",
+    description: "Cobranças TCV do período — valor cheio no mês da adesão/renovação.",
+    columns: [
+      { key: "cliente", label: "Cliente", kind: "text" },
+      { key: "descricao", label: "Descrição", kind: "text" },
+      { key: "competencia", label: "Competência", kind: "text" },
+      { key: "vencimento", label: "Vencimento", kind: "date" },
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "situacao", label: "Situação", kind: "text" },
+      { key: "valor", label: "Valor", kind: "money", total: true },
+      { key: "recebido", label: "Recebido", kind: "money", total: true },
+    ],
+    filterFields: ["periodo", "cliente"],
+    groupOptions: ["cliente", "competencia", "situacao"],
+    defaultSort: { key: "vencimento", dir: "asc" },
+    build: buildTcv,
+  },
+  {
+    key: "faturamento-total",
+    title: "Faturamento total",
+    description: "MRR + TCV mês a mês (regra oficial, sem rateio de TCV).",
+    columns: [
+      { key: "mes", label: "Mês", kind: "text" },
+      { key: "mrr", label: "MRR", kind: "money", total: true },
+      { key: "clientesMrr", label: "Clientes MRR", kind: "int" },
+      { key: "tcv", label: "TCV", kind: "money", total: true },
+      { key: "clientesTcv", label: "TCV fechados", kind: "int", total: true },
+      { key: "total", label: "Total", kind: "money", total: true },
+    ],
+    filterFields: ["periodo", "responsavel"],
+    groupOptions: [],
+    defaultSort: { key: "mes", dir: "asc" },
+    defaultPeriodo: "ano",
+    build: buildFaturamentoTotal,
+  },
+  {
+    key: "renovacoes",
+    title: "Renovações",
+    description: "Clientes com renovação do mês atual a 5 meses à frente, com valor esperado.",
+    columns: [
+      { key: "mes", label: "Mês", kind: "text" },
+      { key: "cliente", label: "Cliente", kind: "text" },
+      { key: "modalidade", label: "Modalidade", kind: "text" },
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "valorEsperado", label: "Valor esperado", kind: "money", total: true },
+    ],
+    filterFields: ["responsavel"],
+    groupOptions: ["mes", "responsavel", "modalidade"],
+    defaultSort: { key: "mes", dir: "asc" },
+    build: buildRenovacoes,
+  },
+  {
+    key: "perdas",
+    title: "Perdas de clientes",
+    description: "Clientes perdidos no período: data, motivo, responsável e receita perdida.",
+    columns: [
+      { key: "data", label: "Data da perda", kind: "date" },
+      { key: "cliente", label: "Cliente", kind: "text" },
+      { key: "modalidade", label: "Modalidade", kind: "text" },
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "motivo", label: "Motivo", kind: "text" },
+      { key: "receitaPerdida", label: "Receita perdida", kind: "money", total: true },
+    ],
+    filterFields: ["periodo", "cliente", "responsavel"],
+    groupOptions: ["responsavel", "modalidade"],
+    defaultSort: { key: "data", dir: "desc" },
+    build: buildPerdas,
+  },
+  {
+    key: "receita-perdida",
+    title: "Receita perdida",
+    description: "Receita perdida por mês nos últimos 12 meses.",
+    columns: [
+      { key: "mes", label: "Mês", kind: "text" },
+      { key: "clientesPerdidos", label: "Clientes perdidos", kind: "int", total: true },
+      { key: "receitaPerdida", label: "Receita perdida", kind: "money", total: true },
+    ],
+    filterFields: [],
+    groupOptions: [],
+    defaultSort: { key: "mes", dir: "asc" },
+    build: buildReceitaPerdida,
+  },
+  {
+    key: "clientes-por-responsavel",
+    title: "Clientes por responsável",
+    description: "Carteira agrupada por responsável: ativos, MRR base e perdas.",
+    columns: [
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "clientesAtivos", label: "Ativos", kind: "int", total: true },
+      { key: "clientesMrr", label: "MRR", kind: "int", total: true },
+      { key: "clientesTcv", label: "TCV", kind: "int", total: true },
+      { key: "mrrBase", label: "MRR base", kind: "money", total: true },
+      { key: "pausados", label: "Pausados", kind: "int", total: true },
+      { key: "perdidosTotal", label: "Perdidos (total)", kind: "int", total: true },
+      { key: "perdas3m", label: "Perdas 3m", kind: "int", total: true },
+    ],
+    filterFields: [],
+    groupOptions: [],
+    defaultSort: { key: "mrrBase", dir: "desc" },
+    build: buildClientesPorResponsavel,
+  },
+  {
+    key: "upsell",
+    title: "Upsell",
+    description: "Pipeline de oportunidades de venda interna e resultados.",
+    columns: [
+      { key: "cliente", label: "Cliente", kind: "text" },
+      { key: "oportunidade", label: "Oportunidade", kind: "text" },
+      { key: "alvo", label: "Serviço/Oferta", kind: "text" },
+      { key: "responsavel", label: "Responsável", kind: "text" },
+      { key: "status", label: "Status", kind: "text" },
+      { key: "criada", label: "Criada em", kind: "date" },
+      { key: "previsao", label: "Previsão", kind: "date" },
+      { key: "fechada", label: "Fechada em", kind: "date" },
+      { key: "valor", label: "Valor", kind: "money", total: true },
+    ],
+    filterFields: ["cliente", "responsavel"],
+    groupOptions: ["status", "responsavel", "alvo"],
+    defaultSort: { key: "valor", dir: "desc" },
+    build: buildUpsell,
+  },
+  {
+    key: "cartoes-limites",
+    title: "Cartões e limites",
+    description: "Limite total, usado e disponível por cartão/conta.",
+    columns: [
+      { key: "cartao", label: "Cartão/Conta", kind: "text" },
+      { key: "banco", label: "Banco", kind: "text" },
+      { key: "tipo", label: "Tipo", kind: "text" },
+      { key: "limiteTotal", label: "Limite total", kind: "money", total: true },
+      { key: "limiteUsado", label: "Usado", kind: "money", total: true },
+      { key: "limiteDisponivel", label: "Disponível", kind: "money", total: true },
+      { key: "fechaDia", label: "Fecha dia", kind: "int" },
+      { key: "venceDia", label: "Vence dia", kind: "int" },
+      { key: "situacao", label: "Situação", kind: "text" },
+    ],
+    filterFields: [],
+    groupOptions: ["banco", "situacao"],
+    defaultSort: { key: "limiteUsado", dir: "desc" },
+    build: buildCartoesLimites,
+  },
+  {
+    key: "margem-operacional",
+    title: "Margem operacional",
+    description: "Receitas, despesas, folha, lucro e margem mês a mês.",
+    columns: [
+      { key: "mes", label: "Mês", kind: "text" },
+      { key: "receitas", label: "Receitas", kind: "money", total: true },
+      { key: "despesas", label: "Despesas", kind: "money", total: true },
+      { key: "folha", label: "Folha", kind: "money", total: true },
+      { key: "lucro", label: "Lucro", kind: "money", total: true },
+      { key: "margem", label: "Margem", kind: "percent" },
+    ],
+    filterFields: ["periodo"],
+    groupOptions: [],
+    defaultSort: { key: "mes", dir: "asc" },
+    defaultPeriodo: "ano",
+    build: buildMargemOperacional,
+  },
+  {
+    key: "projecao-financeira",
+    title: "Projeção financeira",
+    description: "Próximos 6 meses: MRR previsto, TCV esperado, despesas e resultado.",
+    columns: [
+      { key: "mes", label: "Mês", kind: "text" },
+      { key: "mrrPrevisto", label: "MRR previsto", kind: "money", total: true },
+      { key: "tcvEsperado", label: "TCV esperado", kind: "money", total: true },
+      { key: "receitaProjetada", label: "Receita projetada", kind: "money", total: true },
+      { key: "despesasPrevistas", label: "Despesas previstas", kind: "money", total: true },
+      { key: "resultadoProjetado", label: "Resultado projetado", kind: "money", total: true },
+    ],
+    filterFields: [],
+    groupOptions: [],
+    defaultSort: { key: "mes", dir: "asc" },
+    build: buildProjecaoFinanceira,
+  },
+  {
+    key: "executivo",
+    title: "Executivo da agência",
+    description: "Visão única dos principais indicadores do período.",
+    columns: [
+      { key: "grupo", label: "Grupo", kind: "text" },
+      { key: "indicador", label: "Indicador", kind: "text" },
+      { key: "valor", label: "Valor", kind: "text" },
+    ],
+    filterFields: ["periodo"],
+    groupOptions: ["grupo"],
+    defaultSort: { key: "grupo", dir: "asc" },
+    build: buildExecutivo,
   },
   {
     key: "rentabilidade-servico",

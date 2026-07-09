@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { ClientStatus } from "@prisma/client";
+import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
 
@@ -47,6 +47,28 @@ const ClientSchema = z.object({
 function clean(v: FormDataEntryValue | null): string | null {
   const s = (v == null ? "" : String(v)).trim();
   return s === "" ? null : s;
+}
+
+/**
+ * Registra a PERDA (ClientLoss) dos clientes que estão virando CHURNED:
+ * snapshot da receita perdida (MRR mensal / TCV de referência), modalidade,
+ * responsável e motivo. Chamado em toda transição de status → Perdido.
+ */
+async function recordLosses(clientIds: string[], reason?: string | null) {
+  if (clientIds.length === 0) return;
+  const { computeLossSnapshots } = await import("@/lib/services/revenue-metrics");
+  const snapshots = await computeLossSnapshots(clientIds);
+  if (snapshots.length === 0) return;
+  await prisma.clientLoss.createMany({
+    data: snapshots.map((s) => ({
+      clientId: s.clientId,
+      modality: s.modality as any,
+      monthlyValue: s.monthlyValue,
+      referenceValue: s.referenceValue,
+      salesOwner: s.salesOwner,
+      reason: reason ?? null,
+    })),
+  });
 }
 
 export async function saveClient(formData: FormData): Promise<ActionResult> {
@@ -114,6 +136,10 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       // findUnique é pós-filtrado por dono → cliente de outro owner volta null.
       const existing = await prisma.client.findUnique({ where: { id } });
       if (!existing) return { ok: false, error: "Cliente não encontrado." };
+      // Transição → Perdido pela edição também registra a perda.
+      if (parsed.status === "CHURNED" && existing.status !== "CHURNED") {
+        await recordLosses([id]);
+      }
       await prisma.client.update({
         where: { id },
         data: {
@@ -288,13 +314,18 @@ export async function deleteClient(id: string): Promise<ActionResult> {
 
 export async function setClientStatus(
   id: string,
-  status: string
+  status: string,
+  reason?: string | null
 ): Promise<ActionResult> {
   await requireAdmin();
   try {
     const s = z.nativeEnum(ClientStatus).parse(status);
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
+    // Transição → Perdido registra a perda (data, receita, modalidade, motivo).
+    if (s === "CHURNED" && existing.status !== "CHURNED") {
+      await recordLosses([id], reason);
+    }
     await prisma.client.update({
       where: { id },
       data: {
@@ -309,6 +340,209 @@ export async function setClientStatus(
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Define/atualiza o motivo da perda mais recente do cliente (preenchido
+ * opcionalmente logo após marcar como Perdido na carteira).
+ */
+export async function setClientLossReason(
+  clientId: string,
+  reason: string
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const text = reason.trim();
+    if (!text) return { ok: true };
+    const last = await prisma.clientLoss.findFirst({
+      where: { clientId },
+      orderBy: { lostAt: "desc" },
+      select: { id: true },
+    });
+    if (!last) return { ok: false, error: "Registro de perda não encontrado." };
+    await prisma.clientLoss.updateMany({
+      where: { id: last.id },
+      data: { reason: text },
+    });
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao salvar o motivo da perda." };
+  }
+}
+
+/** Modalidade de faturamento (MRR/TCV) — edição inline na carteira. */
+export async function setClientModality(
+  id: string,
+  modality: string | null
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const value =
+      modality == null || modality === ""
+        ? null
+        : z.nativeEnum(ClientModality).parse(modality);
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Cliente não encontrado." };
+    await prisma.client.update({ where: { id }, data: { modality: value } });
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a modalidade.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Mês de renovação (1-12) — edição inline na carteira. */
+export async function setClientRenewalMonth(
+  id: string,
+  month: number | null
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const value =
+      month == null
+        ? null
+        : z.number().int().min(1, "Mês inválido.").max(12, "Mês inválido.").parse(month);
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Cliente não encontrado." };
+    await prisma.client.update({ where: { id }, data: { renewalMonth: value } });
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o mês de renovação.";
+    return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Override manual da inadimplência do mês atual (Pago/Devendo).
+ * Grava valor + competência (mês/ano correntes) + quem/quando ajustou.
+ * `status = null` limpa o override e volta ao cálculo automático.
+ */
+export async function setClientDelinquency(
+  id: string,
+  status: string | null
+): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    const value =
+      status == null || status === ""
+        ? null
+        : z.nativeEnum(DelinquencyStatus).parse(status);
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Cliente não encontrado." };
+
+    if (value == null) {
+      await prisma.client.update({
+        where: { id },
+        data: {
+          delinquencyOverride: null,
+          delinquencyOverrideMonth: null,
+          delinquencyOverrideYear: null,
+          delinquencyOverrideAt: null,
+          delinquencyOverrideBy: null,
+        },
+      });
+    } else {
+      const now = new Date();
+      await prisma.client.update({
+        where: { id },
+        data: {
+          delinquencyOverride: value,
+          delinquencyOverrideMonth: now.getMonth() + 1,
+          delinquencyOverrideYear: now.getFullYear(),
+          delinquencyOverrideAt: now,
+          delinquencyOverrideBy: viewer.name,
+        },
+      });
+    }
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a inadimplência.";
+    return { ok: false, error: msg };
+  }
+}
+
+// ---------- Ações em massa (seleção múltipla na carteira) ----------
+
+const BulkSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1, "Selecione ao menos um cliente."),
+  status: z.nativeEnum(ClientStatus).nullish(),
+  salesOwner: z.string().trim().nullish(),
+  renewalMonth: z.number().int().min(1).max(12).nullish(),
+});
+
+/**
+ * Atualiza em massa os clientes selecionados (updateMany é escopado por dono
+ * pela extensão do Prisma — só afeta clientes do próprio owner). Aplica só os
+ * campos enviados; ausência de campo = não altera.
+ */
+export async function bulkUpdateClients(input: {
+  ids: string[];
+  status?: string | null;
+  salesOwner?: string | null;
+  renewalMonth?: number | null;
+}): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const parsed = BulkSchema.parse({
+      ids: input.ids,
+      status: input.status ? (input.status as ClientStatus) : undefined,
+      salesOwner:
+        input.salesOwner === undefined ? undefined : (input.salesOwner || null),
+      renewalMonth: input.renewalMonth ?? undefined,
+    });
+
+    const data: Record<string, any> = {};
+    if (parsed.status) {
+      data.status = parsed.status;
+      // Mantém churnedAt coerente ao mudar status em massa.
+      if (parsed.status === "CHURNED") data.churnedAt = new Date();
+      else data.churnedAt = null;
+    }
+    if (parsed.salesOwner !== undefined) data.salesOwner = parsed.salesOwner;
+    if (parsed.renewalMonth !== undefined) data.renewalMonth = parsed.renewalMonth;
+
+    if (Object.keys(data).length === 0)
+      return { ok: false, error: "Nada para atualizar." };
+
+    // Transição em massa → Perdido: registra a perda de quem ainda não era.
+    if (parsed.status === "CHURNED") {
+      const transitioning = await prisma.client.findMany({
+        where: { id: { in: parsed.ids }, status: { not: "CHURNED" } },
+        select: { id: true },
+      });
+      await recordLosses(transitioning.map((c) => c.id));
+    }
+
+    await prisma.client.updateMany({ where: { id: { in: parsed.ids } }, data });
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar em massa.";
+    return { ok: false, error: msg };
+  }
+}
+
+/** Exclusão em massa (deleteMany é escopado por dono). */
+export async function bulkDeleteClients(ids: string[]): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    if (!ids.length) return { ok: false, error: "Selecione ao menos um cliente." };
+    await prisma.client.deleteMany({ where: { id: { in: ids } } });
+    revalidatePath("/clientes");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao excluir em massa." };
   }
 }
 

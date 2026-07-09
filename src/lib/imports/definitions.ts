@@ -125,23 +125,6 @@ const ITEM_KIND = [
   { value: "REIMBURSEMENT", label: "Reembolso" },
   { value: "DEDUCTION", label: "Desconto" },
 ];
-const ASSET_TYPE = [
-  { value: "EQUIPMENT", label: "Equipamento" },
-  { value: "INVESTMENT", label: "Investimento" },
-  { value: "RECEIVABLE", label: "Crédito a receber" },
-  { value: "CASH", label: "Dinheiro" },
-  { value: "INTANGIBLE", label: "Intangível" },
-  { value: "OTHER", label: "Outro" },
-];
-const LIABILITY_TYPE = [
-  { value: "LOAN", label: "Empréstimo" },
-  { value: "TAX", label: "Imposto" },
-  { value: "SUPPLIER", label: "Fornecedor" },
-  { value: "CARD_DEBT", label: "Dívida de cartão" },
-  { value: "LABOR", label: "Trabalhista" },
-  { value: "OTHER", label: "Outro" },
-];
-
 const refCliente = (
   campo: string,
   nome: unknown,
@@ -540,57 +523,8 @@ export const IMPORT_DEFS: ImportDef[] = [
     },
   },
 
-  // ---------------- Ativos ----------------
-  {
-    key: "ativos",
-    title: "Ativos",
-    description: "Bens e investimentos da agência",
-    columns: [
-      { key: "name", header: "Nome", required: true, kind: "text", example: "MacBook Pro M3" },
-      { key: "type", header: "Tipo", kind: "enum", options: ASSET_TYPE, example: "Equipamento" },
-      { key: "value", header: "Valor (R$)", required: true, kind: "money", example: "18000,00" },
-      { key: "acquiredAt", header: "Aquisição", kind: "date", example: "15/01/2026" },
-      { key: "notes", header: "Observações", kind: "text", example: "" },
-    ],
-    toData: (row, _refs, err) => {
-      if (n(row.data.value) <= 0) err("Valor (R$)", "deve ser maior que zero");
-      return { ...row.data, type: row.data.type ?? "OTHER" };
-    },
-    dupKey: (d) => norm(d.name),
-    existingKeys: async () => {
-      const rows = await prisma.asset.findMany({ select: { name: true } });
-      return new Set(rows.map((r) => norm(r.name)));
-    },
-    create: async (rows) => (await prisma.asset.createMany({ data: rows as any[] })).count,
-  },
-
-  // ---------------- Passivos ----------------
-  {
-    key: "passivos",
-    title: "Passivos",
-    description: "Dívidas e obrigações (empréstimos, impostos, fornecedores…)",
-    columns: [
-      { key: "name", header: "Nome", required: true, kind: "text", example: "Parcelamento Simples Nacional" },
-      { key: "type", header: "Tipo", kind: "enum", options: LIABILITY_TYPE, example: "Imposto" },
-      { key: "totalValue", header: "Valor total (R$)", required: true, kind: "money", example: "12000,00" },
-      { key: "remainingValue", header: "Saldo devedor (R$)", kind: "money", example: "8000,00", description: "vazio = valor total" },
-      { key: "monthlyPayment", header: "Parcela mensal (R$)", kind: "money", example: "1000,00" },
-      { key: "installments", header: "Nº parcelas", kind: "int", example: 12 },
-      { key: "dueDate", header: "Vencimento final", kind: "date", example: "" },
-      { key: "notes", header: "Observações", kind: "text", example: "" },
-    ],
-    toData: (row, _refs, err) => {
-      const d = row.data;
-      if (n(d.totalValue) <= 0) err("Valor total (R$)", "deve ser maior que zero");
-      return { ...d, type: d.type ?? "OTHER", remainingValue: d.remainingValue ?? d.totalValue };
-    },
-    dupKey: (d) => norm(d.name),
-    existingKeys: async () => {
-      const rows = await prisma.liability.findMany({ select: { name: true } });
-      return new Set(rows.map((r) => norm(r.name)));
-    },
-    create: async (rows) => (await prisma.liability.createMany({ data: rows as any[] })).count,
-  },
+  // Patrimônio (ativos/passivos) foi removido do MVP — os models continuam
+  // no banco, mas a importação em massa não é mais oferecida na interface.
 ];
 
 export function getImportDef(key: string): ImportDef | undefined {

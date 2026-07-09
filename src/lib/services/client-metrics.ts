@@ -131,3 +131,55 @@ export async function getClientSummaries(
 
   return map;
 }
+
+/**
+ * Inadimplência do MÊS ATUAL por cliente (rótulo Pago/Devendo/Sem cobrança).
+ * Calculado a partir das cobranças da competência (mês/ano):
+ *  - DEVENDO  → existe cobrança em aberto (PENDING/PARTIAL/OVERDUE) no mês;
+ *  - PAGO     → há cobrança(s) no mês e todas estão quitadas;
+ *  - SEM_COBRANCA → nenhuma cobrança gerada para o mês.
+ *
+ * É apenas o valor CALCULADO. O override manual (Client.delinquencyOverride)
+ * é aplicado pelo caller, que sabe a competência gravada. Assim mantemos a
+ * separação "automático × ajustado manualmente" pedida no briefing.
+ */
+export type MonthDelinquency = "PAGO" | "DEVENDO" | "SEM_COBRANCA";
+
+export async function getMonthDelinquencies(
+  clientIds: string[],
+  month: number,
+  year: number
+): Promise<Map<string, MonthDelinquency>> {
+  const map = new Map<string, MonthDelinquency>(
+    clientIds.map((id) => [id, "SEM_COBRANCA"])
+  );
+  if (clientIds.length === 0) return map;
+
+  const rows = await prisma.billing.groupBy({
+    by: ["clientId", "status"],
+    where: {
+      clientId: { in: clientIds },
+      competenceMonth: month,
+      competenceYear: year,
+    },
+    _count: { _all: true },
+  });
+
+  // Agrega por cliente: qualquer aberta → DEVENDO; senão alguma paga → PAGO.
+  const hasOpen = new Set<string>();
+  const hasPaid = new Set<string>();
+  for (const r of rows) {
+    if (!r._count._all) continue;
+    if (r.status === "PENDING" || r.status === "PARTIAL" || r.status === "OVERDUE") {
+      hasOpen.add(r.clientId);
+    } else if (r.status === "PAID") {
+      hasPaid.add(r.clientId);
+    }
+  }
+  for (const id of clientIds) {
+    if (hasOpen.has(id)) map.set(id, "DEVENDO");
+    else if (hasPaid.has(id)) map.set(id, "PAGO");
+    // else permanece SEM_COBRANCA
+  }
+  return map;
+}

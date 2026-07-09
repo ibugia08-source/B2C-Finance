@@ -23,6 +23,8 @@ export const SERVICE_CATEGORIES = [
   "SEO",
   "CRM",
   "Consultoria",
+  "IA",
+  "Automação",
   "Método CFC",
   "Outros",
 ];
@@ -37,9 +39,6 @@ export function ServiceDialog({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  const fmt = (v: any) =>
-    v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>
@@ -84,21 +83,6 @@ export function ServiceDialog({
           </div>
 
           <div>
-            <Label>Valor base sugerido (R$)</Label>
-            <Input name="defaultPrice" inputMode="decimal" placeholder="0,00"
-              defaultValue={fmt(initial?.defaultPrice)} />
-          </div>
-          <div>
-            <Label>Custo estimado (R$)</Label>
-            <Input name="estimatedCost" inputMode="decimal" placeholder="0,00"
-              defaultValue={fmt(initial?.estimatedCost)} />
-          </div>
-
-          <div>
-            <Label>Responsável padrão</Label>
-            <Input name="defaultOwner" defaultValue={initial?.defaultOwner ?? ""} />
-          </div>
-          <div>
             <Label>Status</Label>
             <Select name="active" defaultValue={String(initial?.active ?? true)}>
               <option value="true">Ativo</option>
@@ -110,10 +94,10 @@ export function ServiceDialog({
             <Label>Descrição</Label>
             <Textarea name="description" defaultValue={initial?.description ?? ""} />
           </div>
-          <div className="col-span-full">
-            <Label>Observações</Label>
-            <Textarea name="notes" defaultValue={initial?.notes ?? ""} />
-          </div>
+          <p className="col-span-full text-xs text-muted-foreground">
+            Os valores de venda ficam nas <span className="font-medium">Ofertas (Planos)</span> —
+            o serviço é só o catálogo do que a agência entrega.
+          </p>
 
           {error && <p className="col-span-full text-sm text-destructive">{error}</p>}
 

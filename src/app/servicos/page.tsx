@@ -1,7 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -37,10 +36,11 @@ export default async function ServicosPage() {
   ]);
   const inUse = new Map(contractCounts.map((c) => [c.serviceId, c._count._all]));
 
+  // Sem valores: o preço vive nas OFERTAS (Planos), não no serviço.
   const services = servicesRaw.map((s) => ({
     ...s,
-    defaultPrice: s.defaultPrice != null ? Number(s.defaultPrice) : null,
-    estimatedCost: s.estimatedCost != null ? Number(s.estimatedCost) : null,
+    defaultPrice: null,
+    estimatedCost: null,
   }));
   const ativos = services.filter((s) => s.active).length;
 
@@ -48,7 +48,7 @@ export default async function ServicosPage() {
     <div>
       <PageHeader
         title="Serviços"
-        description="Catálogo de serviços da agência"
+        description="Catálogo de serviços da agência — os valores ficam nas Ofertas (Planos)"
         actions={<ServiceDialog />}
       />
 
@@ -70,9 +70,6 @@ export default async function ServicosPage() {
                 <TableRow>
                   <TableHead>Serviço</TableHead>
                   <TableHead>Categoria</TableHead>
-                  <TableHead className="text-right">Valor base</TableHead>
-                  <TableHead className="text-right">Custo estimado</TableHead>
-                  <TableHead>Responsável padrão</TableHead>
                   <TableHead>Contratos</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead></TableHead>
@@ -81,7 +78,7 @@ export default async function ServicosPage() {
               <TableBody>
                 {services.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
                       Nenhum serviço cadastrado. Comece criando os serviços que a
                       agência oferece (Meta Ads, Google Ads, Social Media…).
                     </TableCell>
@@ -98,13 +95,6 @@ export default async function ServicosPage() {
                       )}
                     </TableCell>
                     <TableCell>{s.category ?? "—"}</TableCell>
-                    <TableCell className="text-right">
-                      {s.defaultPrice != null ? formatBRL(s.defaultPrice) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {s.estimatedCost != null ? formatBRL(s.estimatedCost) : "—"}
-                    </TableCell>
-                    <TableCell>{s.defaultOwner ?? "—"}</TableCell>
                     <TableCell>{inUse.get(s.id) ?? 0}</TableCell>
                     <TableCell>
                       <Badge variant={s.active ? "success" : "secondary"}>
@@ -139,13 +129,6 @@ export default async function ServicosPage() {
                   />
                   <div className="space-y-1.5">
                     <Field label="Categoria">{s.category ?? "—"}</Field>
-                    <Field label="Valor base">
-                      {s.defaultPrice != null ? formatBRL(s.defaultPrice) : "—"}
-                    </Field>
-                    <Field label="Custo estimado">
-                      {s.estimatedCost != null ? formatBRL(s.estimatedCost) : "—"}
-                    </Field>
-                    <Field label="Responsável">{s.defaultOwner ?? "—"}</Field>
                     <Field label="Contratos ativos">{inUse.get(s.id) ?? 0}</Field>
                   </div>
                   <MobileCardActions>

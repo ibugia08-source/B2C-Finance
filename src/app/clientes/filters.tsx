@@ -5,27 +5,35 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
+import {
+  CLIENT_STATUSES,
+  CLIENT_STATUS_LABEL,
+  CLIENT_MODALITIES,
+  CLIENT_MODALITY_LABEL,
+  MONTHS,
+} from "./_meta";
 
 type Option = { value: string; label: string };
 
 /**
- * Filtros essenciais da carteira: busca (nome/razão/CNPJ), status,
- * serviço, segmento e ordenação alfabética. Atalhos em chips para as
- * visões mais usadas.
+ * Filtros essenciais da carteira (item 9 do briefing): busca, status,
+ * modalidade, inadimplência do mês, mês de renovação, serviço, segmento,
+ * responsável e ordenação. Chips para as visões mais usadas.
  */
 export function ClientFilters({
   services,
   segments,
+  owners,
 }: {
   services: Option[];
   segments: string[];
+  owners: string[];
 }) {
   const router = useRouter();
   const sp = useSearchParams();
 
   function push(params: URLSearchParams) {
-    params.delete("pagina"); // qualquer filtro novo volta à página 1
+    params.delete("pagina");
     router.push(`/clientes?${params.toString()}`);
   }
 
@@ -41,13 +49,13 @@ export function ClientFilters({
     update("q", String(new FormData(e.currentTarget).get("q") ?? "").trim());
   }
 
-  // Atalhos rápidos (chips) — visões mais usadas da carteira.
   const chips: { key: string; label: string; params: Record<string, string> }[] = [
     { key: "ativos", label: "Ativos", params: { status: "ACTIVE" } },
-    { key: "inadimplentes", label: "Inadimplentes", params: { situacao: "inadimplente" } },
-    { key: "renovacao", label: "Renovação ≤ 30d", params: { renovacao: "30" } },
+    { key: "devendo", label: "Devendo no mês", params: { inadimplencia: "devendo" } },
+    { key: "mrr", label: "MRR", params: { modalidade: "MRR" } },
+    { key: "tcv", label: "TCV", params: { modalidade: "TCV" } },
     { key: "pausados", label: "Pausados", params: { status: "PAUSED" } },
-    { key: "cancelados", label: "Cancelados", params: { status: "CHURNED" } },
+    { key: "perdidos", label: "Perdidos", params: { status: "CHURNED" } },
   ];
   function isChipActive(p: Record<string, string>) {
     return Object.entries(p).every(([k, v]) => sp.get(k) === v);
@@ -86,7 +94,7 @@ export function ClientFilters({
         )}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 items-end">
         <form onSubmit={onSearch} className="col-span-2">
           <Label className="text-xs">Buscar</Label>
           <Input
@@ -106,6 +114,48 @@ export function ClientFilters({
             {CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => (
               <option key={s} value={s}>
                 {CLIENT_STATUS_LABEL[s]}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs">Modalidade</Label>
+          <Select
+            value={sp.get("modalidade") ?? ""}
+            onChange={(e) => update("modalidade", e.target.value)}
+          >
+            <option value="">Todas</option>
+            {CLIENT_MODALITIES.map((m) => (
+              <option key={m} value={m}>
+                {CLIENT_MODALITY_LABEL[m]}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs">Inadimplência (mês)</Label>
+          <Select
+            value={sp.get("inadimplencia") ?? ""}
+            onChange={(e) => update("inadimplencia", e.target.value)}
+          >
+            <option value="">Todos</option>
+            <option value="pago">Pago</option>
+            <option value="devendo">Devendo</option>
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs">Mês de renovação</Label>
+          <Select
+            value={sp.get("mesRenovacao") ?? ""}
+            onChange={(e) => update("mesRenovacao", e.target.value)}
+          >
+            <option value="">Todos</option>
+            {MONTHS.map((m) => (
+              <option key={m.value} value={String(m.value)}>
+                {m.label}
               </option>
             ))}
           </Select>
@@ -136,6 +186,21 @@ export function ClientFilters({
             {segments.map((s) => (
               <option key={s} value={s}>
                 {s}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs">Responsável</Label>
+          <Select
+            value={sp.get("responsavel") ?? ""}
+            onChange={(e) => update("responsavel", e.target.value)}
+          >
+            <option value="">Todos</option>
+            {owners.map((o) => (
+              <option key={o} value={o}>
+                {o}
               </option>
             ))}
           </Select>

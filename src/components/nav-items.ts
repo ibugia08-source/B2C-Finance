@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   CalendarCheck2,
   Receipt,
-  Landmark,
   Users,
   Settings2,
   Wand2,
@@ -17,7 +16,9 @@ import {
   HandCoins,
   FileBarChart2,
   FileUp,
-  Scale,
+  Layers,
+  LineChart,
+  TrendingUp,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -44,19 +45,20 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "Agência", href: "/contratos", label: "Contratos", icon: FileSignature, adminOnly: true },
   { section: "Agência", href: "/cobrancas", label: "Cobranças & contratos", short: "Cobranças", icon: HandCoins, adminOnly: true, primary: true },
   { section: "Agência", href: "/folha", label: "Folha", icon: UsersRound, adminOnly: true },
-  { section: "Agência", href: "/ativos", label: "Patrimônio", icon: Scale, adminOnly: true },
-  { section: "Agência", href: "/servicos", label: "Serviços & Planos", icon: Package, adminOnly: true },
+  { section: "Agência", href: "/servicos", label: "Serviços", icon: Package, adminOnly: true },
+  { section: "Agência", href: "/ofertas", label: "Planos (Ofertas)", icon: Layers, adminOnly: true },
+  { section: "Agência", href: "/upsell", label: "Upsell", icon: TrendingUp, adminOnly: true },
 
-  // Financeiro da agência (caixa, bancos e despesas — herdado e reenquadrado)
+  // Financeiro da agência (contas/cartões vivem DENTRO de Despesas)
   { section: "Financeiro", href: "/receitas", label: "Receitas extras", short: "Receitas", icon: ArrowDownToLine, adminOnly: true, primary: true },
   { section: "Financeiro", href: "/despesas", label: "Despesas", icon: ArrowUpFromLine, adminOnly: true },
   { section: "Financeiro", href: "/transacoes", label: "Movimentações", short: "Mov.", icon: Receipt, adminOnly: true, primary: true },
-  { section: "Financeiro", href: "/cartoes", label: "Contas & cartões", short: "Contas", icon: Landmark, adminOnly: true },
   { section: "Financeiro", href: "/caixa", label: "Reservas (caixa)", short: "Reservas", icon: PiggyBank, adminOnly: true },
   { section: "Financeiro", href: "/pessoas", label: "Pessoas & reembolsos", short: "Pessoas", icon: Users, adminOnly: true },
   { section: "Financeiro", href: "/regras", label: "Regras de categoria", short: "Regras", icon: Wand2, adminOnly: true },
 
   { section: "Análises", href: "/relatorios", label: "Relatórios", icon: FileBarChart2, adminOnly: true },
+  { section: "Análises", href: "/projecoes", label: "Projeções", icon: LineChart, adminOnly: true },
   { section: "Análises", href: "/importacoes", label: "Importar dados", icon: FileUp, adminOnly: true },
   { section: "Análises", href: "/assistente", label: "Assistente IA", icon: Sparkles },
 

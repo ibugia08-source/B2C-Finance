@@ -66,14 +66,35 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     billingStatus: sp.status || undefined,
     revenueType: sp.treceita || undefined,
     expenseType: sp.tdespesa || undefined,
+    modality: sp.modalidade || undefined,
+    salesOwner: sp.responsavel || undefined,
+    segment: sp.segmento || undefined,
+    clientStatus: sp.statuscliente || undefined,
   };
 
-  const [data, clients, services] = await Promise.all([
+  const [data, clients, services, ownerRows, segmentRows] = await Promise.all([
     getExecutiveDashboard(filters),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.client.findMany({
+      where: { salesOwner: { not: null } },
+      distinct: ["salesOwner"],
+      select: { salesOwner: true },
+      orderBy: { salesOwner: "asc" },
+    }),
+    prisma.client.findMany({
+      where: { segment: { not: null } },
+      distinct: ["segment"],
+      select: { segment: true },
+      orderBy: { segment: "asc" },
+    }),
   ]);
-  const { kpis, finance, cash, balance, series, breakdowns, health, alerts, actions } = data;
+  const {
+    kpis, finance, cash, series, breakdowns, health, alerts, actions,
+    revenue, renewalOutlook, losses, clients: clientsBlock, upsell, expenses,
+  } = data;
+  const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
+  const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
 
   const hs = HEALTH_STYLE[health.level];
   const inadPct = Math.round(kpis.inadimplenciaTaxa * 100);
@@ -93,9 +114,273 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
 
       <Card className="mb-5">
         <CardContent className="p-4">
-          <DashboardFilters clients={clients} services={services} />
+          <DashboardFilters
+            clients={clients}
+            services={services}
+            owners={owners}
+            segments={segments}
+          />
         </CardContent>
       </Card>
+
+      {/* ===== Faturamento do período (MRR + TCV) — destaque ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Faturamento · {period.label}
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <Card className="border-primary/25 bg-primary/[0.03]">
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+              Faturamento total do período
+            </p>
+            <p className="text-3xl font-bold mt-1.5 text-primary">
+              {formatBRL(revenue.total)}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              MRR + TCV do período selecionado
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+              Faturamento MRR
+            </p>
+            <p className="text-2xl font-bold mt-1.5">{formatBRL(revenue.mrr)}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {revenue.mrrClients} cliente{revenue.mrrClients === 1 ? "" : "s"} MRR ativo
+              {revenue.mrrClients === 1 ? "" : "s"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+              Faturamento TCV
+            </p>
+            <p className="text-2xl font-bold mt-1.5">{formatBRL(revenue.tcv)}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {revenue.tcvClients} fechado{revenue.tcvClients === 1 ? "" : "s"}/renovado
+              {revenue.tcvClients === 1 ? "" : "s"} no período · valor cheio no mês da adesão
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ===== Clientes ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Clientes
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+        <StatCard href="/clientes?status=ACTIVE" title="Ativos"
+          value={String(clientsBlock.ativos)} intent="positive" />
+        <StatCard href="/clientes?status=PAUSED" title="Pausados"
+          value={String(clientsBlock.pausados)}
+          intent={clientsBlock.pausados > 0 ? "warning" : "default"} />
+        <StatCard href="/clientes?status=CHURNED" title="Perdidos"
+          value={String(clientsBlock.perdidos)}
+          intent={clientsBlock.perdidos > 0 ? "negative" : "default"} />
+        <StatCard href="/clientes?modalidade=MRR&status=ACTIVE" title="MRR ativos"
+          value={String(clientsBlock.mrrAtivos)} />
+        <StatCard href="/clientes?modalidade=TCV&status=ACTIVE" title="TCV ativos"
+          value={String(clientsBlock.tcvAtivos)} />
+        <StatCard href="/clientes?inadimplencia=devendo" title="Devendo no mês"
+          value={String(clientsBlock.devendoMes)}
+          intent={clientsBlock.devendoMes > 0 ? "negative" : "positive"} />
+        <StatCard href="/clientes?inadimplencia=pago" title="Pagos no mês"
+          value={String(clientsBlock.pagosMes)} intent="positive" />
+      </div>
+
+      {/* ===== Renovações (mês atual → 3 meses à frente) ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Renovações
+      </h2>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {renewalOutlook.map((w) => (
+          <Link key={w.offset} href={`/clientes?mesRenovacao=${w.month}`} className="group">
+            <Card className="h-full transition-shadow group-hover:shadow-md">
+              <CardContent className="p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                  {w.offset === 0
+                    ? "Renovações deste mês"
+                    : w.offset === 1
+                      ? "Próximo mês"
+                      : `Em ${w.offset} meses`}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{w.label}</p>
+                <div className="flex items-baseline gap-2 mt-1.5">
+                  <p className="text-2xl font-bold">{w.count}</p>
+                  <p className="text-sm text-muted-foreground">
+                    cliente{w.count === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <p className="text-sm font-medium mt-0.5">
+                  {formatBRL(w.expectedTotal)}{" "}
+                  <span className="text-xs font-normal text-muted-foreground">esperado</span>
+                </p>
+                {w.clients.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1.5 truncate">
+                    {w.clients.slice(0, 3).map((c) => c.name).join(", ")}
+                    {w.clients.length > 3 ? ` +${w.clients.length - 3}` : ""}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {/* ===== Perdas de clientes e receita ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Perdas de clientes
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard
+          href="/clientes?status=CHURNED"
+          title="Perdidos no mês"
+          value={String(losses.currentMonth.count)}
+          intent={losses.currentMonth.count > 0 ? "negative" : "positive"}
+          hint={`${formatBRL(losses.currentMonth.value)} de receita perdida`}
+        />
+        <StatCard
+          href="/clientes?status=CHURNED"
+          title="Perdidos · últimos 3 meses"
+          value={String(losses.last3Months.count)}
+          intent={losses.last3Months.count > 0 ? "warning" : "positive"}
+          hint={`${formatBRL(losses.last3Months.value)} de receita perdida`}
+        />
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">
+              Perdas por responsável (3m)
+            </p>
+            {losses.last3Months.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sem perdas no período.</p>
+            ) : (
+              <ul className="space-y-1.5 text-sm">
+                {Object.entries(
+                  losses.last3Months.items.reduce<Record<string, { count: number; value: number }>>(
+                    (acc, l) => {
+                      const key = l.salesOwner ?? "Sem responsável";
+                      acc[key] = acc[key] ?? { count: 0, value: 0 };
+                      acc[key].count += 1;
+                      acc[key].value += l.value;
+                      return acc;
+                    },
+                    {}
+                  )
+                )
+                  .sort((a, b) => b[1].value - a[1].value)
+                  .slice(0, 5)
+                  .map(([owner, agg]) => (
+                    <li key={owner} className="flex justify-between gap-2">
+                      <span className="truncate">{owner}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {agg.count} ·{" "}
+                        <span className="text-red-600 dark:text-red-400 font-medium">
+                          {formatBRL(agg.value)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-2">
+              Perdas recentes
+            </p>
+            {losses.last3Months.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma perda registrada nos últimos 3 meses. 🎉
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {losses.last3Months.items.slice(0, 4).map((l, i) => (
+                  <li key={i} className="flex items-start justify-between gap-2 text-sm">
+                    <span className="min-w-0">
+                      <Link href={`/clientes/${l.clientId}`} className="font-medium hover:underline">
+                        {l.clientName}
+                      </Link>
+                      <span className="block text-xs text-muted-foreground truncate">
+                        {[
+                          l.modality,
+                          l.salesOwner,
+                          l.reason,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="text-red-600 dark:text-red-400 font-medium">
+                        {formatBRL(l.value)}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(l.lostAt)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ===== Upsell ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Upsell
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <StatCard href="/upsell" title="Oportunidades abertas"
+          value={String(upsell.openCount)}
+          hint={formatBRL(upsell.openValue)} />
+        <StatCard href="/upsell" title="Valor em oportunidades"
+          value={formatBRL(upsell.openValue)} />
+        <StatCard href="/upsell?status=WON" title="Ganho no período"
+          value={formatBRL(upsell.wonValue)} intent="positive" />
+        <StatCard href="/upsell?status=WON" title="Vendidos"
+          value={String(upsell.wonCount)}
+          intent={upsell.wonCount > 0 ? "positive" : "default"} />
+        <StatCard href="/upsell" title="Conversão"
+          value={`${Math.round(upsell.conversionRate * 100)}%`}
+          hint="vendidos / decididos no período" />
+      </div>
+
+      {/* ===== Despesas ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Despesas
+      </h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <StatCard href="/despesas" title="Despesas do mês"
+          value={formatBRL(expenses.total)} intent="negative" />
+        <StatCard href="/despesas?status=pago" title="Pagas"
+          value={formatBRL(expenses.paid)} intent="positive" />
+        <StatCard href="/despesas?status=pendente" title="Pendentes"
+          value={formatBRL(expenses.pending)} intent="warning" />
+        <StatCard href="/despesas?status=vencida" title="Vencidas"
+          value={formatBRL(expenses.overdue)}
+          intent={expenses.overdue > 0 ? "negative" : "default"} />
+        <StatCard href="/despesas?recorrente=sim" title="Recorrentes"
+          value={formatBRL(expenses.recurring)}
+          hint={`${expenses.recurringCount} despesa(s)`} />
+        <StatCard href="/despesas?aba=resumo" title="Débitos de cartão"
+          value={formatBRL(expenses.invoiceOpenTotal)}
+          intent={expenses.invoiceOpenTotal > 0 ? "warning" : "default"} />
+        <StatCard href="/despesas?aba=cartoes" title="Limite total"
+          value={formatBRL(expenses.creditLimitTotal)} />
+        <StatCard href="/despesas?aba=cartoes" title="Limite disponível"
+          value={formatBRL(expenses.creditLimitAvailable)}
+          intent={
+            expenses.creditLimitTotal > 0 &&
+            expenses.creditLimitAvailable < expenses.creditLimitTotal * 0.2
+              ? "negative"
+              : "positive"
+          } />
+      </div>
 
       {/* ===== Saúde financeira ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -230,20 +515,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"} />
       </div>
 
-      {/* ===== Caixa & patrimônio ===== */}
+      {/* ===== Caixa ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Caixa & patrimônio
+        Caixa
       </h2>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <StatCard href="/caixa" title="Caixa atual" value={formatBRL(cash.caixaDisponivel)}
           intent={cash.caixaDisponivel >= 0 ? "positive" : "negative"}
           hint="contas + reservas" />
         <StatCard href="/caixa" title="Caixa previsto" value={formatBRL(cash.saldoPrevisto)}
           intent={cash.saldoPrevisto >= 0 ? "positive" : "negative"}
           hint="+ a receber − a pagar" />
-        <StatCard href="/ativos" title="Ativos" value={formatBRL(balance.ativosTotais)} />
-        <StatCard href="/passivos" title="Passivos" value={formatBRL(balance.passivosTotais)}
-          intent={balance.passivosTotais > 0 ? "negative" : "default"} />
       </div>
 
       {/* ===== Gráficos ===== */}

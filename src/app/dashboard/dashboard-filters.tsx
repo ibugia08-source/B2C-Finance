@@ -33,7 +33,20 @@ const EXPENSE_TYPE_LABEL: Record<string, string> = {
   OTHER: "Outra",
 };
 
-const ENTITY_PARAMS = ["cliente", "servico", "status", "treceita", "tdespesa"] as const;
+const CLIENT_STATUS_LABEL: Record<string, string> = {
+  PROSPECT: "Prospecção",
+  ACTIVE: "Ativo",
+  PAUSED: "Pausado",
+  RENEWAL: "Em renovação",
+  DELINQUENT: "Inadimplente",
+  CHURNED: "Perdido",
+  INACTIVE: "Inativo",
+};
+
+const ENTITY_PARAMS = [
+  "cliente", "servico", "status", "treceita", "tdespesa",
+  "modalidade", "responsavel", "segmento", "statuscliente",
+] as const;
 
 type Opt = { id: string; name: string };
 
@@ -41,9 +54,13 @@ type Opt = { id: string; name: string };
 export function DashboardFilters({
   clients,
   services,
+  owners = [],
+  segments = [],
 }: {
   clients: Opt[];
   services: Opt[];
+  owners?: string[];
+  segments?: string[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -111,6 +128,41 @@ export function DashboardFilters({
           <Select className={selectCls} value={sp.get("tdespesa") ?? ""} onChange={(e) => setParam("tdespesa", e.target.value)}>
             <option value="">Todos</option>
             {Object.entries(EXPENSE_TYPE_LABEL).map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Modalidade</Label>
+          <Select className={selectCls} value={sp.get("modalidade") ?? ""} onChange={(e) => setParam("modalidade", e.target.value)}>
+            <option value="">Todas</option>
+            <option value="MRR">MRR</option>
+            <option value="TCV">TCV</option>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Responsável</Label>
+          <Select className={selectCls} value={sp.get("responsavel") ?? ""} onChange={(e) => setParam("responsavel", e.target.value)}>
+            <option value="">Todos</option>
+            {owners.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Segmento</Label>
+          <Select className={selectCls} value={sp.get("segmento") ?? ""} onChange={(e) => setParam("segmento", e.target.value)}>
+            <option value="">Todos</option>
+            {segments.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Status do cliente</Label>
+          <Select className={selectCls} value={sp.get("statuscliente") ?? ""} onChange={(e) => setParam("statuscliente", e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(CLIENT_STATUS_LABEL).map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
           </Select>

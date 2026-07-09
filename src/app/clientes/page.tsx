@@ -2,55 +2,34 @@ import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange, parseDateBR } from "@/lib/format";
-import { getClientSummaries, type ClientSituation } from "@/lib/services/client-metrics";
+import { formatBRL, monthRange } from "@/lib/format";
+import {
+  getMonthDelinquencies,
+  type MonthDelinquency,
+} from "@/lib/services/client-metrics";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  MobileCards,
-  MobileCard,
-  MobileCardHeader,
-  MobileCardActions,
-  Field,
-  MobileEmpty,
-} from "@/components/ui/record-card";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ContractUploadDialog } from "./contract-upload-dialog";
-import { RenewClientDialog } from "./renew-dialog";
-import { ClientActions } from "./row-actions";
 import { ClientFilters } from "./filters";
-import { CLIENT_STATUS_LABEL, clientStatusVariant } from "./_meta";
+import { ClientsTable, type ClientRow } from "./clients-table";
+import type { DelinquencyValue } from "./_meta";
 
 const PAGE_SIZE = 50;
 
 type Search = {
   q?: string;
   status?: string;
+  modalidade?: string; // MRR | TCV
+  inadimplencia?: string; // pago | devendo
+  mesRenovacao?: string; // 1-12
   servico?: string;
   segmento?: string;
-  situacao?: string; // inadimplente
-  renovacao?: string; // dias
-  entradaDe?: string;
-  entradaAte?: string;
+  responsavel?: string;
   ordem?: string; // az | za
   pagina?: string;
-};
-
-const SITUATION_META: Record<ClientSituation, { label: string; variant: any }> = {
-  EM_DIA: { label: "Em dia", variant: "success" },
-  INADIMPLENTE: { label: "Inadimplente", variant: "destructive" },
-  SEM_COBRANCA: { label: "Sem cobrança", variant: "secondary" },
 };
 
 export default async function ClientesPage({
@@ -60,10 +39,16 @@ export default async function ClientesPage({
 }) {
   await requireAdmin();
 
-  // ---------- where a partir dos filtros ----------
+  // ---------- where (filtros que rodam no banco) ----------
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;
   if (searchParams.segmento) where.segment = searchParams.segmento;
+  if (searchParams.modalidade) where.modality = searchParams.modalidade;
+  if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
+  if (searchParams.mesRenovacao) {
+    const mr = parseInt(searchParams.mesRenovacao, 10);
+    if (mr >= 1 && mr <= 12) where.renewalMonth = mr;
+  }
   if (searchParams.q) {
     const q = searchParams.q.trim();
     const like = { contains: q, mode: "insensitive" as const };
@@ -92,124 +77,131 @@ export default async function ClientesPage({
       },
     };
   }
-  if (searchParams.situacao === "inadimplente") {
-    where.AND = [
-      ...(where.AND ?? []),
-      {
-        OR: [
-          { status: "DELINQUENT" },
-          { billings: { some: { status: "OVERDUE" } } },
-        ],
-      },
-    ];
-  }
-  if (searchParams.renovacao) {
-    const dias = parseInt(searchParams.renovacao, 10) || 30;
-    const limite = new Date();
-    limite.setDate(limite.getDate() + dias);
-    where.AND = [
-      ...(where.AND ?? []),
-      {
-        OR: [
-          { status: "RENEWAL" },
-          {
-            contracts: {
-              some: { status: "ACTIVE", renewalDate: { lte: limite } },
-            },
-          },
-        ],
-      },
-    ];
-  }
-  if (searchParams.entradaDe || searchParams.entradaAte) {
-    const range: any = {};
-    const de = searchParams.entradaDe ? parseDateBR(searchParams.entradaDe) : null;
-    const ate = searchParams.entradaAte ? parseDateBR(searchParams.entradaAte) : null;
-    if (de) range.gte = de;
-    if (ate) {
-      ate.setDate(ate.getDate() + 1); // inclusivo
-      range.lt = ate;
-    }
-    if (Object.keys(range).length) where.startedAt = range;
-  }
 
   const page = Math.max(1, parseInt(searchParams.pagina ?? "1", 10) || 1);
+  const now = new Date();
+  const curMonth = now.getMonth() + 1;
+  const curYear = now.getFullYear();
   const { start, end } = monthRange();
 
-  // ---------- dados em paralelo ----------
-  const [
-    clientsRaw,
-    total,
-    services,
-    segmentRows,
-    ativos,
-    inadimplentesStatus,
-    novosMes,
-    mrrAgg,
-    renewDue,
-  ] = await Promise.all([
-    prisma.client.findMany({
-      where,
-      // Ordem alfabética (A-Z padrão; ?ordem=za inverte)
-      orderBy: { name: searchParams.ordem === "za" ? "desc" : "asc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-    }),
-    prisma.client.count({ where }),
-    prisma.service.findMany({
-      where: { active: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.client.findMany({
-      where: { segment: { not: null } },
-      distinct: ["segment"],
-      select: { segment: true },
-      orderBy: { segment: "asc" },
-    }),
-    prisma.client.count({ where: { status: "ACTIVE" } }),
-    prisma.client.count({ where: { status: "DELINQUENT" } }),
-    prisma.client.count({ where: { startedAt: { gte: start, lt: end } } }),
-    prisma.client.aggregate({
-      where: { status: "ACTIVE" },
-      _sum: { monthlyValue: true },
-    }),
-    prisma.contract.findMany({
-      where: {
-        status: { in: ["ACTIVE", "RENEWAL", "OVERDUE"] },
-        renewalDate: {
-          not: null,
-          lte: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59),
+  // ---------- índice leve de TODOS os clientes do filtro (ordenado) ----------
+  // Usado para: (1) inadimplência do mês por cliente, (2) filtro Pago/Devendo,
+  // (3) seleção "todos os filtrados". Campos mínimos → barato mesmo com muitos.
+  const [index, services, segmentRows, ownerRows, ativos, novosMes, mrrAgg] =
+    await Promise.all([
+      prisma.client.findMany({
+        where,
+        orderBy: { name: searchParams.ordem === "za" ? "desc" : "asc" },
+        select: {
+          id: true,
+          delinquencyOverride: true,
+          delinquencyOverrideMonth: true,
+          delinquencyOverrideYear: true,
+          delinquencyOverrideBy: true,
         },
-      },
-      orderBy: { renewalDate: "asc" },
-      select: { id: true, clientId: true, type: true, totalValue: true, monthlyValue: true },
-    }),
-  ]);
+      }),
+      prisma.service.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.client.findMany({
+        where: { segment: { not: null } },
+        distinct: ["segment"],
+        select: { segment: true },
+        orderBy: { segment: "asc" },
+      }),
+      prisma.client.findMany({
+        where: { salesOwner: { not: null } },
+        distinct: ["salesOwner"],
+        select: { salesOwner: true },
+        orderBy: { salesOwner: "asc" },
+      }),
+      prisma.client.count({ where: { status: "ACTIVE" } }),
+      prisma.client.count({ where: { startedAt: { gte: start, lt: end } } }),
+      prisma.client.aggregate({
+        where: { status: "ACTIVE" },
+        _sum: { monthlyValue: true },
+      }),
+    ]);
 
-  // contrato a renovar por cliente (chegou no mês de renovação)
-  const renewByClient = new Map<string, { id: string; type: string; totalValue: number; monthlyValue: number }>();
-  for (const r of renewDue) {
-    if (!renewByClient.has(r.clientId)) {
-      renewByClient.set(r.clientId, {
-        id: r.id, type: r.type, totalValue: Number(r.totalValue), monthlyValue: Number(r.monthlyValue),
-      });
+  const autoDelinq = await getMonthDelinquencies(
+    index.map((c) => c.id),
+    curMonth,
+    curYear
+  );
+
+  // Inadimplência EFETIVA: override manual da competência corrente vence o auto.
+  type IndexRow = (typeof index)[number];
+  function effectiveDelinquency(c: IndexRow): {
+    value: DelinquencyValue | "SEM_COBRANCA";
+    manual: boolean;
+    by: string | null;
+  } {
+    const overrideActive =
+      c.delinquencyOverride != null &&
+      c.delinquencyOverrideMonth === curMonth &&
+      c.delinquencyOverrideYear === curYear;
+    if (overrideActive) {
+      return {
+        value: c.delinquencyOverride as DelinquencyValue,
+        manual: true,
+        by: c.delinquencyOverrideBy ?? null,
+      };
     }
+    return {
+      value: (autoDelinq.get(c.id) ?? "SEM_COBRANCA") as MonthDelinquency,
+      manual: false,
+      by: null,
+    };
   }
 
-  // Resumo financeiro por cliente da página (lote único).
-  const summaries = await getClientSummaries(clientsRaw.map((c) => c.id));
+  // Filtro Pago/Devendo (em memória, pois depende do override + competência).
+  let filtered = index;
+  if (searchParams.inadimplencia === "pago" || searchParams.inadimplencia === "devendo") {
+    const want = searchParams.inadimplencia.toUpperCase();
+    filtered = index.filter((c) => effectiveDelinquency(c).value === want);
+  }
 
-  // Serializa Decimal → number para os componentes client.
-  const clients = clientsRaw.map((c) => ({
-    ...c,
-    monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
-  }));
+  const allFilteredIds = filtered.map((c) => c.id);
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageSlice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const indexById = new Map(index.map((c) => [c.id, c]));
+
+  // ---------- linhas completas só da página (ordem preservada) ----------
+  const pageIds = pageSlice.map((c) => c.id);
+  const rowsRaw = await prisma.client.findMany({
+    where: { id: { in: pageIds } },
+    select: {
+      id: true,
+      name: true,
+      segment: true,
+      status: true,
+      modality: true,
+      salesOwner: true,
+      renewalMonth: true,
+    },
+  });
+  const rowById = new Map(rowsRaw.map((r) => [r.id, r]));
+  const clients: ClientRow[] = pageIds
+    .map((id) => rowById.get(id))
+    .filter((r): r is (typeof rowsRaw)[number] => r != null)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      segment: r.segment,
+      status: r.status,
+      modality: r.modality,
+      salesOwner: r.salesOwner,
+      renewalMonth: r.renewalMonth,
+      delinquency: effectiveDelinquency(indexById.get(r.id)!),
+    }));
 
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
-
+  const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
   const mrrBase = mrrAgg._sum.monthlyValue != null ? Number(mrrAgg._sum.monthlyValue) : 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const devendoMes = index.filter((c) => effectiveDelinquency(c).value === "DEVENDO").length;
 
   function pageHref(p: number) {
     const params = new URLSearchParams(searchParams as Record<string, string>);
@@ -217,15 +209,8 @@ export default async function ClientesPage({
     return `/clientes?${params.toString()}`;
   }
 
-  // Valor mensal exibido: contrato ativo > cadastro do cliente.
-  function monthlyOf(c: (typeof clients)[number]) {
-    const s = summaries.get(c.id);
-    if (s && s.activeContracts > 0) return s.monthlyValue;
-    return c.monthlyValue ?? 0;
-  }
-
   return (
-    <div>
+    <div className="pb-24">
       <PageHeader
         title="Clientes"
         description="Carteira de clientes da B2C Gestão"
@@ -245,9 +230,10 @@ export default async function ClientesPage({
         <StatCard title="Clientes ativos" value={String(ativos)} intent="positive" />
         <StatCard title="Novos no mês" value={String(novosMes)} />
         <StatCard
-          title="Inadimplentes"
-          value={String(inadimplentesStatus)}
-          intent={inadimplentesStatus > 0 ? "negative" : "default"}
+          title="Devendo no mês"
+          value={String(devendoMes)}
+          intent={devendoMes > 0 ? "negative" : "default"}
+          hint="Inadimplência da competência atual"
         />
         <StatCard
           title="MRR base (ativos)"
@@ -261,166 +247,17 @@ export default async function ClientesPage({
           <ClientFilters
             services={services.map((s) => ({ value: s.id, label: s.name }))}
             segments={segments}
+            owners={owners}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="p-0">
-          {/* Desktop */}
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Serviços ativos</TableHead>
-                  <TableHead className="text-right">Mensal</TableHead>
-                  <TableHead className="text-right">Receita total</TableHead>
-                  <TableHead>Situação</TableHead>
-                  <TableHead>Próx. venc.</TableHead>
-                  <TableHead>Renovação</TableHead>
-                  <TableHead>Responsável</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clients.length === 0 && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="text-center text-muted-foreground py-12"
-                    >
-                      Nenhum cliente encontrado com esses filtros.
-                      <br />
-                      Ajuste a busca ou cadastre um novo cliente.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {clients.map((c) => {
-                  const s = summaries.get(c.id)!;
-                  const sit = SITUATION_META[s.situation];
-                  return (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">
-                        <Link href={`/clientes/${c.id}`} className="hover:underline">
-                          {c.name}
-                        </Link>
-                        {c.segment && (
-                          <p className="text-xs text-muted-foreground">{c.segment}</p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={clientStatusVariant(c.status)}>
-                          {CLIENT_STATUS_LABEL[c.status]}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[180px]">
-                        {s.activeServices.length ? (
-                          <span className="text-sm">{s.activeServices.join(", ")}</span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {monthlyOf(c) > 0 ? formatBRL(monthlyOf(c)) : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {s.totalRevenue > 0 ? formatBRL(s.totalRevenue) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={sit.variant}>{sit.label}</Badge>
-                        {s.openAmount > 0 && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {formatBRL(s.openAmount)} em aberto
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {s.nextDueDate ? formatDateBR(s.nextDueDate) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {renewByClient.has(c.id) ? (
-                          <RenewClientDialog contract={renewByClient.get(c.id)!} clientName={c.name} />
-                        ) : s.nextRenewal ? (
-                          formatDateBR(s.nextRenewal)
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {c.salesOwner ?? c.opsOwner ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <ClientActions client={c} />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile */}
-          <MobileCards>
-            {clients.length === 0 ? (
-              <MobileEmpty>
-                Nenhum cliente encontrado com esses filtros. Ajuste a busca ou
-                cadastre um novo cliente.
-              </MobileEmpty>
-            ) : (
-              clients.map((c) => {
-                const s = summaries.get(c.id)!;
-                const sit = SITUATION_META[s.situation];
-                return (
-                  <MobileCard key={c.id}>
-                    <MobileCardHeader
-                      title={
-                        <Link href={`/clientes/${c.id}`} className="hover:underline">
-                          {c.name}
-                        </Link>
-                      }
-                      aside={
-                        <Badge variant={clientStatusVariant(c.status)}>
-                          {CLIENT_STATUS_LABEL[c.status]}
-                        </Badge>
-                      }
-                    />
-                    <div className="space-y-1.5">
-                      <Field label="Serviços">
-                        {s.activeServices.length ? s.activeServices.join(", ") : "—"}
-                      </Field>
-                      <Field label="Mensal">
-                        {monthlyOf(c) > 0 ? formatBRL(monthlyOf(c)) : "—"}
-                      </Field>
-                      <Field label="Receita total">
-                        {s.totalRevenue > 0 ? formatBRL(s.totalRevenue) : "—"}
-                      </Field>
-                      <Field label="Situação">
-                        <Badge variant={sit.variant}>{sit.label}</Badge>
-                      </Field>
-                      <Field label="Próx. venc.">
-                        {s.nextDueDate ? formatDateBR(s.nextDueDate) : "—"}
-                      </Field>
-                      <Field label="Renovação">
-                        {s.nextRenewal ? formatDateBR(s.nextRenewal) : "—"}
-                      </Field>
-                      <Field label="Responsável">
-                        {c.salesOwner ?? c.opsOwner ?? "—"}
-                      </Field>
-                    </div>
-                    <MobileCardActions>
-                      <ClientActions client={c} />
-                    </MobileCardActions>
-                  </MobileCard>
-                );
-              })
-            )}
-          </MobileCards>
+          <ClientsTable clients={clients} allFilteredIds={allFilteredIds} />
         </CardContent>
       </Card>
 
-      {/* Paginação */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-muted-foreground">

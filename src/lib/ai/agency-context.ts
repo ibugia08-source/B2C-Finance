@@ -60,7 +60,7 @@ export async function buildAgencySnapshotText(): Promise<string> {
     }),
   ]);
 
-  const { kpis, finance, cash, balance, series, breakdowns, health, alerts } = dash;
+  const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses } = dash;
   const L: string[] = [];
 
   L.push(`PERÍODO DE REFERÊNCIA: ${period.label} (hoje: ${formatDateBR(new Date())})`);
@@ -97,10 +97,22 @@ export async function buildAgencySnapshotText(): Promise<string> {
   );
 
   L.push(
-    `PATRIMÔNIO: ativos totais ${formatBRL(balance.ativosTotais)} (contas ${formatBRL(balance.contas)}, reservas ${formatBRL(balance.reservas)}, ` +
-      `a receber ${formatBRL(balance.aReceber)}, bens/investimentos ${formatBRL(balance.ativosManuais)}); ` +
-      `passivos totais ${formatBRL(balance.passivosTotais)} (a pagar ${formatBRL(balance.contasAPagar)}, faturas cartão ${formatBRL(balance.faturasCartao)}, ` +
-      `dívidas ${formatBRL(balance.passivosManuais)}); saldo patrimonial ${formatBRL(balance.saldoPatrimonial)}.`
+    `FATURAMENTO MRR/TCV (período): MRR ${formatBRL(revenue.mrr)} (${revenue.mrrClients} cliente(s) MRR ativo(s)); ` +
+      `TCV ${formatBRL(revenue.tcv)} (${revenue.tcvClients} fechado(s)/renovado(s)); TOTAL ${formatBRL(revenue.total)}. ` +
+      `Regra: TCV entra CHEIO no mês da adesão/renovação (sem rateio); MRR fatura todo mês em que o cliente está ativo.`
+  );
+
+  const rw = renewalOutlook.map(
+    (w) => `${w.label}: ${w.count} cliente(s), ${formatBRL(w.expectedTotal)} esperado`
+  );
+  if (rw.length) L.push(`RENOVAÇÕES (janelas): ${rw.join("; ")}.`);
+
+  L.push(
+    `PERDAS: mês atual ${losses.currentMonth.count} cliente(s) / ${formatBRL(losses.currentMonth.value)} de receita perdida; ` +
+      `últimos 3 meses ${losses.last3Months.count} cliente(s) / ${formatBRL(losses.last3Months.value)}.` +
+      (losses.last3Months.items.length
+        ? ` Recentes: ${losses.last3Months.items.slice(0, 5).map((l) => `${l.clientName} (${formatBRL(l.value)}${l.reason ? ` — ${l.reason}` : ""})`).join("; ")}.`
+        : "")
   );
 
   // Tendências — últimos 6 meses

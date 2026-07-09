@@ -6,8 +6,13 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getCashSummary } from "@/lib/services/finance-metrics";
+import { getCashSummary, getFinanceSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
+import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
+import { getExpenseSummary } from "@/lib/services/expense-metrics";
+import { getMonthlySeries } from "@/lib/services/dashboard-metrics";
+import { limitesUsadosPorCartao } from "@/lib/services/calculations";
+import { AISuggestionsPanel } from "./ai-suggestions";
 import { TONE_LABEL } from "@/lib/billing-message";
 import { SavedViews } from "@/components/saved-views";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,7 +48,11 @@ export default async function RotinaPage() {
   const in30 = new Date(today);
   in30.setDate(in30.getDate() + 30);
 
-  const [queue, cash, accounts, payToday, criticalExpenses, weekBillings, weekExpenses, receivedPayments, receivedIncomes, openAgg, renewals] =
+  const [
+    queue, cash, accounts, payToday, criticalExpenses, weekBillings, weekExpenses,
+    receivedPayments, receivedIncomes, openAgg, renewals,
+    renewalWindows, finance, expenseSummary, series, openUpsells, cardsAll, devendoMes,
+  ] =
     await Promise.all([
       getCollectionQueue(),
       getCashSummary(resolvePeriod({ periodo: "mes" })),
@@ -95,7 +104,80 @@ export default async function RotinaPage() {
         take: 8,
         select: { id: true, title: true, renewalDate: true, monthlyValue: true, client: { select: { name: true } } },
       }),
+      getRenewalOutlook([0, 1]),
+      getFinanceSummary(resolvePeriod({ periodo: "mes" })),
+      getExpenseSummary(),
+      getMonthlySeries({ period: resolvePeriod({ periodo: "mes" }) }),
+      prisma.upsell.findMany({
+        where: { status: { in: ["OPPORTUNITY", "NEGOTIATION"] } },
+        orderBy: { value: "desc" },
+        take: 6,
+        select: {
+          id: true, title: true, value: true, responsible: true, expectedCloseAt: true,
+          client: { select: { name: true } },
+          service: { select: { name: true } },
+          offer: { select: { name: true } },
+        },
+      }),
+      prisma.creditCard.findMany({
+        where: { active: true },
+        select: { id: true, name: true, limitTotal: true, dueDay: true },
+      }),
+      prisma.client.count({ where: { status: "DELINQUENT" } }),
     ]);
+
+  // ===== Cartões: vencimento próximo (5 dias) e limite preocupante (>80%) =====
+  const usedByCard = await limitesUsadosPorCartao(cardsAll.map((c) => c.id));
+  const dayOfMonth = new Date().getDate();
+  const cardWarnings: { text: string; critical: boolean }[] = [];
+  for (const c of cardsAll) {
+    const daysToDue = (c.dueDay - dayOfMonth + 31) % 31;
+    if (daysToDue <= 5) {
+      cardWarnings.push({
+        text: `${c.name}: fatura vence dia ${c.dueDay} (${daysToDue === 0 ? "hoje" : `em ${daysToDue}d`})`,
+        critical: daysToDue <= 1,
+      });
+    }
+    const used = usedByCard.get(c.id) ?? 0;
+    if (c.limitTotal > 0 && used / c.limitTotal >= 0.8) {
+      cardWarnings.push({
+        text: `${c.name}: ${Math.round((used / c.limitTotal) * 100)}% do limite usado (${formatBRL(used)} de ${formatBRL(c.limitTotal)})`,
+        critical: used / c.limitTotal >= 0.95,
+      });
+    }
+  }
+
+  // ===== Tendências (mês atual × anterior) =====
+  const last = (arr: number[]) => arr[arr.length - 1] ?? 0;
+  const prev = (arr: number[]) => arr[arr.length - 2] ?? 0;
+  const trendAlerts: { text: string; critical: boolean }[] = [];
+  if (prev(series.mrr) > 0 && last(series.mrr) < prev(series.mrr)) {
+    trendAlerts.push({
+      text: `Queda de MRR: ${formatBRL(last(series.mrr) - prev(series.mrr))} vs mês anterior.`,
+      critical: last(series.mrr) < prev(series.mrr) * 0.9,
+    });
+  }
+  if (prev(series.receitas) > 0 && last(series.receitas) < prev(series.receitas) * 0.85) {
+    trendAlerts.push({
+      text: `Queda de faturamento: ${formatBRL(last(series.receitas))} vs ${formatBRL(prev(series.receitas))} no mês anterior.`,
+      critical: true,
+    });
+  }
+  if (prev(series.despesas) > 0 && last(series.despesas) > prev(series.despesas) * 1.2) {
+    trendAlerts.push({
+      text: `Alta de despesas: ${formatBRL(last(series.despesas))} (+${Math.round((last(series.despesas) / prev(series.despesas) - 1) * 100)}% vs mês anterior).`,
+      critical: false,
+    });
+  }
+  if (finance.receitas > 0 && finance.margem < 0.2) {
+    trendAlerts.push({
+      text: `Margem do mês em ${Math.round(finance.margem * 100)}% — abaixo do saudável (20%+).`,
+      critical: finance.margem < 0,
+    });
+  }
+
+  const renewalsThisMonth = renewalWindows[0];
+  const renewalsNextMonth = renewalWindows[1];
 
   const n = (v: unknown) => (v == null ? 0 : Number(v));
   const cobrarHoje = queue.filter((q) => !q.contactedToday);
@@ -116,26 +198,46 @@ export default async function RotinaPage() {
   if (pagarSemana > cash.caixaDisponivel && cash.caixaDisponivel > 0)
     cashAlerts.push(`Compromissos da semana (${formatBRL(pagarSemana)}) maiores que o caixa (${formatBRL(cash.caixaDisponivel)}).`);
 
-  // Tarefas sugeridas
-  const tarefas: { text: string; href: string }[] = [];
+  // ===== Tarefas sugeridas COM PRIORIDADE (impacto × urgência × valor) =====
+  type Tarefa = { priority: "alta" | "media" | "baixa"; text: string; href: string };
+  const tarefas: Tarefa[] = [];
   for (const q of cobrarHoje.filter((x) => x.priority === "alta").slice(0, 3)) {
-    tarefas.push({ text: `Cobrar ${q.clientName} — ${formatBRL(q.totalOverdue)} (${q.reasons[0]})`, href: "#fila" });
+    tarefas.push({ priority: "alta", text: `Cobrar ${q.clientName} — ${formatBRL(q.totalOverdue)} (${q.reasons[0]})`, href: "#fila" });
   }
-  for (const p of promessas.filter((x) => x.promise?.broken).slice(0, 2)) {
-    tarefas.push({ text: `Retomar contato com ${p.clientName} — promessa de pagamento vencida`, href: "#fila" });
-  }
+  if (cash.projecao30 < 0)
+    tarefas.push({ priority: "alta", text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo em 30 dias", href: "/cobrancas" });
   if (totalCritico > 0)
-    tarefas.push({ text: `Resolver ${criticalExpenses.length} despesa(s) vencida(s) — ${formatBRL(totalCritico)}`, href: "/despesas" });
+    tarefas.push({ priority: "alta", text: `Resolver ${criticalExpenses.length} despesa(s) vencida(s) — ${formatBRL(totalCritico)}`, href: "/despesas?status=vencida" });
+  for (const p of promessas.filter((x) => x.promise?.broken).slice(0, 2)) {
+    tarefas.push({ priority: "alta", text: `Retomar contato com ${p.clientName} — promessa de pagamento vencida`, href: "#fila" });
+  }
   if (totalPagarHoje > 0)
-    tarefas.push({ text: `Pagar ${payToday.length} despesa(s) de hoje — ${formatBRL(totalPagarHoje)}`, href: "/despesas" });
+    tarefas.push({ priority: "media", text: `Pagar ${payToday.length} despesa(s) de hoje — ${formatBRL(totalPagarHoje)}`, href: "/despesas" });
+  if (renewalsThisMonth && renewalsThisMonth.count > 0)
+    tarefas.push({
+      priority: "media",
+      text: `Encaminhar ${renewalsThisMonth.count} renovação(ões) do mês — ${formatBRL(renewalsThisMonth.expectedTotal)} esperado`,
+      href: `/clientes?mesRenovacao=${renewalsThisMonth.month}`,
+    });
   for (const r of renewals.slice(0, 2)) {
     tarefas.push({
-      text: `Encaminhar renovação de "${r.title}" (${r.client.name}) — ${r.renewalDate ? formatDateBR(r.renewalDate) : ""}`,
+      priority: "media",
+      text: `Renovar contrato "${r.title}" (${r.client.name}) — ${r.renewalDate ? formatDateBR(r.renewalDate) : ""}`,
       href: "/acordos",
     });
   }
-  if (cash.projecao30 < 0)
-    tarefas.push({ text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo", href: "/cobrancas" });
+  for (const w of cardWarnings.filter((c) => c.critical).slice(0, 2)) {
+    tarefas.push({ priority: "media", text: w.text, href: "/despesas?aba=cartoes" });
+  }
+  for (const u of openUpsells.slice(0, 2)) {
+    tarefas.push({
+      priority: "baixa",
+      text: `Avançar upsell de ${u.client.name} — ${formatBRL(Number(u.value))}${u.responsible ? ` (${u.responsible})` : ""}`,
+      href: "/upsell",
+    });
+  }
+  const ORDER = { alta: 0, media: 1, baixa: 2 } as const;
+  tarefas.sort((a, b) => ORDER[a.priority] - ORDER[b.priority]);
 
   return (
     <div>
@@ -159,17 +261,66 @@ export default async function RotinaPage() {
         <StatCard title="Falta receber (aberto)" value={formatBRL(faltaReceber)} />
       </div>
 
-      {cashAlerts.length > 0 && (
-        <Card className="mb-4 border-red-500/50 bg-red-500/5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <StatCard
+          href={renewalsThisMonth ? `/clientes?mesRenovacao=${renewalsThisMonth.month}` : "/clientes"}
+          title="Renovações do mês"
+          value={String(renewalsThisMonth?.count ?? 0)}
+          intent={(renewalsThisMonth?.count ?? 0) > 0 ? "warning" : "default"}
+          hint={`${formatBRL(renewalsThisMonth?.expectedTotal ?? 0)} esperado · próx. mês: ${renewalsNextMonth?.count ?? 0}`}
+        />
+        <StatCard
+          href="/clientes?inadimplencia=devendo"
+          title="Clientes devendo no mês"
+          value={String(devendoMes)}
+          intent={devendoMes > 0 ? "negative" : "positive"}
+        />
+        <StatCard
+          href="/upsell"
+          title="Upsell aberto"
+          value={String(openUpsells.length)}
+          hint={formatBRL(openUpsells.reduce((s, u) => s + Number(u.value), 0))}
+        />
+        <StatCard
+          href="/despesas?aba=resumo"
+          title="Vence na semana (despesas)"
+          value={formatBRL(expenseSummary.upcoming.reduce((s, u) => s + u.amount, 0))}
+          intent={expenseSummary.upcoming.length > 0 ? "warning" : "default"}
+          hint={`${expenseSummary.upcoming.length} despesa(s)`}
+        />
+      </div>
+
+      {(cashAlerts.length > 0 || trendAlerts.length > 0 || cardWarnings.length > 0) && (
+        <Card className="mb-4 border-amber-500/40 bg-amber-500/5">
           <CardContent className="p-4 space-y-1">
             {cashAlerts.map((a, i) => (
-              <p key={i} className="text-sm flex items-center gap-2">
+              <p key={`c${i}`} className="text-sm flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" /> {a}
+              </p>
+            ))}
+            {trendAlerts.map((a, i) => (
+              <p key={`t${i}`} className="text-sm flex items-center gap-2">
+                <AlertTriangle
+                  className={`h-4 w-4 shrink-0 ${a.critical ? "text-red-500" : "text-amber-500"}`}
+                />
+                {a.text}
+              </p>
+            ))}
+            {cardWarnings.map((a, i) => (
+              <p key={`w${i}`} className="text-sm flex items-center gap-2">
+                <AlertTriangle
+                  className={`h-4 w-4 shrink-0 ${a.critical ? "text-red-500" : "text-amber-500"}`}
+                />
+                {a.text}
               </p>
             ))}
           </CardContent>
         </Card>
       )}
+
+      <div className="mb-6">
+        <AISuggestionsPanel />
+      </div>
 
       {/* ===== Fila de cobrança priorizada ===== */}
       <h2 id="fila" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
@@ -315,16 +466,19 @@ export default async function RotinaPage() {
               <p className="text-sm text-muted-foreground py-6 text-center">Nada urgente. Dia tranquilo! 🎉</p>
             ) : (
               <ol className="space-y-2.5">
-                {tarefas.slice(0, 8).map((t, i) => (
-                  <li key={i}>
-                    <Link href={t.href} className="group flex items-start gap-2.5 text-sm">
-                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center shrink-0">
-                        {i + 1}
-                      </span>
-                      <span className="group-hover:underline">{t.text}</span>
-                    </Link>
-                  </li>
-                ))}
+                {tarefas.slice(0, 10).map((t, i) => {
+                  const pm = PRIORITY_META[t.priority];
+                  return (
+                    <li key={i}>
+                      <Link href={t.href} className="group flex items-start gap-2.5 text-sm">
+                        <Badge variant={pm.variant} className="shrink-0 mt-0.5 text-[10px] px-1.5">
+                          {pm.label}
+                        </Badge>
+                        <span className="group-hover:underline">{t.text}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </CardContent>

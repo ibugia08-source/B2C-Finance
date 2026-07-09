@@ -3,18 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
+// Serviço = catálogo puro (nome, descrição, categoria, status).
+// Valores de venda vivem nas OFERTAS (Planos), não aqui.
 const ServiceSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(1, "Informe o nome do serviço."),
   description: z.string().trim().nullable(),
   category: z.string().trim().nullable(),
-  defaultPrice: z.number().nonnegative().nullable(),
-  estimatedCost: z.number().nonnegative().nullable(),
-  defaultOwner: z.string().trim().nullable(),
-  notes: z.string().trim().nullable(),
   active: z.boolean().default(true),
 });
 
@@ -22,10 +19,6 @@ function clean(v: FormDataEntryValue | null): string | null {
   const s = (v == null ? "" : String(v)).trim();
   return s === "" ? null : s;
 }
-const money = (v: FormDataEntryValue | null) => {
-  const raw = clean(v);
-  return raw == null ? null : parseBRL(raw);
-};
 
 export async function saveService(formData: FormData): Promise<ActionResult> {
   await requireAdmin();
@@ -35,10 +28,6 @@ export async function saveService(formData: FormData): Promise<ActionResult> {
       name: String(formData.get("name") ?? "").trim(),
       description: clean(formData.get("description")),
       category: clean(formData.get("category")),
-      defaultPrice: money(formData.get("defaultPrice")),
-      estimatedCost: money(formData.get("estimatedCost")),
-      defaultOwner: clean(formData.get("defaultOwner")),
-      notes: clean(formData.get("notes")),
       active: formData.get("active") !== "false",
     });
     const { id, ...data } = parsed;

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,27 +17,58 @@ import { saveExpense } from "@/lib/actions/expenses";
 import { Plus } from "lucide-react";
 import { formatDateInput } from "@/lib/format";
 
+export const EXPENSE_TYPE_LABEL: Record<string, string> = {
+  FIXED: "Fixa",
+  VARIABLE: "Variável",
+  CARD: "Cartão de crédito",
+  TAX: "Imposto",
+  PAYROLL: "Folha",
+  TOOL: "Ferramenta",
+  ADS: "Mídia / Ads",
+  LOAN: "Empréstimo",
+  OTHER: "Outros",
+};
+
+export const RECURRENCE_LABEL: Record<string, string> = {
+  NONE: "Não recorrente",
+  MONTHLY: "Mensal",
+  QUARTERLY: "Trimestral",
+  SEMIANNUAL: "Semestral",
+  ANNUAL: "Anual",
+  CUSTOM: "Personalizada",
+};
+
+type CardOpt = { id: string; name: string };
+
+/**
+ * Cadastro SIMPLES de despesa: nome, descrição, valor, vencimento,
+ * recorrência, status e tipo. Tipo "Cartão de crédito" abre a associação
+ * com o cartão + mês da fatura (fechamento/vencimento vêm do cartão).
+ */
 export function ExpenseDialog({
-  people,
-  categories,
-  accounts,
-  clients = [],
-  services = [],
+  cards = [],
   initial,
   trigger,
 }: {
-  people: any[];
-  categories: any[];
-  accounts: any[];
-  clients?: { id: string; name: string }[];
-  services?: { id: string; name: string }[];
+  cards?: CardOpt[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const [expenseType, setExpenseType] = useState<string>(initial?.expenseType ?? "OTHER");
+  const [recurrence, setRecurrence] = useState<string>(initial?.recurrence ?? "NONE");
+  const isEditRecurring = Boolean(initial?.recurrenceGroupId);
+
+  const fmt = (v: any) => (v != null ? Number(v).toFixed(2).replace(".", ",") : "");
+  const invoiceRef =
+    initial?.cardInvoiceYear && initial?.cardInvoiceMonth
+      ? `${initial.cardInvoiceYear}-${String(initial.cardInvoiceMonth).padStart(2, "0")}`
+      : "";
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button>
@@ -45,179 +76,165 @@ export function ExpenseDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{initial ? "Editar despesa" : "Nova despesa"}</DialogTitle>
+          <DialogTitle>{initial?.id ? "Editar despesa" : "Nova despesa"}</DialogTitle>
         </DialogHeader>
         <form
-          action={async (fd) => {
-            await saveExpense(fd);
-            setOpen(false);
-          }}
+          action={(fd) =>
+            start(async () => {
+              setError(null);
+              const res = await saveExpense(fd);
+              if (res.ok) setOpen(false);
+              else setError(res.error);
+            })
+          }
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {initial?.id && <input type="hidden" name="id" value={initial.id} />}
 
-          <div className="col-span-2">
-            <Label>Descrição</Label>
-            <Input name="description" defaultValue={initial?.description ?? ""} required />
+          <div className="col-span-full">
+            <Label>Nome da despesa *</Label>
+            <Input
+              name="description"
+              defaultValue={initial?.description ?? ""}
+              placeholder="ex.: Meta Ads, aluguel, ferramenta X"
+              required
+            />
           </div>
 
           <div>
-            <Label>Valor total</Label>
+            <Label>Valor total (R$) *</Label>
             <Input
               name="amount"
-              defaultValue={initial?.amount?.toString().replace(".", ",") ?? "0,00"}
+              inputMode="decimal"
+              placeholder="0,00"
+              defaultValue={fmt(initial?.amount)}
               required
             />
           </div>
           <div>
-            <Label>Data da despesa</Label>
+            <Label>Vencimento *</Label>
             <Input
               type="date"
-              name="date"
-              defaultValue={
-                initial?.date ? formatDateInput(initial.date) : formatDateInput(new Date())
-              }
+              name="dueDate"
+              defaultValue={initial?.dueDate ? formatDateInput(initial.dueDate) : ""}
               required
             />
           </div>
 
           <div>
-            <Label>Forma de pagamento</Label>
-            <Select name="origin" defaultValue={initial?.origin ?? "debito"}>
-              <option value="debito">Cartão de débito</option>
-              <option value="pix">Pix</option>
-              <option value="dinheiro">Dinheiro</option>
-              <option value="boleto">Boleto</option>
+            <Label>Tipo</Label>
+            <Select
+              name="expenseType"
+              value={expenseType}
+              onChange={(e) => setExpenseType(e.target.value)}
+            >
+              {Object.entries(EXPENSE_TYPE_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
             </Select>
           </div>
           <div>
             <Label>Status</Label>
             <Select name="status" defaultValue={initial?.status ?? "pendente"}>
-              <option value="pendente">A vencer / pendente</option>
-              <option value="pago">Pago</option>
-              <option value="cancelado">Cancelado</option>
+              <option value="pendente">Pendente</option>
+              <option value="pago">Paga</option>
+              <option value="cancelado">Cancelada</option>
             </Select>
-          </div>
-
-          <div>
-            <Label>Data de vencimento</Label>
-            <Input
-              type="date"
-              name="dueDate"
-              defaultValue={initial?.dueDate ? formatDateInput(initial.dueDate) : ""}
-            />
-          </div>
-          <div>
-            <Label>Nº de parcelas</Label>
-            <Input
-              name="installments"
-              type="number"
-              min={1}
-              max={60}
-              defaultValue={initial?.installmentsCount ?? 1}
-            />
-          </div>
-
-          <div>
-            <Label>Pessoa responsável</Label>
-            <Select name="responsibleId" defaultValue={initial?.responsibleId ?? ""}>
-              <option value="">—</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label>Categoria</Label>
-            <Select name="categoryId" defaultValue={initial?.categoryId ?? ""}>
-              <option value="">—</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div className="col-span-2">
-            <Label>Conta de origem (opcional)</Label>
-            <Select name="accountId" defaultValue={initial?.accountId ?? ""}>
-              <option value="">—</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {/* ===== Classificação gerencial (agência) ===== */}
-          <div className="col-span-2 border-t pt-3 mt-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Gestão da agência (opcional)
+            <p className="text-[11px] text-muted-foreground mt-1">
+              &quot;Vencida&quot; é automática ao passar do vencimento.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          </div>
+
+          <div>
+            <Label>Recorrência</Label>
+            <Select
+              name="recurrence"
+              value={recurrence}
+              onChange={(e) => setRecurrence(e.target.value)}
+              disabled={Boolean(initial?.id)}
+            >
+              {Object.entries(RECURRENCE_LABEL).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </Select>
+            {initial?.id && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                A recorrência é definida na criação.
+              </p>
+            )}
+          </div>
+          {recurrence === "CUSTOM" && !initial?.id ? (
+            <div>
+              <Label>A cada quantos meses?</Label>
+              <Input
+                type="number"
+                name="recurrenceInterval"
+                min={1}
+                max={24}
+                defaultValue={initial?.recurrenceInterval ?? 2}
+              />
+            </div>
+          ) : (
+            <div className="hidden sm:block" />
+          )}
+
+          {expenseType === "CARD" && (
+            <div className="col-span-full rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <Label>Tipo de despesa</Label>
-                <Select name="expenseType" defaultValue={initial?.expenseType ?? ""}>
+                <Label>Cartão / conta</Label>
+                <Select name="cardId" defaultValue={initial?.cardId ?? ""}>
                   <option value="">—</option>
-                  <option value="FIXED">Fixa</option>
-                  <option value="VARIABLE">Variável</option>
-                  <option value="TOOL">Ferramenta</option>
-                  <option value="ADS">Tráfego / Ads</option>
-                  <option value="TAX">Imposto</option>
-                  <option value="CARD">Cartão</option>
-                  <option value="LOAN">Empréstimo</option>
-                  <option value="PAYROLL">Equipe / Folha</option>
-                  <option value="OTHER">Geral</option>
-                </Select>
-              </div>
-              <div>
-                <Label>Recorrência</Label>
-                <Select name="recurrence" defaultValue={initial?.recurrence ?? ""}>
-                  <option value="">—</option>
-                  <option value="NONE">Única</option>
-                  <option value="MONTHLY">Mensal</option>
-                  <option value="QUARTERLY">Trimestral</option>
-                  <option value="SEMIANNUAL">Semestral</option>
-                  <option value="ANNUAL">Anual</option>
-                </Select>
-              </div>
-              <div>
-                <Label>Cliente vinculado</Label>
-                <Select name="clientId" defaultValue={initial?.clientId ?? ""}>
-                  <option value="">—</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                  {cards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </Select>
               </div>
               <div>
-                <Label>Serviço vinculado</Label>
-                <Select name="serviceId" defaultValue={initial?.serviceId ?? ""}>
-                  <option value="">—</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </Select>
+                <Label>Mês da fatura</Label>
+                <Input type="month" name="cardInvoiceRef" defaultValue={invoiceRef} />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Fechamento e vencimento vêm da configuração do cartão.
+                </p>
               </div>
             </div>
+          )}
+
+          <div className="col-span-full">
+            <Label>Descrição</Label>
+            <Textarea
+              name="notes"
+              defaultValue={initial?.notes ?? ""}
+              placeholder="detalhes da despesa (opcional)"
+            />
           </div>
 
-          <div className="col-span-2">
-            <Label>Observações</Label>
-            <Textarea name="notes" defaultValue={initial?.notes ?? ""} />
-          </div>
+          {isEditRecurring && (
+            <div className="col-span-full">
+              <Label>Aplicar edição a</Label>
+              <Select name="scope" defaultValue="one">
+                <option value="one">Somente esta ocorrência</option>
+                <option value="future">Esta e as próximas (não pagas)</option>
+              </Select>
+            </div>
+          )}
 
-          <DialogFooter className="col-span-2">
+          {error && <p className="col-span-full text-sm text-destructive">{error}</p>}
+
+          <DialogFooter className="col-span-full">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Salvando…" : "Salvar"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

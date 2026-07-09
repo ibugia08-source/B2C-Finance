@@ -67,6 +67,12 @@ model User {
   ownedGeneratedContracts GeneratedContract[] @relation("OwnerGeneratedContract")
   ownedClientDocuments    ClientDocument[]    @relation("OwnerClientDocument")
   ownedClientNotes        ClientNote[]        @relation("OwnerClientNote")
+
+  // ===== Perdas de clientes, Ofertas (Planos) e Upsell =====
+  ownedClientLosses   ClientLoss[]   @relation("OwnerClientLoss")
+  ownedOffers         Offer[]        @relation("OwnerOffer")
+  ownedOfferServices  OfferService[] @relation("OwnerOfferService")
+  ownedUpsells        Upsell[]       @relation("OwnerUpsell")
 }
 
 model Person {
@@ -237,6 +243,17 @@ model Transaction {
   serviceId    String? // serviço vinculado (rentabilidade por serviço)
   service      Service?        @relation(fields: [serviceId], references: [id])
 
+  // ===== Recorrência de despesa (ocorrências materializadas) =====
+  // Despesa recorrente gera ocorrências futuras ligadas pelo mesmo grupo.
+  // Permite editar UMA ocorrência ou TODAS, e encerrar a recorrência
+  // (remove futuras não pagas). CUSTOM usa recurrenceInterval (meses).
+  recurrenceGroupId String?
+  recurrenceInterval Int? // intervalo em meses quando recurrence=CUSTOM
+
+  // ===== Despesa tipo CARTÃO: competência da fatura =====
+  cardInvoiceMonth Int? // 1-12
+  cardInvoiceYear  Int?
+
   // Dono do registro (conta multiusuário).
   ownerId String?
   owner   User?   @relation("OwnerTransaction", fields: [ownerId], references: [id])
@@ -254,6 +271,7 @@ model Transaction {
   @@index([accountCardId])
   @@index([clientId])
   @@index([expenseType])
+  @@index([recurrenceGroupId])
   @@index([ownerId])
 }
 
@@ -558,6 +576,35 @@ enum ClientStatus {
   CHURNED // perdido / cancelado
 }
 
+// Modalidade de faturamento do cliente (fonte da verdade no cadastro).
+// MRR = recorrente mensal; TCV = valor total pago na adesão/renovação.
+enum ClientModality {
+  MRR
+  TCV
+}
+
+// Inadimplência do mês (rótulo simples da linha e do override manual).
+enum DelinquencyStatus {
+  PAGO
+  DEVENDO
+}
+
+// Modalidade de uma Oferta (Plano): recorrente, valor fechado ou personalizado.
+enum OfferModality {
+  MRR
+  TCV
+  CUSTOM
+}
+
+// Status de uma oportunidade de Upsell (venda interna para a base).
+enum UpsellStatus {
+  OPPORTUNITY // oportunidade identificada
+  NEGOTIATION // em negociação
+  WON // vendido
+  LOST // perdido
+  PAUSED // pausado
+}
+
 model Client {
   id           String       @id @default(cuid())
   name         String // nome fantasia / como o cliente é chamado
@@ -572,16 +619,32 @@ model Client {
   address             String? // endereço completo do contratante
   legalRepresentative String? // nome do representante legal
   origin       String? // origem comercial: indicação | tráfego | orgânico | ...
-  salesOwner   String? // responsável comercial
+  salesOwner   String? // responsável comercial (exibido na carteira como "Responsável")
   opsOwner     String? // responsável operacional
   paymentDay   Int? // dia padrão de pagamento (1-28)
   tags         String[]     @default([])
   status       ClientStatus @default(ACTIVE)
+  // Modalidade de faturamento (MRR/TCV) — editável na linha, alimenta filtros,
+  // dashboard e relatórios. Independente dos contratos (que guardam valores).
+  modality     ClientModality?
+  // Mês de renovação (1-12) — editável na linha; alimenta KPIs de renovação.
+  renewalMonth Int?
   // Valor mensal de referência (base para MRR até existirem contratos — Etapa 3).
   monthlyValue Decimal?     @db.Decimal(14, 2)
   startedAt    DateTime? // início da relação comercial
   churnedAt    DateTime? // data de saída (preenchida quando CHURNED)
   notes        String?
+
+  // ===== Inadimplência do mês: override MANUAL sobre o cálculo automático =====
+  // O status Pago/Devendo é calculado a partir das cobranças do mês (Billing).
+  // Quando o gestor ajusta na linha, guardamos o valor + competência (mês/ano)
+  // + quando e quem alterou. O override só vale para a competência gravada;
+  // meses seguintes voltam a usar o cálculo automático.
+  delinquencyOverride      DelinquencyStatus? // null = usar cálculo automático
+  delinquencyOverrideMonth Int? // competência do override (1-12)
+  delinquencyOverrideYear  Int?
+  delinquencyOverrideAt    DateTime? // data/hora do ajuste manual
+  delinquencyOverrideBy    String? // nome do usuário que ajustou
 
   // Dono do registro (conta multiusuário / agência).
   ownerId String?
@@ -604,8 +667,38 @@ model Client {
   documents          ClientDocument[]
   contextNotes       ClientNote[]
 
+  // ===== Perdas (histórico de churn) e Upsell =====
+  losses  ClientLoss[]
+  upsells Upsell[]
+
   @@index([ownerId])
   @@index([status])
+  @@index([modality])
+  @@index([renewalMonth])
+}
+
+// Registro de PERDA de cliente (churn). Criado automaticamente quando o
+// status muda para CHURNED — guarda o snapshot da receita perdida no momento
+// da perda (MRR: valor mensal; TCV: valor de referência da última adesão),
+// modalidade, responsável e motivo. Histórico: um cliente pode ter várias
+// perdas (saiu, voltou, saiu de novo).
+model ClientLoss {
+  id             String          @id @default(cuid())
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lostAt         DateTime        @default(now())
+  modality       ClientModality? // snapshot da modalidade na perda
+  monthlyValue   Decimal?        @db.Decimal(14, 2) // MRR mensal perdido
+  referenceValue Decimal?        @db.Decimal(14, 2) // TCV de referência (última adesão)
+  reason         String? // motivo da perda (opcional)
+  salesOwner     String? // snapshot do responsável na perda
+  ownerId        String?
+  owner          User?           @relation("OwnerClientLoss", fields: [ownerId], references: [id])
+  createdAt      DateTime        @default(now())
+
+  @@index([clientId])
+  @@index([lostAt])
+  @@index([ownerId])
 }
 
 // ===================================================================
@@ -806,9 +899,84 @@ model Service {
   contractServices ContractService[]
   billings         Billing[]
   transactions     Transaction[]
+  offerServices    OfferService[]
+  upsells          Upsell[]
 
   @@index([active])
   @@index([category])
+  @@index([ownerId])
+}
+
+// Oferta (Plano) — pacote comercial que junta serviços com um valor.
+// O PREÇO vive aqui (não no Serviço): a mesma junção de serviços pode ser
+// vendida por valores diferentes em ofertas diferentes (ex.: "Avançado Óticas").
+model Offer {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  modality       OfferModality @default(MRR) // MRR | TCV | CUSTOM (personalizado)
+  defaultValue   Decimal?      @db.Decimal(14, 2) // valor padrão da oferta
+  durationMonths Int? // duração padrão (meses)
+  paymentMethod  String? // forma de pagamento padrão: pix | boleto | cartão | ...
+  active         Boolean       @default(true)
+  notes          String?
+  ownerId        String?
+  owner          User?         @relation("OwnerOffer", fields: [ownerId], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  services OfferService[]
+  upsells  Upsell[]
+
+  @@index([active])
+  @@index([modality])
+  @@index([ownerId])
+}
+
+// Oportunidade de UPSELL — venda interna para cliente da base.
+// Valor atribuído manualmente; ao marcar como vendida (WON) pode gerar uma
+// receita (Income) associada ao cliente para alimentar Dashboard/Relatórios.
+model Upsell {
+  id              String       @id @default(cuid())
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId       String? // serviço sugerido
+  service         Service?     @relation(fields: [serviceId], references: [id])
+  offerId         String? // oferta sugerida, se aplicável
+  offer           Offer?       @relation(fields: [offerId], references: [id])
+  title           String? // descrição curta da oportunidade
+  value           Decimal      @db.Decimal(14, 2) // valor potencial da venda
+  responsible     String? // responsável pela oportunidade
+  status          UpsellStatus @default(OPPORTUNITY)
+  expectedCloseAt DateTime? // data prevista de fechamento
+  closedAt        DateTime? // data real de fechamento (WON/LOST)
+  notes           String?
+  incomeId        String? // receita gerada ao vender (conciliação)
+  ownerId         String?
+  owner           User?        @relation("OwnerUpsell", fields: [ownerId], references: [id])
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@index([expectedCloseAt])
+  @@index([ownerId])
+}
+
+// Serviços incluídos em uma oferta (N:N).
+model OfferService {
+  id        String   @id @default(cuid())
+  offerId   String
+  offer     Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id])
+  ownerId   String?
+  owner     User?    @relation("OwnerOfferService", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([offerId, serviceId])
+  @@index([offerId])
+  @@index([serviceId])
   @@index([ownerId])
 }
 
