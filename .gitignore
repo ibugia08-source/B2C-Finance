@@ -21,3 +21,4 @@ tsconfig.tsbuildinfo
 # backups dos scripts de correção de dados
 backups/
 .uploads
+.env*

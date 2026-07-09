@@ -16,27 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { saveExpense } from "@/lib/actions/expenses";
 import { Plus } from "lucide-react";
 import { formatDateInput } from "@/lib/format";
-
-export const EXPENSE_TYPE_LABEL: Record<string, string> = {
-  FIXED: "Fixa",
-  VARIABLE: "Variável",
-  CARD: "Cartão de crédito",
-  TAX: "Imposto",
-  PAYROLL: "Folha",
-  TOOL: "Ferramenta",
-  ADS: "Mídia / Ads",
-  LOAN: "Empréstimo",
-  OTHER: "Outros",
-};
-
-export const RECURRENCE_LABEL: Record<string, string> = {
-  NONE: "Não recorrente",
-  MONTHLY: "Mensal",
-  QUARTERLY: "Trimestral",
-  SEMIANNUAL: "Semestral",
-  ANNUAL: "Anual",
-  CUSTOM: "Personalizada",
-};
+import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 
 type CardOpt = { id: string; name: string };
 

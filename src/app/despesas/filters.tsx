@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useRouter, useSearchParams } from "next/navigation";
-import { EXPENSE_TYPE_LABEL } from "./expense-dialog";
+import { EXPENSE_TYPE_LABEL } from "./_meta";
 
 export function ExpenseFilters() {
   const router = useRouter();

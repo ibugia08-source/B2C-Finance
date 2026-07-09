@@ -28,7 +28,8 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import { cn } from "@/lib/utils";
-import { ExpenseDialog, EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./expense-dialog";
+import { ExpenseDialog } from "./expense-dialog";
+import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
 import { CardDialog } from "@/app/cartoes/card-dialog";
