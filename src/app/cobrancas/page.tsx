@@ -30,11 +30,13 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import Link from "next/link";
-import { AlertCircle, UserPlus } from "lucide-react";
+import { AlertCircle, UserPlus, Plus } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/viewer";
+import { getReceiptsSummary } from "@/lib/services/revenue-metrics";
 import { BillingDialog } from "./billing-dialog";
 import { BillingActions } from "./row-actions";
 import { MonthNav } from "./month-nav";
+import { CycleFilters } from "./cycle-filters";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
 /**
@@ -49,11 +51,30 @@ type Search = {
   st?: string; // CycleStatus
   responsavel?: string;
   cliente?: string;
+  // "Mais filtros"
+  mod?: string; // MRR | TCV
+  vmin?: string; // valor mínimo (R$)
+  vmax?: string; // valor máximo (R$)
+  vde?: string; // vencimento a partir de (YYYY-MM-DD)
+  vate?: string; // vencimento até (YYYY-MM-DD)
   // compat com links antigos (dashboard/rotina)
   situacao?: string; // atrasado | outro-mes
   avencer?: string;
   status?: string; // OVERDUE | PAID (legado)
 };
+
+/** "1.500,00" | "1500.00" → número (filtros de valor). */
+function parseMoneyParam(v?: string): number | null {
+  if (!v) return null;
+  const num = Number(v.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function parseISODateParam(v?: string): Date | null {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 const STATUS_VARIANT: Record<CycleStatus, any> = {
   UPCOMING: "warning",
@@ -92,6 +113,11 @@ export default async function RecebimentosPage({
   // Manutenção do ciclo: marca vencidas + gera as mensalidades MRR que faltam.
   await markOverdueBillings();
   await ensureMonthlyBillings(mes.month, mes.year);
+
+  // Receita Extra do mês (recuperações automáticas) — camada central de cálculo.
+  const monthStart = new Date(mes.year, mes.month - 1, 1);
+  const monthEnd = new Date(mes.year, mes.month, 1);
+  const receipts = await getReceiptsSummary(monthStart, monthEnd);
 
   const [billingsRaw, clients, contractsRaw, services, accounts, respRows] =
     await Promise.all([
@@ -191,13 +217,32 @@ export default async function RecebimentosPage({
   const kDevendo = rows.filter(
     (r) => r.cycleStatus === "OVERDUE" || r.cycleStatus === "PARTIAL"
   ).length;
+  const lateRows = rows.filter((r) => r.cycleStatus === "PAID_LATE");
+  const otherMonthRows = rows.filter((r) => r.cycleStatus === "PAID_OTHER_MONTH");
+  const kPagosAtraso = lateRows.reduce((s, r) => s + r.paidTotal, 0);
+  const kOutroMes = otherMonthRows.reduce((s, r) => s + r.paidTotal, 0);
 
   // ===== Filtros de visualização =====
   const stFilter = legacyStatus(searchParams);
   const respFilter = searchParams.responsavel ?? "";
+  const vmin = parseMoneyParam(searchParams.vmin);
+  const vmax = parseMoneyParam(searchParams.vmax);
+  const vde = parseISODateParam(searchParams.vde);
+  const vate = parseISODateParam(searchParams.vate);
+  const modFilter =
+    searchParams.mod === "MRR" || searchParams.mod === "TCV" ? searchParams.mod : "";
   const visible = rows.filter((r) => {
     if (stFilter && stFilter !== "REMOVED" && r.cycleStatus !== stFilter) return false;
     if (respFilter && r.responsible !== respFilter) return false;
+    if (modFilter && r.revenueType !== modFilter) return false;
+    if (vmin != null && r.amount < vmin) return false;
+    if (vmax != null && r.amount > vmax) return false;
+    if (vde && r.dueDate < vde) return false;
+    if (vate) {
+      const cap = new Date(vate);
+      cap.setHours(23, 59, 59, 999);
+      if (r.dueDate > cap) return false;
+    }
     return true;
   });
 
@@ -207,6 +252,10 @@ export default async function RecebimentosPage({
     const spNew = new URLSearchParams();
     if (searchParams.mes) spNew.set("mes", searchParams.mes);
     if (searchParams.responsavel) spNew.set("responsavel", searchParams.responsavel);
+    // preserva "Mais filtros" ao trocar o status
+    for (const k of ["mod", "cliente", "vmin", "vmax", "vde", "vate"] as const) {
+      if (searchParams[k]) spNew.set(k, searchParams[k]!);
+    }
     for (const [k, v] of Object.entries(params)) if (v) spNew.set(k, v);
     const qs = spNew.toString();
     return qs ? `/cobrancas?${qs}` : "/cobrancas";
@@ -222,6 +271,13 @@ export default async function RecebimentosPage({
     { label: "Removidos do mês", st: "REMOVED" },
   ];
 
+  const monthLabelStr = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(mes.year, mes.month - 1, 1));
+  const referenceMonth =
+    monthLabelStr.charAt(0).toUpperCase() + monthLabelStr.slice(1).replace(" de ", "/");
+
   const msgInput = (r: (typeof rows)[number]): BillingMessageInput => ({
     clientName: r.client.name,
     openAmount: formatBRL(r.openAmount),
@@ -230,12 +286,8 @@ export default async function RecebimentosPage({
     serviceNames: [r.service?.name ?? r.contract?.title ?? ""].filter(Boolean),
     hasPromise: r.collectionStatus === "PROMISED",
     contactCount: r._count.history,
+    referenceMonth,
   });
-
-  const monthLabelStr = new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric",
-  }).format(new Date(mes.year, mes.month - 1, 1));
 
   return (
     <div>
@@ -249,7 +301,17 @@ export default async function RecebimentosPage({
                 <UserPlus className="h-4 w-4 mr-1" /> Cadastrar cliente na Carteira
               </Link>
             </Button>
-            <BillingDialog clients={clients} contracts={contractsRaw} services={services} />
+            <BillingDialog
+              clients={clients}
+              contracts={contractsRaw}
+              services={services}
+              defaultCompetence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
+              trigger={
+                <Button title="Adiciona um cliente já cadastrado à lista deste mês (valor, vencimento, modalidade e observação)">
+                  <Plus className="h-4 w-4 mr-1" /> Incluir cliente no mês
+                </Button>
+              }
+            />
           </div>
         }
       />
@@ -274,25 +336,45 @@ export default async function RecebimentosPage({
         )}
       </div>
 
-      {/* ===== KPIs do mês ===== */}
+      {/* ===== Mini dashboard do mês (cards clicáveis filtram a lista) ===== */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-        <StatCard title="A receber no mês" value={formatBRL(kAReceber)} />
-        <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive" />
-        <StatCard title="A vencer" value={formatBRL(kAVencer)} intent="warning" />
+        <StatCard title="A receber no mês" value={formatBRL(kAReceber)}
+          href={chipHref({})} />
+        <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive"
+          href={chipHref({ st: "PAID" })} />
+        <StatCard title="A vencer" value={formatBRL(kAVencer)} intent="warning"
+          href={chipHref({ st: "UPCOMING" })} />
         <StatCard title="Vencido" value={formatBRL(kVencido)}
-          intent={kVencido > 0 ? "negative" : "default"} />
-        <StatCard title="Clientes pagos" value={String(kPagos)} intent="positive" />
-        <StatCard title="Clientes devendo" value={String(kDevendo)}
-          intent={kDevendo > 0 ? "negative" : "positive"} />
+          intent={kVencido > 0 ? "negative" : "default"}
+          href={chipHref({ st: "OVERDUE" })} />
+        <StatCard title="Clientes pagos" value={String(kPagos)} intent="positive"
+          href={chipHref({ st: "PAID" })} />
+        <StatCard title="Clientes inadimplentes" value={String(kDevendo)}
+          intent={kDevendo > 0 ? "negative" : "positive"}
+          href={chipHref({ st: "OVERDUE" })} />
+        <StatCard title="Pagos com atraso" value={formatBRL(kPagosAtraso)}
+          hint={`${lateRows.length} pagamento${lateRows.length === 1 ? "" : "s"} após o vencimento`}
+          intent={lateRows.length > 0 ? "warning" : "default"}
+          href={chipHref({ st: "PAID_LATE" })} />
+        <StatCard title="Recebidos em outro mês" value={formatBRL(kOutroMes)}
+          hint={`${otherMonthRows.length} regularizado${otherMonthRows.length === 1 ? "" : "s"} depois`}
+          href={chipHref({ st: "PAID_OTHER_MONTH" })} />
+        <StatCard title="Receita Extra (recuperação)"
+          value={formatBRL(receipts.extraRevenueAutomatic)}
+          hint="inadimplência de meses anteriores recebida neste mês"
+          intent={receipts.extraRevenueAutomatic > 0 ? "positive" : "default"}
+          href="/receitas" />
       </div>
 
-      {/* ===== Chips de status ===== */}
+      {/* ===== Chips de status + Mais filtros ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
         {CHIPS.map((c) => (
           <Link key={c.label} href={chipHref({ st: c.st })}>
             <Badge variant={stFilter === c.st ? "default" : "outline"}>{c.label}</Badge>
           </Link>
         ))}
+        <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+        <CycleFilters clients={clients} />
       </div>
 
       <Card>
@@ -344,6 +426,13 @@ export default async function RecebimentosPage({
                         )}
                       </span>
                       <p className="text-xs text-muted-foreground truncate">{r.description}</p>
+                      {r.cycleStatus === "REMOVED" && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Removido{r.canceledAt ? ` em ${formatDateBR(r.canceledAt)}` : ""}
+                          {r.canceledBy ? ` por ${r.canceledBy}` : ""}
+                          {r.cancelReason ? ` — ${r.cancelReason}` : ""}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={r.revenueType === "MRR" ? "default" : "secondary"}>

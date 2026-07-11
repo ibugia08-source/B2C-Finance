@@ -1066,6 +1066,8 @@ model Billing {
   collectionStatus CollectionStatus @default(NOT_CONTACTED)
   collector        String? // responsável pela cobrança
   canceledAt       DateTime?
+  cancelReason     String? // motivo da remoção do ciclo do mês
+  canceledBy       String? // e-mail de quem removeu
   notes            String?
 
   // ===== Fechamento mensal (regra contábil B2C) =====

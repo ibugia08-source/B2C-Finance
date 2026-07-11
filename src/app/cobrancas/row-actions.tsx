@@ -11,8 +11,9 @@ import {
   Pencil,
   Eye,
   Ban,
+  RotateCcw,
 } from "lucide-react";
-import { cancelBilling } from "@/lib/actions/billings";
+import { cancelBilling, restoreBilling } from "@/lib/actions/billings";
 import { PaymentDialog } from "./payment-dialog";
 import { MessageDialog } from "./message-dialog";
 import { NoteDialog, RescheduleDialog } from "./note-dialog";
@@ -60,6 +61,7 @@ export function BillingActions({
         <MessageDialog
           input={messageInput}
           phone={phone}
+          billingId={billing.id}
           trigger={
             <Button variant="ghost" size="icon" title="Mensagem de cobrança / WhatsApp">
               <MessageSquareText className="h-4 w-4" />
@@ -122,22 +124,37 @@ export function BillingActions({
         <Button
           variant="ghost"
           size="icon"
-          title="Remover deste mês (não será recriado pela geração automática)"
+          title="Remover deste mês (não apaga o cliente; não será recriado pela geração automática)"
           disabled={pending}
           onClick={() => {
-            if (
-              !confirm(
-                `Remover "${billing.description}" do ciclo deste mês?\n\nA cobrança é cancelada e NÃO será recriada automaticamente.`
-              )
-            )
-              return;
+            const reason = prompt(
+              `Remover "${billing.description}" do ciclo deste mês?\n\nO cliente continua na Gestão de Carteira — apenas sai da lista deste mês e NÃO será recriado automaticamente.\n\nMotivo da remoção (opcional):`
+            );
+            if (reason === null) return; // cancelou
             start(async () => {
-              const res = await cancelBilling(billing.id);
+              const res = await cancelBilling(billing.id, reason);
               if (!res.ok) alert(res.error);
             });
           }}
         >
           <Ban className="h-4 w-4 text-destructive" />
+        </Button>
+      )}
+      {billing.status === "CANCELED" && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title="Recolocar no ciclo deste mês"
+          disabled={pending}
+          onClick={() => {
+            if (!confirm(`Recolocar "${billing.description}" no ciclo deste mês?`)) return;
+            start(async () => {
+              const res = await restoreBilling(billing.id);
+              if (!res.ok) alert(res.error);
+            });
+          }}
+        >
+          <RotateCcw className="h-4 w-4 text-emerald-600" />
         </Button>
       )}
     </div>

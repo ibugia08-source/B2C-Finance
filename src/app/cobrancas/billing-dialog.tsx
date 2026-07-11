@@ -24,12 +24,15 @@ export function BillingDialog({
   services,
   initial,
   trigger,
+  defaultCompetence: defaultCompetenceProp,
 }: {
   clients: { id: string; name: string }[];
   contracts: { id: string; title: string; clientId: string }[];
   services: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
+  /** competência pré-selecionada ("YYYY-MM") — ex.: mês aberto no ciclo */
+  defaultCompetence?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +41,9 @@ export function BillingDialog({
 
   const clientContracts = contracts.filter((c) => c.clientId === clientId);
   const now = new Date();
-  const defaultCompetence = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const defaultCompetence =
+    defaultCompetenceProp ??
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const initialCompetence = initial
     ? `${initial.competenceYear}-${String(initial.competenceMonth).padStart(2, "0")}`
     : defaultCompetence;

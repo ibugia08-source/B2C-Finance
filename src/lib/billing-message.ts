@@ -4,6 +4,7 @@
  */
 
 export type MessageTone =
+  | "padrao"
   | "amigavel"
   | "formal"
   | "direto"
@@ -12,6 +13,7 @@ export type MessageTone =
   | "reativacao";
 
 export const TONE_LABEL: Record<MessageTone, string> = {
+  padrao: "Padrão B2C (recomendada)",
   amigavel: "Leve / amigável",
   formal: "Profissional (formal)",
   direto: "Direto",
@@ -28,9 +30,14 @@ export type BillingMessageInput = {
   serviceNames: string[];
   hasPromise: boolean; // já houve promessa de pagamento
   contactCount: number; // interações de cobrança anteriores
+  /** mês de referência da cobrança (ex.: "Julho/2026") */
+  referenceMonth?: string;
   /** forma de regularização (ex.: "PIX chave x@y.com"); omitido → frase genérica */
   paymentInfo?: string;
 };
+
+/** Acima deste atraso, a mensagem padrão passa ao tom "muito atrasado". */
+const VERY_LATE_DAYS = 15;
 
 export function buildBillingMessage(
   tone: MessageTone,
@@ -47,7 +54,38 @@ export function buildBillingMessage(
   const regularizacao =
     i.paymentInfo ?? "PIX ou transferência — me confirme que envio os dados agora";
 
+  const mesRef = i.referenceMonth ?? `o vencimento de ${i.dueDate}`;
+
   switch (tone) {
+    // Templates oficiais do módulo Recebimentos: a vencer, atrasado e
+    // muito atrasado — escolhidos automaticamente pelos dias de atraso.
+    case "padrao":
+      if (i.daysOverdue <= 0) {
+        return [
+          `Olá, ${first}! Tudo bem?`,
+          ``,
+          `Passando para lembrar que o pagamento referente a ${mesRef}, no valor de ${i.openAmount}, vence em ${i.dueDate}.`,
+          ``,
+          `Qualquer dúvida, fico à disposição.`,
+        ].join("\n");
+      }
+      if (i.daysOverdue < VERY_LATE_DAYS) {
+        return [
+          `Olá, ${first}! Tudo bem?`,
+          ``,
+          `Identifiquei que o pagamento referente a ${mesRef}, no valor de ${i.openAmount}, venceu em ${i.dueDate} e ainda está pendente.`,
+          ``,
+          `Consegue me dar um retorno sobre a previsão de pagamento?`,
+        ].join("\n");
+      }
+      return [
+        `Olá, ${first}. Tudo bem?`,
+        ``,
+        `O pagamento referente a ${mesRef}, no valor de ${i.openAmount}, está com ${i.daysOverdue} dia${i.daysOverdue === 1 ? "" : "s"} de atraso.`,
+        ``,
+        `Preciso confirmar com você uma previsão para regularização.`,
+      ].join("\n");
+
     case "amigavel":
       return [
         `Oi, ${first}! Tudo bem? 😊`,

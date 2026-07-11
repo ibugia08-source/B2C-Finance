@@ -18,6 +18,22 @@ import { prisma } from "@/lib/prisma";
 
 const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
+const MONTH_PT = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+/** Descrição oficial da Receita Extra automática (formato do briefing). */
+function recoveryDescription(
+  clientName: string,
+  refMonth: number,
+  refYear: number,
+  paidAt: Date
+): string {
+  const data = paidAt.toLocaleDateString("pt-BR");
+  return `Pagamento de ${clientName} referente a ${MONTH_PT[refMonth - 1]}/${refYear}, recebido em ${data}.`;
+}
+
 export type SettleInput = {
   billingId: string;
   amount: number;
@@ -42,7 +58,10 @@ export type SettleResult =
 export async function settleBillingPayment(input: SettleInput): Promise<SettleResult> {
   const billing = await prisma.billing.findUnique({
     where: { id: input.billingId },
-    include: { contract: { select: { id: true } } },
+    include: {
+      contract: { select: { id: true } },
+      client: { select: { name: true } },
+    },
   });
   if (!billing) return { ok: false, error: "Cobrança não encontrada." };
   if (billing.status === "CANCELED")
@@ -101,12 +120,20 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
     const existingER = await prisma.extraRevenue.findFirst({
       where: { originBillingId: billing.id },
     });
+    const erDescription = recoveryDescription(
+      billing.client.name,
+      billing.competenceMonth,
+      billing.competenceYear,
+      input.paidAt
+    );
     if (existingER) {
+      // Reutiliza o registro (idempotência) — parciais acumulam, nunca duplicam.
       await prisma.extraRevenue.updateMany({
         where: { id: existingER.id },
         data: {
           amount: n(existingER.amount) + input.amount,
           receivedAt: input.paidAt,
+          description: erDescription,
         },
       });
       extraRevenueId = existingER.id;
@@ -118,7 +145,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
           sourcePaymentId: payment.id,
           type: "RECOVERY_OF_OVERDUE",
           origin: "AUTOMATIC",
-          description: `Recuperação de inadimplência — ${billing.description}`,
+          description: erDescription,
           amount: input.amount,
           receivedAt: input.paidAt,
           originalReferenceMonth: billing.competenceMonth,

@@ -420,6 +420,7 @@ export default async function RotinaPage() {
                       <div className="flex gap-1 justify-end">
                         <MessageDialog
                           phone={q.phone}
+                          billingId={q.anchorBilling.id}
                           input={{
                             clientName: q.clientName,
                             openAmount: formatBRL(q.totalOverdue),

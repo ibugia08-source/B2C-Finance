@@ -172,24 +172,113 @@ export async function deleteBillingPayment(id: string): Promise<ActionResult> {
 
 // ---------- Ciclo de vida ----------
 
-export async function cancelBilling(id: string): Promise<ActionResult> {
-  await requireAdmin();
+/**
+ * Remove a cobrança do ciclo do MÊS (não apaga o cliente nem o cadastro):
+ * status CANCELED + auditoria (quem/quando/por quê). A geração automática
+ * nunca recria uma cobrança removida.
+ */
+export async function cancelBilling(
+  id: string,
+  reason?: string | null
+): Promise<ActionResult> {
+  const viewer = await requireAdmin();
   try {
     const b = await prisma.billing.findUnique({ where: { id } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
     if (b.status === "PAID")
-      return { ok: false, error: "Cobrança quitada não pode ser cancelada." };
+      return { ok: false, error: "Cobrança quitada não pode ser removida do mês." };
+    const cleanReason = (reason ?? "").trim() || null;
     await prisma.billing.update({
       where: { id },
-      data: { status: "CANCELED", canceledAt: new Date() },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        canceledBy: viewer.email,
+        cancelReason: cleanReason,
+      },
     });
     await prisma.collectionHistory.create({
-      data: { billingId: id, clientId: b.clientId, status: b.collectionStatus, message: "Cobrança cancelada." },
+      data: {
+        billingId: id,
+        clientId: b.clientId,
+        status: b.collectionStatus,
+        message: `Removida do ciclo de ${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear} por ${viewer.email}.${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
+      },
     });
     revalidateBilling(b.clientId);
     return { ok: true };
   } catch (e: any) {
-    return { ok: false, error: e?.message ?? "Falha ao cancelar a cobrança." };
+    return { ok: false, error: e?.message ?? "Falha ao remover a cobrança do mês." };
+  }
+}
+
+/** Recoloca no ciclo do mês uma cobrança removida por engano. */
+export async function restoreBilling(id: string): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    const b = await prisma.billing.findUnique({ where: { id } });
+    if (!b) return { ok: false, error: "Cobrança não encontrada." };
+    if (b.status !== "CANCELED")
+      return { ok: false, error: "A cobrança não está removida do mês." };
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const status =
+      n(b.paidTotal) > 0 ? "PARTIAL" : b.dueDate < today ? "OVERDUE" : "PENDING";
+    await prisma.billing.update({
+      where: { id },
+      data: { status, canceledAt: null, canceledBy: null, cancelReason: null },
+    });
+    await prisma.collectionHistory.create({
+      data: {
+        billingId: id,
+        clientId: b.clientId,
+        status: b.collectionStatus,
+        message: `Recolocada no ciclo de ${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear} por ${viewer.email}.`,
+      },
+    });
+    revalidateBilling(b.clientId);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao recolocar a cobrança no mês." };
+  }
+}
+
+/**
+ * Registra no histórico que a mensagem de cobrança foi enviada/copiada
+ * (WhatsApp aberto ou texto copiado) e marca o cliente como contatado.
+ */
+export async function registerBillingContact(
+  billingId: string,
+  channel: "whatsapp" | "copia",
+  excerpt: string
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const b = await prisma.billing.findUnique({ where: { id: billingId } });
+    if (!b) return { ok: false, error: "Cobrança não encontrada." };
+    await prisma.collectionHistory.create({
+      data: {
+        billingId: b.id,
+        clientId: b.clientId,
+        status: "CONTACTED",
+        channel,
+        message:
+          channel === "whatsapp"
+            ? `Cobrança enviada via WhatsApp: "${excerpt.slice(0, 180)}…"`
+            : `Mensagem de cobrança copiada: "${excerpt.slice(0, 180)}…"`,
+      },
+    });
+    if (b.collectionStatus === "NOT_CONTACTED") {
+      await prisma.billing.update({
+        where: { id: b.id },
+        data: { collectionStatus: "CONTACTED" },
+      });
+    }
+    revalidateBilling(b.clientId);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao registrar o contato." };
   }
 }
 

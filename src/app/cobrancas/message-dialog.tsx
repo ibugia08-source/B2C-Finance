@@ -19,20 +19,22 @@ import {
   type BillingMessageInput,
 } from "@/lib/billing-message";
 import { Copy, Check, MessageCircle } from "lucide-react";
+import { registerBillingContact } from "@/lib/actions/billings";
 
 /** Apoio interativo à cobrança: mensagens por tom + copiar + WhatsApp. */
 export function MessageDialog({
   input,
   phone,
   trigger,
+  billingId,
 }: {
   input: BillingMessageInput;
   phone: string | null;
   trigger: React.ReactNode;
+  /** quando informado, registra no histórico que a cobrança foi enviada/copiada */
+  billingId?: string;
 }) {
-  const [tone, setTone] = useState<MessageTone>(
-    input.daysOverdue > 30 ? "reativacao" : input.daysOverdue > 0 ? "direto" : "amigavel"
-  );
+  const [tone, setTone] = useState<MessageTone>("padrao");
   const [copied, setCopied] = useState(false);
   const [text, setText] = useState<string | null>(null);
 
@@ -41,6 +43,11 @@ export function MessageDialog({
     [tone, input, text]
   );
   const wa = whatsappLink(phone, message);
+
+  // Fire-and-forget: registra o envio no histórico de cobrança do cliente.
+  function logContact(channel: "whatsapp" | "copia") {
+    if (billingId) void registerBillingContact(billingId, channel, message);
+  }
 
   return (
     <Dialog>
@@ -79,6 +86,7 @@ export function MessageDialog({
                 await navigator.clipboard.writeText(message);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
+                logContact("copia");
               }}
             >
               {copied ? (
@@ -93,7 +101,12 @@ export function MessageDialog({
             </Button>
             {wa ? (
               <Button asChild>
-                <a href={wa} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={wa}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => logContact("whatsapp")}
+                >
                   <MessageCircle className="h-4 w-4 mr-1" /> Abrir WhatsApp
                 </a>
               </Button>
