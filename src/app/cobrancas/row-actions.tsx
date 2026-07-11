@@ -28,6 +28,7 @@ export function BillingActions({
   clients,
   contracts,
   services,
+  primaryLabels = false,
 }: {
   billing: any; // serializado (openAmount number)
   messageInput: BillingMessageInput;
@@ -36,12 +37,14 @@ export function BillingActions({
   clients: { id: string; name: string }[];
   contracts: { id: string; title: string; clientId: string }[];
   services: { id: string; name: string }[];
+  /** mobile: mostra "Registrar pagamento" e "Cobrar" como botões com texto */
+  primaryLabels?: boolean;
 }) {
   const [pending, start] = useTransition();
   const open = ["PENDING", "PARTIAL", "OVERDUE"].includes(billing.status);
 
   return (
-    <div className="flex gap-0.5 justify-end flex-wrap">
+    <div className="flex gap-0.5 justify-end flex-wrap items-center">
       {open && (
         <PaymentDialog
           billing={{
@@ -51,9 +54,20 @@ export function BillingActions({
           }}
           accounts={accounts}
           trigger={
-            <Button variant="ghost" size="icon" title="Registrar pagamento (total ou parcial)">
-              <DollarSign className="h-4 w-4 text-emerald-600" />
-            </Button>
+            primaryLabels ? (
+              <Button size="sm" aria-label="Registrar pagamento">
+                <DollarSign className="h-4 w-4 mr-1" /> Registrar pagamento
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Registrar pagamento (total ou parcial)"
+                aria-label="Registrar pagamento"
+              >
+                <DollarSign className="h-4 w-4 text-emerald-600" />
+              </Button>
+            )
           }
         />
       )}
@@ -63,9 +77,20 @@ export function BillingActions({
           phone={phone}
           billingId={billing.id}
           trigger={
-            <Button variant="ghost" size="icon" title="Mensagem de cobrança / WhatsApp">
-              <MessageSquareText className="h-4 w-4" />
-            </Button>
+            primaryLabels ? (
+              <Button variant="outline" size="sm" aria-label="Cobrar (mensagem/WhatsApp)">
+                <MessageSquareText className="h-4 w-4 mr-1" /> Cobrar
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Cobrar — mensagem pronta / WhatsApp"
+                aria-label="Cobrar (mensagem/WhatsApp)"
+              >
+                <MessageSquareText className="h-4 w-4" />
+              </Button>
+            )
           }
         />
       )}
@@ -74,7 +99,7 @@ export function BillingActions({
           billingId={billing.id}
           promise
           trigger={
-            <Button variant="ghost" size="icon" title="Registrar promessa de pagamento">
+            <Button variant="ghost" size="icon" title="Registrar promessa de pagamento" aria-label="Registrar promessa de pagamento">
               <Handshake className="h-4 w-4 text-amber-600" />
             </Button>
           }
@@ -84,7 +109,7 @@ export function BillingActions({
         <NoteDialog
           billingId={billing.id}
           trigger={
-            <Button variant="ghost" size="icon" title="Adicionar observação">
+            <Button variant="ghost" size="icon" title="Adicionar observação" aria-label="Adicionar observação">
               <StickyNote className="h-4 w-4" />
             </Button>
           }
@@ -94,7 +119,7 @@ export function BillingActions({
         <RescheduleDialog
           billingId={billing.id}
           trigger={
-            <Button variant="ghost" size="icon" title="Reagendar vencimento">
+            <Button variant="ghost" size="icon" title="Reagendar vencimento" aria-label="Reagendar vencimento">
               <CalendarClock className="h-4 w-4" />
             </Button>
           }
@@ -107,14 +132,14 @@ export function BillingActions({
           services={services}
           initial={billing}
           trigger={
-            <Button variant="ghost" size="icon" title="Editar">
+            <Button variant="ghost" size="icon" title="Editar" aria-label="Editar cobrança">
               <Pencil className="h-4 w-4" />
             </Button>
           }
         />
       )}
       {billing.client?.id && (
-        <Button variant="ghost" size="icon" asChild title="Ver cliente (Gestão de Carteira)">
+        <Button variant="ghost" size="icon" asChild title="Ver cliente (Gestão de Carteira)" aria-label="Ver cliente na Gestão de Carteira">
           <Link href={`/clientes/${billing.client.id}`}>
             <Eye className="h-4 w-4" />
           </Link>
@@ -125,6 +150,7 @@ export function BillingActions({
           variant="ghost"
           size="icon"
           title="Remover deste mês (não apaga o cliente; não será recriado pela geração automática)"
+          aria-label="Remover do ciclo deste mês"
           disabled={pending}
           onClick={() => {
             const reason = prompt(
@@ -145,6 +171,7 @@ export function BillingActions({
           variant="ghost"
           size="icon"
           title="Recolocar no ciclo deste mês"
+          aria-label="Recolocar no ciclo deste mês"
           disabled={pending}
           onClick={() => {
             if (!confirm(`Recolocar "${billing.description}" no ciclo deste mês?`)) return;

@@ -37,6 +37,7 @@ import { BillingDialog } from "./billing-dialog";
 import { BillingActions } from "./row-actions";
 import { MonthNav } from "./month-nav";
 import { CycleFilters } from "./cycle-filters";
+import { ClientSearch } from "./search-client";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
 /**
@@ -51,6 +52,7 @@ type Search = {
   st?: string; // CycleStatus
   responsavel?: string;
   cliente?: string;
+  q?: string; // busca por nome do cliente
   // "Mais filtros"
   mod?: string; // MRR | TCV
   vmin?: string; // valor mínimo (R$)
@@ -231,10 +233,12 @@ export default async function RecebimentosPage({
   const vate = parseISODateParam(searchParams.vate);
   const modFilter =
     searchParams.mod === "MRR" || searchParams.mod === "TCV" ? searchParams.mod : "";
+  const q = (searchParams.q ?? "").trim().toLowerCase();
   const visible = rows.filter((r) => {
     if (stFilter && stFilter !== "REMOVED" && r.cycleStatus !== stFilter) return false;
     if (respFilter && r.responsible !== respFilter) return false;
     if (modFilter && r.revenueType !== modFilter) return false;
+    if (q && !r.client.name.toLowerCase().includes(q)) return false;
     if (vmin != null && r.amount < vmin) return false;
     if (vmax != null && r.amount > vmax) return false;
     if (vde && r.dueDate < vde) return false;
@@ -275,6 +279,23 @@ export default async function RecebimentosPage({
     month: "long",
     year: "numeric",
   }).format(new Date(mes.year, mes.month - 1, 1));
+
+  // Estado vazio contextual — diz exatamente o que a visão filtrada significa.
+  const emptyMessage: string = q
+    ? `Nenhum cliente com "${searchParams.q}" no ciclo deste mês.`
+    : stFilter === "OVERDUE"
+      ? "Nenhum cliente inadimplente neste mês. Todos os recebimentos estão em dia até o momento."
+      : stFilter === "PAID_LATE"
+        ? "Nenhum pagamento atrasado encontrado no período selecionado."
+        : stFilter === "REMOVED"
+          ? "Nenhum cliente removido do ciclo deste mês. Clientes removidos continuam cadastrados normalmente na Gestão de Carteira."
+          : stFilter === "PAID"
+            ? "Nenhum pagamento registrado neste mês até o momento."
+            : stFilter === "PAID_OTHER_MONTH"
+              ? "Nenhum recebimento deste mês foi regularizado em outro mês."
+              : stFilter === "UPCOMING"
+                ? "Nenhuma cobrança a vencer neste mês."
+                : "Nenhum cliente encontrado no ciclo de recebimentos deste mês. Você pode adicionar clientes manualmente ou revisar a Gestão de Carteira.";
   const referenceMonth =
     monthLabelStr.charAt(0).toUpperCase() + monthLabelStr.slice(1).replace(" de ", "/");
 
@@ -293,7 +314,7 @@ export default async function RecebimentosPage({
     <div>
       <PageHeader
         title="Recebimentos"
-        description={`Ciclo mensal de pagamentos da carteira · ${monthLabelStr}`}
+        description={`Gerencie o ciclo mensal de pagamentos dos clientes · ${monthLabelStr}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
@@ -318,9 +339,12 @@ export default async function RecebimentosPage({
 
       <CobrancasTabs active="/cobrancas" />
 
-      {/* ===== Filtro mensal (modo mês) ===== */}
+      {/* ===== Barra superior: mês · busca · responsável ===== */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <MonthNav month={mes.month} year={mes.year} />
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthNav month={mes.month} year={mes.year} />
+          <ClientSearch />
+        </div>
         {responsibles.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Responsável:</span>
@@ -375,7 +399,21 @@ export default async function RecebimentosPage({
         ))}
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
         <CycleFilters clients={clients} />
+        <Link
+          href="/relatorios/recebimentos"
+          className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline"
+        >
+          Exportar (relatório de recebimentos)
+        </Link>
       </div>
+
+      {stFilter === "REMOVED" && visible.length > 0 && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          Estes clientes foram removidos do ciclo de recebimentos deste mês.
+          Eles continuam cadastrados normalmente na Gestão de Carteira — use a
+          ação de recolocar para devolvê-los ao mês.
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -398,11 +436,12 @@ export default async function RecebimentosPage({
                 {visible.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
-                      Nenhum recebimento neste ciclo. Clientes MRR ativos entram
-                      automaticamente; adicione uma cobrança avulsa ao mês ou{" "}
-                      <Link href="/clientes" className="underline">
-                        cadastre o cliente na Gestão de Carteira
-                      </Link>.
+                      {emptyMessage}{" "}
+                      {!stFilter && !q && (
+                        <Link href="/clientes" className="underline">
+                          Abrir Gestão de Carteira
+                        </Link>
+                      )}
                     </TableCell>
                   </TableRow>
                 )}
@@ -500,10 +539,7 @@ export default async function RecebimentosPage({
           {/* Mobile */}
           <MobileCards>
             {visible.length === 0 ? (
-              <MobileEmpty>
-                Nenhum recebimento neste ciclo. Clientes MRR ativos entram
-                automaticamente no mês.
-              </MobileEmpty>
+              <MobileEmpty>{emptyMessage}</MobileEmpty>
             ) : (
               visible.map((r) => (
                 <MobileCard key={r.id}>
@@ -542,6 +578,7 @@ export default async function RecebimentosPage({
                       clients={clients}
                       contracts={contractsRaw}
                       services={services}
+                      primaryLabels
                     />
                   </MobileCardActions>
                 </MobileCard>
