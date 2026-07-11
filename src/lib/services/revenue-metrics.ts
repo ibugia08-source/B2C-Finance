@@ -170,6 +170,151 @@ export async function getPeriodRevenue(
 }
 
 // ===================================================================
+// Fechamento mensal — RECEBIMENTOS × RECEITA EXTRA (regra oficial B2C)
+// Faturamento do mês = Recebimentos no mês correto + Receitas Extras.
+//  - Pagamento no mês da competência conta como RECEBIMENTO (mesmo
+//    atrasado dentro do mês → flag "pago com atraso").
+//  - Pagamento em mês POSTERIOR não entra no mês original (que permanece
+//    inadimplente no fechamento) — entra no mês do pagamento como
+//    RECEITA EXTRA automática (recuperação).
+//  - Receita Extra = ExtraRevenue (automáticas + manuais) + receitas
+//    avulsas (Income sem cobrança vinculada).
+// ===================================================================
+
+export type ReceiptsSummary = {
+  receiptsCorrectMonth: number; // pagos dentro do mês de competência
+  mrrReceived: number; // parte MRR dos recebimentos corretos
+  tcvReceived: number; // parte TCV dos recebimentos corretos
+  lateSameMonthValue: number; // pagos com atraso mas dentro do mês
+  lateSameMonthCount: number;
+  paidDifferentMonthValue: number; // recuperações recebidas no período
+  paidDifferentMonthCount: number;
+  extraRevenueAutomatic: number; // ExtraRevenue AUTOMATIC no período
+  extraRevenueManual: number; // ExtraRevenue MANUAL + Income avulsa
+  extraRevenueTotal: number;
+  totalRevenue: number; // receiptsCorrectMonth + extraRevenueTotal
+  openAmount: number; // em aberto (competência no período, não quitado)
+};
+
+export async function getReceiptsSummary(
+  start: Date,
+  end: Date,
+  filters: RevenueFilters = {}
+): Promise<ReceiptsSummary> {
+  const months = monthsInRange(start, end);
+  const entity = clientEntityWhere(filters);
+  const clientFilter = Object.keys(entity).length ? { client: entity } : {};
+
+  const [payments, extraRevenues, looseIncomes, openBillings] = await Promise.all([
+    prisma.payment.findMany({
+      where: {
+        status: "CONFIRMED",
+        paidAt: { gte: start, lt: end },
+        billing: { status: { not: "CANCELED" }, ...(clientFilter as any) },
+      },
+      select: {
+        amount: true,
+        paidAt: true,
+        billing: {
+          select: {
+            competenceMonth: true,
+            competenceYear: true,
+            dueDate: true,
+            revenueType: true,
+          },
+        },
+      },
+    }),
+    prisma.extraRevenue.findMany({
+      where: { receivedAt: { gte: start, lt: end }, ...(clientFilter as any) },
+      select: { amount: true, origin: true },
+    }),
+    prisma.income.findMany({
+      where: {
+        status: "RECEIVED",
+        billingId: null,
+        receivedAt: { gte: start, lt: end },
+        ...(Object.keys(entity).length ? { client: entity } : {}),
+      },
+      select: { amount: true },
+    }),
+    months.length
+      ? prisma.billing.findMany({
+          where: {
+            status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+            OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+            ...(clientFilter as any),
+          },
+          select: { amount: true, paidTotal: true },
+        })
+      : Promise.resolve([] as { amount: unknown; paidTotal: unknown }[]),
+  ]);
+
+  let receiptsCorrectMonth = 0;
+  let mrrReceived = 0;
+  let tcvReceived = 0;
+  let lateSameMonthValue = 0;
+  let lateSameMonthCount = 0;
+  let paidDifferentMonthValue = 0;
+  let paidDifferentMonthCount = 0;
+
+  for (const p of payments) {
+    const b = p.billing;
+    const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
+    const paidKey = p.paidAt.getFullYear() * 12 + p.paidAt.getMonth();
+    const v = n(p.amount);
+    if (paidKey === compKey) {
+      receiptsCorrectMonth += v;
+      if (b.revenueType === "MRR") mrrReceived += v;
+      else if (b.revenueType === "TCV") tcvReceived += v;
+      if (p.paidAt > b.dueDate) {
+        lateSameMonthValue += v;
+        lateSameMonthCount += 1;
+      }
+    } else if (paidKey > compKey) {
+      // Recuperação — já contabilizada via ExtraRevenue (não somar aqui).
+      paidDifferentMonthValue += v;
+      paidDifferentMonthCount += 1;
+    } else {
+      // Adiantamento (pagou antes da competência): conta como recebimento.
+      receiptsCorrectMonth += v;
+      if (b.revenueType === "MRR") mrrReceived += v;
+      else if (b.revenueType === "TCV") tcvReceived += v;
+    }
+  }
+
+  const extraRevenueAutomatic = extraRevenues
+    .filter((e) => e.origin === "AUTOMATIC")
+    .reduce((s, e) => s + n(e.amount), 0);
+  const extraRevenueManual =
+    extraRevenues
+      .filter((e) => e.origin === "MANUAL")
+      .reduce((s, e) => s + n(e.amount), 0) +
+    looseIncomes.reduce((s, i) => s + n(i.amount), 0);
+  const extraRevenueTotal = extraRevenueAutomatic + extraRevenueManual;
+
+  const openAmount = openBillings.reduce(
+    (s, b) => s + Math.max(0, n(b.amount) - n(b.paidTotal)),
+    0
+  );
+
+  return {
+    receiptsCorrectMonth,
+    mrrReceived,
+    tcvReceived,
+    lateSameMonthValue,
+    lateSameMonthCount,
+    paidDifferentMonthValue,
+    paidDifferentMonthCount,
+    extraRevenueAutomatic,
+    extraRevenueManual,
+    extraRevenueTotal,
+    totalRevenue: receiptsCorrectMonth + extraRevenueTotal,
+    openAmount,
+  };
+}
+
+// ===================================================================
 // Renovações — mês atual e meses à frente (ou atrás, offset negativo)
 // ===================================================================
 

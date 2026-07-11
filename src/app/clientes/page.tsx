@@ -212,8 +212,8 @@ export default async function ClientesPage({
   return (
     <div className="pb-24">
       <PageHeader
-        title="Clientes"
-        description="Carteira de clientes da B2C Gestão"
+        title="Gestão de Carteira"
+        description="Carteira de clientes da B2C Gestão — único local de cadastro e edição de clientes"
         actions={
           <div className="flex flex-wrap gap-2">
             <ContractUploadDialog />

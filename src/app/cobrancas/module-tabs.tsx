@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  */
 const TABS = [
   { href: "/acordos", label: "Acordos" },
-  { href: "/cobrancas", label: "Cobranças" },
+  { href: "/cobrancas", label: "Recebimentos" },
   { href: "/pagamentos", label: "Pagamentos" },
   { href: "/inadimplencia", label: "Inadimplência" },
 ];

@@ -38,6 +38,8 @@ export function BillingFilters({
     { key: "avencer", label: "A vencer", params: { avencer: "1" } },
     { key: "parciais", label: "Parciais", params: { status: "PARTIAL" } },
     { key: "pagas", label: "Pagas", params: { status: "PAID" } },
+    { key: "atrasados", label: "Pagas com atraso", params: { situacao: "atrasado" } },
+    { key: "outro-mes", label: "Pagas em outro mês", params: { situacao: "outro-mes" } },
   ];
   function isActive(p: Record<string, string>) {
     return Object.entries(p).every(([k, v]) => sp.get(k) === v);

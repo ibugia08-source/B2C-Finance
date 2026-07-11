@@ -50,6 +50,7 @@ type Search = {
   vencDe?: string;
   vencAte?: string;
   valorMin?: string;
+  situacao?: string; // atrasado (pago com atraso) | outro-mes (virou Receita Extra)
 };
 
 function periodRange(periodo?: string): { start: Date; end: Date } {
@@ -112,6 +113,9 @@ export default async function CobrancasPage({
     const min = parseBRL(searchParams.valorMin);
     if (min > 0) where.amount = { gte: min };
   }
+  // Fechamento mensal: pagos com atraso (no mês) / pagos em outro mês (Receita Extra)
+  if (searchParams.situacao === "atrasado") where.isLate = true;
+  if (searchParams.situacao === "outro-mes") where.paidInDifferentMonth = true;
 
   const [billingsRaw, kpis, clients, contractsRaw, services, accounts, collectorRows] =
     await Promise.all([
@@ -176,8 +180,8 @@ export default async function CobrancasPage({
   return (
     <div>
       <PageHeader
-        title="Cobranças"
-        description="Contas a receber da agência"
+        title="Recebimentos"
+        description="Cobranças e pagamentos de clientes da agência"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
@@ -255,6 +259,9 @@ export default async function CobrancasPage({
                     </TableCell>
                     <TableCell>
                       {String(b.competenceMonth).padStart(2, "0")}/{b.competenceYear}
+                      <Badge variant="outline" className="ml-1.5 text-[10px] px-1.5">
+                        {b.revenueType}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       {formatDateBR(b.dueDate)}
@@ -270,9 +277,28 @@ export default async function CobrancasPage({
                       {b.openAmount > 0 ? formatBRL(b.openAmount) : "—"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={billingStatusVariant(b.status)}>
-                        {BILLING_STATUS_LABEL[b.status]}
-                      </Badge>
+                      <span className="inline-flex items-center gap-1">
+                        <Badge variant={billingStatusVariant(b.status)}>
+                          {BILLING_STATUS_LABEL[b.status]}
+                        </Badge>
+                        {b.isLate && (
+                          <span
+                            title={`Pago com atraso (venceu ${formatDateBR(b.dueDate)}, pago ${b.paidAt ? formatDateBR(b.paidAt) : "depois"})`}
+                            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold cursor-help dark:bg-amber-500/15 dark:text-amber-400"
+                          >
+                            !
+                          </span>
+                        )}
+                      </span>
+                      {b.paidInDifferentMonth && b.paidAt && (
+                        <Link
+                          href="/receitas"
+                          className="block text-[10px] text-blue-700 dark:text-blue-400 hover:underline mt-0.5"
+                          title="Pago em mês posterior à competência — o mês original permaneceu inadimplente e o valor entrou como Receita Extra no mês do pagamento"
+                        >
+                          → Receita Extra em {String(b.paidAt.getMonth() + 1).padStart(2, "0")}/{b.paidAt.getFullYear()}
+                        </Link>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {COLLECTION_STATUS_LABEL[b.collectionStatus]}

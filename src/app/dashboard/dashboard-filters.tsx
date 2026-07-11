@@ -1,6 +1,6 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PeriodFilter } from "@/components/period-filter";
+import { B2CDateRangePicker } from "@/components/b2c-date-range-picker";
 import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -85,7 +85,7 @@ export function DashboardFilters({
 
   return (
     <div className="space-y-3">
-      <PeriodFilter />
+      <B2CDateRangePicker />
       <div className="flex flex-wrap items-end gap-2">
         <div>
           <Label className="text-xs">Cliente</Label>

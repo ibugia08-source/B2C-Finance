@@ -50,11 +50,12 @@ const OWNED_MODELS = new Set<string>([
   "GeneratedContract",
   "ClientDocument",
   "ClientNote",
-  // Perdas de clientes, Ofertas (Planos) e Upsell
+  // Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra
   "ClientLoss",
   "Offer",
   "OfferService",
   "Upsell",
+  "ExtraRevenue",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

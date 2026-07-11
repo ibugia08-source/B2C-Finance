@@ -41,9 +41,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", short: "Início", icon: LayoutDashboard, primary: true },
   { href: "/rotina", label: "Rotina do dia", short: "Rotina", icon: CalendarCheck2, adminOnly: true },
 
-  { section: "Agência", href: "/clientes", label: "Clientes", icon: Building2, adminOnly: true },
+  { section: "Agência", href: "/clientes", label: "Gestão de Carteira", short: "Carteira", icon: Building2, adminOnly: true },
   { section: "Agência", href: "/contratos", label: "Contratos", icon: FileSignature, adminOnly: true },
-  { section: "Agência", href: "/cobrancas", label: "Cobranças & contratos", short: "Cobranças", icon: HandCoins, adminOnly: true, primary: true },
+  { section: "Agência", href: "/cobrancas", label: "Recebimentos", short: "Receber", icon: HandCoins, adminOnly: true, primary: true },
   { section: "Agência", href: "/folha", label: "Folha", icon: UsersRound, adminOnly: true },
   { section: "Agência", href: "/servicos", label: "Serviços", icon: Package, adminOnly: true },
   { section: "Agência", href: "/ofertas", label: "Planos (Ofertas)", icon: Layers, adminOnly: true },

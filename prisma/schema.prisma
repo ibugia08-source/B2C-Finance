@@ -68,11 +68,12 @@ model User {
   ownedClientDocuments    ClientDocument[]    @relation("OwnerClientDocument")
   ownedClientNotes        ClientNote[]        @relation("OwnerClientNote")
 
-  // ===== Perdas de clientes, Ofertas (Planos) e Upsell =====
+  // ===== Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra =====
   ownedClientLosses   ClientLoss[]   @relation("OwnerClientLoss")
   ownedOffers         Offer[]        @relation("OwnerOffer")
   ownedOfferServices  OfferService[] @relation("OwnerOfferService")
   ownedUpsells        Upsell[]       @relation("OwnerUpsell")
+  ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
 }
 
 model Person {
@@ -667,9 +668,10 @@ model Client {
   documents          ClientDocument[]
   contextNotes       ClientNote[]
 
-  // ===== Perdas (histórico de churn) e Upsell =====
-  losses  ClientLoss[]
-  upsells Upsell[]
+  // ===== Perdas (histórico de churn), Upsell e Receita Extra =====
+  losses        ClientLoss[]
+  upsells       Upsell[]
+  extraRevenues ExtraRevenue[]
 
   @@index([ownerId])
   @@index([status])
@@ -1065,6 +1067,17 @@ model Billing {
   collector        String? // responsável pela cobrança
   canceledAt       DateTime?
   notes            String?
+
+  // ===== Fechamento mensal (regra contábil B2C) =====
+  // isLate: quitada DEPOIS do vencimento mas DENTRO do mês de competência
+  //   → conta no mês, com "!" discreto de atraso.
+  // paidInDifferentMonth: quitada em mês POSTERIOR à competência
+  //   → o mês original permanece inadimplente na contabilidade gerencial e
+  //   o valor entra no mês do pagamento como RECEITA EXTRA automática.
+  isLate               Boolean @default(false)
+  paidInDifferentMonth Boolean @default(false)
+
+  extraRevenue ExtraRevenue? // receita extra automática gerada (recuperação)
   ownerId          String?
   owner            User?            @relation("OwnerBilling", fields: [ownerId], references: [id])
   createdAt        DateTime         @default(now())
@@ -1080,6 +1093,54 @@ model Billing {
   @@index([dueDate])
   @@index([competenceYear, competenceMonth])
   @@index([collectionStatus])
+  @@index([ownerId])
+}
+
+// ===== Receita Extra (camada GERENCIAL do faturamento) ====================
+// Regra oficial: Faturamento = Recebimentos do mês correto + Receitas Extras.
+// Pagamento de cobrança de competência ANTERIOR recebido em mês posterior
+// vira Receita Extra AUTOMÁTICA (RECOVERY_OF_OVERDUE) no mês do pagamento —
+// o mês original permanece inadimplente no fechamento. Idempotência:
+// originBillingId é ÚNICO (nunca há 2 receitas extras para a mesma cobrança).
+// NÃO é caixa (o Payment/Income já registram o dinheiro) — é classificação.
+
+enum ExtraRevenueType {
+  RECOVERY_OF_OVERDUE // recuperação de inadimplência de mês anterior
+  MANUAL_EXTRA_REVENUE // lançamento manual
+  ONE_TIME_SERVICE // serviço pontual
+  ADJUSTMENT // ajuste
+  OTHER
+}
+
+enum ExtraRevenueOrigin {
+  AUTOMATIC
+  MANUAL
+}
+
+model ExtraRevenue {
+  id              String             @id @default(cuid())
+  clientId        String?
+  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // Cobrança original recuperada (única → idempotência da geração automática)
+  originBillingId String?            @unique
+  originBilling   Billing?           @relation(fields: [originBillingId], references: [id], onDelete: SetNull)
+  sourcePaymentId String? // pagamento que originou (rastreio)
+  type            ExtraRevenueType   @default(RECOVERY_OF_OVERDUE)
+  origin          ExtraRevenueOrigin @default(AUTOMATIC)
+  description     String
+  amount          Decimal            @db.Decimal(14, 2)
+  receivedAt      DateTime           @default(now())
+  // Competência ORIGINAL da cobrança recuperada (de onde o valor "veio")
+  originalReferenceMonth Int?
+  originalReferenceYear  Int?
+  ownerId   String?
+  owner     User?    @relation("OwnerExtraRevenue", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([receivedAt])
+  @@index([type])
   @@index([ownerId])
 }
 

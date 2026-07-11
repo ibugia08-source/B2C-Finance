@@ -25,13 +25,15 @@
  * status do cliente (RevenueFilters / DashboardFilters).
  */
 
-// ===== Faturamento MRR/TCV, renovações e perdas =====
+// ===== Faturamento MRR/TCV, recebimentos/receita extra, renovações, perdas =====
 export {
   getPeriodRevenue,
+  getReceiptsSummary,
   getRenewalOutlook,
   getLossSummary,
   computeLossSnapshots,
   type PeriodRevenue,
+  type ReceiptsSummary,
   type RevenueFilters,
   type RenewalWindow,
   type RenewalClient,

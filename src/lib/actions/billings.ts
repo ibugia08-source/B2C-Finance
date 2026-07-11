@@ -134,77 +134,16 @@ export async function registerBillingPayment(
       notes: clean(formData.get("notes")),
     });
 
-    const billing = await prisma.billing.findUnique({
-      where: { id: parsed.billingId },
-      include: { contract: { select: { id: true } } },
-    });
-    if (!billing) return { ok: false, error: "Cobrança não encontrada." };
-    if (billing.status === "CANCELED")
-      return { ok: false, error: "Cobrança cancelada não recebe pagamento." };
+    // Núcleo contábil compartilhado (fechamento mensal + Receita Extra
+    // automática idempotente) — mesma função testada pelos cenários.
+    const { settleBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+    const result = await settleBillingPayment(parsed);
+    if (!result.ok) return result;
 
-    const openAmount = n(billing.amount) - n(billing.paidTotal);
-    if (parsed.amount > openAmount + 0.01) {
-      return {
-        ok: false,
-        error: `Valor maior que o saldo em aberto (${openAmount.toFixed(2)}).`,
-      };
-    }
-
-    const wasOverdue = billing.status === "OVERDUE";
-    const newPaidTotal = n(billing.paidTotal) + parsed.amount;
-    const fullyPaid = newPaidTotal >= n(billing.amount) - 0.01;
-
-    await prisma.payment.create({
-      data: {
-        billingId: billing.id,
-        amount: parsed.amount,
-        paidAt: parsed.paidAt,
-        method: parsed.method,
-        accountId: parsed.accountId,
-        notes: parsed.notes,
-      },
-    });
-
-    // Conciliação caixa ↔ competência: cria a receita recebida (Income)
-    // vinculada à cobrança. Pagamento de vencida = recuperação.
-    await prisma.income.create({
-      data: {
-        description: `${billing.description} (${fullyPaid ? "quitação" : "parcial"})`,
-        amount: parsed.amount,
-        receivedAt: parsed.paidAt,
-        sourceType: parsed.method === "CASH" ? "CASH" : parsed.method === "PIX" ? "PIX" : "BANK_ACCOUNT",
-        incomeType: "SALE",
-        status: "RECEIVED",
-        accountId: parsed.accountId,
-        clientId: billing.clientId,
-        contractId: billing.contractId,
-        billingId: billing.id,
-        revenueType: wasOverdue ? "RECOVERY" : billing.revenueType,
-      },
-    });
-
-    await prisma.billing.update({
-      where: { id: billing.id },
-      data: {
-        paidTotal: newPaidTotal,
-        status: fullyPaid ? "PAID" : "PARTIAL",
-        paidAt: fullyPaid ? parsed.paidAt : null,
-        collectionStatus: fullyPaid ? "PAID" : billing.collectionStatus,
-      },
-    });
-
-    await prisma.collectionHistory.create({
-      data: {
-        billingId: billing.id,
-        clientId: billing.clientId,
-        status: fullyPaid ? "PAID" : "PROMISED",
-        message: fullyPaid
-          ? `Pagamento total registrado (${parsed.method}).`
-          : `Pagamento parcial de R$ ${parsed.amount.toFixed(2)} registrado (${parsed.method}).`,
-      },
-    });
-
-    revalidateBilling(billing.clientId);
+    revalidateBilling(result.clientId);
+    revalidatePath("/receitas");
     return { ok: true };
   } catch (e: any) {
     return {
@@ -214,39 +153,17 @@ export async function registerBillingPayment(
   }
 }
 
-/** Exclui um pagamento e reverte o saldo/status da cobrança. */
+/** Exclui um pagamento e reverte saldo/status/flags e Receita Extra. */
 export async function deleteBillingPayment(id: string): Promise<ActionResult> {
   await requireAdmin();
   try {
-    const payment = await prisma.payment.findUnique({
-      where: { id },
-      include: { billing: true },
-    });
-    if (!payment) return { ok: false, error: "Pagamento não encontrado." };
-
-    const b = payment.billing;
-    const newPaidTotal = Math.max(0, n(b.paidTotal) - n(payment.amount));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const status =
-      newPaidTotal <= 0.01
-        ? b.dueDate < today
-          ? "OVERDUE"
-          : "PENDING"
-        : "PARTIAL";
-
-    await prisma.$transaction([
-      prisma.payment.delete({ where: { id } }),
-      prisma.income.deleteMany({
-        where: { billingId: b.id, amount: n(payment.amount), receivedAt: payment.paidAt },
-      }),
-      prisma.billing.update({
-        where: { id: b.id },
-        data: { paidTotal: newPaidTotal, status, paidAt: null },
-      }),
-    ]);
-
-    revalidateBilling(b.clientId);
+    const { revertBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+    const result = await revertBillingPayment(id);
+    if (!result.ok) return result;
+    revalidateBilling(result.clientId);
+    revalidatePath("/receitas");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o pagamento." };

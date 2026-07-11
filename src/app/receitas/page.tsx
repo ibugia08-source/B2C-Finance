@@ -107,10 +107,20 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
   let ref = new Date();
   if (mesParam) ref = new Date(mesParam.year, mesParam.month - 1, 1);
   const { start, end } = monthRange(ref);
-  const monthIncomes = await prisma.income.findMany({
-    where: { receivedAt: { gte: start, lt: end } },
-    select: { amount: true, status: true },
-  });
+  const [monthIncomes, extraRevenues] = await Promise.all([
+    prisma.income.findMany({
+      where: { receivedAt: { gte: start, lt: end } },
+      select: { amount: true, status: true },
+    }),
+    // Receitas Extras AUTOMÁTICAS do mês (recuperações de inadimplência de
+    // meses anteriores — regra do fechamento mensal).
+    prisma.extraRevenue.findMany({
+      where: { receivedAt: { gte: start, lt: end } },
+      orderBy: { receivedAt: "desc" },
+      include: { client: { select: { id: true, name: true } } },
+    }),
+  ]);
+  const totalExtra = extraRevenues.reduce((s, e) => s + Number(e.amount), 0);
   const totalRecebido = monthIncomes
     .filter((i) => i.status === "RECEIVED")
     .reduce((s, i) => s + i.amount, 0);
@@ -147,11 +157,56 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
         <StatCard title="Recebido no mês" value={formatBRL(totalRecebido)} intent="positive" />
         <StatCard title="Previsto no mês" value={formatBRL(totalPrevisto)} intent="warning" />
         <StatCard title="Atrasado" value={formatBRL(totalAtrasado)} intent="negative" />
+        <StatCard
+          title="Receita Extra (recuperações)"
+          value={formatBRL(totalExtra)}
+          intent={totalExtra > 0 ? "positive" : "default"}
+          hint="inadimplência de meses anteriores recuperada neste mês"
+        />
       </div>
+
+      {extraRevenues.length > 0 && (
+        <Card className="mb-4 border-blue-200 dark:border-blue-500/30">
+          <CardContent className="p-4">
+            <p className="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-400 font-medium mb-2">
+              Receita Extra automática — recuperações de meses anteriores
+            </p>
+            <ul className="space-y-1.5 text-sm">
+              {extraRevenues.map((e) => (
+                <li key={e.id} className="flex flex-wrap justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    {e.client ? (
+                      <a href={`/clientes/${e.client.id}`} className="font-medium hover:underline">
+                        {e.client.name}
+                      </a>
+                    ) : (
+                      <span className="font-medium">—</span>
+                    )}{" "}
+                    <span className="text-muted-foreground">
+                      · competência original{" "}
+                      {e.originalReferenceMonth
+                        ? `${String(e.originalReferenceMonth).padStart(2, "0")}/${e.originalReferenceYear}`
+                        : "—"}
+                    </span>
+                  </span>
+                  <span className="whitespace-nowrap text-muted-foreground">
+                    recebido {formatDateBR(e.receivedAt)} ·{" "}
+                    <strong className="text-emerald-600">{formatBRL(Number(e.amount))}</strong>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Geradas automaticamente quando uma cobrança de competência anterior é paga
+              em mês posterior — o mês original permanece inadimplente no fechamento.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">

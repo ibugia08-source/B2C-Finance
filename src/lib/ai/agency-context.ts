@@ -60,7 +60,7 @@ export async function buildAgencySnapshotText(): Promise<string> {
     }),
   ]);
 
-  const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses } = dash;
+  const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses, receipts } = dash;
   const L: string[] = [];
 
   L.push(`PERÍODO DE REFERÊNCIA: ${period.label} (hoje: ${formatDateBR(new Date())})`);
@@ -97,8 +97,18 @@ export async function buildAgencySnapshotText(): Promise<string> {
   );
 
   L.push(
-    `FATURAMENTO MRR/TCV (período): MRR ${formatBRL(revenue.mrr)} (${revenue.mrrClients} cliente(s) MRR ativo(s)); ` +
-      `TCV ${formatBRL(revenue.tcv)} (${revenue.tcvClients} fechado(s)/renovado(s)); TOTAL ${formatBRL(revenue.total)}. ` +
+    `FATURAMENTO OFICIAL (fechamento mensal): Faturamento = Recebimentos no mês correto + Receitas Extras. ` +
+      `Recebimentos do período ${formatBRL(receipts.receiptsCorrectMonth)} (MRR ${formatBRL(receipts.mrrReceived)} + TCV ${formatBRL(receipts.tcvReceived)}); ` +
+      `Receita Extra ${formatBRL(receipts.extraRevenueTotal)} (${formatBRL(receipts.extraRevenueAutomatic)} recuperação automática de inadimplência de meses anteriores + ${formatBRL(receipts.extraRevenueManual)} avulsas/manuais); ` +
+      `TOTAL ${formatBRL(receipts.totalRevenue)}. ` +
+      `Pagos com atraso (dentro do mês): ${receipts.lateSameMonthCount} (${formatBRL(receipts.lateSameMonthValue)}) — contam no mês, com aviso. ` +
+      `Pagos em MÊS POSTERIOR à competência: ${receipts.paidDifferentMonthCount} (${formatBRL(receipts.paidDifferentMonthValue)}) — NÃO entram no mês original (que permanece inadimplente no fechamento); entram no mês do pagamento como Receita Extra automática, sem duplicidade. ` +
+      `Receita em aberto da competência: ${formatBRL(receipts.openAmount)}.`
+  );
+
+  L.push(
+    `ESPERADO POR COMPETÊNCIA (referência): MRR ${formatBRL(revenue.mrr)} (${revenue.mrrClients} cliente(s) MRR ativo(s)); ` +
+      `TCV ${formatBRL(revenue.tcv)} (${revenue.tcvClients} fechado(s)/renovado(s)); total ${formatBRL(revenue.total)}. ` +
       `Regra: TCV entra CHEIO no mês da adesão/renovação (sem rateio); MRR fatura todo mês em que o cliente está ativo.`
   );
 

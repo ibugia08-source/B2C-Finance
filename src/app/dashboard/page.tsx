@@ -92,6 +92,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const {
     kpis, finance, cash, series, breakdowns, health, alerts, actions,
     revenue, renewalOutlook, losses, clients: clientsBlock, upsell, expenses,
+    receipts,
   } = data;
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
@@ -123,48 +124,76 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         </CardContent>
       </Card>
 
-      {/* ===== Faturamento do período (MRR + TCV) — destaque ===== */}
+      {/* ===== Faturamento do período — regra oficial:
+           Faturamento = Recebimentos no mês correto + Receitas Extras ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Faturamento · {period.label}
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <Card className="border-primary/25 bg-primary/[0.03]">
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
               Faturamento total do período
             </p>
             <p className="text-3xl font-bold mt-1.5 text-primary">
-              {formatBRL(revenue.total)}
+              {formatBRL(receipts.totalRevenue)}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              MRR + TCV do período selecionado
+              recebimentos no mês correto + receitas extras
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Faturamento MRR
+              Recebimentos do período
             </p>
-            <p className="text-2xl font-bold mt-1.5">{formatBRL(revenue.mrr)}</p>
+            <p className="text-2xl font-bold mt-1.5">
+              {formatBRL(receipts.receiptsCorrectMonth)}
+            </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {revenue.mrrClients} cliente{revenue.mrrClients === 1 ? "" : "s"} MRR ativo
-              {revenue.mrrClients === 1 ? "" : "s"}
+              MRR {formatBRL(receipts.mrrReceived)} · TCV {formatBRL(receipts.tcvReceived)}
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Faturamento TCV
-            </p>
-            <p className="text-2xl font-bold mt-1.5">{formatBRL(revenue.tcv)}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {revenue.tcvClients} fechado{revenue.tcvClients === 1 ? "" : "s"}/renovado
-              {revenue.tcvClients === 1 ? "" : "s"} no período · valor cheio no mês da adesão
-            </p>
-          </CardContent>
-        </Card>
+        <Link href="/receitas" className="group">
+          <Card className="h-full transition-shadow group-hover:shadow-md">
+            <CardContent className="p-5">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                Receita Extra
+              </p>
+              <p className="text-2xl font-bold mt-1.5">
+                {formatBRL(receipts.extraRevenueTotal)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatBRL(receipts.extraRevenueAutomatic)} recuperação de inadimplência ·{" "}
+                {formatBRL(receipts.extraRevenueManual)} avulsas
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <StatCard href="/cobrancas" title="MRR recebido"
+          value={formatBRL(receipts.mrrReceived)} intent="positive" />
+        <StatCard href="/cobrancas" title="TCV recebido"
+          value={formatBRL(receipts.tcvReceived)}
+          hint="valor cheio no mês da adesão" />
+        <StatCard href="/cobrancas?situacao=atrasado" title="Pagos com atraso"
+          value={String(receipts.lateSameMonthCount)}
+          intent={receipts.lateSameMonthCount > 0 ? "warning" : "default"}
+          hint={formatBRL(receipts.lateSameMonthValue)} />
+        <StatCard href="/cobrancas?situacao=outro-mes" title="Pagos em outro mês"
+          value={String(receipts.paidDifferentMonthCount)}
+          intent={receipts.paidDifferentMonthCount > 0 ? "warning" : "default"}
+          hint={`${formatBRL(receipts.paidDifferentMonthValue)} → Receita Extra`} />
+        <StatCard href="/cobrancas" title="Receita em aberto"
+          value={formatBRL(receipts.openAmount)}
+          intent={receipts.openAmount > 0 ? "warning" : "positive"}
+          hint="competência do período não quitada" />
+        <StatCard href="/cobrancas" title="Esperado (competência)"
+          value={formatBRL(revenue.total)}
+          hint={`MRR ${formatBRL(revenue.mrr)} · TCV ${formatBRL(revenue.tcv)} · ${revenue.mrrClients} cli. MRR`} />
       </div>
 
       {/* ===== Clientes ===== */}

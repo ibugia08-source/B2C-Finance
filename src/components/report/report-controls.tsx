@@ -1,6 +1,6 @@
 "use client";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PeriodFilter } from "@/components/period-filter";
+import { B2CDateRangePicker } from "@/components/b2c-date-range-picker";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,7 +68,7 @@ export function ReportControls(cfg: ReportControlsConfig) {
 
   return (
     <div className="space-y-3">
-      {has("periodo") && <PeriodFilter />}
+      {has("periodo") && <B2CDateRangePicker />}
 
       {/* Filtros de entidade */}
       <div className="flex flex-wrap items-end gap-2">

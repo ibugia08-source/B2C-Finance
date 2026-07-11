@@ -10,9 +10,11 @@ import {
 import { getDelinquentClients } from "./billing-metrics";
 import {
   getPeriodRevenue,
+  getReceiptsSummary,
   getRenewalOutlook,
   getLossSummary,
   type PeriodRevenue,
+  type ReceiptsSummary,
   type RenewalWindow,
   type LossSummary,
   type RevenueFilters,
@@ -513,6 +515,8 @@ export type ExecutiveDashboard = {
   clients: ClientsBlock;
   upsell: UpsellKpis;
   expenses: ExpenseSummary;
+  // ===== Fechamento mensal: Recebimentos + Receita Extra =====
+  receipts: ReceiptsSummary;
 };
 
 /** Contadores de clientes do mês (com override manual de inadimplência). */
@@ -579,7 +583,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
   const [
     kpis, finance, cash, series, breakdowns, delinquents,
     revenue, renewalOutlook, losses,
-    clients, upsell, expenses,
+    clients, upsell, expenses, receipts,
     dueSoon, renewals,
   ] =
     await Promise.all([
@@ -595,6 +599,7 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
       getClientsBlock(),
       getUpsellKpis(f.period.start, f.period.end),
       getExpenseSummary(f.period.start),
+      getReceiptsSummary(f.period.start, f.period.end, revenueFilters),
       prisma.transaction.aggregate({
         where: {
           type: "despesa",
@@ -695,6 +700,6 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
     kpis, finance, cash, series, breakdowns, health,
     alerts, actions: actions.slice(0, 6),
     revenue, renewalOutlook, losses,
-    clients, upsell, expenses,
+    clients, upsell, expenses, receipts,
   };
 }

@@ -14,13 +14,49 @@ export type Period = {
   label: string;
 };
 
+/** Rótulos dos presets do B2CDateRangePicker (padrão Meta Ads). */
+export const PRESET_LABEL: Record<string, string> = {
+  today: "Hoje",
+  yesterday: "Ontem",
+  today_yesterday: "Hoje e ontem",
+  last_7_days: "Últimos 7 dias",
+  last_14_days: "Últimos 14 dias",
+  last_28_days: "Últimos 28 dias",
+  last_30_days: "Últimos 30 dias",
+  this_week: "Esta semana",
+  last_week: "Semana passada",
+  this_month: "Este mês",
+  last_month: "Mês passado",
+  maximum: "Máximo",
+  custom: "Personalizado",
+};
+
 export function resolvePeriod(searchParams: {
   periodo?: string;
   de?: string;
   ate?: string;
+  date?: string; // "YYYY-MM-DD_YYYY-MM-DD" (B2CDateRangePicker)
+  preset?: string;
 }): Period {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // ===== B2CDateRangePicker: ?date=inicio_fim (inclusivo) + ?preset= =====
+  if (searchParams.date) {
+    const m = searchParams.date.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
+    if (m) {
+      const s = parseDateBR(m[1]);
+      const e = parseDateBR(m[2]);
+      if (s && e) {
+        const end = new Date(e);
+        end.setDate(end.getDate() + 1); // exclusivo
+        const label =
+          (searchParams.preset && PRESET_LABEL[searchParams.preset]) ||
+          "Período personalizado";
+        return { key: "custom", start: s, end, label };
+      }
+    }
+  }
 
   const de = searchParams.de ? parseDateBR(searchParams.de) : null;
   const ate = searchParams.ate ? parseDateBR(searchParams.ate) : null;
