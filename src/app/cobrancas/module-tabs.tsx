@@ -2,12 +2,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Abas do hub de receita — o fluxo completo em um módulo só:
- * Acordos (contratos MRR/TCV que geram as cobranças) → Cobranças →
- * Pagamentos → Inadimplência. Rotas preservadas, navegação em 1 clique.
+ * Abas do módulo Recebimentos — apenas o operacional de cobrança:
+ * Recebimentos (ciclo mensal) → Pagamentos → Inadimplência.
+ * Acordos/contratos ficam FORA deste módulo (a rota /acordos segue viva
+ * para renovações, mas não é exposta aqui — recebimento ≠ contrato).
  */
 const TABS = [
-  { href: "/acordos", label: "Acordos" },
   { href: "/cobrancas", label: "Recebimentos" },
   { href: "/pagamentos", label: "Pagamentos" },
   { href: "/inadimplencia", label: "Inadimplência" },

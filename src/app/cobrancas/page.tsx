@@ -1,13 +1,15 @@
 import { PageHeader } from "@/components/page-header";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
-import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange, parseDateBR, parseBRL } from "@/lib/format";
+import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";
+import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import {
-  markOverdueBillings,
-  getBillingKpis,
-} from "@/lib/services/billing-metrics";
+  ensureMonthlyBillings,
+  cycleStatusOf,
+  CYCLE_STATUS_LABEL,
+  type CycleStatus,
+} from "@/lib/services/receivables-cycle";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -28,110 +30,95 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import Link from "next/link";
+import { AlertCircle, UserPlus } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { BillingDialog } from "./billing-dialog";
 import { BillingActions } from "./row-actions";
-import { BillingFilters } from "./filters";
-import {
-  BILLING_STATUS_LABEL,
-  COLLECTION_STATUS_LABEL,
-  billingStatusVariant,
-} from "./_meta";
+import { MonthNav } from "./month-nav";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
+/**
+ * RECEBIMENTOS — ciclo mensal da carteira (planilha mensal inteligente).
+ * Mês selecionado → clientes que devem pagar no mês → status de cada um.
+ * Cadastro de cliente é SÓ na Gestão de Carteira; contratos DOCX ficam
+ * em /contratos — aqui é apenas cobrança e pagamento do mês.
+ */
+
 type Search = {
-  status?: string;
-  cliente?: string;
-  contrato?: string;
-  servico?: string;
+  mes?: string; // YYYY-MM
+  st?: string; // CycleStatus
   responsavel?: string;
-  periodo?: string; // dia | semana | mes
+  cliente?: string;
+  // compat com links antigos (dashboard/rotina)
+  situacao?: string; // atrasado | outro-mes
   avencer?: string;
-  vencDe?: string;
-  vencAte?: string;
-  valorMin?: string;
-  situacao?: string; // atrasado (pago com atraso) | outro-mes (virou Receita Extra)
+  status?: string; // OVERDUE | PAID (legado)
 };
 
-function periodRange(periodo?: string): { start: Date; end: Date } {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (periodo === "dia") {
-    const end = new Date(today);
-    end.setDate(end.getDate() + 1);
-    return { start: today, end };
-  }
-  if (periodo === "semana") {
-    const start = new Date(today);
-    start.setDate(start.getDate() - start.getDay()); // domingo
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    return { start, end };
-  }
-  return monthRange(now);
+const STATUS_VARIANT: Record<CycleStatus, any> = {
+  UPCOMING: "warning",
+  PAID: "success",
+  PAID_LATE: "success",
+  PAID_OTHER_MONTH: "secondary",
+  OVERDUE: "destructive",
+  PARTIAL: "warning",
+  REMOVED: "outline",
+};
+
+/** Mapeia parâmetros legados para o filtro do ciclo. */
+function legacyStatus(sp: Search): CycleStatus | "" {
+  if (sp.st) return sp.st as CycleStatus;
+  if (sp.situacao === "atrasado") return "PAID_LATE";
+  if (sp.situacao === "outro-mes") return "PAID_OTHER_MONTH";
+  if (sp.avencer === "1") return "UPCOMING";
+  if (sp.status === "OVERDUE") return "OVERDUE";
+  if (sp.status === "PAID") return "PAID";
+  return "";
 }
 
-export default async function CobrancasPage({
+export default async function RecebimentosPage({
   searchParams,
 }: {
   searchParams: Search;
 }) {
   await requireAdmin();
 
-  // Atualização automática de vencidas (barata e idempotente).
+  const now = new Date();
+  const mes = parseMonthParam(searchParams.mes) ?? {
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  };
+
+  // Manutenção do ciclo: marca vencidas + gera as mensalidades MRR que faltam.
   await markOverdueBillings();
+  await ensureMonthlyBillings(mes.month, mes.year);
 
-  const { start: pStart, end: pEnd } = periodRange(searchParams.periodo);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const where: any = {};
-  if (searchParams.status) where.status = searchParams.status;
-  if (searchParams.cliente) where.clientId = searchParams.cliente;
-  if (searchParams.contrato) where.contractId = searchParams.contrato;
-  if (searchParams.servico) where.serviceId = searchParams.servico;
-  if (searchParams.responsavel) where.collector = searchParams.responsavel;
-  if (searchParams.avencer === "1") {
-    where.status = { in: ["PENDING", "PARTIAL"] };
-    where.dueDate = { gte: today };
-  }
-  if (searchParams.periodo) {
-    where.dueDate = { ...(where.dueDate ?? {}), gte: pStart, lt: pEnd };
-  }
-  if (searchParams.vencDe || searchParams.vencAte) {
-    const range: any = { ...(where.dueDate ?? {}) };
-    const de = searchParams.vencDe ? parseDateBR(searchParams.vencDe) : null;
-    const ate = searchParams.vencAte ? parseDateBR(searchParams.vencAte) : null;
-    if (de) range.gte = de;
-    if (ate) {
-      ate.setDate(ate.getDate() + 1);
-      range.lt = ate;
-    }
-    where.dueDate = range;
-  }
-  if (searchParams.valorMin) {
-    const min = parseBRL(searchParams.valorMin);
-    if (min > 0) where.amount = { gte: min };
-  }
-  // Fechamento mensal: pagos com atraso (no mês) / pagos em outro mês (Receita Extra)
-  if (searchParams.situacao === "atrasado") where.isLate = true;
-  if (searchParams.situacao === "outro-mes") where.paidInDifferentMonth = true;
-
-  const [billingsRaw, kpis, clients, contractsRaw, services, accounts, collectorRows] =
+  const [billingsRaw, clients, contractsRaw, services, accounts, respRows] =
     await Promise.all([
       prisma.billing.findMany({
-        where,
+        where: {
+          competenceMonth: mes.month,
+          competenceYear: mes.year,
+          ...(searchParams.cliente ? { clientId: searchParams.cliente } : {}),
+        },
         orderBy: [{ dueDate: "asc" }],
-        take: 300,
+        take: 500,
         include: {
-          client: { select: { id: true, name: true, phone: true } },
+          client: {
+            select: {
+              id: true, name: true, phone: true, modality: true,
+              startedAt: true, createdAt: true, paymentDay: true, salesOwner: true,
+            },
+          },
           contract: { select: { title: true } },
           service: { select: { name: true } },
           _count: { select: { history: true } },
         },
       }),
-      getBillingKpis(pStart, pEnd),
-      prisma.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.client.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
       prisma.contract.findMany({
         orderBy: { title: "asc" },
         select: { id: true, title: true, clientId: true },
@@ -141,54 +128,126 @@ export default async function CobrancasPage({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
       }),
-      prisma.account.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      prisma.billing.findMany({
-        where: { collector: { not: null } },
-        distinct: ["collector"],
-        select: { collector: true },
+      prisma.account.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+      prisma.client.findMany({
+        where: { salesOwner: { not: null } },
+        distinct: ["salesOwner"],
+        select: { salesOwner: true },
+        orderBy: { salesOwner: "asc" },
       }),
     ]);
 
-  const billings = billingsRaw.map((b) => {
-    const amount = Number(b.amount);
-    const paidTotal = Number(b.paidTotal);
-    const daysOverdue =
-      b.status === "OVERDUE"
-        ? Math.max(1, Math.floor((today.getTime() - b.dueDate.getTime()) / 86_400_000))
-        : 0;
-    return {
-      ...b,
-      amount,
-      paidTotal,
-      openAmount: amount - paidTotal,
-      daysOverdue,
-    };
+  const today = new Date();
+
+  // Linhas do ciclo com status derivado (interface simples).
+  const rows = billingsRaw
+    .map((b) => {
+      const amount = Number(b.amount);
+      const paidTotal = Number(b.paidTotal);
+      const { status, daysLate } = cycleStatusOf(
+        {
+          id: b.id, status: b.status, isLate: b.isLate,
+          paidInDifferentMonth: b.paidInDifferentMonth,
+          dueDate: b.dueDate, paidAt: b.paidAt,
+        },
+        today
+      );
+      const responsible = b.collector ?? b.client.salesOwner ?? null;
+      return {
+        ...b,
+        amount,
+        paidTotal,
+        openAmount: Math.max(0, amount - paidTotal),
+        cycleStatus: status,
+        daysLate,
+        responsible,
+        entryDate: b.client.startedAt ?? b.client.createdAt,
+      };
+    })
+    // Removidos do mês ficam ocultos (a geração não os recria), a menos
+    // que o filtro peça explicitamente.
+    .filter((r) =>
+      legacyStatus(searchParams) === "REMOVED"
+        ? r.cycleStatus === "REMOVED"
+        : r.cycleStatus !== "REMOVED"
+    )
+    .sort((a, b) => a.client.name.localeCompare(b.client.name, "pt-BR"));
+
+  // ===== KPIs do mês (antes dos filtros de visualização) =====
+  const kAReceber = rows.reduce((s, r) => s + r.amount, 0);
+  const kRecebido = rows.reduce((s, r) => s + r.paidTotal, 0);
+  const kAVencer = rows
+    .filter((r) => r.cycleStatus === "UPCOMING" || r.cycleStatus === "PARTIAL")
+    .reduce((s, r) => s + r.openAmount, 0);
+  const kVencido = rows
+    .filter((r) => r.cycleStatus === "OVERDUE")
+    .reduce((s, r) => s + r.openAmount, 0);
+  const kPagos = rows.filter(
+    (r) => r.cycleStatus === "PAID" || r.cycleStatus === "PAID_LATE"
+  ).length;
+  const kDevendo = rows.filter(
+    (r) => r.cycleStatus === "OVERDUE" || r.cycleStatus === "PARTIAL"
+  ).length;
+
+  // ===== Filtros de visualização =====
+  const stFilter = legacyStatus(searchParams);
+  const respFilter = searchParams.responsavel ?? "";
+  const visible = rows.filter((r) => {
+    if (stFilter && stFilter !== "REMOVED" && r.cycleStatus !== stFilter) return false;
+    if (respFilter && r.responsible !== respFilter) return false;
+    return true;
   });
 
-  const collectors = collectorRows.map((r) => r.collector!).filter(Boolean).sort();
+  const responsibles = respRows.map((r) => r.salesOwner!).filter(Boolean);
 
-  const msgInput = (b: (typeof billings)[number]): BillingMessageInput => ({
-    clientName: b.client.name,
-    openAmount: formatBRL(b.openAmount),
-    dueDate: formatDateBR(b.dueDate),
-    daysOverdue: b.daysOverdue,
-    serviceNames: [b.service?.name ?? b.contract?.title ?? ""].filter(Boolean),
-    hasPromise: b.collectionStatus === "PROMISED",
-    contactCount: b._count.history,
+  const chipHref = (params: Record<string, string>) => {
+    const spNew = new URLSearchParams();
+    if (searchParams.mes) spNew.set("mes", searchParams.mes);
+    if (searchParams.responsavel) spNew.set("responsavel", searchParams.responsavel);
+    for (const [k, v] of Object.entries(params)) if (v) spNew.set(k, v);
+    const qs = spNew.toString();
+    return qs ? `/cobrancas?${qs}` : "/cobrancas";
+  };
+
+  const CHIPS: { label: string; st: string }[] = [
+    { label: "Todos", st: "" },
+    { label: "A vencer", st: "UPCOMING" },
+    { label: "Pagos", st: "PAID" },
+    { label: "Pagos com atraso", st: "PAID_LATE" },
+    { label: "Inadimplentes", st: "OVERDUE" },
+    { label: "Recebidos em outro mês", st: "PAID_OTHER_MONTH" },
+    { label: "Removidos do mês", st: "REMOVED" },
+  ];
+
+  const msgInput = (r: (typeof rows)[number]): BillingMessageInput => ({
+    clientName: r.client.name,
+    openAmount: formatBRL(r.openAmount),
+    dueDate: formatDateBR(r.dueDate),
+    daysOverdue: r.cycleStatus === "OVERDUE" ? r.daysLate : 0,
+    serviceNames: [r.service?.name ?? r.contract?.title ?? ""].filter(Boolean),
+    hasPromise: r.collectionStatus === "PROMISED",
+    contactCount: r._count.history,
   });
+
+  const monthLabelStr = new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(mes.year, mes.month - 1, 1));
 
   return (
     <div>
       <PageHeader
         title="Recebimentos"
-        description="Cobranças e pagamentos de clientes da agência"
+        description={`Ciclo mensal de pagamentos da carteira · ${monthLabelStr}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
-              <Link href="/inadimplencia">Inadimplência</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/pagamentos">Pagamentos</Link>
+              <Link href="/clientes" title="O cadastro de clientes é feito na Gestão de Carteira">
+                <UserPlus className="h-4 w-4 mr-1" /> Cadastrar cliente na Carteira
+              </Link>
             </Button>
             <BillingDialog clients={clients} contracts={contractsRaw} services={services} />
           </div>
@@ -197,31 +256,44 @@ export default async function CobrancasPage({
 
       <CobrancasTabs active="/cobrancas" />
 
-      <div className="mb-3 print:hidden">
-        <SavedViews module="cobrancas" />
+      {/* ===== Filtro mensal (modo mês) ===== */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <MonthNav month={mes.month} year={mes.year} />
+        {responsibles.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">Responsável:</span>
+            <Link href={chipHref({ st: stFilter })}>
+              <Badge variant={!respFilter ? "default" : "outline"}>Todos</Badge>
+            </Link>
+            {responsibles.map((r) => (
+              <Link key={r} href={chipHref({ st: stFilter, responsavel: respFilter === r ? "" : r })}>
+                <Badge variant={respFilter === r ? "default" : "outline"}>{r}</Badge>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-4">
-        <StatCard title="Total a receber" value={formatBRL(kpis.totalAReceber)} />
-        <StatCard title="Recebido no período" value={formatBRL(kpis.recebidoPeriodo)} intent="positive" />
-        <StatCard title="Vencido" value={formatBRL(kpis.totalVencido)}
-          intent={kpis.totalVencido > 0 ? "negative" : "default"} />
-        <StatCard title="A vencer" value={formatBRL(kpis.totalAVencer)} intent="warning" />
-        <StatCard title="Parcial" value={formatBRL(kpis.totalParcial)} />
-        <StatCard title="Clientes inadimplentes" value={String(kpis.clientesInadimplentes)}
-          intent={kpis.clientesInadimplentes > 0 ? "negative" : "positive"} />
+      {/* ===== KPIs do mês ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+        <StatCard title="A receber no mês" value={formatBRL(kAReceber)} />
+        <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive" />
+        <StatCard title="A vencer" value={formatBRL(kAVencer)} intent="warning" />
+        <StatCard title="Vencido" value={formatBRL(kVencido)}
+          intent={kVencido > 0 ? "negative" : "default"} />
+        <StatCard title="Clientes pagos" value={String(kPagos)} intent="positive" />
+        <StatCard title="Clientes devendo" value={String(kDevendo)}
+          intent={kDevendo > 0 ? "negative" : "positive"} />
       </div>
 
-      <Card className="mb-4">
-        <CardContent className="p-4">
-          <BillingFilters
-            clients={clients.map((c) => ({ value: c.id, label: c.name }))}
-            contracts={contractsRaw.map((c) => ({ value: c.id, label: c.title }))}
-            services={services.map((s) => ({ value: s.id, label: s.name }))}
-            collectors={collectors}
-          />
-        </CardContent>
-      </Card>
+      {/* ===== Chips de status ===== */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+        {CHIPS.map((c) => (
+          <Link key={c.label} href={chipHref({ st: c.st })}>
+            <Badge variant={stFilter === c.st ? "default" : "outline"}>{c.label}</Badge>
+          </Link>
+        ))}
+      </div>
 
       <Card>
         <CardContent className="p-0">
@@ -229,86 +301,101 @@ export default async function CobrancasPage({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Cliente / descrição</TableHead>
-                  <TableHead>Referência</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Modalidade</TableHead>
+                  <TableHead>Entrada</TableHead>
                   <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Esperado</TableHead>
-                  <TableHead className="text-right">Recebido</TableHead>
-                  <TableHead className="text-right">Em aberto</TableHead>
+                  <TableHead className="text-right">Valor do mês</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Cobrança</TableHead>
+                  <TableHead>Pago em</TableHead>
+                  <TableHead>Responsável</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {billings.length === 0 && (
+                {visible.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
-                      Nenhuma cobrança encontrada. Gere cobranças a partir dos
-                      acordos (em /acordos) ou crie uma cobrança manual.
+                      Nenhum recebimento neste ciclo. Clientes MRR ativos entram
+                      automaticamente; adicione uma cobrança avulsa ao mês ou{" "}
+                      <Link href="/clientes" className="underline">
+                        cadastre o cliente na Gestão de Carteira
+                      </Link>.
                     </TableCell>
                   </TableRow>
                 )}
-                {billings.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="max-w-[240px]">
-                      <Link href={`/clientes/${b.client.id}`} className="font-medium hover:underline">
-                        {b.client.name}
-                      </Link>
-                      <p className="text-xs text-muted-foreground truncate">{b.description}</p>
-                    </TableCell>
-                    <TableCell>
-                      {String(b.competenceMonth).padStart(2, "0")}/{b.competenceYear}
-                      <Badge variant="outline" className="ml-1.5 text-[10px] px-1.5">
-                        {b.revenueType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {formatDateBR(b.dueDate)}
-                      {b.daysOverdue > 0 && (
-                        <p className="text-xs text-destructive">{b.daysOverdue}d atraso</p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">{formatBRL(b.amount)}</TableCell>
-                    <TableCell className="text-right text-emerald-600">
-                      {b.paidTotal > 0 ? formatBRL(b.paidTotal) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {b.openAmount > 0 ? formatBRL(b.openAmount) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1">
-                        <Badge variant={billingStatusVariant(b.status)}>
-                          {BILLING_STATUS_LABEL[b.status]}
-                        </Badge>
-                        {b.isLate && (
+                {visible.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="max-w-[220px]">
+                      <span className="flex items-center gap-1.5">
+                        <Link
+                          href={`/clientes/${r.client.id}`}
+                          className="font-medium hover:underline truncate"
+                        >
+                          {r.client.name}
+                        </Link>
+                        {(r.cycleStatus === "OVERDUE" || r.cycleStatus === "PAID_LATE") && (
                           <span
-                            title={`Pago com atraso (venceu ${formatDateBR(b.dueDate)}, pago ${b.paidAt ? formatDateBR(b.paidAt) : "depois"})`}
-                            className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold cursor-help dark:bg-amber-500/15 dark:text-amber-400"
+                            title="Pagamento em atraso em relação à data de vencimento."
+                            className="cursor-help"
                           >
-                            !
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                           </span>
                         )}
                       </span>
-                      {b.paidInDifferentMonth && b.paidAt && (
-                        <Link
-                          href="/receitas"
-                          className="block text-[10px] text-blue-700 dark:text-blue-400 hover:underline mt-0.5"
-                          title="Pago em mês posterior à competência — o mês original permaneceu inadimplente e o valor entrou como Receita Extra no mês do pagamento"
-                        >
-                          → Receita Extra em {String(b.paidAt.getMonth() + 1).padStart(2, "0")}/{b.paidAt.getFullYear()}
-                        </Link>
+                      <p className="text-xs text-muted-foreground truncate">{r.description}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={r.revenueType === "MRR" ? "default" : "secondary"}>
+                        {r.revenueType}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {r.entryDate ? formatDateBR(r.entryDate) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDateBR(r.dueDate)}
+                      {r.client.paymentDay && (
+                        <p className="text-[11px] text-muted-foreground">
+                          todo dia {r.client.paymentDay}
+                        </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {COLLECTION_STATUS_LABEL[b.collectionStatus]}
-                      {b.collector && <p>por {b.collector}</p>}
+                    <TableCell className="text-right font-medium">
+                      {formatBRL(r.amount)}
+                      {r.cycleStatus === "PARTIAL" && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {formatBRL(r.openAmount)} em aberto
+                        </p>
+                      )}
                     </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[r.cycleStatus]}>
+                        {CYCLE_STATUS_LABEL[r.cycleStatus]}
+                      </Badge>
+                      <p className="text-[11px] mt-0.5 text-muted-foreground">
+                        {r.cycleStatus === "OVERDUE" ? (
+                          <span className="text-destructive font-medium">
+                            ! {r.daysLate} dia{r.daysLate === 1 ? "" : "s"} em atraso
+                          </span>
+                        ) : r.cycleStatus === "PAID_LATE" ? (
+                          `pago com ${r.daysLate} dia${r.daysLate === 1 ? "" : "s"} de atraso`
+                        ) : r.cycleStatus === "PAID_OTHER_MONTH" ? (
+                          "→ Receita Extra no mês do pagamento"
+                        ) : (
+                          "Em dia"
+                        )}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {r.paidAt ? formatDateBR(r.paidAt) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm">{r.responsible ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       <BillingActions
-                        billing={b}
-                        messageInput={msgInput(b)}
-                        phone={b.client.phone}
+                        billing={r}
+                        messageInput={msgInput(r)}
+                        phone={r.client.phone}
                         accounts={accounts}
                         clients={clients}
                         contracts={contractsRaw}
@@ -321,42 +408,47 @@ export default async function CobrancasPage({
             </Table>
           </div>
 
+          {/* Mobile */}
           <MobileCards>
-            {billings.length === 0 ? (
+            {visible.length === 0 ? (
               <MobileEmpty>
-                Nenhuma cobrança encontrada. Gere cobranças pelos contratos ou crie
-                uma manual.
+                Nenhum recebimento neste ciclo. Clientes MRR ativos entram
+                automaticamente no mês.
               </MobileEmpty>
             ) : (
-              billings.map((b) => (
-                <MobileCard key={b.id}>
+              visible.map((r) => (
+                <MobileCard key={r.id}>
                   <MobileCardHeader
-                    title={b.client.name}
+                    title={
+                      <Link href={`/clientes/${r.client.id}`} className="hover:underline">
+                        {r.client.name}
+                      </Link>
+                    }
                     aside={
-                      <Badge variant={billingStatusVariant(b.status)}>
-                        {BILLING_STATUS_LABEL[b.status]}
+                      <Badge variant={STATUS_VARIANT[r.cycleStatus]}>
+                        {CYCLE_STATUS_LABEL[r.cycleStatus]}
                       </Badge>
                     }
                   />
-                  <p className="text-xs text-muted-foreground -mt-1">{b.description}</p>
                   <div className="space-y-1.5">
-                    <Field label="Vencimento">
-                      {formatDateBR(b.dueDate)}
-                      {b.daysOverdue > 0 ? ` (${b.daysOverdue}d)` : ""}
+                    <Field label="Modalidade">{r.revenueType}</Field>
+                    <Field label="Vencimento">{formatDateBR(r.dueDate)}</Field>
+                    <Field label="Valor do mês">{formatBRL(r.amount)}</Field>
+                    <Field label="Situação">
+                      {r.cycleStatus === "OVERDUE"
+                        ? `! ${r.daysLate}d em atraso`
+                        : r.cycleStatus === "PAID_LATE"
+                          ? `pago com ${r.daysLate}d de atraso`
+                          : "Em dia"}
                     </Field>
-                    <Field label="Esperado">{formatBRL(b.amount)}</Field>
-                    <Field label="Em aberto">
-                      {b.openAmount > 0 ? formatBRL(b.openAmount) : "—"}
-                    </Field>
-                    <Field label="Cobrança">
-                      {COLLECTION_STATUS_LABEL[b.collectionStatus]}
-                    </Field>
+                    <Field label="Pago em">{r.paidAt ? formatDateBR(r.paidAt) : "—"}</Field>
+                    <Field label="Responsável">{r.responsible ?? "—"}</Field>
                   </div>
                   <MobileCardActions>
                     <BillingActions
-                      billing={b}
-                      messageInput={msgInput(b)}
-                      phone={b.client.phone}
+                      billing={r}
+                      messageInput={msgInput(r)}
+                      phone={r.client.phone}
                       accounts={accounts}
                       clients={clients}
                       contracts={contractsRaw}
@@ -369,6 +461,13 @@ export default async function CobrancasPage({
           </MobileCards>
         </CardContent>
       </Card>
+
+      <p className="mt-3 text-xs text-muted-foreground print:hidden">
+        Clientes MRR ativos entram automaticamente no ciclo do mês. Perdidos e
+        pausados não entram; TCV entra apenas no mês de adesão/renovação.
+        Removidos do mês não são recriados. O cadastro de clientes é feito na{" "}
+        <Link href="/clientes" className="underline">Gestão de Carteira</Link>.
+      </p>
     </div>
   );
 }

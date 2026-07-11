@@ -1,5 +1,6 @@
 "use client";
 import { useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   DollarSign,
@@ -8,6 +9,7 @@ import {
   CalendarClock,
   Handshake,
   Pencil,
+  Eye,
   Ban,
 } from "lucide-react";
 import { cancelBilling } from "@/lib/actions/billings";
@@ -109,14 +111,26 @@ export function BillingActions({
           }
         />
       )}
+      {billing.client?.id && (
+        <Button variant="ghost" size="icon" asChild title="Ver cliente (Gestão de Carteira)">
+          <Link href={`/clientes/${billing.client.id}`}>
+            <Eye className="h-4 w-4" />
+          </Link>
+        </Button>
+      )}
       {open && (
         <Button
           variant="ghost"
           size="icon"
-          title="Cancelar cobrança"
+          title="Remover deste mês (não será recriado pela geração automática)"
           disabled={pending}
           onClick={() => {
-            if (!confirm(`Cancelar a cobrança "${billing.description}"?`)) return;
+            if (
+              !confirm(
+                `Remover "${billing.description}" do ciclo deste mês?\n\nA cobrança é cancelada e NÃO será recriada automaticamente.`
+              )
+            )
+              return;
             start(async () => {
               const res = await cancelBilling(billing.id);
               if (!res.ok) alert(res.error);
