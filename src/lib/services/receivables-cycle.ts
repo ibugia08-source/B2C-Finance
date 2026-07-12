@@ -95,7 +95,8 @@ export type CycleStatus =
   | "PAID" // Pago no prazo
   | "PAID_LATE" // Pago com atraso (dentro do mês)
   | "PAID_OTHER_MONTH" // Recebido em outro mês (virou Receita Extra)
-  | "OVERDUE" // Inadimplente
+  | "OVERDUE" // Vencido (passou do vencimento e não pagou — automático)
+  | "DELINQUENT" // Inadimplente (marcação manual na lista)
   | "PARTIAL" // Parcialmente pago (interno)
   | "REMOVED"; // Removido do mês (cancelada)
 
@@ -104,7 +105,8 @@ export const CYCLE_STATUS_LABEL: Record<CycleStatus, string> = {
   PAID: "Pago",
   PAID_LATE: "Pago com atraso",
   PAID_OTHER_MONTH: "Recebido em outro mês",
-  OVERDUE: "Inadimplente",
+  OVERDUE: "Vencido",
+  DELINQUENT: "Inadimplente",
   PARTIAL: "Parcial",
   REMOVED: "Removido do mês",
 };
@@ -117,6 +119,8 @@ export type CycleRow = {
     paidInDifferentMonth: boolean;
     dueDate: Date;
     paidAt: Date | null;
+    /** collectionStatus ESCALATED = marcado manualmente como Inadimplente */
+    collectionStatus?: string | null;
   };
 };
 
@@ -137,12 +141,13 @@ export function cycleStatusOf(
     if (b.isLate) return { status: "PAID_LATE", daysLate };
     return { status: "PAID", daysLate: 0 };
   }
-  if (b.dueDate < t) {
-    return {
-      status: "OVERDUE",
-      daysLate: Math.max(1, Math.floor((t.getTime() - b.dueDate.getTime()) / msDay)),
-    };
-  }
+  const daysLate =
+    b.dueDate < t
+      ? Math.max(1, Math.floor((t.getTime() - b.dueDate.getTime()) / msDay))
+      : 0;
+  // Inadimplente = decisão manual (vale mesmo antes do vencimento).
+  if (b.collectionStatus === "ESCALATED") return { status: "DELINQUENT", daysLate };
+  if (daysLate > 0) return { status: "OVERDUE", daysLate };
   if (b.status === "PARTIAL") return { status: "PARTIAL", daysLate: 0 };
   return { status: "UPCOMING", daysLate: 0 };
 }

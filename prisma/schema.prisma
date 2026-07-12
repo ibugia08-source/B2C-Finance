@@ -632,6 +632,8 @@ model Client {
   renewalMonth Int?
   // Valor mensal de referência (base para MRR até existirem contratos — Etapa 3).
   monthlyValue Decimal?     @db.Decimal(14, 2)
+  // Prazo do contrato em meses — editável inline em Recebimentos/Carteira.
+  contractMonths Int?
   startedAt    DateTime? // início da relação comercial
   churnedAt    DateTime? // data de saída (preenchida quando CHURNED)
   notes        String?

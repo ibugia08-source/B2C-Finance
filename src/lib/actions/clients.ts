@@ -477,6 +477,8 @@ const BulkSchema = z.object({
   status: z.nativeEnum(ClientStatus).nullish(),
   salesOwner: z.string().trim().nullish(),
   renewalMonth: z.number().int().min(1).max(12).nullish(),
+  modality: z.nativeEnum(ClientModality).nullish(),
+  paymentDay: z.number().int().min(1).max(28).nullish(),
 });
 
 /**
@@ -489,6 +491,8 @@ export async function bulkUpdateClients(input: {
   status?: string | null;
   salesOwner?: string | null;
   renewalMonth?: number | null;
+  modality?: string | null;
+  paymentDay?: number | null;
 }): Promise<ActionResult> {
   await requireAdmin();
   try {
@@ -498,6 +502,8 @@ export async function bulkUpdateClients(input: {
       salesOwner:
         input.salesOwner === undefined ? undefined : (input.salesOwner || null),
       renewalMonth: input.renewalMonth ?? undefined,
+      modality: input.modality ? (input.modality as ClientModality) : undefined,
+      paymentDay: input.paymentDay ?? undefined,
     });
 
     const data: Record<string, any> = {};
@@ -509,6 +515,10 @@ export async function bulkUpdateClients(input: {
     }
     if (parsed.salesOwner !== undefined) data.salesOwner = parsed.salesOwner;
     if (parsed.renewalMonth !== undefined) data.renewalMonth = parsed.renewalMonth;
+    if (parsed.modality !== undefined && parsed.modality !== null)
+      data.modality = parsed.modality;
+    if (parsed.paymentDay !== undefined && parsed.paymentDay !== null)
+      data.paymentDay = parsed.paymentDay;
 
     if (Object.keys(data).length === 0)
       return { ok: false, error: "Nada para atualizar." };
