@@ -3,11 +3,11 @@
  *  1. Venc. 15/06, pago 15/06  → Junho recebe; sem atraso; sem Receita Extra.
  *  2. Venc. 15/06, pago 25/06  → Junho recebe; "pago com atraso"; sem R.E.
  *  3. Venc. 15/06, pago 02/07  → Junho NÃO recebe (fica inadimplente no
- *     fechamento); Julho ganha Receita Extra automática vinculada; sem
- *     duplicidade; cobrança de Julho não é afetada.
+ *     fechamento); Julho ganha a RECUPERAÇÃO via pagamentos — SEM criar
+ *     Receita Extra (Receita Extra é apenas manual); cobrança de Julho
+ *     não é afetada.
  *  4. TCV 6.000 pago em Junho  → Junho recebe 6.000; Julho zerado (sem rateio).
- *  + Idempotência: nunca 2 Receitas Extras automáticas para a mesma cobrança.
- *  + Reversão: excluir o pagamento remove a Receita Extra e as flags.
+ *  + Reversão: excluir o pagamento zera a recuperação e as flags.
  *
  * Usa o MESMO código de produção (settleBillingPayment / getReceiptsSummary).
  * Dados de teste marcados com TAG e removidos ao final (asserts por DELTA
@@ -118,36 +118,13 @@ async function main() {
       assert(r3.ok === true, "pagamento aceito");
       if (r3.ok) {
         assert(r3.paidInDifferentMonth === true, "flag pago em outro mês");
-        assert(r3.extraRevenueId != null, "Receita Extra automática criada");
       }
-      const er3 = await prisma.extraRevenue.findFirst({
+      // Regra atual: Receita Extra é APENAS manual — o pagamento em mês
+      // posterior fica como inadimplência regularizada, sem registro de ER.
+      const er3Count = await prisma.extraRevenue.count({
         where: { originBillingId: b3.id },
       });
-      assert(!!er3, "R.E. vinculada à cobrança original (originBillingId)");
-      assert(
-        er3?.originalReferenceMonth === 6 && er3?.originalReferenceYear === 2026,
-        "R.E. guarda a competência original (06/2026)"
-      );
-
-      // Idempotência: 2ª R.E. automática para a MESMA cobrança deve falhar
-      let dupBlocked = false;
-      try {
-        await prisma.extraRevenue.create({
-          data: {
-            clientId: client.id,
-            originBillingId: b3.id,
-            description: `${TAG} duplicata proibida`,
-            amount: 1,
-          },
-        });
-      } catch (e: any) {
-        dupBlocked = e?.code === "P2002" || /unique/i.test(String(e?.message));
-      }
-      assert(dupBlocked, "constraint única impede R.E. duplicada (P2002)");
-      const erCount = await prisma.extraRevenue.count({
-        where: { originBillingId: b3.id },
-      });
-      assert(erCount === 1, "exatamente 1 Receita Extra para a cobrança");
+      assert(er3Count === 0, "NÃO cria Receita Extra automática (regra: só manual)");
 
       // ===== Fechamento: deltas de Junho e Julho =====
       console.log("Fechamento mensal (deltas nos resumos):");
@@ -183,11 +160,11 @@ async function main() {
       );
       assert(
         close(dJul("extraRevenueAutomatic"), 1000),
-        "Julho: Receita Extra automática = R$ 1.000"
+        "Julho: recuperação de inadimplência = R$ 1.000 (via pagamentos, sem ER)"
       );
       assert(
         close(dJul("totalRevenue"), 1000),
-        "Julho: faturamento total ganhou só a Receita Extra (sem duplicidade)"
+        "Julho: faturamento total ganhou só a recuperação (sem duplicidade)"
       );
 
       // ===== Reversão: excluir o pagamento de C3 =====
@@ -195,10 +172,11 @@ async function main() {
       if (r3.ok) {
         const rev = await revertBillingPayment(r3.paymentId);
         assert(rev.ok === true, "pagamento revertido");
-        const erAfter = await prisma.extraRevenue.count({
-          where: { originBillingId: b3.id },
-        });
-        assert(erAfter === 0, "Receita Extra removida na reversão");
+        const julReverted = await getReceiptsSummary(JUL.start, JUL.end);
+        assert(
+          close(Number(julReverted.paidDifferentMonthValue) - Number(julBefore.paidDifferentMonthValue), 0),
+          "recuperação de Julho zerada após reversão"
+        );
         const b3After = await prisma.billing.findUnique({ where: { id: b3.id } });
         assert(
           b3After?.paidInDifferentMonth === false && b3After?.isLate === false,

@@ -14,13 +14,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { UserPlus, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { getReceiptsSummary } from "@/lib/services/revenue-metrics";
 import { BillingDialog } from "./billing-dialog";
 import { MonthNav } from "./month-nav";
 import { CycleFilters } from "./cycle-filters";
 import { ClientSearch } from "./search-client";
+import { PastDelinquencyDialog } from "./past-delinquency-dialog";
 import { ReceivablesTable, type ReceivableRow } from "./receivables-table";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
@@ -92,11 +92,6 @@ export default async function RecebimentosPage({
   // Manutenção do ciclo: marca vencidas + gera as mensalidades MRR que faltam.
   await markOverdueBillings();
   await ensureMonthlyBillings(mes.month, mes.year);
-
-  // Receita Extra do mês (recuperações automáticas) — camada central de cálculo.
-  const monthStart = new Date(mes.year, mes.month - 1, 1);
-  const monthEnd = new Date(mes.year, mes.month, 1);
-  const receipts = await getReceiptsSummary(monthStart, monthEnd);
 
   const [billingsRaw, activeClients, allClients, contractsRaw, services, accounts, respRows] =
     await Promise.all([
@@ -283,10 +278,11 @@ export default async function RecebimentosPage({
     stFilter === "REMOVED" ? r.cycleStatus === "REMOVED" : r.cycleStatus !== "REMOVED"
   );
 
-  // ===== KPIs do mês (sobre as cobranças, antes dos filtros de visualização) =====
+  // ===== Painel do mês (5 métricas, sobre as cobranças do ciclo) =====
   const chargeRows = baseRows.filter((r) => r.billingId && r.cycleStatus !== "REMOVED");
   const paidOf = (r: Row) => r.amountDue - r.openAmount;
-  const kAReceber = chargeRows.reduce((s, r) => s + r.amountDue, 0);
+  // A receber = o que ainda não foi pago no mês (a vencer + vencido).
+  const kAReceber = chargeRows.reduce((s, r) => s + r.openAmount, 0);
   const kRecebido = chargeRows.reduce((s, r) => s + paidOf(r), 0);
   const kAVencer = chargeRows
     .filter((r) => r.cycleStatus === "UPCOMING" || r.cycleStatus === "PARTIAL")
@@ -297,13 +293,6 @@ export default async function RecebimentosPage({
   const kPagos = chargeRows.filter((r) =>
     ["PAID", "PAID_LATE"].includes(r.cycleStatus)
   ).length;
-  const kDevendo = chargeRows.filter(
-    (r) => OWING.includes(r.cycleStatus) || r.cycleStatus === "PARTIAL"
-  ).length;
-  const lateRows = chargeRows.filter((r) => r.cycleStatus === "PAID_LATE");
-  const otherMonthRows = chargeRows.filter((r) => r.cycleStatus === "PAID_OTHER_MONTH");
-  const kPagosAtraso = lateRows.reduce((s, r) => s + paidOf(r), 0);
-  const kOutroMes = otherMonthRows.reduce((s, r) => s + paidOf(r), 0);
 
   // ===== Filtros de visualização =====
   const visible = baseRows.filter((r) => {
@@ -379,11 +368,7 @@ export default async function RecebimentosPage({
         description={`Gerencie o ciclo mensal de pagamentos dos clientes · ${monthLabelStr}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" asChild>
-              <Link href="/clientes" title="O cadastro de clientes é feito na Gestão de Carteira">
-                <UserPlus className="h-4 w-4 mr-1" /> Cadastrar cliente na Carteira
-              </Link>
-            </Button>
+            <PastDelinquencyDialog clients={allClients} />
             <BillingDialog
               clients={allClients}
               contracts={contractsRaw}
@@ -425,9 +410,10 @@ export default async function RecebimentosPage({
         )}
       </div>
 
-      {/* ===== Mini dashboard do mês (cards clicáveis filtram a lista) ===== */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-        <StatCard title="A receber no mês" value={formatBRL(kAReceber)} href={chipHref({})} />
+      {/* ===== Painel do mês: só as 5 métricas essenciais (clicáveis) ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+        <StatCard title="A receber" value={formatBRL(kAReceber)}
+          hint="ainda não pago no mês" href={chipHref({})} />
         <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive"
           href={chipHref({ st: "PAID" })} />
         <StatCard title="A vencer" value={formatBRL(kAVencer)} intent="warning"
@@ -437,21 +423,6 @@ export default async function RecebimentosPage({
           href={chipHref({ st: "OVERDUE" })} />
         <StatCard title="Clientes pagos" value={String(kPagos)} intent="positive"
           href={chipHref({ st: "PAID" })} />
-        <StatCard title="Clientes inadimplentes" value={String(kDevendo)}
-          intent={kDevendo > 0 ? "negative" : "positive"}
-          href={chipHref({ st: "OVERDUE" })} />
-        <StatCard title="Pagos com atraso" value={formatBRL(kPagosAtraso)}
-          hint={`${lateRows.length} pagamento${lateRows.length === 1 ? "" : "s"} após o vencimento`}
-          intent={lateRows.length > 0 ? "warning" : "default"}
-          href={chipHref({ st: "PAID_LATE" })} />
-        <StatCard title="Recebidos em outro mês" value={formatBRL(kOutroMes)}
-          hint={`${otherMonthRows.length} regularizado${otherMonthRows.length === 1 ? "" : "s"} depois`}
-          href={chipHref({ st: "PAID_OTHER_MONTH" })} />
-        <StatCard title="Receita Extra (recuperação)"
-          value={formatBRL(receipts.extraRevenueAutomatic)}
-          hint="inadimplência de meses anteriores recebida neste mês"
-          intent={receipts.extraRevenueAutomatic > 0 ? "positive" : "default"}
-          href="/receitas" />
       </div>
 
       {/* ===== Chips de status + Mais filtros ===== */}
@@ -504,9 +475,10 @@ export default async function RecebimentosPage({
       <p className="mt-3 text-xs text-muted-foreground print:hidden">
         Clientes MRR ativos entram automaticamente no ciclo do mês; TCV entra
         apenas no mês de adesão/renovação, sem rateio. Alterações de modalidade,
-        vencimento, valor e prazo feitas aqui atualizam também o cadastro na{" "}
+        vencimento, valor e prazo feitas aqui atualizam também o cadastro.
+        Removidos do mês não são recriados e o cliente nunca é apagado. Para
+        cadastrar um novo cliente, acesse a{" "}
         <Link href="/clientes" className="underline">Gestão de Carteira</Link>.
-        Removidos do mês não são recriados e o cliente nunca é apagado.
       </p>
     </div>
   );

@@ -200,7 +200,7 @@ export function ReceivablesTable({
           ) : r.cycleStatus === "PAID_LATE" ? (
             `! pago com ${r.daysLate} dia${r.daysLate === 1 ? "" : "s"} de atraso`
           ) : r.cycleStatus === "PAID_OTHER_MONTH" ? (
-            "→ Receita Extra no mês do pagamento"
+            "inadimplência regularizada em outro mês"
           ) : r.cycleStatus === "PARTIAL" ? (
             `${fmtBRL(r.openAmount)} em aberto`
           ) : r.paidAtBR ? (

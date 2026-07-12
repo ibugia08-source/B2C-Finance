@@ -294,17 +294,17 @@ export default async function RotinaPage() {
         />
         <StatCard
           href="/receitas"
-          title="Receita Extra no mês"
+          title="Receita Extra e recuperações"
           value={formatBRL(receiptsMonth.extraRevenueTotal)}
           intent={receiptsMonth.extraRevenueTotal > 0 ? "positive" : "default"}
-          hint={`${formatBRL(receiptsMonth.extraRevenueAutomatic)} recuperação de inadimplência`}
+          hint={`${formatBRL(receiptsMonth.extraRevenueAutomatic)} inadimplência regularizada`}
         />
         <StatCard
           href="/cobrancas?situacao=outro-mes"
           title="Pagos em outro mês"
           value={String(receiptsMonth.paidDifferentMonthCount)}
           intent={receiptsMonth.paidDifferentMonthCount > 0 ? "warning" : "default"}
-          hint={`${formatBRL(receiptsMonth.paidDifferentMonthValue)} viraram Receita Extra`}
+          hint={`${formatBRL(receiptsMonth.paidDifferentMonthValue)} regularizados de meses anteriores`}
         />
         <StatCard
           href="/cobrancas?situacao=atrasado"

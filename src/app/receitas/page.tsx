@@ -112,10 +112,10 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
       where: { receivedAt: { gte: start, lt: end } },
       select: { amount: true, status: true },
     }),
-    // Receitas Extras AUTOMÁTICAS do mês (recuperações de inadimplência de
-    // meses anteriores — regra do fechamento mensal).
+    // Receita Extra é APENAS manual (lançamentos avulsos do usuário).
+    // Recuperações de inadimplência ficam registradas nos pagamentos.
     prisma.extraRevenue.findMany({
-      where: { receivedAt: { gte: start, lt: end } },
+      where: { receivedAt: { gte: start, lt: end }, origin: "MANUAL" },
       orderBy: { receivedAt: "desc" },
       include: { client: { select: { id: true, name: true } } },
     }),
@@ -162,10 +162,10 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
         <StatCard title="Previsto no mês" value={formatBRL(totalPrevisto)} intent="warning" />
         <StatCard title="Atrasado" value={formatBRL(totalAtrasado)} intent="negative" />
         <StatCard
-          title="Receita Extra (recuperações)"
+          title="Receita Extra (manual)"
           value={formatBRL(totalExtra)}
           intent={totalExtra > 0 ? "positive" : "default"}
-          hint="inadimplência de meses anteriores recuperada neste mês"
+          hint="entradas avulsas cadastradas manualmente"
         />
       </div>
 
@@ -173,7 +173,7 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
         <Card className="mb-4 border-blue-200 dark:border-blue-500/30">
           <CardContent className="p-4">
             <p className="text-xs uppercase tracking-wide text-blue-700 dark:text-blue-400 font-medium mb-2">
-              Receita Extra automática — recuperações de meses anteriores
+              Receita Extra — lançamentos manuais do mês
             </p>
             <ul className="space-y-1.5 text-sm">
               {extraRevenues.map((e) => (

@@ -160,14 +160,14 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           <Card className="h-full transition-shadow group-hover:shadow-md">
             <CardContent className="p-5">
               <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                Receita Extra
+                Receita Extra e recuperações
               </p>
               <p className="text-2xl font-bold mt-1.5">
                 {formatBRL(receipts.extraRevenueTotal)}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                {formatBRL(receipts.extraRevenueAutomatic)} recuperação de inadimplência ·{" "}
-                {formatBRL(receipts.extraRevenueManual)} avulsas
+                {formatBRL(receipts.extraRevenueAutomatic)} inadimplência regularizada ·{" "}
+                {formatBRL(receipts.extraRevenueManual)} Receita Extra manual
               </p>
             </CardContent>
           </Card>

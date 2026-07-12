@@ -224,6 +224,87 @@ export async function setMonthChargeStatus(
   }
 }
 
+// ===== Inadimplência anterior (registro manual de meses passados) =====
+
+/**
+ * Registra manualmente uma inadimplência de MÊS ANTERIOR: cria a cobrança
+ * vencida na competência informada (entra no histórico financeiro do
+ * cliente e nos relatórios). NÃO cria Receita Extra — se for paga depois,
+ * fica como inadimplência regularizada pela regra padrão.
+ */
+export async function addPastDelinquency(formData: FormData): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    const clientId = String(formData.get("clientId") ?? "");
+    const refMonth = parseInt(String(formData.get("refMonth") ?? ""), 10);
+    const refYear = parseInt(String(formData.get("refYear") ?? ""), 10);
+    const amount = parseBRL(String(formData.get("amount") ?? "0"));
+    const dueRaw = String(formData.get("dueDate") ?? ""); // YYYY-MM-DD (input date)
+    const notes = String(formData.get("notes") ?? "").trim() || null;
+
+    if (!clientId) return { ok: false, error: "Selecione o cliente." };
+    if (!Number.isInteger(refMonth) || refMonth < 1 || refMonth > 12)
+      return { ok: false, error: "Mês de referência inválido." };
+    if (!Number.isInteger(refYear) || refYear < 2000 || refYear > 2100)
+      return { ok: false, error: "Ano de referência inválido." };
+    if (!Number.isFinite(amount) || amount <= 0)
+      return { ok: false, error: "Informe o valor inadimplente." };
+
+    const now = new Date();
+    const compKey = refYear * 12 + (refMonth - 1);
+    const nowKey = now.getFullYear() * 12 + now.getMonth();
+    if (compKey >= nowKey)
+      return {
+        ok: false,
+        error: "Inadimplência anterior é só de meses passados — para o mês atual use o ciclo normal.",
+      };
+
+    const client = await prisma.client.findFirst({
+      where: { id: clientId },
+      select: { id: true, name: true, modality: true, paymentDay: true },
+    });
+    if (!client) return { ok: false, error: "Cliente não encontrado." };
+
+    let dueDate: Date | null = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dueRaw)) dueDate = new Date(`${dueRaw}T00:00:00`);
+    if (!dueDate || Number.isNaN(dueDate.getTime())) {
+      dueDate = new Date(refYear, refMonth - 1, Math.min(client.paymentDay ?? 5, 28));
+    }
+
+    const billing = await prisma.billing.create({
+      data: {
+        clientId: client.id,
+        description: `Inadimplência anterior ${String(refMonth).padStart(2, "0")}/${refYear} — ${client.name}`,
+        competenceMonth: refMonth,
+        competenceYear: refYear,
+        amount,
+        dueDate,
+        status: "OVERDUE",
+        collectionStatus: "ESCALATED", // aparece como Inadimplente
+        revenueType:
+          client.modality === "MRR" || client.modality === "TCV"
+            ? client.modality
+            : "ONE_TIME",
+        notes,
+      },
+    });
+    await prisma.collectionHistory.create({
+      data: {
+        billingId: billing.id,
+        clientId: client.id,
+        status: "ESCALATED",
+        message: `Inadimplência de ${String(refMonth).padStart(2, "0")}/${refYear} registrada manualmente por ${viewer.email}.${notes ? ` Obs.: ${notes}` : ""}`,
+      },
+    });
+
+    revalidateAll(client.id);
+    revalidatePath("/inadimplencia");
+    return { ok: true, id: billing.id };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao registrar a inadimplência." };
+  }
+}
+
 // ===== Ações em massa da lista de Recebimentos =====
 
 /** Status do mês em massa (Pago fica de fora — pagamento é individual). */

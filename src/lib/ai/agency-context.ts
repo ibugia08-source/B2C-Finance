@@ -99,10 +99,10 @@ export async function buildAgencySnapshotText(): Promise<string> {
   L.push(
     `FATURAMENTO OFICIAL (fechamento mensal): Faturamento = Recebimentos no mês correto + Receitas Extras. ` +
       `Recebimentos do período ${formatBRL(receipts.receiptsCorrectMonth)} (MRR ${formatBRL(receipts.mrrReceived)} + TCV ${formatBRL(receipts.tcvReceived)}); ` +
-      `Receita Extra ${formatBRL(receipts.extraRevenueTotal)} (${formatBRL(receipts.extraRevenueAutomatic)} recuperação automática de inadimplência de meses anteriores + ${formatBRL(receipts.extraRevenueManual)} avulsas/manuais); ` +
+      `Receita Extra e recuperações ${formatBRL(receipts.extraRevenueTotal)} (${formatBRL(receipts.extraRevenueAutomatic)} inadimplência de meses anteriores regularizada no período + ${formatBRL(receipts.extraRevenueManual)} Receita Extra MANUAL/avulsas — Receita Extra automática NÃO existe mais); ` +
       `TOTAL ${formatBRL(receipts.totalRevenue)}. ` +
       `Pagos com atraso (dentro do mês): ${receipts.lateSameMonthCount} (${formatBRL(receipts.lateSameMonthValue)}) — contam no mês, com aviso. ` +
-      `Pagos em MÊS POSTERIOR à competência: ${receipts.paidDifferentMonthCount} (${formatBRL(receipts.paidDifferentMonthValue)}) — NÃO entram no mês original (que permanece inadimplente no fechamento); entram no mês do pagamento como Receita Extra automática, sem duplicidade. ` +
+      `Pagos em MÊS POSTERIOR à competência: ${receipts.paidDifferentMonthCount} (${formatBRL(receipts.paidDifferentMonthValue)}) — NÃO entram no mês original (que permanece inadimplente no fechamento); contam no mês do pagamento como inadimplência regularizada, sem duplicidade e sem criar Receita Extra. ` +
       `Receita em aberto da competência: ${formatBRL(receipts.openAmount)}.`
   );
 

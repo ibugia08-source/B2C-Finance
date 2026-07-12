@@ -1,8 +1,10 @@
 /**
- * Testes do BLOCO 2 de Recebimentos:
- *  1. Descrição oficial da Receita Extra automática:
- *     "Pagamento de {cliente} referente a {Mês}/{ano}, recebido em dd/mm/aaaa."
- *  2. Pagamento parcial posterior ACUMULA na mesma Receita Extra (idempotente).
+ * Testes de Recebimentos (regras de remoção/ER manual):
+ *  1. Pagamento em mês posterior NÃO cria Receita Extra (ER é só manual);
+ *     fica como inadimplência regularizada (flag paidInDifferentMonth).
+ *  2. Quitação posterior mantém flags corretas, sem duplicidade.
+ *  2b. Inadimplência anterior manual = cobrança vencida na competência
+ *     original, sem Receita Extra.
  *  3. Cobrança removida do mês (CANCELED + motivo/autor) NÃO é recriada
  *     pela geração automática do ciclo (ensureMonthlyBillings).
  *  4. Restauração: voltar de CANCELED reativa a cobrança no ciclo.
@@ -51,8 +53,8 @@ async function main() {
     });
 
     try {
-      // ===== 1) Descrição oficial da Receita Extra =====
-      console.log("Descrição da Receita Extra automática:");
+      // ===== 1) Pagamento em mês posterior: SEM Receita Extra (só manual) =====
+      console.log("Pagamento em mês posterior — inadimplência regularizada, sem ER:");
       const b = await prisma.billing.create({
         data: {
           clientId: client.id,
@@ -74,19 +76,13 @@ async function main() {
         notes: null,
       });
       assert(r1.ok, "pagamento parcial em mês posterior registrado");
-      const er1 = await prisma.extraRevenue.findFirst({
-        where: { originBillingId: b.id },
-      });
-      const expectedDesc = `Pagamento de ${TAG} Cliente XPTO referente a Junho/2026, recebido em 02/07/2026.`;
-      assert(!!er1, "Receita Extra automática criada");
       assert(
-        er1?.description === expectedDesc,
-        "descrição no formato oficial do briefing",
-        `obtido: "${er1?.description}"`
+        (await prisma.extraRevenue.count({ where: { originBillingId: b.id } })) === 0,
+        "NÃO criou Receita Extra automática (Receita Extra é apenas manual)"
       );
 
-      // ===== 2) Parcial posterior acumula (sem duplicar) =====
-      console.log("Acúmulo idempotente de parciais:");
+      // ===== 2) Quitação posterior mantém a regra (flags certas, sem ER) =====
+      console.log("Quitação em mês posterior — flags e nenhuma duplicidade:");
       const r2 = await settleBillingPayment({
         billingId: b.id,
         amount: 1000,
@@ -96,18 +92,38 @@ async function main() {
         notes: null,
       });
       assert(r2.ok, "segunda parcial registrada");
-      const ers = await prisma.extraRevenue.findMany({
-        where: { originBillingId: b.id },
-      });
-      assert(ers.length === 1, "continua existindo UMA Receita Extra");
+      const bPaid = await prisma.billing.findUnique({ where: { id: b.id } });
       assert(
-        Math.abs(Number(ers[0].amount) - 3000) < 0.01,
-        "valor acumulado = R$ 3.000"
+        bPaid?.status === "PAID" && bPaid?.paidInDifferentMonth === true,
+        "cobrança quitada com flag 'pago em outro mês' (regularizado depois)"
       );
       assert(
-        ers[0].description.includes("10/07/2026"),
-        "descrição atualizada com a última data de recebimento",
-        ers[0].description
+        (await prisma.extraRevenue.count({ where: { originBillingId: b.id } })) === 0,
+        "segue sem Receita Extra após a quitação"
+      );
+
+      // ===== 2b) Inadimplência anterior manual: cria cobrança vencida, sem ER =====
+      console.log("Inadimplência anterior (registro manual de mês passado):");
+      const past = await prisma.billing.create({
+        data: {
+          clientId: client.id,
+          description: `Inadimplência anterior 03/2026 — ${TAG} Cliente XPTO`,
+          competenceMonth: 3,
+          competenceYear: 2026,
+          amount: 1500,
+          dueDate: new Date(2026, 2, 15),
+          status: "OVERDUE",
+          collectionStatus: "ESCALATED",
+          revenueType: "MRR",
+        },
+      });
+      assert(
+        past.status === "OVERDUE" && past.collectionStatus === "ESCALATED",
+        "registrada como cobrança vencida/inadimplente na competência original"
+      );
+      assert(
+        (await prisma.extraRevenue.count({ where: { originBillingId: past.id } })) === 0,
+        "inadimplência anterior NÃO cria Receita Extra"
       );
 
       // ===== 3) Removido do mês NÃO é recriado =====

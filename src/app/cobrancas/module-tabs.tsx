@@ -2,14 +2,13 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Abas do módulo Recebimentos — apenas o operacional de cobrança:
- * Recebimentos (ciclo mensal) → Pagamentos → Inadimplência.
- * Acordos/contratos ficam FORA deste módulo (a rota /acordos segue viva
- * para renovações, mas não é exposta aqui — recebimento ≠ contrato).
+ * Abas do módulo Recebimentos — só o essencial: a lista mensal e a visão
+ * de inadimplência. A aba Pagamentos foi removida (registrar pagamento é
+ * ação rápida na linha; a rota /pagamentos segue viva fora do módulo).
+ * Acordos/contratos ficam FORA deste módulo.
  */
 const TABS = [
   { href: "/cobrancas", label: "Recebimentos" },
-  { href: "/pagamentos", label: "Pagamentos" },
   { href: "/inadimplencia", label: "Inadimplência" },
 ];
 

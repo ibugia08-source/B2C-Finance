@@ -175,10 +175,11 @@ export async function getPeriodRevenue(
 //  - Pagamento no mês da competência conta como RECEBIMENTO (mesmo
 //    atrasado dentro do mês → flag "pago com atraso").
 //  - Pagamento em mês POSTERIOR não entra no mês original (que permanece
-//    inadimplente no fechamento) — entra no mês do pagamento como
-//    RECEITA EXTRA automática (recuperação).
-//  - Receita Extra = ExtraRevenue (automáticas + manuais) + receitas
-//    avulsas (Income sem cobrança vinculada).
+//    inadimplente no fechamento) — conta no mês do pagamento como
+//    RECUPERAÇÃO DE INADIMPLÊNCIA (direto dos pagamentos, sem registro
+//    de Receita Extra: Receita Extra é APENAS manual).
+//  - Receita Extra = ExtraRevenue MANUAL + receitas avulsas (Income sem
+//    cobrança vinculada). Registros AUTOMATIC legados são ignorados.
 // ===================================================================
 
 export type ReceiptsSummary = {
@@ -189,9 +190,11 @@ export type ReceiptsSummary = {
   lateSameMonthCount: number;
   paidDifferentMonthValue: number; // recuperações recebidas no período
   paidDifferentMonthCount: number;
-  extraRevenueAutomatic: number; // ExtraRevenue AUTOMATIC no período
+  /** recuperação de inadimplência de meses anteriores recebida no período
+   * (= paidDifferentMonthValue; mantido p/ compatibilidade de telas) */
+  extraRevenueAutomatic: number;
   extraRevenueManual: number; // ExtraRevenue MANUAL + Income avulsa
-  extraRevenueTotal: number;
+  extraRevenueTotal: number; // recuperações + manuais
   totalRevenue: number; // receiptsCorrectMonth + extraRevenueTotal
   openAmount: number; // em aberto (competência no período, não quitado)
 };
@@ -226,7 +229,13 @@ export async function getReceiptsSummary(
       },
     }),
     prisma.extraRevenue.findMany({
-      where: { receivedAt: { gte: start, lt: end }, ...(clientFilter as any) },
+      // Receita Extra é apenas MANUAL (automáticas legadas ficam fora para
+      // não duplicar com a recuperação contada direto dos pagamentos).
+      where: {
+        receivedAt: { gte: start, lt: end },
+        origin: "MANUAL",
+        ...(clientFilter as any),
+      },
       select: { amount: true, origin: true },
     }),
     prisma.income.findMany({
@@ -272,7 +281,8 @@ export async function getReceiptsSummary(
         lateSameMonthCount += 1;
       }
     } else if (paidKey > compKey) {
-      // Recuperação — já contabilizada via ExtraRevenue (não somar aqui).
+      // Recuperação de inadimplência: conta no faturamento do período
+      // via extraRevenueAutomatic (abaixo) — nunca no mês original.
       paidDifferentMonthValue += v;
       paidDifferentMonthCount += 1;
     } else {
@@ -283,13 +293,10 @@ export async function getReceiptsSummary(
     }
   }
 
-  const extraRevenueAutomatic = extraRevenues
-    .filter((e) => e.origin === "AUTOMATIC")
-    .reduce((s, e) => s + n(e.amount), 0);
+  // "Recuperação" agora vem DIRETO dos pagamentos de meses anteriores.
+  const extraRevenueAutomatic = paidDifferentMonthValue;
   const extraRevenueManual =
-    extraRevenues
-      .filter((e) => e.origin === "MANUAL")
-      .reduce((s, e) => s + n(e.amount), 0) +
+    extraRevenues.reduce((s, e) => s + n(e.amount), 0) +
     looseIncomes.reduce((s, i) => s + n(i.amount), 0);
   const extraRevenueTotal = extraRevenueAutomatic + extraRevenueManual;
 

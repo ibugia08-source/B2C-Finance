@@ -9,30 +9,15 @@ import { prisma } from "@/lib/prisma";
  *  - Pagamento no mês da COMPETÊNCIA → recebimento do mês; se depois do
  *    vencimento, marca isLate (aviso "!", continua contando no mês).
  *  - Pagamento em mês POSTERIOR → o mês original permanece inadimplente
- *    no fechamento; o valor entra no mês do pagamento como RECEITA EXTRA
- *    automática (RECOVERY_OF_OVERDUE). Idempotente: originBillingId é
- *    único — parciais ACUMULAM no mesmo registro, nunca duplicam.
+ *    no fechamento; o pagamento fica registrado como INADIMPLÊNCIA
+ *    REGULARIZADA (flag paidInDifferentMonth) e conta no faturamento do
+ *    mês do pagamento pela camada de recebimentos (getReceiptsSummary).
+ *    NÃO cria Receita Extra automática — Receita Extra é SÓ manual.
  *  - Income de conciliação (caixa) é criado por pagamento; receitas
  *    avulsas (billingId null) não se misturam — sem dupla contagem.
  */
 
 const n = (v: unknown): number => (v == null ? 0 : Number(v));
-
-const MONTH_PT = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
-
-/** Descrição oficial da Receita Extra automática (formato do briefing). */
-function recoveryDescription(
-  clientName: string,
-  refMonth: number,
-  refYear: number,
-  paidAt: Date
-): string {
-  const data = paidAt.toLocaleDateString("pt-BR");
-  return `Pagamento de ${clientName} referente a ${MONTH_PT[refMonth - 1]}/${refYear}, recebido em ${data}.`;
-}
 
 export type SettleInput = {
   billingId: string;
@@ -114,47 +99,10 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
     },
   });
 
-  // Receita Extra automática — idempotente por cobrança (originBillingId único).
-  let extraRevenueId: string | null = null;
-  if (inLaterMonth) {
-    const existingER = await prisma.extraRevenue.findFirst({
-      where: { originBillingId: billing.id },
-    });
-    const erDescription = recoveryDescription(
-      billing.client.name,
-      billing.competenceMonth,
-      billing.competenceYear,
-      input.paidAt
-    );
-    if (existingER) {
-      // Reutiliza o registro (idempotência) — parciais acumulam, nunca duplicam.
-      await prisma.extraRevenue.updateMany({
-        where: { id: existingER.id },
-        data: {
-          amount: n(existingER.amount) + input.amount,
-          receivedAt: input.paidAt,
-          description: erDescription,
-        },
-      });
-      extraRevenueId = existingER.id;
-    } else {
-      const er = await prisma.extraRevenue.create({
-        data: {
-          clientId: billing.clientId,
-          originBillingId: billing.id,
-          sourcePaymentId: payment.id,
-          type: "RECOVERY_OF_OVERDUE",
-          origin: "AUTOMATIC",
-          description: erDescription,
-          amount: input.amount,
-          receivedAt: input.paidAt,
-          originalReferenceMonth: billing.competenceMonth,
-          originalReferenceYear: billing.competenceYear,
-        },
-      });
-      extraRevenueId = er.id;
-    }
-  }
+  // Receita Extra automática foi REMOVIDA (regra atual: Receita Extra é
+  // apenas manual). O pagamento em mês posterior fica registrado pelas flags
+  // e conta como recuperação de inadimplência na camada de recebimentos.
+  const extraRevenueId: string | null = null;
 
   await prisma.billing.update({
     where: { id: billing.id },
@@ -174,7 +122,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
       clientId: billing.clientId,
       status: fullyPaid ? "PAID" : "PROMISED",
       message: fullyPaid
-        ? `Pagamento total registrado (${input.method}).${inLaterMonth ? " Pago em mês posterior à competência — valor lançado como Receita Extra." : lateSameMonth ? " Pago com atraso (dentro do mês)." : ""}`
+        ? `Pagamento total registrado (${input.method}).${inLaterMonth ? " Pago em mês posterior à competência — inadimplência regularizada (o mês original permanece não recebido)." : lateSameMonth ? " Pago com atraso (dentro do mês)." : ""}`
         : `Pagamento parcial de R$ ${input.amount.toFixed(2)} registrado (${input.method}).`,
     },
   });

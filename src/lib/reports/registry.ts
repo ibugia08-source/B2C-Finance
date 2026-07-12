@@ -938,8 +938,10 @@ async function buildReceitaExtra(q: ReportQuery): Promise<ReportRow[]> {
   const { start, end } = q.period;
   const [extras, loose] = await Promise.all([
     prisma.extraRevenue.findMany({
+      // Receita Extra é apenas MANUAL (automáticas legadas ficam fora).
       where: {
         receivedAt: { gte: start, lt: end },
+        origin: "MANUAL",
         ...(q.clientId ? { clientId: q.clientId } : {}),
       },
       orderBy: { receivedAt: "desc" },
@@ -1204,7 +1206,7 @@ export const REPORTS: ReportDef[] = [
   {
     key: "receita-extra",
     title: "Receita Extra",
-    description: "Recuperações de inadimplência (automáticas), lançamentos manuais e entradas avulsas do período.",
+    description: "Lançamentos manuais de Receita Extra e entradas avulsas do período.",
     columns: [
       { key: "data", label: "Recebida em", kind: "date" },
       { key: "cliente", label: "Cliente", kind: "text" },
