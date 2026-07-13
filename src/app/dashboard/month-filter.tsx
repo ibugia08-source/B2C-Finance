@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label";
 import { CalendarDays } from "lucide-react";
 
 /**
- * Filtro ÚNICO do Dashboard: lista suspensa de meses (próximo mês, atual e
- * 12 para trás) + opção "Personalizado…" no fim, que abre um intervalo de
- * datas livre. Atualiza ?date=YYYY-MM-DD_YYYY-MM-DD (lido por resolvePeriod).
+ * Filtro ÚNICO do Dashboard: [Mês ▾] [Ano ▾] — com "Personalizado…" no fim
+ * da lista de meses para escolher um intervalo de datas livre (De/Até).
+ * Atualiza ?date=YYYY-MM-DD_YYYY-MM-DD (lido por resolvePeriod).
  */
 
 const MONTHS_PT = [
@@ -32,46 +32,43 @@ export function MonthFilter() {
   const sp = useSearchParams();
 
   const now = new Date();
-  // Próximo mês, mês atual e 12 meses para trás.
-  const options = useMemo(() => {
-    const list: { value: string; label: string; y: number; m: number }[] = [];
-    for (let off = 1; off >= -12; off--) {
-      const d = new Date(now.getFullYear(), now.getMonth() + off, 1);
-      const y = d.getFullYear();
-      const m = d.getMonth() + 1;
-      list.push({
-        value: `${y}-${String(m).padStart(2, "0")}`,
-        label: `${MONTHS_PT[m - 1]}/${y}`,
-        y,
-        m,
-      });
-    }
+  const curM = now.getMonth() + 1;
+  const curY = now.getFullYear();
+
+  // Anos disponíveis: 3 para trás até 1 à frente (inclui o ano da URL, se fora).
+  const years = useMemo(() => {
+    const list: number[] = [];
+    for (let y = curY - 3; y <= curY + 1; y++) list.push(y);
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Deriva a seleção do ?date= (mês cheio → item da lista; outro → custom).
+  // Deriva a seleção do ?date=: mês cheio → mês/ano; outro intervalo → custom.
   const dateParam = sp.get("date") ?? "";
-  const { selected, customStart, customEnd } = useMemo(() => {
-    const m = dateParam.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
-    if (!m) {
-      const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-      return { selected: cur, customStart: "", customEnd: "" };
+  const derived = useMemo(() => {
+    const m = dateParam.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{4}-\d{2}-\d{2})$/);
+    if (m) {
+      const [, ys, ms, , endStr] = m;
+      const y = parseInt(ys, 10);
+      const mo = parseInt(ms, 10);
+      const r = monthRange(y, mo);
+      if (dateParam === `${r.start}_${r.end}`) {
+        return { custom: false, month: mo, year: y, de: "", ate: "" };
+      }
+      const full = dateParam.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/)!;
+      return { custom: true, month: curM, year: curY, de: full[1], ate: full[2] };
     }
-    const [, s, e] = m;
-    const opt = options.find((o) => {
-      const r = monthRange(o.y, o.m);
-      return r.start === s && r.end === e;
-    });
-    return opt
-      ? { selected: opt.value, customStart: "", customEnd: "" }
-      : { selected: "custom", customStart: s, customEnd: e };
+    return { custom: false, month: curM, year: curY, de: "", ate: "" };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateParam, options]);
+  }, [dateParam]);
 
-  const [custom, setCustom] = useState(selected === "custom");
-  const [de, setDe] = useState(customStart);
-  const [ate, setAte] = useState(customEnd);
+  const [custom, setCustom] = useState(derived.custom);
+  const [month, setMonth] = useState(derived.month);
+  const [year, setYear] = useState(derived.year);
+  const [de, setDe] = useState(derived.de);
+  const [ate, setAte] = useState(derived.ate);
+
+  const yearOptions = years.includes(year) ? years : [year, ...years];
 
   function pushRange(start: string, end: string) {
     const params = new URLSearchParams(sp.toString());
@@ -81,16 +78,26 @@ export function MonthFilter() {
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  function onSelect(v: string) {
+  function apply(m: number, y: number) {
+    const r = monthRange(y, m);
+    pushRange(r.start, r.end);
+  }
+
+  function onMonthChange(v: string) {
     if (v === "custom") {
       setCustom(true);
       return;
     }
+    const m = parseInt(v, 10);
     setCustom(false);
-    const opt = options.find((o) => o.value === v);
-    if (!opt) return;
-    const r = monthRange(opt.y, opt.m);
-    pushRange(r.start, r.end);
+    setMonth(m);
+    apply(m, year);
+  }
+
+  function onYearChange(v: string) {
+    const y = parseInt(v, 10);
+    setYear(y);
+    if (!custom) apply(month, y);
   }
 
   return (
@@ -100,18 +107,32 @@ export function MonthFilter() {
         <div className="flex items-center gap-1.5">
           <CalendarDays className="h-4 w-4 text-muted-foreground" aria-hidden />
           <Select
-            aria-label="Mês do Dashboard"
-            className="h-9 w-auto min-w-[170px] text-sm font-medium"
-            value={custom ? "custom" : selected}
-            onChange={(e) => onSelect(e.target.value)}
+            aria-label="Mês"
+            className="h-9 w-auto min-w-[140px] text-sm font-medium"
+            value={custom ? "custom" : String(month)}
+            onChange={(e) => onMonthChange(e.target.value)}
           >
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
+            {MONTHS_PT.map((label, i) => (
+              <option key={label} value={i + 1}>
+                {label}
               </option>
             ))}
             <option value="custom">Personalizado…</option>
           </Select>
+          {!custom && (
+            <Select
+              aria-label="Ano"
+              className="h-9 w-auto text-sm font-medium"
+              value={String(year)}
+              onChange={(e) => onYearChange(e.target.value)}
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </Select>
+          )}
         </div>
       </div>
 
