@@ -147,28 +147,26 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Visão financeira · {period.label}
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      {/* Ordem obrigatória: Previsto · Despesas · Recebido · Em Aberto · Margem.
+          Vencido e Resultado saíram da 1ª linha (seguem nos módulos/relatórios). */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
         <StatCard href="/cobrancas" title="Faturamento total previsto"
           value={formatBRL(previsto)}
           hint="tudo que está previsto entrar no mês" />
+        <StatCard href="/despesas" title="Total despesas (mês)"
+          value={formatBRL(finance.despesas)}
+          intent={finance.despesas > 0 ? "negative" : "default"}
+          hint="despesas do período filtrado" />
         <StatCard href="/cobrancas?st=PAID" title="Recebido"
           value={formatBRL(recebido)} intent="positive"
           hint={`MRR ${formatBRL(receipts.mrrReceived)} · TCV ${formatBRL(receipts.tcvReceived)}`} />
-        <StatCard href="/cobrancas" title="Em aberto"
+        <StatCard href="/cobrancas" title="Em Aberto"
           value={formatBRL(emAberto)} intent={emAberto > 0 ? "warning" : "default"}
-          hint="previsto − recebido (falta receber)" />
-        <StatCard href="/cobrancas?st=OVERDUE" title="Vencido"
-          value={formatBRL(vencido)}
-          intent={vencido > 0 ? "negative" : "default"}
-          hint="parte do em aberto já vencida" />
-        <StatCard href="/relatorios/financeiro-mensal" title="Resultado"
-          value={formatBRL(resultado)}
-          intent={resultado >= 0 ? "positive" : "negative"}
-          hint={`recebido − despesas ${formatBRL(finance.despesas)} · caixa estimado ${formatBRL(cash.saldoPrevisto)}`} />
+          hint={`previsto − recebido · vencido ${formatBRL(vencido)}`} />
         <StatCard href="/relatorios/financeiro-mensal" title="Margem Operacional"
           value={`${margemPct}%`}
           intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"}
-          hint="resultado / recebido" />
+          hint={`resultado ${formatBRL(resultado)} / recebido`} />
       </div>
 
       {/* ===== Linha 2 — Operação ===== */}
