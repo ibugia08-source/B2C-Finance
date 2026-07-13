@@ -50,7 +50,7 @@ const FormSchema = z.object({
   paymentModel: z.string(),
   contractTotal: z.string(),
   contractMonths: z.string(),
-  launchMonth: z.string(),
+  saleDate: z.string(),
   tags: z.string(),
   notes: z.string(),
 });
@@ -93,7 +93,7 @@ export function ClientDialog({
       paymentModel: initial?.paymentModel ?? "",
       contractTotal: initial?.contractTotal ?? "",
       contractMonths: initial?.contractMonths ?? "",
-      launchMonth: "",
+      saleDate: "",
       tags: Array.isArray(initial?.tags) ? initial.tags.join(", ") : "",
       notes: initial?.notes ?? "",
     },
@@ -199,9 +199,12 @@ export function ClientDialog({
           </div>
 
           {isNew && (
-            <div className="col-span-full rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="col-span-full rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <p className="col-span-full text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Fechamento do contrato (venda)
+              </p>
               <div>
-                <Label>Modelo de pagamento</Label>
+                <Label>Tipo da venda</Label>
                 <Select {...register("paymentModel")}>
                   <option value="">— sem contrato agora —</option>
                   <option value="MRR">MRR (recorrente mensal)</option>
@@ -210,35 +213,33 @@ export function ClientDialog({
               </div>
               {paymentModel && (
                 <div>
-                  <Label>Valor total do contrato (R$) *</Label>
-                  <Input {...register("contractTotal")} inputMode="decimal" placeholder="ex.: 5100,00" />
+                  <Label>Data do fechamento (venda) *</Label>
+                  <Input type="date" {...register("saleDate")} required />
                 </div>
               )}
               {paymentModel && (
                 <div>
-                  <Label>Prazo (meses) *</Label>
-                  <Input type="number" min={1} {...register("contractMonths")} placeholder="ex.: 3" />
+                  <Label>Valor total do contrato (R$) *</Label>
+                  <Input {...register("contractTotal")} inputMode="decimal" placeholder="ex.: 5100,00" required />
                 </div>
               )}
-              {paymentModel === "TCV" && (
+              {paymentModel && (
                 <div>
-                  <Label>Mês de lançamento da venda *</Label>
-                  <Input type="month" {...register("launchMonth")} />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    mês em que a entrada (venda) cai no financeiro
-                  </p>
+                  <Label>Prazo do contrato (meses) *</Label>
+                  <Input type="number" min={1} {...register("contractMonths")} placeholder="ex.: 3" required />
                 </div>
               )}
               {paymentModel === "MRR" && (
-                <p className="sm:col-span-3 text-xs text-muted-foreground">
-                  O sistema calcula o mensal (total ÷ prazo), cria o contrato e as
-                  cobranças recorrentes até o fim do prazo.
+                <p className="sm:col-span-2 text-xs text-muted-foreground">
+                  O sistema calcula o mensal (total ÷ prazo) e cria as cobranças
+                  recorrentes a partir do mês da venda até o fim do prazo.
                 </p>
               )}
               {paymentModel === "TCV" && (
-                <p className="sm:col-span-3 text-xs text-muted-foreground">
-                  O valor cheio entra como cobrança única no mês de lançamento.
-                  Na renovação, o cliente paga o valor cheio novamente.
+                <p className="sm:col-span-2 text-xs text-muted-foreground">
+                  O valor CHEIO entra uma única vez no mês da venda — não é
+                  distribuído pelos meses contratados. Na renovação, o cliente
+                  paga o valor cheio novamente.
                 </p>
               )}
             </div>

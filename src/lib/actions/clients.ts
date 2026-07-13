@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
+import { parseBRL, parseDateBR } from "@/lib/format";
 
 /**
  * Resultado padrão das mutations (Etapa 1). Toda ação retorna um objeto
@@ -158,37 +158,39 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       });
       id = created.id;
 
-      // ===== Modelo de pagamento no cadastro → cria o contrato + cobranças =====
-      // MRR: valor total ÷ prazo = mensal, recorrente enquanto durar o contrato.
-      // TCV: valor cheio lançado uma vez no mês escolhido ("mês de lançamento").
+      // ===== Fechamento do contrato (venda) no cadastro =====
+      // Data do fechamento + modalidade (MRR/TCV) + prazo → cria o contrato
+      // e as cobranças. MRR: valor total ÷ prazo = mensal, recorrente a
+      // partir do mês da venda. TCV: valor CHEIO entra uma única vez no
+      // mês da venda — NUNCA rateado pelos meses contratados.
       const model = clean(formData.get("paymentModel")); // "MRR" | "TCV" | null
       const totalRaw = clean(formData.get("contractTotal"));
       const monthsRaw = clean(formData.get("contractMonths"));
-      const launch = clean(formData.get("launchMonth")); // "YYYY-MM" (TCV)
+      const saleRaw = clean(formData.get("saleDate")); // "YYYY-MM-DD" (input date)
 
-      if ((model === "MRR" || model === "TCV") && totalRaw) {
-        const total = parseBRL(totalRaw);
+      if (model === "MRR" || model === "TCV") {
+        const total = totalRaw ? parseBRL(totalRaw) : 0;
         const months = monthsRaw ? Math.max(1, parseInt(monthsRaw, 10)) : null;
         if (!(total > 0)) return { ok: false, error: "Informe o valor total do contrato." };
-        if (model === "MRR" && !months)
-          return { ok: false, error: "Informe o prazo (meses) do contrato MRR." };
-        if (model === "TCV" && !launch)
-          return { ok: false, error: "Informe o mês de lançamento da venda (TCV)." };
+        if (!months)
+          return { ok: false, error: "Informe o prazo do contrato (meses)." };
+        if (!saleRaw || !/^\d{4}-\d{2}-\d{2}$/.test(saleRaw))
+          return { ok: false, error: "Informe a data do fechamento do contrato (venda)." };
+        const saleDate = new Date(`${saleRaw}T00:00:00`);
+        if (Number.isNaN(saleDate.getTime()))
+          return { ok: false, error: "Data do fechamento inválida." };
 
         const billingDay = parsed.paymentDay ?? 5;
-        let startDate: Date;
-        if (model === "TCV") {
-          const lp = parseMonthParam(launch);
-          if (!lp)
-            return { ok: false, error: "Mês de lançamento inválido — confira o mês/ano." };
-          startDate = new Date(lp.year, lp.month - 1, Math.min(billingDay, 28));
-        } else {
-          startDate = parsed.startedAt ?? new Date();
-        }
-        const term = months ?? 12;
-        const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + term, startDate.getDate());
-        endDate.setDate(endDate.getDate() - 1);
-        const monthly = model === "MRR" ? Math.round((total / term) * 100) / 100 : 0;
+        // Início do contrato = mês da venda (competência da 1ª cobrança).
+        const startDate = new Date(
+          saleDate.getFullYear(),
+          saleDate.getMonth(),
+          Math.min(billingDay, 28)
+        );
+        // Fim = último dia do mês final do prazo (venda em maio + 3 meses →
+        // mai/jun/jul; nunca "vaza" uma mensalidade no 4º mês).
+        const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + months, 0);
+        const monthly = model === "MRR" ? Math.round((total / months) * 100) / 100 : 0;
 
         const contract = await prisma.contract.create({
           data: {
@@ -205,15 +207,23 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
             status: "ACTIVE",
           },
         });
-        // Gera as cobranças (recorrentes até o fim p/ MRR; única no mês p/ TCV)
+        // Gera as cobranças: recorrentes até o fim p/ MRR; ÚNICA e CHEIA no
+        // mês da venda p/ TCV (sem rateio).
         const { generateBillingsForContract } = await import(
           "@/lib/services/contract-metrics"
         );
         await generateBillingsForContract(contract.id);
-        // MRR de referência do cliente
-        if (model === "MRR") {
-          await prisma.client.update({ where: { id: created.id }, data: { monthlyValue: monthly } });
-        }
+        // Reflete a venda no cadastro do cliente: modalidade, prazo,
+        // valor de referência e entrada (se não informada).
+        await prisma.client.update({
+          where: { id: created.id },
+          data: {
+            modality: model,
+            contractMonths: months,
+            ...(model === "MRR" ? { monthlyValue: monthly } : {}),
+            ...(parsed.startedAt ? {} : { startedAt: saleDate }),
+          },
+        });
         revalidatePath("/acordos");
         revalidatePath("/cobrancas");
       }
@@ -302,9 +312,13 @@ Regras: "name" é o nome do CONTRATANTE (cliente), nunca da agência/contratada 
 export async function deleteClient(id: string): Promise<ActionResult> {
   await requireAdmin();
   try {
-    // deleteMany é escopado por dono → só remove cliente do próprio owner.
-    await prisma.client.deleteMany({ where: { id } });
+    // Exclusão profunda: remove cobranças/pagamentos/contratos do cliente
+    // na ordem certa (Billing/Contract não têm cascade no banco).
+    const { deleteClientsDeep } = await import("@/lib/services/client-purge");
+    const res = await deleteClientsDeep([id]);
+    if (res.deleted === 0) return { ok: false, error: "Cliente não encontrado." };
     revalidatePath("/clientes");
+    revalidatePath("/cobrancas");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (e: any) {
@@ -547,8 +561,10 @@ export async function bulkDeleteClients(ids: string[]): Promise<ActionResult> {
   await requireAdmin();
   try {
     if (!ids.length) return { ok: false, error: "Selecione ao menos um cliente." };
-    await prisma.client.deleteMany({ where: { id: { in: ids } } });
+    const { deleteClientsDeep } = await import("@/lib/services/client-purge");
+    await deleteClientsDeep(ids);
     revalidatePath("/clientes");
+    revalidatePath("/cobrancas");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (e: any) {
