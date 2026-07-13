@@ -334,6 +334,114 @@ export async function bulkSetMonthStatus(
   }
 }
 
+/**
+ * Remove CLIENTES SELECIONADOS da lista do mês (checkbox → Remover da lista).
+ * - Com cobrança no mês: cancela a cobrança (auditado).
+ * - Sem cobrança no mês ("Sem cobrança"): cria um marcador CANCELADO na
+ *   competência — o cliente some da lista, aparece em "Removidos do mês",
+ *   pode ser recolocado e a geração automática não o recria.
+ * NUNCA apaga o cliente da Gestão de Carteira.
+ */
+export async function bulkRemoveClientsFromList(
+  entries: { clientId: string; billingId: string | null }[],
+  month: number,
+  year: number,
+  reason: string | null
+): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year))
+      return { ok: false, error: "Competência inválida." };
+    const cleanReason = (reason ?? "").trim() || null;
+
+    const billingIds = entries.filter((e) => e.billingId).map((e) => e.billingId!);
+    const bareClientIds = Array.from(
+      new Set(entries.filter((e) => !e.billingId).map((e) => e.clientId))
+    );
+
+    let removed = 0;
+
+    // 1) Cancela as cobranças existentes (quitadas ficam de fora).
+    if (billingIds.length) {
+      const bills = await prisma.billing.findMany({
+        where: { id: { in: billingIds }, status: { notIn: ["PAID", "CANCELED"] } },
+        select: { id: true, clientId: true },
+      });
+      if (bills.length) {
+        await prisma.billing.updateMany({
+          where: { id: { in: bills.map((b) => b.id) } },
+          data: {
+            status: "CANCELED",
+            canceledAt: new Date(),
+            canceledBy: viewer.email,
+            cancelReason: cleanReason,
+          },
+        });
+        await prisma.collectionHistory.createMany({
+          data: bills.map((b) => ({
+            billingId: b.id,
+            clientId: b.clientId,
+            status: "NOT_CONTACTED" as any,
+            message: `Removido da lista de ${String(month).padStart(2, "0")}/${year} por ${viewer.email}.${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
+          })),
+        });
+        removed += bills.length;
+      }
+    }
+
+    // 2) Clientes sem cobrança no mês: marcador cancelado na competência.
+    if (bareClientIds.length) {
+      const clients = await prisma.client.findMany({
+        where: { id: { in: bareClientIds } },
+        select: { id: true, name: true, monthlyValue: true, paymentDay: true },
+      });
+      for (const c of clients) {
+        // Se já existir cobrança na competência (corrida), não duplica.
+        const existing = await prisma.billing.findFirst({
+          where: { clientId: c.id, competenceMonth: month, competenceYear: year },
+          select: { id: true },
+        });
+        if (existing) continue;
+        const day = Math.min(Math.max(c.paymentDay ?? 5, 1), 28);
+        const marker = await prisma.billing.create({
+          data: {
+            clientId: c.id,
+            description: `Mensalidade ${String(month).padStart(2, "0")}/${year} — ${c.name}`,
+            competenceMonth: month,
+            competenceYear: year,
+            amount: Number(c.monthlyValue ?? 0),
+            dueDate: new Date(year, month - 1, day),
+            status: "CANCELED",
+            canceledAt: new Date(),
+            canceledBy: viewer.email,
+            cancelReason: cleanReason,
+            revenueType: "MRR",
+          },
+        });
+        await prisma.collectionHistory.create({
+          data: {
+            billingId: marker.id,
+            clientId: c.id,
+            status: "NOT_CONTACTED",
+            message: `Removido da lista de ${String(month).padStart(2, "0")}/${year} por ${viewer.email} (cliente sem cobrança no mês).${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
+          },
+        });
+        removed += 1;
+      }
+    }
+
+    if (removed === 0)
+      return {
+        ok: false,
+        error: "Nada para remover (cobranças quitadas ficam de fora).",
+      };
+    revalidateAll();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao remover da lista." };
+  }
+}
+
 /** Remove do ciclo do mês em massa (auditado; não apaga clientes). */
 export async function bulkRemoveFromMonth(
   billingIds: string[],

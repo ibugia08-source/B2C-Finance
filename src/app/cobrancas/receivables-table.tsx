@@ -41,7 +41,7 @@ import {
   setClientContractMonths,
   setMonthChargeStatus,
   bulkSetMonthStatus,
-  bulkRemoveFromMonth,
+  bulkRemoveClientsFromList,
 } from "@/lib/actions/receivables-inline";
 import { restoreBilling } from "@/lib/actions/billings";
 import type { ActionResult } from "@/lib/actions/clients";
@@ -591,16 +591,17 @@ function BulkBar({
   const count = rows.length;
 
   function removeFromMonth() {
-    if (billingIds.length === 0) {
-      alert("Nenhuma cobrança deste mês na seleção.");
-      return;
-    }
     const reason = prompt(
-      `Remover ${billingIds.length} cobrança(s) do ciclo deste mês?\n\nOs clientes continuam na Gestão de Carteira. Motivo (opcional):`
+      `Remover ${count} cliente(s) selecionado(s) da lista deste mês?\n\nEles continuam na Gestão de Carteira e podem ser recolocados em "Removidos do mês". Motivo (opcional):`
     );
     if (reason === null) return;
     start(async () => {
-      const res = await bulkRemoveFromMonth(billingIds, reason);
+      const res = await bulkRemoveClientsFromList(
+        rows.map((r) => ({ clientId: r.clientId, billingId: r.billingId })),
+        month,
+        year,
+        reason
+      );
       if (!res.ok) alert(res.error);
       else onClear();
     });
@@ -633,7 +634,7 @@ function BulkBar({
               disabled={pending}
               onClick={removeFromMonth}
             >
-              Remover do mês
+              Remover da lista
             </Button>
             <Button size="sm" variant="ghost" onClick={onClear}>
               Cancelar
