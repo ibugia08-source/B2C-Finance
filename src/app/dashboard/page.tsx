@@ -28,7 +28,7 @@ import {
   LineChart,
   HBarList,
 } from "@/components/charts";
-import { B2CDateRangePicker } from "@/components/b2c-date-range-picker";
+import { MonthFilter } from "./month-filter";
 import { PersonalDashboard } from "./personal-dashboard";
 import {
   AlertTriangle,
@@ -120,10 +120,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         <SavedViews module="dashboard" />
       </div>
 
-      {/* Único filtro do Dashboard: período */}
+      {/* Único filtro do Dashboard: mês (lista suspensa) ou intervalo livre */}
       <Card className="mb-5">
         <CardContent className="p-4">
-          <B2CDateRangePicker />
+          <MonthFilter />
         </CardContent>
       </Card>
 
