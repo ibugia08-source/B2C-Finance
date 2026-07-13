@@ -2,7 +2,6 @@ import Link from "next/link";
 import { SavedViews } from "@/components/saved-views";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { getViewer } from "@/lib/auth/viewer";
@@ -29,7 +28,7 @@ import {
   LineChart,
   HBarList,
 } from "@/components/charts";
-import { DashboardFilters } from "./dashboard-filters";
+import { B2CDateRangePicker } from "@/components/b2c-date-range-picker";
 import { PersonalDashboard } from "./personal-dashboard";
 import {
   AlertTriangle,
@@ -75,44 +74,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
 
   const sp = searchParams ?? {};
   const period = resolvePeriod(sp);
-  const filters: Filters = {
-    period,
-    clientId: sp.cliente || undefined,
-    serviceId: sp.servico || undefined,
-    billingStatus: sp.status || undefined,
-    revenueType: sp.treceita || undefined,
-    expenseType: sp.tdespesa || undefined,
-    modality: sp.modalidade || undefined,
-    salesOwner: sp.responsavel || undefined,
-    segment: sp.segmento || undefined,
-    clientStatus: sp.statuscliente || undefined,
-  };
+  // Único filtro do Dashboard: o PERÍODO. Recortes por cliente/serviço/
+  // responsável etc. vivem nos módulos e relatórios.
+  const filters: Filters = { period };
 
-  const [data, churn, newClients, clients, services, ownerRows, segmentRows] = await Promise.all([
+  const [data, churn, newClients] = await Promise.all([
     getExecutiveDashboard(filters),
     getMonthlyChurn(period.start, period.end),
     getNewClientsSummary(period.start, period.end),
-    prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    prisma.client.findMany({
-      where: { salesOwner: { not: null } },
-      distinct: ["salesOwner"],
-      select: { salesOwner: true },
-      orderBy: { salesOwner: "asc" },
-    }),
-    prisma.client.findMany({
-      where: { segment: { not: null } },
-      distinct: ["segment"],
-      select: { segment: true },
-      orderBy: { segment: "asc" },
-    }),
   ]);
   const {
     kpis, finance, cash, series, health, alerts, actions,
     renewalOutlook, clients: clientsBlock, upsell, expenses, receipts,
   } = data;
-  const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
-  const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
 
   const hs = HEALTH_STYLE[health.level];
   const renovacoes = renewalOutlook[0];
@@ -146,14 +120,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         <SavedViews module="dashboard" />
       </div>
 
+      {/* Único filtro do Dashboard: período */}
       <Card className="mb-5">
         <CardContent className="p-4">
-          <DashboardFilters
-            clients={clients}
-            services={services}
-            owners={owners}
-            segments={segments}
-          />
+          <B2CDateRangePicker />
         </CardContent>
       </Card>
 
