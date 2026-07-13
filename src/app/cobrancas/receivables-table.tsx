@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertCircle, DollarSign, MessageSquareText, CalendarClock, RotateCcw } from "lucide-react";
+import { AlertCircle, DollarSign, MessageSquareText, CalendarClock, RotateCcw, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -42,6 +42,7 @@ import {
   setMonthChargeStatus,
   bulkSetMonthStatus,
   bulkRemoveClientsFromList,
+  deleteBillingPayments,
 } from "@/lib/actions/receivables-inline";
 import { restoreBilling } from "@/lib/actions/billings";
 import type { ActionResult } from "@/lib/actions/clients";
@@ -215,8 +216,10 @@ export function ReceivablesTable({
 
   function rowActions(r: ReceivableRow, primary = false) {
     const open = r.billingId && !["PAID", "PAID_LATE", "PAID_OTHER_MONTH", "REMOVED", "NO_CHARGE"].includes(r.cycleStatus);
+    const paid = r.billingId && ["PAID", "PAID_LATE", "PAID_OTHER_MONTH"].includes(r.cycleStatus);
     return (
       <div className="flex gap-0.5 justify-end flex-wrap items-center">
+        {paid && <DeletePaymentButton row={r} primary={primary} />}
         {open && (
           <PaymentDialog
             billing={{ id: r.billingId!, openAmount: r.openAmount, description: r.description ?? r.name }}
@@ -542,6 +545,52 @@ function InlineMoney({
     >
       {shown > 0 ? fmtBRL(shown) : "— definir —"}
     </button>
+  );
+}
+
+/** Exclui o(s) pagamento(s) de uma cobrança quitada — reabre a cobrança. */
+function DeletePaymentButton({
+  row,
+  primary = false,
+}: {
+  row: ReceivableRow;
+  primary?: boolean;
+}) {
+  const [pending, start] = useTransition();
+  function run() {
+    if (
+      !confirm(
+        `Excluir o(s) pagamento(s) de ${row.name} (${fmtBRL(row.amountDue)})?\n\nA cobrança volta a ficar em aberto/vencida e os valores saem de "Recebido". Esta ação não pode ser desfeita.`
+      )
+    )
+      return;
+    start(async () => {
+      const res = await deleteBillingPayments(row.billingId!);
+      if (!res.ok) alert(res.error);
+    });
+  }
+  return primary ? (
+    <Button
+      variant="outline"
+      size="sm"
+      className="text-destructive"
+      aria-label="Excluir pagamento"
+      disabled={pending}
+      onClick={run}
+    >
+      <Trash2 className="h-4 w-4 mr-1" /> Excluir pagamento
+    </Button>
+  ) : (
+    <Button
+      variant="ghost"
+      size="icon"
+      title="Excluir pagamento (reabre a cobrança)"
+      aria-label="Excluir pagamento"
+      disabled={pending}
+      onClick={run}
+    >
+      <Trash2 className="h-4 w-4 text-destructive" />
+    </Button>
   );
 }
 

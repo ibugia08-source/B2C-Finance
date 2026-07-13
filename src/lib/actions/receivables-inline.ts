@@ -187,7 +187,7 @@ export async function setMonthChargeStatus(
       return {
         ok: false,
         error:
-          "Cobrança já quitada. Para reabrir, exclua o pagamento na aba Pagamentos.",
+          "Cobrança já quitada. Para reabrir, use a ação 'Excluir pagamento' na própria linha.",
       };
 
     const today = new Date();
@@ -302,6 +302,50 @@ export async function addPastDelinquency(formData: FormData): Promise<ActionResu
     return { ok: true, id: billing.id };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao registrar a inadimplência." };
+  }
+}
+
+// ===== Excluir pagamento de cobrança quitada (reabre a cobrança) =====
+
+/**
+ * Exclui TODOS os pagamentos de uma cobrança (linha "Paga" da lista):
+ * reverte cada um pelo núcleo contábil oficial (saldo, status, flags de
+ * fechamento e conciliação de caixa) — a cobrança volta a Em aberto/Vencida.
+ */
+export async function deleteBillingPayments(billingId: string): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    const b = await prisma.billing.findUnique({ where: { id: billingId } });
+    if (!b) return { ok: false, error: "Cobrança não encontrada." };
+    const payments = await prisma.payment.findMany({
+      where: { billingId },
+      orderBy: { paidAt: "desc" },
+      select: { id: true },
+    });
+    if (payments.length === 0)
+      return { ok: false, error: "Esta cobrança não tem pagamentos registrados." };
+
+    const { revertBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+    for (const p of payments) {
+      const res = await revertBillingPayment(p.id);
+      if (!res.ok) return res;
+    }
+    await prisma.collectionHistory.create({
+      data: {
+        billingId,
+        clientId: b.clientId,
+        status: "NOT_CONTACTED",
+        message: `Pagamento(s) excluído(s) por ${viewer.email} — cobrança reaberta.`,
+      },
+    });
+    revalidateAll(b.clientId);
+    revalidatePath("/pagamentos");
+    revalidatePath("/receitas");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao excluir o pagamento." };
   }
 }
 
