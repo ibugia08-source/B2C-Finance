@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getCashSummary, getFinanceSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
-import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
+import { getRenewalOutlook, getReceiptsSummary } from "@/lib/services/revenue-metrics";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getMonthlySeries } from "@/lib/services/dashboard-metrics";
 import { limitesUsadosPorCartao } from "@/lib/services/calculations";
@@ -50,7 +50,7 @@ export default async function RotinaPage() {
 
   const [
     queue, cash, accounts, payToday, criticalExpenses, weekBillings, weekExpenses,
-    receivedPayments, receivedIncomes, openAgg, renewals,
+    receivedPayments, receivedIncomes, receiptsMes, renewals,
     renewalWindows, finance, expenseSummary, series, openUpsells, cardsAll, devendoMes,
   ] =
     await Promise.all([
@@ -94,10 +94,13 @@ export default async function RotinaPage() {
         where: { status: "RECEIVED", billingId: null, receivedAt: { gte: today, lt: tomorrow } },
         select: { amount: true, description: true },
       }),
-      prisma.billing.aggregate({
-        where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
-        _sum: { amount: true, paidTotal: true },
-      }),
+      // Métrica oficial do MÊS VIGENTE — mesma função do Dashboard
+      // (Falta receber = previsto do mês − recebido do mês; nunca soma
+      // inadimplência de meses anteriores — isso é o card "A cobrar").
+      getReceiptsSummary(
+        resolvePeriod({ periodo: "mes" }).start,
+        resolvePeriod({ periodo: "mes" }).end
+      ),
       prisma.contract.findMany({
         where: { status: { in: ["ACTIVE", "RENEWAL"] }, renewalDate: { not: null, lte: in30 } },
         orderBy: { renewalDate: "asc" },
@@ -187,7 +190,8 @@ export default async function RotinaPage() {
   const recebidoHoje =
     receivedPayments.reduce((s, p) => s + n(p.amount), 0) +
     receivedIncomes.reduce((s, i) => s + n(i.amount), 0);
-  const faltaReceber = n(openAgg._sum.amount) - n(openAgg._sum.paidTotal);
+  // Falta receber = Em aberto do mês vigente (fórmula oficial, camada central).
+  const faltaReceber = receiptsMes.openMonth;
   const promessas = queue.filter((q) => q.promise);
 
   // Alertas de caixa
@@ -258,7 +262,8 @@ export default async function RotinaPage() {
           intent={totalCritico > 0 ? "negative" : "default"}
           hint={totalCritico > 0 ? `${formatBRL(totalCritico)} já vencido!` : `${payToday.length} despesa(s)`} />
         <StatCard title="Recebido hoje" value={formatBRL(recebidoHoje)} intent="positive" />
-        <StatCard title="Falta receber (aberto)" value={formatBRL(faltaReceber)} />
+        <StatCard title="Falta receber (mês)" value={formatBRL(faltaReceber)}
+          hint="previsto do mês − recebido" />
       </div>
 
       {/* Operação do mês — fechamento mensal detalhado fica no Dashboard/relatórios. */}

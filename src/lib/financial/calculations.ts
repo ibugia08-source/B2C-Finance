@@ -25,6 +25,37 @@
  * status do cliente (RevenueFilters / DashboardFilters).
  */
 
+// ===== MÉTRICAS OFICIAIS DO MÊS (fórmulas do dicionário) =====
+// Em aberto = Falta receber = Faturamento total previsto − Recebido (clamp 0).
+// Vencido = parte do em aberto com vencimento passado (Vencido ⊂ Em aberto).
+// Dashboard, Rotina e relatórios usam ESTAS funções — nunca recalculam.
+import { getReceiptsSummary as _receipts } from "@/lib/services/revenue-metrics";
+
+/** Faturamento total previsto do período (Σ cobranças da competência). */
+export async function getMonthlyExpectedRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).expectedTotal;
+}
+/** Recebido no período (pagos dentro do mês de competência + adiantamentos). */
+export async function getMonthlyReceivedRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).receiptsCorrectMonth;
+}
+/** Em aberto / Falta receber = max(previsto − recebido, 0). */
+export async function getMonthlyOpenRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).openMonth;
+}
+/** Vencido = em aberto com vencimento passado (subconjunto do Em aberto). */
+export async function getMonthlyOverdueRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).overdueOpenAmount;
+}
+/** Resultado do mês = Recebido − Despesas do mês (regra do Dashboard). */
+export function computeMonthlyResult(received: number, monthExpenses: number) {
+  return received - monthExpenses;
+}
+/** Margem Operacional = Resultado / Recebido (0 quando nada recebido). */
+export function computeOperationalMargin(result: number, received: number) {
+  return received > 0 ? result / received : 0;
+}
+
 // ===== Faturamento MRR/TCV, recebimentos/receita extra, renovações, perdas =====
 export {
   getPeriodRevenue,

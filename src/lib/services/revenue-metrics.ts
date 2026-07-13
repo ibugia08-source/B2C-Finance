@@ -197,6 +197,14 @@ export type ReceiptsSummary = {
   extraRevenueTotal: number; // recuperações + manuais
   totalRevenue: number; // receiptsCorrectMonth + extraRevenueTotal
   openAmount: number; // em aberto (competência no período, não quitado)
+
+  // ===== Métricas OFICIAIS do mês (fórmulas do dicionário) =====
+  /** Faturamento total previsto: Σ cobranças da competência (exceto canceladas) */
+  expectedTotal: number;
+  /** Em aberto / Falta receber = max(previsto − recebido, 0) — clamp documentado */
+  openMonth: number;
+  /** Vencido: parte do em aberto cuja data de vencimento já passou (⊂ Em aberto) */
+  overdueOpenAmount: number;
 };
 
 export async function getReceiptsSummary(
@@ -254,10 +262,26 @@ export async function getReceiptsSummary(
             OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
             ...(clientFilter as any),
           },
-          select: { amount: true, paidTotal: true },
+          select: { amount: true, paidTotal: true, dueDate: true },
         })
-      : Promise.resolve([] as { amount: unknown; paidTotal: unknown }[]),
+      : Promise.resolve(
+          [] as { amount: unknown; paidTotal: unknown; dueDate: Date }[]
+        ),
   ]);
+
+  // Faturamento total previsto do período: Σ cobranças da competência,
+  // exceto canceladas (inclui pagas e em aberto).
+  const expectedAgg = months.length
+    ? await prisma.billing.aggregate({
+        where: {
+          status: { not: "CANCELED" },
+          OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+          ...(clientFilter as any),
+        },
+        _sum: { amount: true },
+      })
+    : null;
+  const expectedTotal = n(expectedAgg?._sum.amount);
 
   let receiptsCorrectMonth = 0;
   let mrrReceived = 0;
@@ -305,6 +329,22 @@ export async function getReceiptsSummary(
     0
   );
 
+  // ===== Fórmulas OFICIAIS do mês (dicionário de métricas) =====
+  // Em aberto = Faturamento total previsto − Recebido do mês.
+  // Clamp em 0: recebido pode superar o previsto (adiantamento de competência
+  // futura contado como recebimento) — nunca exibir "em aberto" negativo.
+  const openMonth = Math.max(0, expectedTotal - receiptsCorrectMonth);
+  // Vencido = parte do em aberto cuja data de vencimento já passou (⊂ Em aberto).
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const overdueOpenAmount = openBillings.reduce(
+    (s, b) =>
+      (b as any).dueDate < today
+        ? s + Math.max(0, n(b.amount) - n(b.paidTotal))
+        : s,
+    0
+  );
+
   return {
     receiptsCorrectMonth,
     mrrReceived,
@@ -318,6 +358,9 @@ export async function getReceiptsSummary(
     extraRevenueTotal,
     totalRevenue: receiptsCorrectMonth + extraRevenueTotal,
     openAmount,
+    expectedTotal,
+    openMonth,
+    overdueOpenAmount,
   };
 }
 

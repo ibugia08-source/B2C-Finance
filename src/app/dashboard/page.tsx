@@ -12,6 +12,10 @@ import {
   type DashboardFilters as Filters,
   type DashAlert,
 } from "@/lib/services/dashboard-metrics";
+import {
+  computeMonthlyResult,
+  computeOperationalMargin,
+} from "@/lib/financial/calculations";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -104,8 +108,18 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
 
   const hs = HEALTH_STYLE[health.level];
-  const margemPct = Math.round(finance.margem * 100);
   const renovacoes = renewalOutlook[0];
+
+  // ===== Fórmulas oficiais da 1ª linha (docs/METRICAS_FINANCEIRAS.md) =====
+  // Em aberto = Faturamento total previsto − Recebido (clamp 0, na camada
+  // central); Vencido ⊂ Em aberto; Resultado = Recebido − Despesas do mês;
+  // Margem Operacional = Resultado / Recebido.
+  const previsto = receipts.expectedTotal;
+  const recebido = receipts.receiptsCorrectMonth;
+  const emAberto = receipts.openMonth;
+  const vencido = receipts.overdueOpenAmount;
+  const resultado = computeMonthlyResult(recebido, finance.despesas);
+  const margemPct = Math.round(computeOperationalMargin(resultado, recebido) * 100);
 
   return (
     <div>
@@ -134,27 +148,27 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         Visão financeira · {period.label}
       </h2>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <StatCard href="/cobrancas" title="Faturamento"
-          value={formatBRL(receipts.totalRevenue)}
-          hint="recebido no mês + Receita Extra" />
+        <StatCard href="/cobrancas" title="Faturamento total previsto"
+          value={formatBRL(previsto)}
+          hint="tudo que está previsto entrar no mês" />
         <StatCard href="/cobrancas?st=PAID" title="Recebido"
-          value={formatBRL(receipts.receiptsCorrectMonth)} intent="positive"
+          value={formatBRL(recebido)} intent="positive"
           hint={`MRR ${formatBRL(receipts.mrrReceived)} · TCV ${formatBRL(receipts.tcvReceived)}`} />
-        <StatCard href="/cobrancas?st=UPCOMING" title="Em aberto"
-          value={formatBRL(kpis.receitaPendente)} intent="warning"
-          hint="ainda no prazo" />
+        <StatCard href="/cobrancas" title="Em aberto"
+          value={formatBRL(emAberto)} intent={emAberto > 0 ? "warning" : "default"}
+          hint="previsto − recebido (falta receber)" />
         <StatCard href="/cobrancas?st=OVERDUE" title="Vencido"
-          value={formatBRL(kpis.receitaVencida)}
-          intent={kpis.receitaVencida > 0 ? "negative" : "default"}
-          hint="passou do vencimento" />
+          value={formatBRL(vencido)}
+          intent={vencido > 0 ? "negative" : "default"}
+          hint="parte do em aberto já vencida" />
         <StatCard href="/relatorios/financeiro-mensal" title="Resultado"
-          value={formatBRL(finance.lucro)}
-          intent={finance.lucro >= 0 ? "positive" : "negative"}
-          hint={`despesas ${formatBRL(finance.despesas)} · caixa estimado ${formatBRL(cash.saldoPrevisto)}`} />
-        <StatCard href="/relatorios/financeiro-mensal" title="Margem"
+          value={formatBRL(resultado)}
+          intent={resultado >= 0 ? "positive" : "negative"}
+          hint={`recebido − despesas ${formatBRL(finance.despesas)} · caixa estimado ${formatBRL(cash.saldoPrevisto)}`} />
+        <StatCard href="/relatorios/financeiro-mensal" title="Margem Operacional"
           value={`${margemPct}%`}
           intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"}
-          hint="resultado / faturamento" />
+          hint="resultado / recebido" />
       </div>
 
       {/* ===== Linha 2 — Operação ===== */}

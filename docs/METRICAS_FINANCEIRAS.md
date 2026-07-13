@@ -13,14 +13,42 @@ TCV nunca é rateado por mês.
 
 ---
 
+## As 6 métricas da 1ª linha do Dashboard (fórmulas OBRIGATÓRIAS)
+
+```
+Faturamento total previsto = Σ cobranças da competência do mês (exceto canceladas)
+Recebido                   = Σ pago dentro do mês de competência (+ adiantamentos)
+Em aberto                  = max(Faturamento total previsto − Recebido, 0)
+Falta receber (Rotina)     = Em aberto do mês vigente  ← MESMO cálculo, outro nome
+Vencido                    = parte do Em aberto com vencimento passado (Vencido ⊂ Em aberto)
+Resultado                  = Recebido − Despesas do mês
+Margem Operacional         = Resultado / Recebido  (0 quando nada recebido)
+```
+
+Decisões documentadas:
+- **Clamp em 0** no Em aberto: adiantamento de competência futura pode fazer
+  Recebido > Previsto; nunca exibir valor negativo.
+- **Margem sobre o Recebido** (não sobre o previsto): representa a margem
+  sobre o que realmente entrou.
+- **Inadimplência de meses anteriores NÃO entra** no Em aberto do mês atual —
+  ela aparece no card próprio "A cobrar (vencido)" da Rotina e no módulo
+  Inadimplência (aging acumulado).
+- Funções oficiais em `lib/financial/calculations.ts`:
+  `getMonthlyExpectedRevenue`, `getMonthlyReceivedRevenue`,
+  `getMonthlyOpenRevenue`, `getMonthlyOverdueRevenue`,
+  `computeMonthlyResult`, `computeOperationalMargin`
+  (base: `getReceiptsSummary` → `expectedTotal`, `receiptsCorrectMonth`,
+  `openMonth`, `overdueOpenAmount`).
+
 ## Recebimentos (dinheiro que entra de clientes)
 
 | Métrica | Significado | Cálculo (campo na camada central) | Onde aparece |
 |---|---|---|---|
-| **Faturamento** | Tudo que a agência faturou no mês (regra oficial) | `receipts.totalRevenue` = recebido no mês correto + recuperações + Receita Extra manual (`getReceiptsSummary`) | Dashboard L1, Relatório Executivo |
+| **Faturamento total previsto** | Tudo previsto para entrar no mês | `receipts.expectedTotal` | Dashboard L1 |
 | **Recebido** | Pago dentro do mês de competência | `receipts.receiptsCorrectMonth` | Dashboard L1, Recebimentos, Relatório Recebimentos |
-| **Em aberto** | Ainda não pago, dentro do prazo | `kpis.receitaPendente` (cobranças PENDING/PARTIAL no prazo) | Dashboard L1, Recebimentos ("A vencer") |
-| **Vencido** | Passou do vencimento e não foi pago | `kpis.receitaVencida` (cobranças OVERDUE) | Dashboard L1, Recebimentos, Inadimplência |
+| **Em aberto / Falta receber** | Ainda falta receber no mês | `receipts.openMonth` = max(previsto − recebido, 0) | Dashboard L1, Rotina |
+| **Vencido** | Parte do em aberto já vencida | `receipts.overdueOpenAmount` | Dashboard L1, Recebimentos, Inadimplência |
+| **Faturamento (realizado)** | Fechamento oficial: recebido + recuperações + Receita Extra manual | `receipts.totalRevenue` | Relatório Executivo, IA |
 | **A receber** (só em Recebimentos) | Em aberto + Vencido do mês selecionado | soma dos `openAmount` das cobranças do ciclo | Painel de Recebimentos |
 | **MRR recebido** | Parte recorrente do Recebido | `receipts.mrrReceived` | Hint do card Recebido, Relatório MRR |
 | **TCV recebido** | Parte de contratos fechados do Recebido (valor cheio no mês da adesão) | `receipts.tcvReceived` | Hint do card Recebido, Relatório TCV |
