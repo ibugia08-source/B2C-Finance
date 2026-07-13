@@ -295,8 +295,14 @@ export default async function RecebimentosPage({
   ).length;
 
   // ===== Filtros de visualização =====
+  // "Pagos" agrupa todas as variações de pagamento concluído.
+  const PAID_GROUP = ["PAID", "PAID_LATE", "PAID_OTHER_MONTH"];
   const visible = baseRows.filter((r) => {
-    if (stFilter && stFilter !== "REMOVED" && r.cycleStatus !== stFilter) return false;
+    if (stFilter === "PAID") {
+      if (!PAID_GROUP.includes(r.cycleStatus)) return false;
+    } else if (stFilter && stFilter !== "REMOVED" && r.cycleStatus !== stFilter) {
+      return false;
+    }
     if (respFilter && r.responsible !== respFilter) return false;
     if (modFilter && (r.modality ?? "") !== modFilter) return false;
     if (q && !r.name.toLowerCase().includes(q)) return false;
@@ -327,14 +333,14 @@ export default async function RecebimentosPage({
     return qs ? `/cobrancas?${qs}` : "/cobrancas";
   };
 
+  // Filtros enxutos: variações de "pago" (com atraso / outro mês) continuam
+  // visíveis no status de cada linha e acessíveis por link direto (?st=).
   const CHIPS: { label: string; st: string }[] = [
     { label: "Todos", st: "" },
     { label: "A vencer", st: "UPCOMING" },
     { label: "Pagos", st: "PAID" },
-    { label: "Pagos com atraso", st: "PAID_LATE" },
     { label: "Vencidos", st: "OVERDUE" },
     { label: "Inadimplentes", st: "DELINQUENT" },
-    { label: "Recebidos em outro mês", st: "PAID_OTHER_MONTH" },
     { label: "Sem cobrança", st: "NO_CHARGE" },
     { label: "Removidos do mês", st: "REMOVED" },
   ];

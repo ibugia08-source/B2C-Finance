@@ -142,65 +142,23 @@ export function ClientDialog({
           onSubmit={handleSubmit(onSubmit)}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
+          {/* ===== Campos principais — o essencial para operar ===== */}
           <div className="col-span-full">
             <Label>Nome do cliente *</Label>
-            <Input {...register("name")} />
+            <Input {...register("name")} placeholder="ex.: Clínica Sorriso" />
             {err.name && <FieldError msg={err.name.message} />}
           </div>
 
           <div>
-            <Label>Razão social</Label>
-            <Input {...register("legalName")} />
-          </div>
-          <div>
-            <Label>CNPJ / CPF</Label>
-            <Input {...register("document")} />
-          </div>
-
-          <div>
-            <Label>E-mail</Label>
-            <Input type="email" {...register("email")} />
-            {err.email && <FieldError msg={err.email.message} />}
-          </div>
-          <div>
             <Label>WhatsApp / Telefone</Label>
             <Input {...register("phone")} placeholder="(71) 9 9999-9999" />
           </div>
-
           <div>
-            <Label>Segmento / nicho</Label>
-            <Input {...register("segment")} />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2">
-              <Label>Cidade</Label>
-              <Input {...register("city")} />
-            </div>
-            <div>
-              <Label>UF</Label>
-              <Input {...register("state")} maxLength={2} placeholder="BA" />
-              {err.state && <FieldError msg={err.state.message} />}
-            </div>
+            <Label>E-mail</Label>
+            <Input type="email" {...register("email")} placeholder="contato@cliente.com" />
+            {err.email && <FieldError msg={err.email.message} />}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Endereço (contratos)</Label>
-              <Input {...register("address")} placeholder="rua, nº, bairro, cidade/UF" />
-            </div>
-            <div>
-              <Label>Representante legal</Label>
-              <Input {...register("legalRepresentative")} placeholder="nome do responsável que assina" />
-            </div>
-          </div>
-
-          <div>
-            <Label>Origem</Label>
-            <Input
-              {...register("origin")}
-              placeholder="indicação, tráfego, orgânico…"
-            />
-          </div>
           <div>
             <Label>Status</Label>
             <Select {...register("status")}>
@@ -211,14 +169,9 @@ export function ClientDialog({
               ))}
             </Select>
           </div>
-
           <div>
-            <Label>Responsável comercial</Label>
-            <Input {...register("salesOwner")} />
-          </div>
-          <div>
-            <Label>Responsável operacional</Label>
-            <Input {...register("opsOwner")} />
+            <Label>Responsável</Label>
+            <Input {...register("salesOwner")} placeholder="quem cuida deste cliente" />
           </div>
 
           {!isNew && (
@@ -290,16 +243,62 @@ export function ClientDialog({
               )}
             </div>
           )}
-          <div className={isNew ? "col-span-full sm:col-span-1" : ""}>
-            <Label>Tags</Label>
-            <Input {...register("tags")} placeholder="vip, mensal, tráfego" />
-            <p className="text-xs text-muted-foreground mt-1">Separe por vírgula.</p>
-          </div>
-
-          <div className="col-span-full">
-            <Label>Observações</Label>
-            <Textarea {...register("notes")} />
-          </div>
+          {/* ===== Avançado — dados fiscais, contratuais e internos ===== */}
+          <details className="col-span-full rounded-lg border">
+            <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Avançado — dados fiscais, endereço e detalhes internos (opcional)
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 pt-1">
+              <div>
+                <Label>Razão social</Label>
+                <Input {...register("legalName")} />
+              </div>
+              <div>
+                <Label>CNPJ / CPF</Label>
+                <Input {...register("document")} placeholder="00.000.000/0000-00" />
+              </div>
+              <div>
+                <Label>Segmento / nicho</Label>
+                <Input {...register("segment")} placeholder="ex.: odontologia" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
+                  <Label>Cidade</Label>
+                  <Input {...register("city")} />
+                </div>
+                <div>
+                  <Label>UF</Label>
+                  <Input {...register("state")} maxLength={2} placeholder="BA" />
+                  {err.state && <FieldError msg={err.state.message} />}
+                </div>
+              </div>
+              <div>
+                <Label>Endereço (usado nos contratos)</Label>
+                <Input {...register("address")} placeholder="rua, nº, bairro, cidade/UF" />
+              </div>
+              <div>
+                <Label>Representante legal</Label>
+                <Input {...register("legalRepresentative")} placeholder="quem assina o contrato" />
+              </div>
+              <div>
+                <Label>Origem</Label>
+                <Input {...register("origin")} placeholder="indicação, tráfego, orgânico…" />
+              </div>
+              <div>
+                <Label>Responsável operacional</Label>
+                <Input {...register("opsOwner")} />
+              </div>
+              <div className="col-span-full">
+                <Label>Tags</Label>
+                <Input {...register("tags")} placeholder="vip, mensal, tráfego" />
+                <p className="text-xs text-muted-foreground mt-1">Separe por vírgula.</p>
+              </div>
+              <div className="col-span-full">
+                <Label>Observações</Label>
+                <Textarea {...register("notes")} />
+              </div>
+            </div>
+          </details>
 
           {serverError && (
             <p className="col-span-full text-sm text-destructive">{serverError}</p>

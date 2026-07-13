@@ -8,7 +8,7 @@ import { requireAdmin } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getCashSummary, getFinanceSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
-import { getRenewalOutlook, getReceiptsSummary } from "@/lib/services/revenue-metrics";
+import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getMonthlySeries } from "@/lib/services/dashboard-metrics";
 import { limitesUsadosPorCartao } from "@/lib/services/calculations";
@@ -51,7 +51,7 @@ export default async function RotinaPage() {
   const [
     queue, cash, accounts, payToday, criticalExpenses, weekBillings, weekExpenses,
     receivedPayments, receivedIncomes, openAgg, renewals,
-    renewalWindows, receiptsMonth, finance, expenseSummary, series, openUpsells, cardsAll, devendoMes,
+    renewalWindows, finance, expenseSummary, series, openUpsells, cardsAll, devendoMes,
   ] =
     await Promise.all([
       getCollectionQueue(),
@@ -105,10 +105,6 @@ export default async function RotinaPage() {
         select: { id: true, title: true, renewalDate: true, monthlyValue: true, client: { select: { name: true } } },
       }),
       getRenewalOutlook([0, 1]),
-      getReceiptsSummary(
-        resolvePeriod({ periodo: "mes" }).start,
-        resolvePeriod({ periodo: "mes" }).end
-      ),
       getFinanceSummary(resolvePeriod({ periodo: "mes" })),
       getExpenseSummary(),
       getMonthlySeries({ period: resolvePeriod({ periodo: "mes" }) }),
@@ -265,7 +261,8 @@ export default async function RotinaPage() {
         <StatCard title="Falta receber (aberto)" value={formatBRL(faltaReceber)} />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      {/* Operação do mês — fechamento mensal detalhado fica no Dashboard/relatórios. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <StatCard
           href={renewalsThisMonth ? `/clientes?mesRenovacao=${renewalsThisMonth.month}` : "/clientes"}
           title="Renovações do mês"
@@ -275,43 +272,16 @@ export default async function RotinaPage() {
         />
         <StatCard
           href="/clientes?inadimplencia=devendo"
-          title="Clientes devendo no mês"
+          title="Clientes em aberto no mês"
           value={String(devendoMes)}
           intent={devendoMes > 0 ? "negative" : "positive"}
+          hint="ainda sem pagamento registrado"
         />
         <StatCard
           href="/upsell"
-          title="Upsell aberto"
+          title="Upsell em aberto"
           value={String(openUpsells.length)}
           hint={formatBRL(openUpsells.reduce((s, u) => s + Number(u.value), 0))}
-        />
-        <StatCard
-          href="/despesas?aba=resumo"
-          title="Vence na semana (despesas)"
-          value={formatBRL(expenseSummary.upcoming.reduce((s, u) => s + u.amount, 0))}
-          intent={expenseSummary.upcoming.length > 0 ? "warning" : "default"}
-          hint={`${expenseSummary.upcoming.length} despesa(s)`}
-        />
-        <StatCard
-          href="/receitas"
-          title="Receita Extra e recuperações"
-          value={formatBRL(receiptsMonth.extraRevenueTotal)}
-          intent={receiptsMonth.extraRevenueTotal > 0 ? "positive" : "default"}
-          hint={`${formatBRL(receiptsMonth.extraRevenueAutomatic)} inadimplência regularizada`}
-        />
-        <StatCard
-          href="/cobrancas?situacao=outro-mes"
-          title="Pagos em outro mês"
-          value={String(receiptsMonth.paidDifferentMonthCount)}
-          intent={receiptsMonth.paidDifferentMonthCount > 0 ? "warning" : "default"}
-          hint={`${formatBRL(receiptsMonth.paidDifferentMonthValue)} regularizados de meses anteriores`}
-        />
-        <StatCard
-          href="/cobrancas?situacao=atrasado"
-          title="Pagos com atraso (mês)"
-          value={String(receiptsMonth.lateSameMonthCount)}
-          intent={receiptsMonth.lateSameMonthCount > 0 ? "warning" : "positive"}
-          hint={formatBRL(receiptsMonth.lateSameMonthValue)}
         />
       </div>
 

@@ -233,7 +233,7 @@ export default async function ClientDetailPage({
           <TabsList>
             <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
             <TabsTrigger value="contratos">
-              Acordos {contracts.length > 0 && `(${contracts.length})`}
+              Contratos comerciais {contracts.length > 0 && `(${contracts.length})`}
             </TabsTrigger>
             <TabsTrigger value="documentos">
               Documentos e Contratos{" "}

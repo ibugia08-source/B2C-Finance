@@ -79,6 +79,11 @@ export function AISuggestionsPanel() {
                     {pm.label}
                   </Badge>
                   <span className="min-w-0">
+                    {s.insight && (
+                      <span className="block text-xs text-muted-foreground">
+                        {s.insight}
+                      </span>
+                    )}
                     <span className="block text-sm font-medium">{s.action}</span>
                     <span className="block text-xs text-muted-foreground">{s.reason}</span>
                   </span>

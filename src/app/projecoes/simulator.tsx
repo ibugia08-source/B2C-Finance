@@ -83,11 +83,23 @@ function NumField({
 
 export function ProjectionSimulator({ baseline }: { baseline: Baseline }) {
   const [scenario, setScenario] = useState<ScenarioInput>(EMPTY_SCENARIO);
-  const [goals, setGoals] = useState<Goals>({
+  const [goalsInput, setGoals] = useState<Goals>({
     metaFaturamento: null,
     margemDesejada: 30,
     metaLucro: null,
   });
+
+  // Meta de lucro é DERIVADA (faturamento × margem) — um campo a menos.
+  const goals = useMemo<Goals>(
+    () => ({
+      ...goalsInput,
+      metaLucro:
+        goalsInput.metaFaturamento != null && goalsInput.margemDesejada != null
+          ? Math.round(goalsInput.metaFaturamento * (goalsInput.margemDesejada / 100))
+          : null,
+    }),
+    [goalsInput]
+  );
 
   const atual = useMemo(() => currentScenario(baseline), [baseline]);
   const projetado = useMemo(
@@ -155,12 +167,10 @@ export function ProjectionSimulator({ baseline }: { baseline: Baseline }) {
                   }
                 />
               </div>
-              <NumField
-                label="Meta de lucro (R$/mês)"
-                value={goals.metaLucro ?? 0}
-                onChange={(v) => setGoals((g) => ({ ...g, metaLucro: v || null }))}
-              />
             </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              A meta de lucro é calculada: faturamento × margem desejada.
+            </p>
           </div>
 
           <div className="border-t pt-4">
@@ -193,14 +203,21 @@ export function ProjectionSimulator({ baseline }: { baseline: Baseline }) {
                 hint={`vencido em aberto: ${formatBRL(baseline.inadimplenciaAberta)}`}
               />
               <NumField label="Redução de despesas (R$/mês)" value={scenario.reducaoDespesas} onChange={set("reducaoDespesas")} />
-              <NumField
-                label="Perda de clientes MRR (nº)"
-                value={scenario.perdaClientesMrr}
-                onChange={set("perdaClientesMrr")}
-                isCount
-                hint={`ticket médio MRR: ${formatBRL(baseline.avgTicketMrr)}`}
-              />
-              <NumField label="Contratação / aumento de folha (R$/mês)" value={scenario.aumentoFolha} onChange={set("aumentoFolha")} />
+              <details className="rounded-md border">
+                <summary className="cursor-pointer select-none px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
+                  Avançado — perdas e folha
+                </summary>
+                <div className="space-y-3 p-2.5 pt-1">
+                  <NumField
+                    label="Perda de clientes MRR (nº)"
+                    value={scenario.perdaClientesMrr}
+                    onChange={set("perdaClientesMrr")}
+                    isCount
+                    hint={`ticket médio MRR: ${formatBRL(baseline.avgTicketMrr)}`}
+                  />
+                  <NumField label="Contratação / aumento de folha (R$/mês)" value={scenario.aumentoFolha} onChange={set("aumentoFolha")} />
+                </div>
+              </details>
             </div>
           </div>
         </CardContent>

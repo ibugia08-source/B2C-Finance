@@ -9,8 +9,9 @@ import { requireAdmin } from "@/lib/auth/viewer";
 
 export type RoutineSuggestion = {
   priority: "alta" | "media" | "baixa";
-  action: string; // o que fazer
-  reason: string; // por quê (com números do retrato)
+  insight: string; // o que está acontecendo (fato com números)
+  reason: string; // por que isso importa
+  action: string; // o que fazer agora
 };
 
 export type RoutineAIResult =
@@ -41,8 +42,13 @@ REGRAS INVIOLÁVEIS:
 - Priorize por: impacto financeiro, urgência, dias de atraso, valor envolvido, proximidade de vencimento, risco de perda, potencial de receita e efeito na margem.
 - Temas possíveis: quem cobrar primeiro, cliente com risco de atraso/perda, despesa a revisar, renovação a priorizar, upsell com maior potencial, responsável que precisa de atenção, cenário financeiro se formando, como melhorar a margem.
 
+Fale como um analista financeiro simples e direto, em 3 blocos por sugestão:
+- insight: O QUE ESTÁ ACONTECENDO — o fato, com os números do retrato (ex.: "R$ 4.500 vencidos, concentrados em 3 clientes").
+- reason: POR QUE ISSO IMPORTA — o efeito prático no caixa/margem/risco.
+- action: O QUE FAZER AGORA — frase imperativa curta e executável.
+
 Responda APENAS com JSON válido (sem markdown):
-{"suggestions":[{"priority":"alta|media|baixa","action":"frase imperativa curta","reason":"justificativa com os números do retrato"}]}`;
+{"suggestions":[{"priority":"alta|media|baixa","insight":"o que está acontecendo, com números","reason":"por que importa","action":"o que fazer agora"}]}`;
 
     const result = await chatComplete({
       settings,
@@ -62,8 +68,9 @@ Responda APENAS com JSON válido (sem markdown):
       )
       .map((s: any) => ({
         priority: ["alta", "media", "baixa"].includes(s.priority) ? s.priority : "media",
-        action: String(s.action).slice(0, 240),
+        insight: String(s.insight ?? "").slice(0, 300),
         reason: String(s.reason).slice(0, 400),
+        action: String(s.action).slice(0, 240),
       }))
       .slice(0, 8);
 

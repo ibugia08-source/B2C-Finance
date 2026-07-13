@@ -86,55 +86,16 @@ export function IncomeDialog({
           </div>
 
           <div>
-            <Label>Origem</Label>
-            <Select name="sourceType" defaultValue={initial?.sourceType ?? "BANK_ACCOUNT"}>
-              <option value="BANK_ACCOUNT">Conta bancária</option>
-              <option value="PIX">Pix</option>
-              <option value="TRANSFER">Transferência</option>
-              <option value="CASH">Dinheiro em espécie</option>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Receita não pode entrar em cartão de crédito.
-            </p>
-          </div>
-
-          <div>
-            <Label>Tipo</Label>
-            <Select name="incomeType" defaultValue={initial?.incomeType ?? "OTHER"}>
-              <option value="SALARY">Salário</option>
-              <option value="EARNINGS">Rendimentos</option>
-              <option value="COMPANY_WITHDRAWAL">Retirada da empresa</option>
-              <option value="SALE">Venda</option>
-              <option value="OTHER">Outro</option>
-            </Select>
-          </div>
-
-          <div>
-            <Label>Conta de destino</Label>
-            <Select name="accountId" defaultValue={initial?.accountId ?? ""}>
+            <Label>Cliente (se houver)</Label>
+            <Select name="clientId" defaultValue={initial?.clientId ?? ""}>
               <option value="">—</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </Select>
           </div>
-
           <div>
-            <Label>Pessoa relacionada</Label>
-            <Select name="personId" defaultValue={initial?.personId ?? ""}>
-              <option value="">—</option>
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label>Categoria</Label>
+            <Label>Categoria (se houver)</Label>
             <Select name="categoryId" defaultValue={initial?.categoryId ?? ""}>
               <option value="">—</option>
               {categories.map((c) => (
@@ -145,23 +106,72 @@ export function IncomeDialog({
             </Select>
           </div>
 
-          <div>
-            <Label>Status</Label>
-            <Select name="status" defaultValue={initial?.status ?? "RECEIVED"}>
-              <option value="RECEIVED">Recebido</option>
-              <option value="EXPECTED">Previsto</option>
-              <option value="LATE">Atrasado</option>
-            </Select>
-          </div>
-
-          {/* ===== Classificação gerencial (agência) ===== */}
-          <div className="col-span-2 border-t pt-3 mt-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Gestão da agência (opcional)
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* ===== Avançado — raro no dia a dia; padrões já resolvem ===== */}
+          <details className="col-span-2 rounded-lg border">
+            <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Avançado — forma de entrada, conta, status e classificação (opcional)
+            </summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 pt-1">
               <div>
-                <Label>Tipo de receita</Label>
+                <Label>Forma de entrada</Label>
+                <Select name="sourceType" defaultValue={initial?.sourceType ?? "PIX"}>
+                  <option value="PIX">Pix</option>
+                  <option value="BANK_ACCOUNT">Conta bancária</option>
+                  <option value="TRANSFER">Transferência</option>
+                  <option value="CASH">Dinheiro em espécie</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Conta de destino</Label>
+                <Select name="accountId" defaultValue={initial?.accountId ?? ""}>
+                  <option value="">—</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select name="status" defaultValue={initial?.status ?? "RECEIVED"}>
+                  <option value="RECEIVED">Recebido</option>
+                  <option value="EXPECTED">Previsto</option>
+                  <option value="LATE">Atrasado</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Classificação</Label>
+                <Select name="incomeType" defaultValue={initial?.incomeType ?? "OTHER"}>
+                  <option value="SALE">Venda</option>
+                  <option value="EARNINGS">Rendimentos</option>
+                  <option value="COMPANY_WITHDRAWAL">Retirada da empresa</option>
+                  <option value="SALARY">Salário</option>
+                  <option value="OTHER">Outro</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Pessoa relacionada</Label>
+                <Select name="personId" defaultValue={initial?.personId ?? ""}>
+                  <option value="">—</option>
+                  {people.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Contrato</Label>
+                <Select name="contractId" defaultValue={initial?.contractId ?? ""}>
+                  <option value="">—</option>
+                  {contracts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Tipo de receita (gestão)</Label>
                 <Select name="revenueType" defaultValue={initial?.revenueType ?? ""}>
                   <option value="">—</option>
                   <option value="MRR">Recorrente (MRR)</option>
@@ -184,31 +194,12 @@ export function IncomeDialog({
                   }
                 />
               </div>
-              <div>
-                <Label>Cliente</Label>
-                <Select name="clientId" defaultValue={initial?.clientId ?? ""}>
-                  <option value="">—</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label>Contrato</Label>
-                <Select name="contractId" defaultValue={initial?.contractId ?? ""}>
-                  <option value="">—</option>
-                  {contracts.map((c) => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </Select>
+              <div className="col-span-full">
+                <Label>Observações</Label>
+                <Textarea name="notes" defaultValue={initial?.notes ?? ""} />
               </div>
             </div>
-          </div>
-
-          <div className="col-span-2">
-            <Label>Observações</Label>
-            <Textarea name="notes" defaultValue={initial?.notes ?? ""} />
-          </div>
+          </details>
 
           <DialogFooter className="col-span-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

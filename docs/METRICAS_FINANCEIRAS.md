@@ -1,0 +1,82 @@
+# Dicionário de Métricas Financeiras — B2C Finance
+
+**Fonte da verdade** para nomes, significados e cálculos das métricas do sistema.
+Regra de ouro: **antes de criar uma métrica nova, verifique se ela já existe aqui
+com outro nome.** Toda métrica é calculada na camada central
+(`src/lib/financial/calculations.ts` re-exporta `src/lib/services/*`) — nunca em
+componente.
+
+Regra contábil oficial: **Faturamento = Recebimentos no mês correto + Receitas Extras.**
+Pagamento de mês anterior recebido depois = *inadimplência regularizada* (conta no mês
+do pagamento; o mês original permanece não recebido). Receita Extra é **apenas manual**.
+TCV nunca é rateado por mês.
+
+---
+
+## Recebimentos (dinheiro que entra de clientes)
+
+| Métrica | Significado | Cálculo (campo na camada central) | Onde aparece |
+|---|---|---|---|
+| **Faturamento** | Tudo que a agência faturou no mês (regra oficial) | `receipts.totalRevenue` = recebido no mês correto + recuperações + Receita Extra manual (`getReceiptsSummary`) | Dashboard L1, Relatório Executivo |
+| **Recebido** | Pago dentro do mês de competência | `receipts.receiptsCorrectMonth` | Dashboard L1, Recebimentos, Relatório Recebimentos |
+| **Em aberto** | Ainda não pago, dentro do prazo | `kpis.receitaPendente` (cobranças PENDING/PARTIAL no prazo) | Dashboard L1, Recebimentos ("A vencer") |
+| **Vencido** | Passou do vencimento e não foi pago | `kpis.receitaVencida` (cobranças OVERDUE) | Dashboard L1, Recebimentos, Inadimplência |
+| **A receber** (só em Recebimentos) | Em aberto + Vencido do mês selecionado | soma dos `openAmount` das cobranças do ciclo | Painel de Recebimentos |
+| **MRR recebido** | Parte recorrente do Recebido | `receipts.mrrReceived` | Hint do card Recebido, Relatório MRR |
+| **TCV recebido** | Parte de contratos fechados do Recebido (valor cheio no mês da adesão) | `receipts.tcvReceived` | Hint do card Recebido, Relatório TCV |
+| **Clientes pagos** | Clientes com pagamento do mês registrado | `clientsBlock.pagosMes` / ciclo de Recebimentos | Dashboard L2, Recebimentos |
+| **Clientes em aberto** | Clientes ainda sem pagamento no mês | `clientsBlock.devendoMes` (com override manual) | Dashboard L2, Rotina, Carteira |
+| **Inadimplência regularizada** | Vencido de mês anterior pago depois | `receipts.paidDifferentMonthValue` (= `extraRevenueAutomatic`) | Dashboard (hint do Faturamento), Rotina |
+| **Receita Extra (manual)** | Entradas avulsas cadastradas à mão | `receipts.extraRevenueManual` (ExtraRevenue MANUAL + Income sem cobrança) | Receitas, Relatório Receita Extra |
+
+**Nomes proibidos** (ambíguos — não usar em telas novas): "Valor a receber",
+"Valor pendente", "Receita esperada", "Faturamento esperado", "Previsto" para
+receita de clientes.
+
+## Despesas (dinheiro que sai)
+
+| Métrica | Significado | Cálculo | Onde aparece |
+|---|---|---|---|
+| **Despesas do mês** | Total de despesas do mês (não canceladas) | `expenses.total` | Despesas, hint do Resultado |
+| **Pagas** | Despesas quitadas | `expenses.paid` | Despesas |
+| **Em aberto** | Pendentes dentro do prazo | `expenses.pending` | Despesas |
+| **Vencidas** | Pendentes com vencimento passado (derivado, nunca gravado) | `expenses.overdue` | Dashboard L2, Despesas, Rotina |
+| **Recorrentes** | Despesas com recorrência no mês | `expenses.recurring` | Despesas (Resumo) |
+| **Cartão usado** | Limite usado nos cartões | `expenses.creditLimitUsed` | Despesas (Cartões) |
+| **Limite disponível** | Limite livre nos cartões | `expenses.creditLimitAvailable` | Despesas (Cartões) |
+
+## Resultado
+
+| Métrica | Significado | Cálculo | Onde aparece |
+|---|---|---|---|
+| **Resultado** | Lucro/prejuízo do mês | `finance.lucro` = receitas − despesas pagas | Dashboard L1, Relatório Financeiro mensal |
+| **Margem** | Resultado ÷ Faturamento | `finance.margem` (0–1, exibida em %) | Dashboard L1, Projeções |
+| **Caixa estimado** | Caixa atual + a receber − a pagar | `cash.saldoPrevisto` | Hint do Resultado, módulo Caixa |
+
+## Operação
+
+| Métrica | Significado | Cálculo | Onde aparece |
+|---|---|---|---|
+| **Clientes ativos** | Status ACTIVE na Carteira | `clientsBlock.ativos` | Dashboard L2, Carteira |
+| **Renovações do mês** | Clientes com `renewalMonth` = mês atual | `renewalOutlook[0]` (`getRenewalOutlook`) | Dashboard L2, Rotina, Relatório Renovações |
+| **Upsell em aberto** | Oportunidades abertas + valor | `upsell.openCount` / `openValue` | Dashboard L2, Upsell, Rotina |
+
+## Convenção de status (universal para dinheiro)
+
+`Previsto → Recebido/Pago → Em aberto → Vencido` — nenhuma tela deve criar
+sinônimos ("pendente", "atrasado", "a vencer") sem mapear para um destes.
+Em Recebimentos, os detalhes de *como* foi pago aparecem no status da linha:
+Pago · Pago com atraso · Recebido em outro mês (todos contam como "Pagos").
+
+## Histórico de decisões
+
+- 2026-07-12 — Simplificação geral: Dashboard reduzido a 3 linhas (15 cards);
+  removidos os cálculos paralelos da antiga seção "Comercial & faturamento"
+  da tela (MRR/TCV por contratos continuam no serviço apenas para a IA);
+  relatórios 25 → 18 (removidos: margem-operacional, faturamento-total,
+  pagamentos-atrasados, pagos-outro-mes, receita-perdida,
+  rentabilidade-servico, projecao-financeira — todos recortes de outros).
+- 2026-07-11 — Receita Extra passou a ser **apenas manual**; recuperação de
+  inadimplência conta direto dos pagamentos.
+- 2026-07-10 — Regra oficial de fechamento mensal implantada
+  (`payment-accounting.ts`); TCV sem rateio.

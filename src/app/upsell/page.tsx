@@ -100,23 +100,17 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
         actions={<UpsellDialog clients={clients} services={services} offers={offers} />}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <StatCard
-          title="Oportunidades abertas"
+          title="Em aberto"
           value={String(kpis.openCount)}
-          hint={`${formatBRL(kpis.openValue)} em pipeline`}
+          hint={`${formatBRL(kpis.openValue)} em oportunidades`}
         />
-        <StatCard title="Valor em oportunidades" value={formatBRL(kpis.openValue)} />
         <StatCard
           title="Ganho no mês"
           value={formatBRL(kpis.wonValue)}
           intent="positive"
           hint={`${kpis.wonCount} venda(s)`}
-        />
-        <StatCard
-          title="Vendidos no mês"
-          value={String(kpis.wonCount)}
-          intent={kpis.wonCount > 0 ? "positive" : "default"}
         />
         <StatCard
           title="Conversão (mês)"
