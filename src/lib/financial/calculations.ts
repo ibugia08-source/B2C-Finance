@@ -51,10 +51,64 @@ export async function getMonthlyOverdueRevenue(start: Date, end: Date) {
 export function computeMonthlyResult(received: number, monthExpenses: number) {
   return received - monthExpenses;
 }
+/** Alias com o nome oficial do dicionário. */
+export const getMonthlyResult = computeMonthlyResult;
 /** Margem Operacional = Resultado / Recebido (0 quando nada recebido). */
 export function computeOperationalMargin(result: number, received: number) {
   return received > 0 ? result / received : 0;
 }
+
+// ===== Indicadores gerenciais do mês (Bloco 2 do Dashboard) =====
+// Assíncronos consultam a camada de serviços; os puros recebem valores já
+// centralizados e apenas protegem contra divisão por zero.
+import {
+  getMonthlyChurn as _churn,
+  getNewClientsSummary as _newClients,
+} from "@/lib/services/revenue-metrics";
+
+/** Faturamento MRR do mês = parte MRR do Recebido. */
+export async function getMonthlyMrrRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).mrrReceived;
+}
+/** Faturamento TCV do mês = parte TCV do Recebido (valor cheio, sem rateio). */
+export async function getMonthlyTcvRevenue(start: Date, end: Date) {
+  return (await _receipts(start, end)).tcvReceived;
+}
+/** Ticket médio = Recebido / clientes pagos no mês (0 se ninguém pagou). */
+export function getMonthlyAverageTicket(received: number, paidClients: number) {
+  return paidClients > 0 ? received / paidClients : 0;
+}
+/** Custo por cliente = Despesas do mês / clientes ativos (0 se nenhum). */
+export function getMonthlyCostPerClient(monthExpenses: number, activeClients: number) {
+  return activeClients > 0 ? monthExpenses / activeClients : 0;
+}
+/** % Folha no faturamento = Folha do mês / Recebido (dinheiro que entrou). */
+export function getPayrollPercentageOfRevenue(payroll: number, received: number) {
+  return received > 0 ? payroll / received : 0;
+}
+/** Qtd. de clientes perdidos (churn) no período filtrado. */
+export async function getMonthlyChurnCount(start: Date, end: Date) {
+  return (await _churn(start, end)).count;
+}
+/** Receita perdida no período (MRR = mensal; TCV = última adesão). */
+export async function getMonthlyLostRevenue(start: Date, end: Date) {
+  return (await _churn(start, end)).value;
+}
+/** Qtd. de novos clientes no período (startedAt, fallback createdAt). */
+export async function getMonthlyNewClientsCount(start: Date, end: Date) {
+  return (await _newClients(start, end)).count;
+}
+/** Receita dos novos clientes (MRR = mensal; TCV = total do contrato). */
+export async function getMonthlyNewClientsRevenue(start: Date, end: Date) {
+  return (await _newClients(start, end)).revenue;
+}
+/** Total inadimplência = parte vencida do Em Aberto do período (⊂ Em Aberto). */
+export async function getMonthlyDelinquencyTotal(start: Date, end: Date) {
+  return (await _receipts(start, end)).overdueOpenAmount;
+}
+
+export { getMonthlyChurn, getNewClientsSummary } from "@/lib/services/revenue-metrics";
+export type { MonthlyChurn, NewClientsSummary } from "@/lib/services/revenue-metrics";
 
 // ===== Faturamento MRR/TCV, recebimentos/receita extra, renovações, perdas =====
 export {

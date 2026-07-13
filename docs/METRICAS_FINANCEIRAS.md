@@ -108,3 +108,23 @@ Pago · Pago com atraso · Recebido em outro mês (todos contam como "Pagos").
   inadimplência conta direto dos pagamentos.
 - 2026-07-10 — Regra oficial de fechamento mensal implantada
   (`payment-accounting.ts`); TCV sem rateio.
+
+## Indicadores gerenciais do mês (Bloco 2 do Dashboard)
+
+| Métrica | Fórmula | Função oficial |
+|---|---|---|
+| Resultado do mês | Recebido − Despesas do mês | `computeMonthlyResult` / `getMonthlyResult` |
+| Faturamento MRR (mês) | parte MRR do Recebido | `getMonthlyMrrRevenue` |
+| Faturamento TCV (mês) | parte TCV do Recebido (valor cheio, sem rateio) | `getMonthlyTcvRevenue` |
+| Ticket médio (mês) | Recebido ÷ clientes pagos (0 se nenhum) | `getMonthlyAverageTicket` |
+| Custo por cliente | Despesas do mês ÷ clientes ativos (0 se nenhum) | `getMonthlyCostPerClient` |
+| % Folha no faturamento | Folha do mês ÷ Recebido (dinheiro que entrou) | `getPayrollPercentageOfRevenue` |
+| Churn de clientes (mês) | perdas com `lostAt` no período filtrado | `getMonthlyChurnCount` |
+| Receita perdida (mês) | MRR = mensal perdido; TCV = última adesão | `getMonthlyLostRevenue` |
+| Novos clientes (mês) | entrada = `startedAt` (fallback `createdAt`) no período | `getMonthlyNewClientsCount` |
+| Receita de novos clientes | MRR = mensal; TCV = total do último contrato | `getMonthlyNewClientsRevenue` |
+| Total inadimplência | = Vencido (parte vencida do Em Aberto) | `getMonthlyDelinquencyTotal` |
+
+Análises visuais (abaixo dos indicadores): Receita por modalidade ·
+Evolução financeira mensal · Recebimento do mês (recebido/aberto/vencido) ·
+Novos clientes × churn · Receita perdida × novos clientes · % Folha (12m).

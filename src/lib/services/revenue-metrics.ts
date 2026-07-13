@@ -521,6 +521,61 @@ function lossValue(l: { modality: string | null; monthlyValue: unknown; referenc
   return n(l.monthlyValue) || n(l.referenceValue);
 }
 
+/** Churn do PERÍODO FILTRADO (≠ getLossSummary, que é sempre o mês atual). */
+export type MonthlyChurn = { count: number; value: number };
+export async function getMonthlyChurn(start: Date, end: Date): Promise<MonthlyChurn> {
+  const losses = await prisma.clientLoss.findMany({
+    where: { lostAt: { gte: start, lt: end } },
+    select: { modality: true, monthlyValue: true, referenceValue: true },
+  });
+  return {
+    count: losses.length,
+    value: losses.reduce((s, l) => s + lossValue(l), 0),
+  };
+}
+
+/**
+ * Novos clientes do período: entrada = startedAt (fallback createdAt).
+ * Receita: MRR → valor mensal; TCV → valor total do último contrato
+ * (fallback: valor mensal de referência).
+ */
+export type NewClientsSummary = { count: number; revenue: number };
+export async function getNewClientsSummary(
+  start: Date,
+  end: Date
+): Promise<NewClientsSummary> {
+  const clients = await prisma.client.findMany({
+    where: {
+      OR: [
+        { startedAt: { gte: start, lt: end } },
+        { startedAt: null, createdAt: { gte: start, lt: end } },
+      ],
+    },
+    select: { id: true, modality: true, monthlyValue: true },
+  });
+  const tcvIds = clients.filter((c) => c.modality === "TCV").map((c) => c.id);
+  const contracts = tcvIds.length
+    ? await prisma.contract.findMany({
+        where: { clientId: { in: tcvIds } },
+        orderBy: { startDate: "desc" },
+        select: { clientId: true, totalValue: true },
+      })
+    : [];
+  const lastTcv = new Map<string, number>();
+  for (const c of contracts)
+    if (!lastTcv.has(c.clientId)) lastTcv.set(c.clientId, n(c.totalValue));
+
+  const revenue = clients.reduce(
+    (s, c) =>
+      s +
+      (c.modality === "TCV"
+        ? lastTcv.get(c.id) ?? n(c.monthlyValue)
+        : n(c.monthlyValue)),
+    0
+  );
+  return { count: clients.length, revenue };
+}
+
 export async function getLossSummary(): Promise<LossSummary> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);

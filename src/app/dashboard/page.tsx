@@ -15,14 +15,19 @@ import {
 import {
   computeMonthlyResult,
   computeOperationalMargin,
+  getMonthlyAverageTicket,
+  getMonthlyCostPerClient,
+  getPayrollPercentageOfRevenue,
+  getMonthlyChurn,
+  getNewClientsSummary,
 } from "@/lib/financial/calculations";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   ChartCard,
   GroupedBarChart,
-  DivergingBarChart,
   LineChart,
+  HBarList,
 } from "@/components/charts";
 import { DashboardFilters } from "./dashboard-filters";
 import { PersonalDashboard } from "./personal-dashboard";
@@ -83,8 +88,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     clientStatus: sp.statuscliente || undefined,
   };
 
-  const [data, clients, services, ownerRows, segmentRows] = await Promise.all([
+  const [data, churn, newClients, clients, services, ownerRows, segmentRows] = await Promise.all([
     getExecutiveDashboard(filters),
+    getMonthlyChurn(period.start, period.end),
+    getNewClientsSummary(period.start, period.end),
     prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     prisma.client.findMany({
@@ -120,6 +127,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const vencido = receipts.overdueOpenAmount;
   const resultado = computeMonthlyResult(recebido, finance.despesas);
   const margemPct = Math.round(computeOperationalMargin(resultado, recebido) * 100);
+
+  // ===== Indicadores gerenciais do mês (todas as divisões protegidas) =====
+  const ticketMedio = getMonthlyAverageTicket(recebido, clientsBlock.pagosMes);
+  const custoPorCliente = getMonthlyCostPerClient(finance.despesas, clientsBlock.ativos);
+  const folhaPct = Math.round(
+    getPayrollPercentageOfRevenue(finance.folhaPeriodo, recebido) * 100
+  );
 
   return (
     <div>
@@ -167,6 +181,37 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           value={`${margemPct}%`}
           intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"}
           hint={`resultado ${formatBRL(resultado)} / recebido`} />
+      </div>
+
+      {/* ===== Bloco 2 — Indicadores gerenciais do mês (compactos) ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Indicadores gerenciais do mês
+      </h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-6">
+        <MiniStat label="Resultado do mês" value={formatBRL(resultado)}
+          tone={resultado >= 0 ? "pos" : "neg"} hint="recebido − despesas" />
+        <MiniStat label="Faturamento MRR (mês)" value={formatBRL(receipts.mrrReceived)} />
+        <MiniStat label="Faturamento TCV (mês)" value={formatBRL(receipts.tcvReceived)}
+          hint="valor cheio, sem rateio" />
+        <MiniStat label="Ticket médio (mês)"
+          value={clientsBlock.pagosMes > 0 ? formatBRL(ticketMedio) : "—"}
+          hint={`${clientsBlock.pagosMes} cliente(s) pago(s)`} />
+        <MiniStat label="Custo por cliente"
+          value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
+          hint={`${clientsBlock.ativos} ativo(s)`} />
+        <MiniStat label="% Folha no faturamento" value={`${folhaPct}%`}
+          tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"}
+          hint="folha / recebido" />
+        <MiniStat label="Churn de clientes (mês)" value={String(churn.count)}
+          tone={churn.count > 0 ? "neg" : "pos"} />
+        <MiniStat label="Receita perdida (mês)" value={formatBRL(churn.value)}
+          tone={churn.value > 0 ? "neg" : "default"} />
+        <MiniStat label="Novos clientes (mês)" value={String(newClients.count)}
+          tone={newClients.count > 0 ? "pos" : "default"} />
+        <MiniStat label="Receita de novos clientes" value={formatBRL(newClients.revenue)}
+          tone={newClients.revenue > 0 ? "pos" : "default"} />
+        <MiniStat label="Total inadimplência" value={formatBRL(vencido)}
+          tone={vencido > 0 ? "neg" : "pos"} hint="vencido e não pago no mês" />
       </div>
 
       {/* ===== Linha 2 — Operação ===== */}
@@ -293,27 +338,102 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         </Card>
       </div>
 
-      {/* ===== Tendências ===== */}
+      {/* ===== Análises visuais ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Tendências · últimos 12 meses
+        Análises visuais · {period.label}
       </h2>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="Receita × despesa por mês">
-          <GroupedBarChart
-            labels={series.labels}
-            series={[
-              { name: "Receitas", colorClass: "bg-emerald-500", values: series.receitas },
-              { name: "Despesas", colorClass: "bg-rose-500", values: series.despesas },
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <ChartCard title="Receita por modalidade" hint="recebido no período">
+          <HBarList
+            colorClass="bg-[#1E70D3]"
+            items={[
+              { label: "MRR (recorrente)", value: receipts.mrrReceived },
+              { label: "TCV (contrato fechado)", value: receipts.tcvReceived },
             ]}
           />
         </ChartCard>
-        <ChartCard title="Resultado por mês" hint="receitas − despesas pagas">
-          <DivergingBarChart labels={series.labels} values={series.lucro} />
-        </ChartCard>
-        <ChartCard title="MRR ao longo do tempo" hint="recorrência vigente em cada mês">
-          <LineChart labels={series.labels} values={series.mrr} />
+        <ChartCard title="Evolução financeira mensal" hint="últimos 12 meses">
+          <GroupedBarChart
+            labels={series.labels}
+            series={[
+              { name: "Receitas", colorClass: "bg-[#1E70D3]", values: series.receitas },
+              { name: "Despesas", colorClass: "bg-rose-400", values: series.despesas },
+            ]}
+          />
         </ChartCard>
       </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <ChartCard title="Recebimento do mês" hint="recebido · em aberto · vencido">
+          <HBarList
+            colorClass="bg-[#1E70D3]"
+            items={[
+              { label: "Recebido", value: recebido },
+              { label: "Em aberto (no prazo)", value: Math.max(0, emAberto - vencido) },
+              { label: "Vencido", value: vencido },
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="Novos clientes × churn" hint="quantidade no período">
+          <HBarList
+            colorClass="bg-[#1E70D3]"
+            format={(v: number) => String(Math.round(v))}
+            items={[
+              { label: "Novos clientes", value: newClients.count },
+              { label: "Perdidos (churn)", value: churn.count },
+            ]}
+          />
+        </ChartCard>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ChartCard title="Receita perdida × novos clientes" hint="valor no período">
+          <HBarList
+            colorClass="bg-[#1E70D3]"
+            items={[
+              { label: "Receita de novos clientes", value: newClients.revenue },
+              { label: "Receita perdida (churn)", value: churn.value },
+            ]}
+          />
+        </ChartCard>
+        <ChartCard title="% Folha no faturamento" hint="ideal: até 40% · últimos 12 meses">
+          <LineChart
+            labels={series.labels}
+            values={series.folhaPct}
+            stroke="#1E70D3"
+            format={(v) => `${Math.round(v)}%`}
+          />
+        </ChartCard>
+      </div>
+    </div>
+  );
+}
+
+/** Card compacto dos indicadores gerenciais (menor que o StatCard principal). */
+function MiniStat({
+  label,
+  value,
+  hint,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "default" | "pos" | "neg" | "warn";
+}) {
+  const color =
+    tone === "pos"
+      ? "text-emerald-600"
+      : tone === "neg"
+        ? "text-red-600"
+        : tone === "warn"
+          ? "text-amber-600"
+          : "text-foreground";
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
+        {label}
+      </p>
+      <p className={`text-base font-semibold tabular-nums mt-0.5 ${color}`}>{value}</p>
+      {hint && <p className="text-[10px] text-muted-foreground truncate" title={hint}>{hint}</p>}
     </div>
   );
 }

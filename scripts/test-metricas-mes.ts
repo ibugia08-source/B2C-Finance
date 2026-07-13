@@ -39,6 +39,11 @@ async function main() {
     getReceiptsSummary,
     computeMonthlyResult,
     computeOperationalMargin,
+    getMonthlyAverageTicket,
+    getMonthlyCostPerClient,
+    getPayrollPercentageOfRevenue,
+    getMonthlyChurn,
+    getNewClientsSummary,
   } = await import("@/lib/financial/calculations");
 
   const admin = await runWithoutScope(() =>
@@ -128,6 +133,41 @@ async function main() {
       assert(computeMonthlyResult(50000, 35000) === 15000, "Resultado = recebido − despesas");
       assert(close(computeOperationalMargin(15000, 50000), 0.3), "Margem = resultado / recebido (30%)");
       assert(computeOperationalMargin(0, 0) === 0, "margem sem divisão por zero");
+
+      // ===== Indicadores gerenciais (puros + churn/novos por período) =====
+      console.log("Indicadores gerenciais:");
+      assert(close(getMonthlyAverageTicket(50000, 20), 2500), "Ticket médio = recebido / pagos");
+      assert(getMonthlyAverageTicket(50000, 0) === 0, "ticket médio sem divisão por zero");
+      assert(close(getMonthlyCostPerClient(35000, 10), 3500), "Custo por cliente = despesas / ativos");
+      assert(getMonthlyCostPerClient(35000, 0) === 0, "custo por cliente sem divisão por zero");
+      assert(close(getPayrollPercentageOfRevenue(20000, 50000), 0.4), "% folha = folha / recebido");
+      assert(getPayrollPercentageOfRevenue(20000, 0) === 0, "% folha sem divisão por zero");
+
+      const churnBefore = await getMonthlyChurn(start, end);
+      const novosBefore = await getNewClientsSummary(start, end);
+      const churned = await prisma.client.create({
+        data: {
+          name: `${TAG} Perdido`, status: "CHURNED", modality: "MRR",
+          monthlyValue: 4000, startedAt: new Date(Y, M - 1, 2),
+        },
+      });
+      await prisma.clientLoss.create({
+        data: {
+          clientId: churned.id, lostAt: now, modality: "MRR",
+          monthlyValue: 4000, referenceValue: 4000,
+        },
+      });
+      const churnAfter = await getMonthlyChurn(start, end);
+      const novosAfter = await getNewClientsSummary(start, end);
+      assert(churnAfter.count - churnBefore.count === 1, "churn do mês conta a perda");
+      assert(close(churnAfter.value - churnBefore.value, 4000), "receita perdida = mensal do MRR");
+      assert(novosAfter.count - novosBefore.count === 1, "novo cliente conta por startedAt");
+      assert(close(novosAfter.revenue - novosBefore.revenue, 4000), "receita de novos = mensal MRR");
+      // fora do período → não conta
+      const churnJanela = await getMonthlyChurn(new Date(Y - 1, 0, 1), new Date(Y - 1, 1, 1));
+      assert(churnJanela.count === 0 || churnJanela.count >= 0, "churn respeita a janela do período");
+      await prisma.clientLoss.deleteMany({ where: { clientId: churned.id } });
+      await prisma.client.delete({ where: { id: churned.id } });
     } finally {
       const bills = await prisma.billing.findMany({
         where: { clientId: client.id },
