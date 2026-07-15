@@ -1,6 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL } from "@/lib/format";
 import type { ActionResult } from "./clients";
@@ -15,11 +16,14 @@ import type { ActionResult } from "./clients";
 const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateAll(clientId?: string) {
-  revalidatePath("/cobrancas");
-  revalidatePath("/clientes");
-  if (clientId) revalidatePath(`/clientes/${clientId}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/rotina");
+  revalidateTag(CACHE_TAGS.BILLINGS);
+  revalidateTag(CACHE_TAGS.CLIENTS);
+  revalidateTag(CACHE_TAGS.BILLING_CYCLE);
+  revalidateTag(CACHE_TAGS.DASHBOARD);
+  if (clientId) {
+    revalidateTag(CACHE_TAGS.CLIENT_ID(clientId));
+    revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(clientId));
+  }
 }
 
 /** Cobrança em aberto do cliente na competência (para sincronizar edições). */

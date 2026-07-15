@@ -1,6 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -401,8 +402,9 @@ export async function setClientModality(
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
     await prisma.client.update({ where: { id }, data: { modality: value } });
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
+    revalidateTag(CACHE_TAGS.CLIENT_ID(id));
+    revalidateTag(CACHE_TAGS.CLIENTS);
+    revalidateTag(CACHE_TAGS.DASHBOARD);
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a modalidade.";
