@@ -15,6 +15,8 @@ interface SidebarWithToggleProps {
   responsive?: boolean;
   mobileVariant?: "drawer" | "bottom-sheet";
   onStateChange?: (expanded: boolean) => void;
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
 }
 
 const STORAGE_KEY = "b2c:sidebar:state";
@@ -25,11 +27,20 @@ export function SidebarWithToggle({
   responsive = true,
   mobileVariant = "drawer",
   onStateChange,
+  mobileOpen: controlledMobileOpen,
+  onMobileOpenChange,
 }: SidebarWithToggleProps) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [isClient, setIsClient] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [internalMobileOpen, setInternalMobileOpen] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const mobileOpen = controlledMobileOpen ?? internalMobileOpen;
+  const setMobileOpen = (open: boolean) => {
+    setInternalMobileOpen(open);
+    onMobileOpenChange?.(open);
+  };
 
   // Hydrate from localStorage
   useEffect(() => {
