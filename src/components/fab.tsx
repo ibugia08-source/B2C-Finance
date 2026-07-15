@@ -24,9 +24,9 @@ export const FAB = React.forwardRef<HTMLButtonElement, FABProps>(
     ref
   ) => {
     const variantClasses = {
-      default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg hover:shadow-xl",
-      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-lg hover:shadow-xl",
-      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-lg hover:shadow-xl",
+      default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md hover:shadow-lg dark:shadow-lg dark:hover:shadow-xl",
+      secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-md hover:shadow-lg dark:shadow-lg dark:hover:shadow-xl",
+      destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md hover:shadow-lg dark:shadow-lg dark:hover:shadow-xl",
     };
 
     const sizeClasses = {

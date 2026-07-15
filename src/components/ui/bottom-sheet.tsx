@@ -35,7 +35,7 @@ const BottomSheetContent = React.forwardRef<
       className={cn(
         // Mobile: bottom-sheet (animação slide-up)
         // Desktop: centered modal (animação zoom)
-        "fixed left-[50%] top-auto md:top-[50%] bottom-0 md:bottom-auto z-50 w-full md:w-[calc(100%-1.5rem)] md:max-w-lg grid gap-4 border bg-background p-4 sm:p-6 shadow-2xl rounded-t-2xl md:rounded-2xl translate-x-[-50%] md:translate-y-[-50%]",
+        "fixed left-[50%] top-auto md:top-[50%] bottom-0 md:bottom-auto z-50 w-full md:w-[calc(100%-1.5rem)] md:max-w-lg grid gap-4 border bg-background p-4 sm:p-6 shadow-modal dark:shadow-modal rounded-t-2xl md:rounded-2xl translate-x-[-50%] md:translate-y-[-50%]",
         "max-h-[90vh] md:max-h-[90vh] overflow-y-auto",
         "duration-300 ease-out",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",

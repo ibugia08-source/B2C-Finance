@@ -42,37 +42,37 @@
   }
 
   .dark {
-    /* B2C Finance — escuro (opcional, escolha do usuário) */
-    --background: 240 24% 5%;          /* #0A0A0F */
-    --foreground: 240 16% 94%;         /* #EDEEF2 prata */
+    /* B2C Finance — escuro (otimizado para legibilidade + WCAG AA) */
+    --background: 240 15% 3.5%;        /* #0B0D14 muito profundo */
+    --foreground: 210 11% 96.5%;       /* #F5F6FA branco puro */
 
-    --card: 240 16% 11%;               /* #1A1A23 grafite */
-    --card-foreground: 240 16% 94%;
+    --card: 240 14% 9%;                /* #141820 grafite profundo */
+    --card-foreground: 210 11% 96.5%;
 
-    --popover: 240 16% 11%;
-    --popover-foreground: 240 16% 94%;
+    --popover: 240 14% 9%;
+    --popover-foreground: 210 11% 96.5%;
 
-    --primary: 212 85% 58%;            /* azul B2C (mais vivo no escuro) */
+    --primary: 211 89% 62%;            /* #3B82F6 azul vivo + legível */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 10% 16%;          /* #2A2A32 */
-    --secondary-foreground: 240 16% 94%;
+    --secondary: 240 10% 15%;          /* #252A33 painel suave */
+    --secondary-foreground: 210 11% 96.5%;
 
-    --muted: 240 12% 13%;
-    --muted-foreground: 240 10% 66%;
+    --muted: 240 12% 22%;              /* #363D4A textura media */
+    --muted-foreground: 210 9% 68%;    /* #A8AFB8 cinza legível */
 
-    --accent: 213 55% 22%;             /* azul profundo (hover suave) */
-    --accent-foreground: 213 100% 92%;
+    --accent: 213 89% 50%;             /* #3B7FFF azul acento forte */
+    --accent-foreground: 210 11% 96.5%;
 
-    --destructive: 0 84% 60%;          /* #EF4444 */
+    --destructive: 0 84% 62%;          /* #F87171 vermelho legível */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 10% 18%;             /* #2A2A32 */
-    --input: 240 10% 18%;
-    --ring: 212 85% 62%;
+    --border: 240 12% 16%;             /* #2A2F3D divisores suaves */
+    --input: 240 12% 16%;
+    --ring: 211 89% 65%;
 
-    --gold: 46 65% 55%;                /* dourado premium #D4AF37 */
-    --gold-soft: 46 40% 16%;
+    --gold: 45 85% 58%;                /* #E8B547 dourado aquecido + vivo */
+    --gold-soft: 45 40% 14%;           /* profundo gold background */
   }
 }
 
@@ -149,8 +149,20 @@
   }
   .dark .shadow-soft {
     box-shadow:
-      0 1px 2px hsl(0 0% 0% / 0.4),
-      0 12px 32px -10px hsl(0 0% 0% / 0.55);
+      0 1px 3px hsl(0 0% 0% / 0.5),
+      0 10px 28px -8px hsl(0 0% 0% / 0.6);
+  }
+
+  /* Sombra elevada para modais/sheets */
+  .shadow-modal {
+    box-shadow:
+      0 20px 25px -5px hsl(240 30% 4% / 0.1),
+      0 10px 10px -5px hsl(240 30% 4% / 0.04);
+  }
+  .dark .shadow-modal {
+    box-shadow:
+      0 20px 25px -5px hsl(0 0% 0% / 0.3),
+      0 10px 10px -5px hsl(0 0% 0% / 0.2);
   }
 
   /* Entrada suave de conteúdo ao navegar entre páginas */
@@ -311,6 +323,25 @@
   /* Hover lift effect */
   .hover-lift {
     @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
+  }
+
+  /* Dark mode specific utilities */
+  .dark-bg-elevated {
+    @apply bg-secondary dark:bg-[#1a1f2e];
+  }
+
+  .dark-border-subtle {
+    @apply border-border dark:border-[#3a424f];
+  }
+
+  /* Placeholder text with better dark mode contrast */
+  .placeholder-soft {
+    @apply placeholder:text-muted-foreground dark:placeholder:text-[#7a8490];
+  }
+
+  /* Focus ring with better dark mode visibility */
+  .focus-ring-dark {
+    @apply focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-[#60a5fa] focus:ring-offset-1 dark:focus:ring-offset-[#0b0d14];
   }
 }
 
