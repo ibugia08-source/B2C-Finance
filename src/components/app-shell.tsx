@@ -1,6 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
-import { Sidebar } from "./sidebar";
+import { SidebarWithToggle } from "./sidebar-with-toggle";
 import { MobileNav } from "./mobile-nav";
 
 const NO_SHELL = ["/login"];
@@ -20,10 +20,15 @@ export function AppShell({
   return (
     <>
       <div className="flex min-h-screen app-shell">
-        <Sidebar user={user} />
+        <SidebarWithToggle
+          user={user}
+          defaultExpanded={false}
+          responsive={true}
+          mobileVariant="drawer"
+        />
         <main
           key={path}
-          className="page-enter flex-1 p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto w-full"
+          className="page-enter flex-1 p-3 sm:p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto w-full"
         >
           {children}
         </main>
