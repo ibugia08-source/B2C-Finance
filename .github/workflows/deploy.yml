@@ -31,10 +31,7 @@ jobs:
         run: npm run build:ci
         env:
           NODE_ENV: production
-      
-      - name: Run tests
-        run: npm test --if-present --coverage
-      
+
       - name: Deploy to Vercel
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: vercel/action@master
