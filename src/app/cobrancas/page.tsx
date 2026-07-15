@@ -392,6 +392,17 @@ export default async function RecebimentosPage({
 
       <CobrancasTabs active="/cobrancas" />
 
+      {/* Aviso de consolidação (Fase 3) */}
+      <Card className="mb-4 border-amber-200 bg-amber-50">
+        <CardContent className="p-4">
+          <p className="text-sm text-amber-900">
+            <strong>Módulo em consolidação:</strong> Os recebimentos individuais de cada cliente
+            agora estão disponíveis no painel do cliente (<Link href="/clientes" className="underline hover:text-amber-700">Clientes</Link> → cliente → aba &quot;Recebimentos&quot;).
+            Esta página mantém a view gerencial de operações em massa.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* ===== Barra superior: mês · busca · responsável ===== */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex flex-wrap items-center gap-2">
