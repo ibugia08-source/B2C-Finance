@@ -29,10 +29,10 @@ export async function ensureBillingCycleUpToDate() {
       where: {
         AND: [
           { dueDate: { lt: today } },
-          { status: { in: ["UPCOMING", "PARTIAL"] } },
+          { status: { in: ["PENDING", "PARTIAL"] } },
         ],
       },
-      data: { status: "OVERDUE" as any },
+      data: { status: "OVERDUE" },
     });
 
     // 2. Gerar MRRs faltantes do mês atual
@@ -84,9 +84,8 @@ export async function ensureBillingCycleUpToDate() {
               amount: contract.monthlyValue || 0,
               dueDate,
               description: `${contract.title} - ${currentMonth}/${currentYear}`,
-              status: dueDate < today ? "OVERDUE" : "UPCOMING",
+              status: dueDate < today ? "OVERDUE" : "PENDING",
               revenueType: "MRR",
-              ownerId: client.ownerId,
             } as any,
           });
         }
@@ -109,10 +108,10 @@ export async function ensureBillingCycleUpToDateNoLock() {
     where: {
       AND: [
         { dueDate: { lt: today } },
-        { status: { in: ["UPCOMING", "PARTIAL"] } },
+        { status: { in: ["PENDING", "PARTIAL"] } },
       ],
     },
-    data: { status: "OVERDUE" as any },
+    data: { status: "OVERDUE" },
   });
 
   const now = new Date();
@@ -160,9 +159,8 @@ export async function ensureBillingCycleUpToDateNoLock() {
             amount: contract.monthlyValue || 0,
             dueDate,
             description: `${contract.title} - ${currentMonth}/${currentYear}`,
-            status: dueDate < today ? "OVERDUE" : "UPCOMING",
+            status: dueDate < today ? "OVERDUE" : "PENDING",
             revenueType: "MRR",
-            ownerId: client.ownerId,
           } as any,
         });
       }
