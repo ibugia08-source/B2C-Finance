@@ -649,6 +649,10 @@ model Client {
   delinquencyOverrideAt    DateTime? // data/hora do ajuste manual
   delinquencyOverrideBy    String? // nome do usuário que ajustou
 
+  // ===== Soft Delete (Fase 0 - Reorganização) =====
+  archivedAt DateTime? // soft delete: null = ativo, preenchido = arquivado
+  deletedAt  DateTime? // hard delete timestamp (para auditoria)
+
   // Dono do registro (conta multiusuário / agência).
   ownerId String?
   owner   User?   @relation("OwnerClient", fields: [ownerId], references: [id])
@@ -1182,6 +1186,8 @@ model CollectionHistory {
   message      String? // texto enviado / resumo do contato
   contactedAt  DateTime         @default(now())
   nextActionAt DateTime? // próximo follow-up
+  actionType   String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
+  createdBy    String? // user.email (quem fez a ação)
   ownerId      String?
   owner        User?            @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
   createdAt    DateTime         @default(now())
@@ -1267,7 +1273,7 @@ model Commission {
   employeeId  String
   employee    Employee         @relation(fields: [employeeId], references: [id])
   clientId    String?
-  client      Client?          @relation(fields: [clientId], references: [id])
+  client      Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   contractId  String?
   contract    Contract?        @relation(fields: [contractId], references: [id])
   basisAmount Decimal?         @db.Decimal(14, 2) // base de cálculo
