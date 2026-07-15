@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   title: "B2C Finance — Gestão financeira da B2C Gestão",
   description:
     "B2C Finance: a plataforma financeira da B2C Gestão — clientes, contratos, cobranças, caixa, folha, relatórios e copiloto de IA.",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 5,
+    userScalable: true,
+    viewportFit: "cover",
+  },
 };
 
 // Aplica o tema antes da pintura para evitar "flash" (FOUC).

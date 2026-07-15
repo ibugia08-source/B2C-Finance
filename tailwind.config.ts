@@ -13,6 +13,14 @@ const config: Config = {
       padding: "2rem",
       screens: { "2xl": "1400px" },
     },
+    screens: {
+      xs: "375px", // iPhone SE base
+      sm: "640px",
+      md: "768px", // Tablet: sidebar toggle starts
+      lg: "1024px", // Laptop: sidebar always visible
+      xl: "1280px",
+      "2xl": "1536px",
+    },
     extend: {
       fontFamily: {
         display: ['"Orbitron"', "ui-sans-serif", "sans-serif"],
@@ -62,6 +70,28 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      minHeight: {
+        touch: "44px", // Apple touch target minimum
+        "touch-sm": "40px",
+      },
+      minWidth: {
+        touch: "44px",
+        "touch-sm": "40px",
+      },
+      fontSize: {
+        // Responsive typography scale
+        xs: ["12px", "16px"],
+        sm: ["14px", "20px"],
+        base: ["16px", "24px"],
+        lg: ["18px", "28px"],
+        xl: ["20px", "28px"],
+        "2xl": ["24px", "32px"],
+        "3xl": ["30px", "36px"],
+        "4xl": ["36px", "40px"],
+      },
+      transitionDuration: {
+        300: "300ms",
       },
     },
   },

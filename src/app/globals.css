@@ -169,6 +169,49 @@
   }
 }
 
+@layer components {
+  /* Mobile-friendly utilities for touch-first design */
+  .btn-touch {
+    @apply min-h-touch px-4 py-3 font-medium transition-all duration-100;
+  }
+
+  .btn-touch-primary {
+    @apply btn-touch bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95;
+  }
+
+  .btn-touch-secondary {
+    @apply btn-touch bg-secondary text-secondary-foreground hover:bg-secondary/90;
+  }
+
+  .input-touch {
+    @apply h-touch text-base leading-relaxed;
+  }
+
+  .card-mobile {
+    @apply rounded-lg border p-3 sm:p-4 md:p-6;
+  }
+
+  /* Safe area support for notch/home bar */
+  .safe-area-top {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .safe-area-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  /* Smooth collapse/expand animation for sidebar */
+  .sidebar-collapse {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  /* Tab bar at bottom with safe area support */
+  .tab-bar {
+    @apply fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur;
+    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;
