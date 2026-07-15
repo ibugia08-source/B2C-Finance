@@ -43,7 +43,7 @@ interface CardStackProps {
  */
 export function CardStack({ children, className }: CardStackProps) {
   return (
-    <div className={cn("md:hidden space-y-3", className)}>
+    <div className={cn("md:hidden space-y-3 fade-scale-in", className)}>
       {children}
     </div>
   );
@@ -67,7 +67,7 @@ export function CardRow({ children, className }: CardRowProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-3 sm:p-4 space-y-2 transition-all duration-200 hover:shadow-soft",
+        "rounded-lg border bg-card p-3 sm:p-4 space-y-2 transition-smooth hover-lift hover:shadow-soft",
         className
       )}
     >
