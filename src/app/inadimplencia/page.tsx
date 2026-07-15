@@ -175,8 +175,8 @@ export default async function InadimplenciaPage() {
                           }
                         />
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/cobrancas?cliente=${c.clientId}&status=OVERDUE`}>
-                            Ver cobranças
+                          <Link href={`/clientes/${c.clientId}?tab=recebimentos`}>
+                            Ver recebimentos
                           </Link>
                         </Button>
                       </div>

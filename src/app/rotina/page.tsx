@@ -441,8 +441,8 @@ export default async function RotinaPage() {
                             </Button>
                           }
                         />
-                        <Button variant="ghost" size="icon" asChild title="Ver todas as cobranças do cliente">
-                          <Link href={`/cobrancas?cliente=${q.clientId}`}>
+                        <Button variant="ghost" size="icon" asChild title="Ver recebimentos do cliente">
+                          <Link href={`/clientes/${q.clientId}?tab=recebimentos`}>
                             <ArrowRight className="h-4 w-4" />
                           </Link>
                         </Button>
