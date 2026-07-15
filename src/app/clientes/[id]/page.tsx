@@ -161,7 +161,7 @@ export default async function ClientDetailPage({
           href="/clientes"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar para a carteira
+          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar para clientes
         </Link>
       </div>
 
