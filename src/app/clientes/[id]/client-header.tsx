@@ -2,9 +2,11 @@
 import Link from "next/link";
 import { ArrowLeft, FileSignature, HandCoins } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { formatBRL, formatDateBR } from "@/lib/format";
+import type { ClientRiskProfile } from "@/lib/services/client-metrics";
 import { ClientStatusSelect } from "../status-select";
 import { ClientDialog } from "../client-dialog";
 import {
@@ -30,9 +32,19 @@ export interface ClientHeaderProps {
     overdueAmount: number;
   };
   monthly: number;
+  risk: ClientRiskProfile;
 }
 
-export function ClientHeader({ client, summary, monthly }: ClientHeaderProps) {
+const RISK_BADGE: Record<ClientRiskProfile["riskLevel"], any> = {
+  baixo: "success",
+  medio: "warning",
+  alto: "destructive",
+  sem_historico: "secondary",
+};
+
+export function ClientHeader({ client, summary, monthly, risk }: ClientHeaderProps) {
+  const onTimePct =
+    risk.onTimeRate != null ? Math.round(risk.onTimeRate * 100) : null;
   return (
     <>
       <div className="mb-4">
@@ -40,7 +52,7 @@ export function ClientHeader({ client, summary, monthly }: ClientHeaderProps) {
           href="/clientes"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar para a carteira
+          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar para clientes
         </Link>
       </div>
 
@@ -82,8 +94,8 @@ export function ClientHeader({ client, summary, monthly }: ClientHeaderProps) {
         </Button>
       </div>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Mini-dashboard do cliente */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard
           title="Mensal contratado"
           value={monthly > 0 ? formatBRL(monthly) : "—"}
@@ -94,9 +106,19 @@ export function ClientHeader({ client, summary, monthly }: ClientHeaderProps) {
           }
         />
         <StatCard
-          title="Receita total"
+          title="Total recebido (LTV)"
           value={summary.totalRevenue > 0 ? formatBRL(summary.totalRevenue) : "—"}
           intent="positive"
+          hint="tudo que este cliente já pagou"
+        />
+        <StatCard
+          title="Tempo de casa"
+          value={
+            risk.monthsActive != null
+              ? `${risk.monthsActive} ${risk.monthsActive === 1 ? "mês" : "meses"}`
+              : "—"
+          }
+          hint="ativo na base desde a entrada"
         />
         <StatCard
           title="Em aberto"
@@ -112,6 +134,23 @@ export function ClientHeader({ client, summary, monthly }: ClientHeaderProps) {
           title="Próxima renovação"
           value={summary.nextRenewal ? formatDateBR(summary.nextRenewal) : "—"}
         />
+        {/* Perfil de pagamento / risco de inadimplência individual */}
+        <div className="rounded-xl border bg-card p-4 flex flex-col justify-between">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+            Perfil de pagamento
+          </p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <Badge variant={RISK_BADGE[risk.riskLevel]} className="text-sm">
+              {risk.payerLabel}
+            </Badge>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {onTimePct != null
+              ? `${onTimePct}% pagas no prazo · ${risk.paidCount} quitada(s)`
+              : "sem pagamentos registrados"}
+            {risk.overdueCount > 0 ? ` · ${risk.overdueCount} vencida(s)` : ""}
+          </p>
+        </div>
       </div>
     </>
   );

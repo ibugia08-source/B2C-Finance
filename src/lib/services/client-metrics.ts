@@ -133,6 +133,74 @@ export async function getClientSummaries(
 }
 
 /**
+ * Perfil financeiro/risco INDIVIDUAL do cliente (mini-dashboard da área do
+ * cliente): quanto tempo está na base, comportamento de pagamento e um rótulo
+ * de risco de inadimplência calculado a partir do histórico de cobranças.
+ */
+export type ClientRiskProfile = {
+  monthsActive: number | null; // meses desde a entrada (startedAt)
+  paidCount: number; // cobranças quitadas
+  overdueCount: number; // cobranças vencidas em aberto AGORA
+  lateCount: number; // quitadas com atraso (dentro ou fora do mês)
+  onTimeRate: number | null; // 0..1 das quitadas que foram no prazo
+  riskLevel: "baixo" | "medio" | "alto" | "sem_historico";
+  payerLabel: string; // "Bom pagador" | "Regular" | "Risco — em atraso" | ...
+};
+
+export async function getClientRiskProfile(
+  clientId: string,
+  startedAt: Date | null
+): Promise<ClientRiskProfile> {
+  const billings = await prisma.billing.findMany({
+    where: { clientId, status: { not: "CANCELED" } },
+    select: { status: true, isLate: true, paidInDifferentMonth: true },
+  });
+
+  let paidCount = 0;
+  let overdueCount = 0;
+  let lateCount = 0;
+  for (const b of billings) {
+    if (b.status === "PAID") {
+      paidCount += 1;
+      if (b.isLate || b.paidInDifferentMonth) lateCount += 1;
+    } else if (b.status === "OVERDUE") {
+      overdueCount += 1;
+    }
+  }
+  const onTimeRate = paidCount > 0 ? (paidCount - lateCount) / paidCount : null;
+
+  let riskLevel: ClientRiskProfile["riskLevel"];
+  let payerLabel: string;
+  if (overdueCount > 0) {
+    riskLevel = "alto";
+    payerLabel = "Risco — em atraso";
+  } else if (paidCount === 0) {
+    riskLevel = "sem_historico";
+    payerLabel = "Sem histórico";
+  } else if (paidCount >= 3 && (onTimeRate ?? 0) >= 0.8) {
+    riskLevel = "baixo";
+    payerLabel = "Bom pagador";
+  } else if ((onTimeRate ?? 1) < 0.5) {
+    riskLevel = "alto";
+    payerLabel = "Pagador irregular";
+  } else {
+    riskLevel = "medio";
+    payerLabel = "Regular";
+  }
+
+  const now = new Date();
+  const monthsActive = startedAt
+    ? Math.max(
+        0,
+        (now.getFullYear() - startedAt.getFullYear()) * 12 +
+          (now.getMonth() - startedAt.getMonth())
+      )
+    : null;
+
+  return { monthsActive, paidCount, overdueCount, lateCount, onTimeRate, riskLevel, payerLabel };
+}
+
+/**
  * Inadimplência do MÊS ATUAL por cliente (rótulo Pago/Devendo/Sem cobrança).
  * Calculado a partir das cobranças da competência (mês/ano):
  *  - DEVENDO  → existe cobrança em aberto (PENDING/PARTIAL/OVERDUE) no mês;

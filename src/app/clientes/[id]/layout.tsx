@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { ClientHeader } from "./client-header";
 import { TabsNavigation, type TabsCount } from "./tabs-navigation";
-import { getClientSummaries } from "@/lib/services/client-metrics";
+import { getClientSummaries, getClientRiskProfile } from "@/lib/services/client-metrics";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const revalidate = 60;
@@ -48,6 +48,8 @@ export default async function ClientDetailLayout({
 
   if (!client) notFound();
 
+  const risk = await getClientRiskProfile(params.id, client.startedAt);
+
   const summary = summaries.get(params.id) || {
     activeContracts: 0,
     nextRenewal: null,
@@ -73,6 +75,7 @@ export default async function ClientDetailLayout({
         client={client}
         summary={summary}
         monthly={monthly}
+        risk={risk}
       />
 
       <TabsNavigation clientId={params.id} counts={tabCounts} />
