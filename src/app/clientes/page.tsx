@@ -17,6 +17,7 @@ import { ClientFilters } from "./filters";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { getPeriodRevenue } from "@/lib/services/revenue-metrics";
 import type { DelinquencyValue } from "./_meta";
 
 const PAGE_SIZE = 50;
@@ -89,7 +90,7 @@ export default async function ClientesPage({
   // ---------- índice leve de TODOS os clientes do filtro (ordenado) ----------
   // Usado para: (1) inadimplência do mês por cliente, (2) filtro Pago/Devendo,
   // (3) seleção "todos os filtrados". Campos mínimos → barato mesmo com muitos.
-  const [index, services, segmentRows, ownerRows, ativos, novosMes, mrrAgg] =
+  const [index, services, segmentRows, ownerRows, ativos, novosMes, revenue] =
     await Promise.all([
       prisma.client.findMany({
         where,
@@ -121,13 +122,11 @@ export default async function ClientesPage({
       }),
       prisma.client.count({ where: { status: "ACTIVE" } }),
       prisma.client.count({ where: { startedAt: { gte: start, lt: end } } }),
-      // MRR base = Σ mensalidade dos clientes ATIVOS na modalidade MRR.
-      // TCV usa totalContractValue (não mensalidade) e não entra aqui, mesmo
-      // que tenha um monthlyValue legado/residual gravado.
-      prisma.client.aggregate({
-        where: { status: "ACTIVE", modality: "MRR" },
-        _sum: { monthlyValue: true },
-      }),
+      // Faturamento do mês pela camada central (mesma fonte do Dashboard):
+      //  · revenue.mrr = Σ mensalidade dos clientes MRR ativos no mês
+      //  · revenue.tcv = Σ cobranças TCV com competência no mês (valor cheio)
+      // Nunca mistura modalidades nem rateia TCV.
+      getPeriodRevenue(start, end),
     ]);
 
   const autoDelinq = await getMonthDelinquencies(
@@ -236,7 +235,8 @@ export default async function ClientesPage({
 
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
-  const mrrBase = mrrAgg._sum.monthlyValue != null ? Number(mrrAgg._sum.monthlyValue) : 0;
+  const mrrBase = revenue.mrr; // Σ mensalidade dos clientes MRR ativos no mês
+  const tcvTotal = revenue.tcv; // Σ TCV faturado no mês (adesões/renovações)
   const devendoMes = index.filter((c) => effectiveDelinquency(c).value === "DEVENDO").length;
 
   function pageHref(p: number) {
@@ -264,7 +264,7 @@ export default async function ClientesPage({
         <SavedViews module="clientes" />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
         <StatCard title="Clientes ativos" value={String(ativos)} intent="positive" />
         <StatCard title="Novos no mês" value={String(novosMes)} />
         <StatCard
@@ -276,7 +276,12 @@ export default async function ClientesPage({
         <StatCard
           title="MRR base (ativos)"
           value={formatBRL(mrrBase)}
-          hint="Mensalidade recorrente dos clientes MRR ativos"
+          hint="Soma das mensalidades dos clientes MRR ativos"
+        />
+        <StatCard
+          title="TCV total (mês)"
+          value={formatBRL(tcvTotal)}
+          hint="Valor cheio faturado no mês dos clientes TCV"
         />
       </div>
 
