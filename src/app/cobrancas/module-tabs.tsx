@@ -2,12 +2,12 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Abas do módulo Recebimentos — só o essencial: a lista mensal e a visão
- * de inadimplência. A aba Pagamentos foi removida (registrar pagamento é
- * ação rápida na linha; a rota /pagamentos segue viva fora do módulo).
- * Acordos/contratos ficam FORA deste módulo.
+ * Abas do módulo CLIENTES (unificado): a carteira de clientes, a visão
+ * mensal de recebimentos e a inadimplência — tudo sob o mesmo módulo.
+ * Cadastro de cliente é só na aba Clientes. Acordos/contratos ficam FORA.
  */
 const TABS = [
+  { href: "/clientes", label: "Clientes" },
   { href: "/cobrancas", label: "Recebimentos" },
   { href: "/inadimplencia", label: "Inadimplência" },
 ];

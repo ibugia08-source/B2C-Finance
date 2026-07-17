@@ -29,6 +29,7 @@ import {
   modalityPill,
 } from "./_meta";
 import { setClientModality, setClientRenewalMonth } from "@/lib/actions/clients";
+import { formatBRL } from "@/lib/format";
 import type { ClientRow } from "./clients-table";
 
 const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
@@ -73,10 +74,12 @@ export function ClientsPanel({
 
   return (
     <>
-      {/* Desktop */}
-      <div className="hidden md:block overflow-x-auto">
+      {/* Desktop — container com rolagem horizontal CONTÍNUA (não só no rodapé
+          da página): a barra lateral fica na base desta caixa de altura fixa,
+          sempre visível; o cabeçalho fica fixo (sticky) ao rolar. */}
+      <div className="hidden md:block relative max-h-[70vh] overflow-auto rounded-md border">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
             <TableRow>
               <TableHead className="w-10">
                 <Checkbox
@@ -89,8 +92,11 @@ export function ClientsPanel({
               <TableHead>Cliente</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Modalidade</TableHead>
-              <TableHead>Inadimplência (mês)</TableHead>
+              <TableHead className="text-right">Valor</TableHead>
+              <TableHead>Vencimento</TableHead>
+              <TableHead>Pagamento (mês)</TableHead>
               <TableHead>Renovação</TableHead>
+              <TableHead className="text-center">Meses ativo</TableHead>
               <TableHead>Responsável</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -98,7 +104,7 @@ export function ClientsPanel({
           <TableBody>
             {clients.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                <TableCell colSpan={11} className="text-center text-muted-foreground py-12">
                   Nenhum cliente encontrado com esses filtros.
                   <br />
                   Ajuste a busca ou cadastre um novo cliente.
@@ -168,6 +174,11 @@ export function ClientsPanel({
                     emptyLabel="— definir —"
                     action={(v) => setClientModality(c.id, v || null)}
                   />
+                </Field>
+                <Field label="Valor">
+                  {c.refValue != null && c.refValue > 0
+                    ? `${formatBRL(c.refValue)} ${c.modality === "TCV" ? "(total)" : "/mês"}`
+                    : "—"}
                 </Field>
                 <Field label="Inadimplência (mês)">
                   <DelinquencyCell client={c} />

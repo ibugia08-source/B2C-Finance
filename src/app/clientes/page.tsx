@@ -15,6 +15,8 @@ import { ClientDialog } from "./client-dialog";
 import { ContractUploadDialog } from "./contract-upload-dialog";
 import { ClientFilters } from "./filters";
 import { ClientsTable, type ClientRow } from "./clients-table";
+import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { DelinquencyValue } from "./_meta";
 
 const PAGE_SIZE = 50;
@@ -181,22 +183,53 @@ export default async function ClientesPage({
       modality: true,
       salesOwner: true,
       renewalMonth: true,
+      monthlyValue: true,
+      totalContractValue: true,
+      paymentDay: true,
+      contractMonths: true,
+      startedAt: true,
     },
   });
   const rowById = new Map(rowsRaw.map((r) => [r.id, r]));
   const clients: ClientRow[] = pageIds
     .map((id) => rowById.get(id))
     .filter((r): r is (typeof rowsRaw)[number] => r != null)
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      segment: r.segment,
-      status: r.status,
-      modality: r.modality,
-      salesOwner: r.salesOwner,
-      renewalMonth: r.renewalMonth,
-      delinquency: effectiveDelinquency(indexById.get(r.id)!),
-    }));
+    .map((r) => {
+      // Valor de referência da linha: MRR usa mensal; TCV usa total do contrato.
+      const monthly = r.monthlyValue != null ? Number(r.monthlyValue) : null;
+      const total = r.totalContractValue != null ? Number(r.totalContractValue) : null;
+      const refValue = r.modality === "TCV" ? total : monthly;
+      // Vencimento do mês corrente (MRR) — dia recorrente clampado ao mês.
+      const dueThisMonth =
+        r.modality === "MRR" && r.paymentDay != null
+          ? getValidDueDateForMonth(curYear, curMonth, r.paymentDay)
+          : null;
+      // Meses ativo na base (a partir da entrada).
+      const monthsActive = r.startedAt
+        ? Math.max(
+            0,
+            (curYear - r.startedAt.getFullYear()) * 12 +
+              (curMonth - 1 - r.startedAt.getMonth())
+          )
+        : null;
+      return {
+        id: r.id,
+        name: r.name,
+        segment: r.segment,
+        status: r.status,
+        modality: r.modality,
+        salesOwner: r.salesOwner,
+        renewalMonth: r.renewalMonth,
+        monthlyValue: monthly,
+        totalContractValue: total,
+        refValue: refValue != null ? refValue : null,
+        paymentDay: r.paymentDay,
+        contractMonths: r.contractMonths,
+        dueDay: dueThisMonth ? dueThisMonth.getDate() : null,
+        monthsActive,
+        delinquency: effectiveDelinquency(indexById.get(r.id)!),
+      };
+    });
 
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
@@ -212,8 +245,8 @@ export default async function ClientesPage({
   return (
     <div className="pb-24">
       <PageHeader
-        title="Gestão de Carteira"
-        description="Carteira de clientes da B2C Gestão — único local de cadastro e edição de clientes"
+        title="Clientes"
+        description="Carteira de clientes da B2C Gestão — cadastro, financeiro e recebimentos em um só módulo"
         actions={
           <div className="flex flex-wrap gap-2">
             <ContractUploadDialog />
@@ -221,6 +254,8 @@ export default async function ClientesPage({
           </div>
         }
       />
+
+      <CobrancasTabs active="/clientes" />
 
       <div className="mb-3 print:hidden">
         <SavedViews module="clientes" />

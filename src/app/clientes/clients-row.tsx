@@ -1,10 +1,11 @@
 "use client";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineSelect } from "./inline-select";
 import { DelinquencyCell } from "./clients-actions";
 import { ClientActions } from "./row-actions";
+import { formatBRL } from "@/lib/format";
 import {
   CLIENT_STATUSES,
   CLIENT_STATUS_LABEL,
@@ -31,6 +32,11 @@ const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
 }));
 const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
 
+/** Célula interativa: cliques não abrem a área do cliente (edição inline). */
+function stop(e: React.MouseEvent) {
+  e.stopPropagation();
+}
+
 export function ClientRowDesktop({
   client,
   selected,
@@ -42,9 +48,15 @@ export function ClientRowDesktop({
   onToggle: () => void;
   onStatusDone: (c: ClientRow) => (value: string) => void;
 }) {
+  const router = useRouter();
   return (
-    <TableRow data-state={selected ? "selected" : undefined}>
-      <TableCell>
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      className="cursor-pointer"
+      onClick={() => router.push(`/clientes/${client.id}`)}
+      title="Abrir a área do cliente"
+    >
+      <TableCell onClick={stop}>
         <Checkbox
           aria-label={`Selecionar ${client.name}`}
           checked={selected}
@@ -52,14 +64,12 @@ export function ClientRowDesktop({
         />
       </TableCell>
       <TableCell className="font-medium">
-        <Link href={`/clientes/${client.id}`} className="hover:underline">
-          {client.name}
-        </Link>
+        <span className="hover:underline">{client.name}</span>
         {client.segment && (
           <p className="text-xs text-muted-foreground">{client.segment}</p>
         )}
       </TableCell>
-      <TableCell>
+      <TableCell onClick={stop}>
         <InlineSelect
           ariaLabel={`Status de ${client.name}`}
           value={client.status}
@@ -69,7 +79,7 @@ export function ClientRowDesktop({
           onDone={onStatusDone(client)}
         />
       </TableCell>
-      <TableCell>
+      <TableCell onClick={stop}>
         <InlineSelect
           ariaLabel={`Modalidade de ${client.name}`}
           value={client.modality ?? ""}
@@ -80,10 +90,33 @@ export function ClientRowDesktop({
           action={(v) => setClientModality(client.id, v || null)}
         />
       </TableCell>
-      <TableCell>
+      <TableCell className="text-right tabular-nums whitespace-nowrap">
+        {client.refValue != null && client.refValue > 0 ? (
+          <span>
+            {formatBRL(client.refValue)}
+            <span className="ml-1 text-[10px] text-muted-foreground">
+              {client.modality === "TCV" ? "total" : "/mês"}
+            </span>
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-sm whitespace-nowrap">
+        {client.modality === "TCV" ? (
+          <span className="text-muted-foreground" title="TCV é pago no ato — sem vencimento recorrente">
+            no ato
+          </span>
+        ) : client.dueDay != null ? (
+          `dia ${client.dueDay}`
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell onClick={stop}>
         <DelinquencyCell client={client} />
       </TableCell>
-      <TableCell>
+      <TableCell onClick={stop}>
         <InlineSelect
           ariaLabel={`Mês de renovação de ${client.name}`}
           value={client.renewalMonth != null ? String(client.renewalMonth) : ""}
@@ -93,8 +126,11 @@ export function ClientRowDesktop({
           action={(v) => setClientRenewalMonth(client.id, v ? parseInt(v, 10) : null)}
         />
       </TableCell>
-      <TableCell className="text-sm">{client.salesOwner ?? "—"}</TableCell>
-      <TableCell className="text-right">
+      <TableCell className="text-center text-sm tabular-nums">
+        {client.monthsActive != null ? client.monthsActive : "—"}
+      </TableCell>
+      <TableCell className="text-sm whitespace-nowrap">{client.salesOwner ?? "—"}</TableCell>
+      <TableCell className="text-right" onClick={stop}>
         <ClientActions client={client} />
       </TableCell>
     </TableRow>
