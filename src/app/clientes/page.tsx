@@ -16,11 +16,10 @@ import { ContractUploadDialog } from "./contract-upload-dialog";
 import { ClientFilters } from "./filters";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
+import { PageSizeSelect, PAGE_SIZES } from "./page-size-select";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { getPeriodRevenue } from "@/lib/services/revenue-metrics";
 import type { DelinquencyValue } from "./_meta";
-
-const PAGE_SIZE = 50;
 
 type Search = {
   q?: string;
@@ -33,6 +32,7 @@ type Search = {
   responsavel?: string;
   ordem?: string; // az | za
   pagina?: string;
+  porPagina?: string; // 20 | 40 | 100 linhas por página
 };
 
 export default async function ClientesPage({
@@ -44,7 +44,10 @@ export default async function ClientesPage({
 
   // ---------- where (filtros que rodam no banco) ----------
   const where: any = {};
+  // Perdidos saem da lista padrão (botão "Perda de cliente"); para revê-los,
+  // use o chip/filtro de status "Perdido / Cancelado".
   if (searchParams.status) where.status = searchParams.status;
+  else where.status = { not: "CHURNED" };
   if (searchParams.segmento) where.segment = searchParams.segmento;
   if (searchParams.modalidade) where.modality = searchParams.modalidade;
   if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
@@ -82,6 +85,11 @@ export default async function ClientesPage({
   }
 
   const page = Math.max(1, parseInt(searchParams.pagina ?? "1", 10) || 1);
+  // Linhas por página: 20 (padrão), 40 ou 100 — escolhido no rodapé da lista.
+  const requestedSize = parseInt(searchParams.porPagina ?? "", 10);
+  const pageSize = (PAGE_SIZES as readonly number[]).includes(requestedSize)
+    ? requestedSize
+    : 20;
   const now = new Date();
   const curMonth = now.getMonth() + 1;
   const curYear = now.getFullYear();
@@ -169,8 +177,8 @@ export default async function ClientesPage({
 
   const allFilteredIds = filtered.map((c) => c.id);
   const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pageSlice = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageSlice = filtered.slice((page - 1) * pageSize, page * pageSize);
   const indexById = new Map(index.map((c) => [c.id, c]));
 
   // ---------- linhas completas só da página (ordem preservada) ----------
@@ -301,35 +309,38 @@ export default async function ClientesPage({
         </CardContent>
       </Card>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-muted-foreground">
-            {total} cliente{total === 1 ? "" : "s"} · página {page} de {totalPages}
-          </p>
-          <div className="flex gap-2">
-            {/* asChild + disabled não bloqueia <Link>: na 1ª/última página
-                renderizamos botão desabilitado de verdade. */}
-            {page <= 1 ? (
-              <Button variant="outline" size="sm" disabled>
-                Anterior
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={pageHref(page - 1)}>Anterior</Link>
-              </Button>
-            )}
-            {page >= totalPages ? (
-              <Button variant="outline" size="sm" disabled>
-                Próxima
-              </Button>
-            ) : (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={pageHref(page + 1)}>Próxima</Link>
-              </Button>
-            )}
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+        <p className="text-sm text-muted-foreground">
+          {total} cliente{total === 1 ? "" : "s"} · página {page} de {totalPages}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <PageSizeSelect value={pageSize} />
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              {/* asChild + disabled não bloqueia <Link>: na 1ª/última página
+                  renderizamos botão desabilitado de verdade. */}
+              {page <= 1 ? (
+                <Button variant="outline" size="sm" disabled>
+                  Anterior
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={pageHref(page - 1)}>Anterior</Link>
+                </Button>
+              )}
+              {page >= totalPages ? (
+                <Button variant="outline" size="sm" disabled>
+                  Próxima
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={pageHref(page + 1)}>Próxima</Link>
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

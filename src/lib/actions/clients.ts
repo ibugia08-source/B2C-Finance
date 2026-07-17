@@ -100,7 +100,11 @@ function clean(v: FormDataEntryValue | null): string | null {
  * snapshot da receita perdida (MRR mensal / TCV de referência), modalidade,
  * responsável e motivo. Chamado em toda transição de status → Perdido.
  */
-async function recordLosses(clientIds: string[], reason?: string | null) {
+async function recordLosses(
+  clientIds: string[],
+  reason?: string | null,
+  lostAt?: Date
+) {
   if (clientIds.length === 0) return;
   const { computeLossSnapshots } = await import("@/lib/services/revenue-metrics");
   const snapshots = await computeLossSnapshots(clientIds);
@@ -113,6 +117,8 @@ async function recordLosses(clientIds: string[], reason?: string | null) {
       referenceValue: s.referenceValue,
       salesOwner: s.salesOwner,
       reason: reason ?? null,
+      // Data informada pelo gestor (botão Perda); default do banco = agora.
+      ...(lostAt ? { lostAt } : {}),
     })),
   });
 }
@@ -491,6 +497,63 @@ export async function setClientStatus(
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };
+  }
+}
+
+/**
+ * PERDA de cliente (botão "Perda" da carteira): registra a saída com a DATA
+ * informada pelo gestor + motivo. O cliente vira Perdido (CHURNED), sai da
+ * lista padrão de clientes e a perda alimenta os indicadores de churn
+ * (Dashboard/Relatórios) com snapshot da receita perdida.
+ */
+export async function markClientLost(
+  id: string,
+  lostAtRaw: string,
+  reason?: string | null
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(lostAtRaw ?? "").trim());
+    if (!m) return { ok: false, error: "Informe a data da saída." };
+    // Meio-dia local evita a data "voltar um dia" por fuso horário.
+    const lostAt = new Date(+m[1], +m[2] - 1, +m[3], 12);
+    if (isNaN(lostAt.getTime())) return { ok: false, error: "Data da saída inválida." };
+
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Cliente não encontrado." };
+
+    const text = (reason ?? "").trim() || null;
+    if (existing.status !== "CHURNED") {
+      await recordLosses([id], text, lostAt);
+    } else {
+      // Já estava perdido: atualiza a perda mais recente (data/motivo)
+      // em vez de duplicar o registro.
+      const last = await prisma.clientLoss.findFirst({
+        where: { clientId: id },
+        orderBy: { lostAt: "desc" },
+        select: { id: true },
+      });
+      if (last) {
+        await prisma.clientLoss.updateMany({
+          where: { id: last.id },
+          data: { lostAt, ...(text ? { reason: text } : {}) },
+        });
+      } else {
+        await recordLosses([id], text, lostAt);
+      }
+    }
+
+    await prisma.client.update({
+      where: { id },
+      data: { status: "CHURNED", churnedAt: lostAt },
+    });
+
+    revalidatePath("/clientes");
+    revalidatePath(`/clientes/${id}`);
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao registrar a perda." };
   }
 }
 

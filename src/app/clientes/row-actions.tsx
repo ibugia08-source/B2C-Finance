@@ -1,7 +1,8 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { ClientDialog } from "./client-dialog";
-import { Pencil, Trash2, Eye } from "lucide-react";
+import { ClientLossDialog } from "./loss-dialog";
+import { Pencil, Trash2, Eye, UserX } from "lucide-react";
 import { deleteClient } from "@/lib/actions/clients";
 import { useTransition } from "react";
 import Link from "next/link";
@@ -28,6 +29,17 @@ export function ClientActions({
           </Button>
         }
       />
+      {client.status !== "CHURNED" && (
+        <ClientLossDialog
+          clientId={client.id}
+          clientName={client.name}
+          trigger={
+            <Button variant="ghost" size="icon" title="Perda de cliente">
+              <UserX className="h-4 w-4 text-destructive" />
+            </Button>
+          }
+        />
+      )}
       <Button
         variant="ghost"
         size="icon"
