@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 const LOCK_ID = 1337; // Advisory lock ID (fixo)
 
@@ -72,8 +73,7 @@ export async function ensureBillingCycleUpToDate() {
 
         if (contract) {
           // Gerar billing
-          const dayOfMonth = contract.billingDay || 5;
-          const dueDate = new Date(currentYear, currentMonth - 1, dayOfMonth);
+          const dueDate = getValidDueDateForMonth(currentYear, currentMonth, contract.billingDay);
 
           await prisma.billing.create({
             data: {
@@ -147,8 +147,7 @@ export async function ensureBillingCycleUpToDateNoLock() {
       });
 
       if (contract) {
-        const dayOfMonth = contract.billingDay || 5;
-        const dueDate = new Date(currentYear, currentMonth - 1, dayOfMonth);
+        const dueDate = getValidDueDateForMonth(currentYear, currentMonth, contract.billingDay);
 
         await prisma.billing.create({
           data: {

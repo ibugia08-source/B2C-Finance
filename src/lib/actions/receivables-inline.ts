@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL } from "@/lib/format";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
 /**
@@ -51,8 +52,8 @@ export async function setClientPaymentDay(
 ): Promise<ActionResult> {
   await requireAdmin();
   try {
-    if (!Number.isInteger(day) || day < 1 || day > 28)
-      return { ok: false, error: "Dia de vencimento deve ser entre 1 e 28." };
+    if (!Number.isInteger(day) || day < 1 || day > 31)
+      return { ok: false, error: "Dia de vencimento deve ser entre 1 e 31." };
     const client = await prisma.client.findFirst({ where: { id: clientId } });
     if (!client) return { ok: false, error: "Cliente não encontrado." };
 
@@ -60,7 +61,7 @@ export async function setClientPaymentDay(
 
     const open = await openBillingOf(clientId, month, year);
     if (open) {
-      const dueDate = new Date(year, month - 1, day);
+      const dueDate = getValidDueDateForMonth(year, month, day);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       await prisma.billing.update({
@@ -272,7 +273,7 @@ export async function addPastDelinquency(formData: FormData): Promise<ActionResu
     let dueDate: Date | null = null;
     if (/^\d{4}-\d{2}-\d{2}$/.test(dueRaw)) dueDate = new Date(`${dueRaw}T00:00:00`);
     if (!dueDate || Number.isNaN(dueDate.getTime())) {
-      dueDate = new Date(refYear, refMonth - 1, Math.min(client.paymentDay ?? 5, 28));
+      dueDate = getValidDueDateForMonth(refYear, refMonth, client.paymentDay);
     }
 
     const billing = await prisma.billing.create({
@@ -450,7 +451,6 @@ export async function bulkRemoveClientsFromList(
           select: { id: true },
         });
         if (existing) continue;
-        const day = Math.min(Math.max(c.paymentDay ?? 5, 1), 28);
         const marker = await prisma.billing.create({
           data: {
             clientId: c.id,
@@ -458,7 +458,7 @@ export async function bulkRemoveClientsFromList(
             competenceMonth: month,
             competenceYear: year,
             amount: Number(c.monthlyValue ?? 0),
-            dueDate: new Date(year, month - 1, day),
+            dueDate: getValidDueDateForMonth(year, month, c.paymentDay),
             status: "CANCELED",
             canceledAt: new Date(),
             canceledBy: viewer.email,

@@ -157,7 +157,7 @@ export function ContractDialog({
           </div>
           <div>
             <Label>Dia de vencimento</Label>
-            <Input type="number" min={1} max={28} name="billingDay"
+            <Input type="number" min={1} max={31} name="billingDay"
               defaultValue={initial?.billingDay ?? 5} />
           </div>
 

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 /**
  * CICLO MENSAL DE RECEBIMENTOS — a "planilha mensal inteligente".
@@ -68,8 +69,7 @@ export async function ensureMonthlyBillings(
     // Só a partir do mês de entrada do cliente na carteira.
     const entered = c.startedAt ?? c.createdAt;
     if (entered && entered >= monthEnd) continue;
-    const day = Math.min(Math.max(c.paymentDay ?? 5, 1), 28);
-    const dueDate = new Date(year, month - 1, day);
+    const dueDate = getValidDueDateForMonth(year, month, c.paymentDay);
     rows.push({
       clientId: c.id,
       description: `Mensalidade ${String(month).padStart(2, "0")}/${year} — ${c.name}`,

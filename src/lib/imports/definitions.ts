@@ -163,15 +163,15 @@ export const IMPORT_DEFS: ImportDef[] = [
       { key: "state", header: "UF", kind: "text", example: "BA" },
       { key: "origin", header: "Origem", kind: "text", example: "Indicação" },
       { key: "salesOwner", header: "Responsável comercial", kind: "text", example: "Israel" },
-      { key: "paymentDay", header: "Dia de pagamento", kind: "int", example: 5, description: "1 a 28" },
+      { key: "paymentDay", header: "Dia de pagamento", kind: "int", example: 5, description: "1 a 31" },
       { key: "status", header: "Status", kind: "enum", options: CLIENT_STATUS, example: "Ativo" },
       { key: "monthlyValue", header: "Valor mensal (R$)", kind: "money", example: "2500,00" },
       { key: "notes", header: "Observações", kind: "text", example: "" },
     ],
     toData: (row, _refs, err) => {
       const d = row.data;
-      if (d.paymentDay != null && (Number(d.paymentDay) < 1 || Number(d.paymentDay) > 28))
-        err("Dia de pagamento", "use um dia entre 1 e 28");
+      if (d.paymentDay != null && (Number(d.paymentDay) < 1 || Number(d.paymentDay) > 31))
+        err("Dia de pagamento", "use um dia entre 1 e 31");
       return { ...d, status: d.status ?? "ACTIVE" };
     },
     dupKey: (d) => norm(d.name),
@@ -248,7 +248,7 @@ export const IMPORT_DEFS: ImportDef[] = [
       { key: "totalValue", header: "Valor total (R$)", kind: "money", example: "5100,00" },
       { key: "startDate", header: "Início", required: true, kind: "date", example: "01/06/2026" },
       { key: "endDate", header: "Fim", kind: "date", example: "31/08/2026" },
-      { key: "billingDay", header: "Dia de cobrança", kind: "int", example: 5, description: "1 a 28" },
+      { key: "billingDay", header: "Dia de cobrança", kind: "int", example: 5, description: "1 a 31" },
       { key: "status", header: "Status", kind: "enum", options: CONTRACT_STATUS, example: "Ativo" },
       { key: "renewalDate", header: "Renovação", kind: "date", example: "" },
       { key: "notes", header: "Observações", kind: "text", example: "" },
@@ -263,22 +263,28 @@ export const IMPORT_DEFS: ImportDef[] = [
         return null;
       }
       // derivação (mesma regra do formulário de contratos)
+      const isTcv = (d.type ?? "MRR") === "TCV";
       const start = d.startDate as Date;
       const end = d.endDate as Date | null;
       const months = end && start
         ? Math.max(1, (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1)
         : 12;
-      if (monthly == null && total != null) monthly = Math.round((total / months) * 100) / 100;
-      if (total == null && monthly != null) total = Math.round(monthly * months * 100) / 100;
+      // TCV nunca vira mensal recorrente — só MRR/avulso derivam total⇄mensal.
+      if (isTcv) {
+        monthly = 0;
+      } else {
+        if (monthly == null && total != null) monthly = Math.round((total / months) * 100) / 100;
+        if (total == null && monthly != null) total = Math.round(monthly * months * 100) / 100;
+      }
       if (end && start && end < start) err("Fim", "data fim anterior ao início");
       const day = d.billingDay == null ? 5 : Number(d.billingDay);
-      if (day < 1 || day > 28) err("Dia de cobrança", "use um dia entre 1 e 28");
+      if (day < 1 || day > 31) err("Dia de cobrança", "use um dia entre 1 e 31");
       if (!clientId) return null;
       return {
         clientId,
         title: d.title,
         type: d.type ?? "MRR",
-        recurrence: d.recurrence ?? "MONTHLY",
+        recurrence: isTcv ? "NONE" : (d.recurrence ?? "MONTHLY"),
         monthlyValue: monthly,
         totalValue: total,
         startDate: d.startDate,

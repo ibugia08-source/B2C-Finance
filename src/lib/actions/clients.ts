@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR } from "@/lib/format";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 /**
  * Resultado padrão das mutations (Etapa 1). Toda ação retorna um objeto
@@ -14,35 +15,79 @@ import { parseBRL, parseDateBR } from "@/lib/format";
  */
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
-const ClientSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().trim().min(1, "Informe o nome do cliente."),
-  legalName: z.string().trim().nullable(),
-  document: z.string().trim().nullable(),
-  email: z
-    .union([z.string().trim().email("E-mail inválido."), z.literal(""), z.null()])
-    .transform((v) => (v ? v : null)),
-  phone: z.string().trim().nullable(),
-  segment: z.string().trim().nullable(),
-  city: z.string().trim().nullable(),
-  state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA).").nullable(),
-  address: z.string().trim().nullable(),
-  legalRepresentative: z.string().trim().nullable(),
-  origin: z.string().trim().nullable(),
-  salesOwner: z.string().trim().nullable(),
-  opsOwner: z.string().trim().nullable(),
-  paymentDay: z
-    .number()
-    .int()
-    .min(1, "Dia entre 1 e 28.")
-    .max(28, "Dia entre 1 e 28.")
-    .nullable(),
-  tags: z.array(z.string().trim().min(1)).default([]),
-  status: z.nativeEnum(ClientStatus),
-  monthlyValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
-  startedAt: z.date().nullable(),
-  notes: z.string().trim().nullable(),
-});
+const ClientSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().trim().min(1, "Informe o nome do cliente."),
+    legalName: z.string().trim().nullable(),
+    document: z.string().trim().nullable(),
+    email: z
+      .union([z.string().trim().email("E-mail inválido."), z.literal(""), z.null()])
+      .transform((v) => (v ? v : null)),
+    phone: z.string().trim().nullable(),
+    segment: z.string().trim().nullable(),
+    city: z.string().trim().nullable(),
+    state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA).").nullable(),
+    address: z.string().trim().nullable(),
+    legalRepresentative: z.string().trim().nullable(),
+    origin: z.string().trim().nullable(),
+    salesOwner: z.string().trim().nullable(),
+    opsOwner: z.string().trim().nullable(),
+    // Dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês).
+    paymentDay: z
+      .number()
+      .int()
+      .min(1, "Dia entre 1 e 31.")
+      .max(31, "Dia entre 1 e 31.")
+      .nullable(),
+    tags: z.array(z.string().trim().min(1)).default([]),
+    status: z.nativeEnum(ClientStatus),
+    // Modalidade de faturamento — define quais campos são obrigatórios.
+    modality: z.nativeEnum(ClientModality).nullable(),
+    // MRR: valor mensal recorrente. TCV: valor total do contrato.
+    monthlyValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
+    totalContractValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
+    contractMonths: z.number().int().positive("Prazo deve ser maior que zero.").nullable(),
+    startedAt: z.date().nullable(),
+    notes: z.string().trim().nullable(),
+  })
+  // ===== Regras condicionais por modalidade (Bloco 1 §7) =====
+  .superRefine((v, ctx) => {
+    if (v.modality === "MRR") {
+      if (!(v.monthlyValue && v.monthlyValue > 0))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["monthlyValue"],
+          message: "MRR exige o valor mensal recorrente (maior que zero).",
+        });
+      if (v.paymentDay == null)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["paymentDay"],
+          message: "MRR exige o dia recorrente de pagamento (1 a 31).",
+        });
+    }
+    if (v.modality === "TCV") {
+      if (!(v.totalContractValue && v.totalContractValue > 0))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["totalContractValue"],
+          message: "TCV exige o valor total do contrato (maior que zero).",
+        });
+      if (v.contractMonths == null)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contractMonths"],
+          message: "TCV exige o prazo do contrato em meses.",
+        });
+      if (v.startedAt == null)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["startedAt"],
+          message: "TCV exige a data de entrada/fechamento.",
+        });
+    }
+  });
 
 /** Normaliza um campo do FormData: string vazia vira null. */
 function clean(v: FormDataEntryValue | null): string | null {
@@ -99,9 +144,21 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         .map((t) => t.trim())
         .filter(Boolean),
       status: (clean(formData.get("status")) ?? "ACTIVE") as ClientStatus,
+      modality: (() => {
+        const raw = clean(formData.get("paymentModel"));
+        return raw === "MRR" || raw === "TCV" ? (raw as ClientModality) : null;
+      })(),
       monthlyValue: (() => {
         const raw = clean(formData.get("monthlyValue"));
         return raw == null ? null : parseBRL(raw);
+      })(),
+      totalContractValue: (() => {
+        const raw = clean(formData.get("totalContractValue"));
+        return raw == null ? null : parseBRL(raw);
+      })(),
+      contractMonths: (() => {
+        const raw = clean(formData.get("contractMonths"));
+        return raw == null ? null : Math.max(1, parseInt(raw, 10) || 0) || null;
       })(),
       startedAt: (() => {
         const raw = clean(formData.get("startedAt"));
@@ -109,6 +166,36 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       })(),
       notes: clean(formData.get("notes")),
     });
+
+    // ===== Normalização por modalidade (limpa o que não pertence) =====
+    // MRR usa monthlyValue + paymentDay (dia recorrente). TCV usa
+    // totalContractValue e NÃO tem dia recorrente nem mensal. Sem modalidade
+    // (leads/legado): mantém o que veio.
+    const modality = parsed.modality;
+    const modalityFields =
+      modality === "MRR"
+        ? {
+            modality,
+            monthlyValue: parsed.monthlyValue,
+            totalContractValue: null,
+            paymentDay: parsed.paymentDay,
+            contractMonths: parsed.contractMonths,
+          }
+        : modality === "TCV"
+          ? {
+              modality,
+              monthlyValue: null, // TCV não tem mensalidade recorrente
+              totalContractValue: parsed.totalContractValue,
+              paymentDay: null, // TCV não tem dia recorrente de pagamento
+              contractMonths: parsed.contractMonths,
+            }
+          : {
+              modality: null,
+              monthlyValue: parsed.monthlyValue,
+              totalContractValue: parsed.totalContractValue,
+              paymentDay: parsed.paymentDay,
+              contractMonths: parsed.contractMonths,
+            };
 
     const base = {
       name: parsed.name,
@@ -124,12 +211,11 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       origin: parsed.origin,
       salesOwner: parsed.salesOwner,
       opsOwner: parsed.opsOwner,
-      paymentDay: parsed.paymentDay,
       tags: parsed.tags,
       status: parsed.status,
-      monthlyValue: parsed.monthlyValue,
       startedAt: parsed.startedAt,
       notes: parsed.notes,
+      ...modalityFields,
     };
 
     let id = parsed.id;
@@ -160,45 +246,37 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       id = created.id;
 
       // ===== Fechamento do contrato (venda) no cadastro =====
-      // Data do fechamento + modalidade (MRR/TCV) + prazo → cria o contrato
-      // e as cobranças. MRR: valor total ÷ prazo = mensal, recorrente a
-      // partir do mês da venda. TCV: valor CHEIO entra uma única vez no
-      // mês da venda — NUNCA rateado pelos meses contratados.
-      const model = clean(formData.get("paymentModel")); // "MRR" | "TCV" | null
-      const totalRaw = clean(formData.get("contractTotal"));
-      const monthsRaw = clean(formData.get("contractMonths"));
-      const saleRaw = clean(formData.get("saleDate")); // "YYYY-MM-DD" (input date)
-
-      if (model === "MRR" || model === "TCV") {
-        const total = totalRaw ? parseBRL(totalRaw) : 0;
-        const months = monthsRaw ? Math.max(1, parseInt(monthsRaw, 10)) : null;
-        if (!(total > 0)) return { ok: false, error: "Informe o valor total do contrato." };
-        if (!months)
-          return { ok: false, error: "Informe o prazo do contrato (meses)." };
-        if (!saleRaw || !/^\d{4}-\d{2}-\d{2}$/.test(saleRaw))
-          return { ok: false, error: "Informe a data do fechamento do contrato (venda)." };
-        const saleDate = new Date(`${saleRaw}T00:00:00`);
-        if (Number.isNaN(saleDate.getTime()))
-          return { ok: false, error: "Data do fechamento inválida." };
-
-        const billingDay = parsed.paymentDay ?? 5;
-        // Início do contrato = mês da venda (competência da 1ª cobrança).
-        const startDate = new Date(
-          saleDate.getFullYear(),
-          saleDate.getMonth(),
-          Math.min(billingDay, 28)
+      // Com uma modalidade escolhida, cria o contrato e gera as cobranças.
+      // MRR: mensalidade recorrente a partir da entrada (pelo prazo, ou aberto).
+      // TCV: valor CHEIO uma única vez no mês da entrada — NUNCA rateado.
+      if (modality === "MRR" || modality === "TCV") {
+        const months = parsed.contractMonths; // TCV: obrigatório; MRR: opcional
+        // Âncora do contrato = data de entrada/fechamento; MRR sem entrada = hoje.
+        const entry = parsed.startedAt ?? new Date();
+        const monthly = modality === "MRR" ? parsed.monthlyValue ?? 0 : 0;
+        const total =
+          modality === "TCV"
+            ? parsed.totalContractValue ?? 0
+            : Math.round(monthly * (months ?? 12) * 100) / 100;
+        // MRR vence no dia recorrente; TCV é pago no ato (dia da entrada).
+        const billingDay = modality === "MRR" ? parsed.paymentDay ?? 5 : entry.getDate();
+        // Início do contrato clampado ao último dia válido do mês (§8).
+        const startDate = getValidDueDateForMonth(
+          entry.getFullYear(),
+          entry.getMonth() + 1,
+          billingDay
         );
-        // Fim = último dia do mês final do prazo (venda em maio + 3 meses →
-        // mai/jun/jul; nunca "vaza" uma mensalidade no 4º mês).
-        const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + months, 0);
-        const monthly = model === "MRR" ? Math.round((total / months) * 100) / 100 : 0;
+        // Fim = último dia do mês final do prazo (quando há prazo definido).
+        const endDate = months
+          ? new Date(startDate.getFullYear(), startDate.getMonth() + months, 0)
+          : null;
 
         const contract = await prisma.contract.create({
           data: {
             clientId: created.id,
-            title: `Contrato ${parsed.name} — ${model}`,
-            type: model,
-            recurrence: model === "MRR" ? "MONTHLY" : "NONE",
+            title: `Contrato ${parsed.name} — ${modality}`,
+            type: modality,
+            recurrence: modality === "MRR" ? "MONTHLY" : "NONE",
             monthlyValue: monthly,
             totalValue: total,
             startDate,
@@ -208,23 +286,18 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
             status: "ACTIVE",
           },
         });
-        // Gera as cobranças: recorrentes até o fim p/ MRR; ÚNICA e CHEIA no
-        // mês da venda p/ TCV (sem rateio).
+        // Gera as cobranças: recorrentes p/ MRR; ÚNICA e CHEIA p/ TCV (sem rateio).
         const { generateBillingsForContract } = await import(
           "@/lib/services/contract-metrics"
         );
         await generateBillingsForContract(contract.id);
-        // Reflete a venda no cadastro do cliente: modalidade, prazo,
-        // valor de referência e entrada (se não informada).
-        await prisma.client.update({
-          where: { id: created.id },
-          data: {
-            modality: model,
-            contractMonths: months,
-            ...(model === "MRR" ? { monthlyValue: monthly } : {}),
-            ...(parsed.startedAt ? {} : { startedAt: saleDate }),
-          },
-        });
+        // Garante a data de entrada no cadastro quando não informada.
+        if (!parsed.startedAt) {
+          await prisma.client.update({
+            where: { id: created.id },
+            data: { startedAt: entry },
+          });
+        }
         revalidatePath("/acordos");
         revalidatePath("/cobrancas");
       }
@@ -237,6 +310,69 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar o cliente.";
     return { ok: false, error: msg };
   }
+}
+
+/**
+ * Carrega o registro COMPLETO do cliente para o formulário de edição.
+ * A lista da carteira usa uma projeção enxuta (performance); o formulário
+ * precisa de todos os campos editáveis para não sobrescrever com vazio ao
+ * salvar. Serializa Decimals/Datas para tipos simples atravessáveis.
+ */
+export type ClientEditData = {
+  id: string;
+  name: string;
+  legalName: string | null;
+  document: string | null;
+  email: string | null;
+  phone: string | null;
+  segment: string | null;
+  city: string | null;
+  state: string | null;
+  address: string | null;
+  legalRepresentative: string | null;
+  origin: string | null;
+  salesOwner: string | null;
+  opsOwner: string | null;
+  status: string;
+  modality: string | null;
+  paymentDay: number | null;
+  monthlyValue: number | null;
+  totalContractValue: number | null;
+  contractMonths: number | null;
+  startedAt: string | null; // ISO
+  tags: string[];
+  notes: string | null;
+};
+
+export async function getClientForEdit(id: string): Promise<ClientEditData | null> {
+  await requireAdmin();
+  const c = await prisma.client.findUnique({ where: { id } });
+  if (!c) return null;
+  return {
+    id: c.id,
+    name: c.name,
+    legalName: c.legalName,
+    document: c.document,
+    email: c.email,
+    phone: c.phone,
+    segment: c.segment,
+    city: c.city,
+    state: c.state,
+    address: c.address,
+    legalRepresentative: c.legalRepresentative,
+    origin: c.origin,
+    salesOwner: c.salesOwner,
+    opsOwner: c.opsOwner,
+    status: c.status,
+    modality: c.modality,
+    paymentDay: c.paymentDay,
+    monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
+    totalContractValue: c.totalContractValue != null ? Number(c.totalContractValue) : null,
+    contractMonths: c.contractMonths,
+    startedAt: c.startedAt ? c.startedAt.toISOString() : null,
+    tags: c.tags,
+    notes: c.notes,
+  };
 }
 
 // ---------- Cadastro por contrato (PDF + IA) ----------
@@ -277,7 +413,7 @@ export async function extractClientFromContract(formData: FormData): Promise<Con
       return { ok: false, error: "PDF sem texto legível — envie um contrato digital (não escaneado)." };
 
     const system = `Você extrai dados de contratos de prestação de serviços de uma agência de marketing brasileira. Responda APENAS com um JSON válido (sem markdown, sem comentários) no formato:
-{"name": string|null, "legalName": string|null, "document": string|null, "email": string|null, "phone": string|null, "city": string|null, "state": string|null (sigla UF), "address": string|null (endereço completo do contratante), "legalRepresentative": string|null (nome do representante legal que assina), "segment": string|null, "paymentModel": "MRR"|"TCV"|null, "contractTotal": string|null (ex: "5100,00"), "contractMonths": string|null (nº de meses do contrato), "paymentDay": string|null (dia de vencimento 1-28), "startedAt": string|null (data de início dd/mm/aaaa), "notes": string|null (resumo de serviços/condições em 1 frase)}
+{"name": string|null, "legalName": string|null, "document": string|null, "email": string|null, "phone": string|null, "city": string|null, "state": string|null (sigla UF), "address": string|null (endereço completo do contratante), "legalRepresentative": string|null (nome do representante legal que assina), "segment": string|null, "paymentModel": "MRR"|"TCV"|null, "contractTotal": string|null (ex: "5100,00"), "contractMonths": string|null (nº de meses do contrato), "paymentDay": string|null (dia de vencimento 1-31), "startedAt": string|null (data de início dd/mm/aaaa), "notes": string|null (resumo de serviços/condições em 1 frase)}
 Regras: "name" é o nome do CONTRATANTE (cliente), nunca da agência/contratada (B2C, B2C Gestão). paymentModel: "MRR" se o pagamento é mensal/recorrente; "TCV" se é valor fechado do projeto. contractTotal: valor TOTAL do contrato (se só houver mensal e prazo, multiplique). Use null quando o dado não estiver no contrato. NUNCA invente.`;
 
     const result = await chatComplete({
@@ -494,7 +630,7 @@ const BulkSchema = z.object({
   salesOwner: z.string().trim().nullish(),
   renewalMonth: z.number().int().min(1).max(12).nullish(),
   modality: z.nativeEnum(ClientModality).nullish(),
-  paymentDay: z.number().int().min(1).max(28).nullish(),
+  paymentDay: z.number().int().min(1).max(31).nullish(),
 });
 
 /**

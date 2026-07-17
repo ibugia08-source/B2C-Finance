@@ -622,7 +622,7 @@ model Client {
   origin       String? // origem comercial: indicação | tráfego | orgânico | ...
   salesOwner   String? // responsável comercial (exibido na carteira como "Responsável")
   opsOwner     String? // responsável operacional
-  paymentDay   Int? // dia padrão de pagamento (1-28)
+  paymentDay   Int? // dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês quando o mês tem menos dias)
   tags         String[]     @default([])
   status       ClientStatus @default(ACTIVE)
   // Modalidade de faturamento (MRR/TCV) — editável na linha, alimenta filtros,
@@ -630,8 +630,11 @@ model Client {
   modality     ClientModality?
   // Mês de renovação (1-12) — editável na linha; alimenta KPIs de renovação.
   renewalMonth Int?
-  // Valor mensal de referência (base para MRR até existirem contratos — Etapa 3).
+  // Valor mensal recorrente — usado SOMENTE em MRR (base da mensalidade).
   monthlyValue Decimal?     @db.Decimal(14, 2)
+  // Valor TOTAL do contrato — usado SOMENTE em TCV. Referência editável no
+  // nível do cliente; espelha Contract.totalValue da venda/renovação.
+  totalContractValue Decimal? @db.Decimal(14, 2)
   // Prazo do contrato em meses — editável inline em Recebimentos/Carteira.
   contractMonths Int?
   startedAt    DateTime? // início da relação comercial

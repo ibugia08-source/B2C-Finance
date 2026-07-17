@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 /**
  * Métricas contratuais da agência — separação explícita entre:
@@ -108,7 +109,8 @@ function monthsBetween(start: Date, end: Date, cap = 36): { m: number; y: number
 }
 
 function dueDateFor(y: number, m: number, billingDay: number, notBefore: Date): Date {
-  const d = new Date(y, m - 1, Math.min(Math.max(billingDay, 1), 28));
+  // Dia recorrente 1-31 ajustado ao último dia válido do mês (§8).
+  const d = getValidDueDateForMonth(y, m, billingDay);
   return d < notBefore ? notBefore : d;
 }
 
@@ -166,8 +168,11 @@ export async function generateBillingsForContract(
   const startM = contract.startDate;
   const first = { m: startM.getMonth() + 1, y: startM.getFullYear() };
 
+  // TCV é SEMPRE cobrança única (valor cheio no mês da venda) — nunca rateado,
+  // mesmo que um contrato antigo tenha ficado com recurrence != NONE.
   const oneShot =
     contract.recurrence === "NONE" ||
+    contract.type === "TCV" ||
     contract.type === "ONE_TIME" ||
     contract.type === "SETUP";
 

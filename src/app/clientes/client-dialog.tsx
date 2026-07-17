@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,45 +16,126 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { saveClient } from "@/lib/actions/clients";
+import { saveClient, getClientForEdit } from "@/lib/actions/clients";
 import { Plus } from "lucide-react";
 import { formatDateInput } from "@/lib/format";
 import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
 
+/** Parse tolerante de dinheiro pt-BR ("1.500,00" → 1500) só para validar > 0. */
+function looseMoney(s: string): number {
+  const cleaned = String(s).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(cleaned);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 // Validação client-side (espelha a Server Action; strings do formulário).
-const FormSchema = z.object({
-  name: z.string().trim().min(1, "Informe o nome do cliente."),
-  legalName: z.string(),
-  document: z.string(),
-  email: z
-    .union([z.string().trim().email("E-mail inválido."), z.literal("")])
-    .default(""),
-  phone: z.string(),
-  segment: z.string(),
-  city: z.string(),
-  state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA)"),
-  address: z.string(),
-  legalRepresentative: z.string(),
-  origin: z.string(),
-  salesOwner: z.string(),
-  opsOwner: z.string(),
-  paymentDay: z
-    .string()
-    .refine(
-      (v) => v === "" || (parseInt(v, 10) >= 1 && parseInt(v, 10) <= 28),
-      "Dia entre 1 e 28."
-    ),
-  status: z.string(),
-  monthlyValue: z.string(),
-  startedAt: z.string(),
-  paymentModel: z.string(),
-  contractTotal: z.string(),
-  contractMonths: z.string(),
-  saleDate: z.string(),
-  tags: z.string(),
-  notes: z.string(),
-});
+// Regras condicionais por modalidade (Bloco 1 §7).
+const FormSchema = z
+  .object({
+    name: z.string().trim().min(1, "Informe o nome do cliente."),
+    legalName: z.string(),
+    document: z.string(),
+    email: z
+      .union([z.string().trim().email("E-mail inválido."), z.literal("")])
+      .default(""),
+    phone: z.string(),
+    segment: z.string(),
+    city: z.string(),
+    state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA)"),
+    address: z.string(),
+    legalRepresentative: z.string(),
+    origin: z.string(),
+    salesOwner: z.string(),
+    opsOwner: z.string(),
+    status: z.string(),
+    // Modalidade — decide quais campos são exigidos.
+    paymentModel: z.string(), // "" | "MRR" | "TCV"
+    monthlyValue: z.string(), // MRR
+    totalContractValue: z.string(), // TCV
+    paymentDay: z
+      .string()
+      .refine(
+        (v) => v === "" || (parseInt(v, 10) >= 1 && parseInt(v, 10) <= 31),
+        "Dia entre 1 e 31."
+      ),
+    contractMonths: z.string(),
+    startedAt: z.string(),
+    tags: z.string(),
+    notes: z.string(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.paymentModel === "MRR") {
+      if (looseMoney(v.monthlyValue) <= 0)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["monthlyValue"],
+          message: "Informe o valor mensal recorrente (maior que zero).",
+        });
+      if (v.paymentDay === "")
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["paymentDay"],
+          message: "Informe o dia recorrente de pagamento.",
+        });
+    }
+    if (v.paymentModel === "TCV") {
+      if (looseMoney(v.totalContractValue) <= 0)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["totalContractValue"],
+          message: "Informe o valor total do contrato (maior que zero).",
+        });
+      if (v.contractMonths === "")
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contractMonths"],
+          message: "Informe o prazo do contrato (meses).",
+        });
+      if (v.startedAt === "")
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["startedAt"],
+          message: "Informe a data de entrada/fechamento.",
+        });
+    }
+  });
 type FormValues = z.infer<typeof FormSchema>;
+
+/** Formata dinheiro para o input: number → "1500,00"; string (form/IA) intacta. */
+function moneyStr(v: any): string {
+  if (v == null || v === "") return "";
+  if (typeof v === "number") return v.toFixed(2).replace(".", ",");
+  return String(v);
+}
+
+function toFormValues(src: any): FormValues {
+  return {
+    name: src?.name ?? "",
+    legalName: src?.legalName ?? "",
+    document: src?.document ?? "",
+    email: src?.email ?? "",
+    phone: src?.phone ?? "",
+    segment: src?.segment ?? "",
+    city: src?.city ?? "",
+    state: src?.state ?? "",
+    address: src?.address ?? "",
+    legalRepresentative: src?.legalRepresentative ?? "",
+    origin: src?.origin ?? "",
+    salesOwner: src?.salesOwner ?? "",
+    opsOwner: src?.opsOwner ?? "",
+    status: src?.status ?? "ACTIVE",
+    // Aceita `modality` (cadastro/edição) ou `paymentModel` (pré-fill da IA).
+    paymentModel: src?.modality ?? src?.paymentModel ?? "",
+    monthlyValue: moneyStr(src?.monthlyValue),
+    // Aceita `totalContractValue` (cadastro) ou `contractTotal` (pré-fill da IA).
+    totalContractValue: moneyStr(src?.totalContractValue ?? src?.contractTotal),
+    paymentDay: src?.paymentDay != null ? String(src.paymentDay) : "",
+    contractMonths: src?.contractMonths != null ? String(src.contractMonths) : "",
+    startedAt: src?.startedAt ? formatDateInput(src.startedAt) : "",
+    tags: Array.isArray(src?.tags) ? src.tags.join(", ") : "",
+    notes: src?.notes ?? "",
+  };
+}
 
 export function ClientDialog({
   initial,
@@ -66,42 +147,34 @@ export function ClientDialog({
   const [open, setOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const isNew = !initial?.id;
+  // Em edição, a lista passa uma projeção enxuta — carregamos o registro
+  // COMPLETO ao abrir para não sobrescrever campos com vazio ao salvar.
+  const [data, setData] = useState<any>(initial);
+  const [loaded, setLoaded] = useState<boolean>(isNew);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
-    values: {
-      name: initial?.name ?? "",
-      legalName: initial?.legalName ?? "",
-      document: initial?.document ?? "",
-      email: initial?.email ?? "",
-      phone: initial?.phone ?? "",
-      segment: initial?.segment ?? "",
-      city: initial?.city ?? "",
-      state: initial?.state ?? "",
-      address: initial?.address ?? "",
-      legalRepresentative: initial?.legalRepresentative ?? "",
-      origin: initial?.origin ?? "",
-      salesOwner: initial?.salesOwner ?? "",
-      opsOwner: initial?.opsOwner ?? "",
-      paymentDay: initial?.paymentDay != null ? String(initial.paymentDay) : "",
-      status: initial?.status ?? "ACTIVE",
-      monthlyValue:
-        initial?.monthlyValue != null
-          ? Number(initial.monthlyValue).toFixed(2).replace(".", ",")
-          : "",
-      startedAt: initial?.startedAt ? formatDateInput(initial.startedAt) : "",
-      paymentModel: initial?.paymentModel ?? "",
-      contractTotal: initial?.contractTotal ?? "",
-      contractMonths: initial?.contractMonths ?? "",
-      saleDate: "",
-      tags: Array.isArray(initial?.tags) ? initial.tags.join(", ") : "",
-      notes: initial?.notes ?? "",
-    },
+    values: toFormValues(data),
   });
   const { register, handleSubmit, formState, watch } = form;
   const err = formState.errors;
   const paymentModel = watch("paymentModel");
-  const isNew = !initial?.id;
+
+  useEffect(() => {
+    if (!open || isNew || loaded) return;
+    let active = true;
+    (async () => {
+      const full = await getClientForEdit(initial.id);
+      if (active && full) {
+        setData(full);
+        setLoaded(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [open, isNew, loaded, initial?.id]);
 
   function onSubmit(values: FormValues) {
     start(async () => {
@@ -174,76 +247,97 @@ export function ClientDialog({
             <Input {...register("salesOwner")} placeholder="quem cuida deste cliente" />
           </div>
 
-          {!isNew && (
+          {/* ===== Modalidade & cobrança — campos dinâmicos por MRR/TCV ===== */}
+          <div className="col-span-full rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <p className="col-span-full text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Modalidade e cobrança
+            </p>
             <div>
-              <Label>Valor mensal (R$)</Label>
-              <Input {...register("monthlyValue")} inputMode="decimal" placeholder="0,00" />
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label>Dia de pagamento</Label>
-              <Input
-                type="number"
-                min={1}
-                max={28}
-                {...register("paymentDay")}
-                placeholder="5"
-              />
-              {err.paymentDay && <FieldError msg={err.paymentDay.message} />}
+              <Label>Modalidade</Label>
+              <Select {...register("paymentModel")}>
+                <option value="">— definir depois —</option>
+                <option value="MRR">MRR — mensalidade recorrente</option>
+                <option value="TCV">TCV — valor fechado (pago no ato)</option>
+              </Select>
             </div>
             <div>
-              <Label>Entrada</Label>
+              <Label>
+                {paymentModel === "TCV" ? "Entrada / fechamento *" : "Entrada"}
+              </Label>
               <Input type="date" {...register("startedAt")} />
+              {err.startedAt && <FieldError msg={err.startedAt.message} />}
             </div>
-          </div>
 
-          {isNew && (
-            <div className="col-span-full rounded-lg border bg-muted/30 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <p className="col-span-full text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Fechamento do contrato (venda)
-              </p>
-              <div>
-                <Label>Tipo da venda</Label>
-                <Select {...register("paymentModel")}>
-                  <option value="">— sem contrato agora —</option>
-                  <option value="MRR">MRR (recorrente mensal)</option>
-                  <option value="TCV">TCV (valor fechado)</option>
-                </Select>
-              </div>
-              {paymentModel && (
+            {paymentModel === "MRR" && (
+              <>
                 <div>
-                  <Label>Data do fechamento (venda) *</Label>
-                  <Input type="date" {...register("saleDate")} required />
+                  <Label>Valor mensal recorrente (R$) *</Label>
+                  <Input
+                    {...register("monthlyValue")}
+                    inputMode="decimal"
+                    placeholder="ex.: 1.500,00"
+                  />
+                  {err.monthlyValue && <FieldError msg={err.monthlyValue.message} />}
                 </div>
-              )}
-              {paymentModel && (
+                <div>
+                  <Label>Dia recorrente de pagamento *</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    {...register("paymentDay")}
+                    placeholder="ex.: 10"
+                  />
+                  {err.paymentDay && <FieldError msg={err.paymentDay.message} />}
+                </div>
+                <div>
+                  <Label>Prazo do contrato (meses)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    {...register("contractMonths")}
+                    placeholder="ex.: 12"
+                  />
+                </div>
+                <p className="col-span-full text-xs text-muted-foreground">
+                  MRR é uma mensalidade recorrente. Este cliente entra todos os
+                  meses na lista de recebimentos enquanto estiver ativo.
+                </p>
+              </>
+            )}
+
+            {paymentModel === "TCV" && (
+              <>
                 <div>
                   <Label>Valor total do contrato (R$) *</Label>
-                  <Input {...register("contractTotal")} inputMode="decimal" placeholder="ex.: 5100,00" required />
+                  <Input
+                    {...register("totalContractValue")}
+                    inputMode="decimal"
+                    placeholder="ex.: 3.000,00"
+                  />
+                  {err.totalContractValue && (
+                    <FieldError msg={err.totalContractValue.message} />
+                  )}
                 </div>
-              )}
-              {paymentModel && (
                 <div>
                   <Label>Prazo do contrato (meses) *</Label>
-                  <Input type="number" min={1} {...register("contractMonths")} placeholder="ex.: 3" required />
+                  <Input
+                    type="number"
+                    min={1}
+                    {...register("contractMonths")}
+                    placeholder="ex.: 3"
+                  />
+                  {err.contractMonths && <FieldError msg={err.contractMonths.message} />}
                 </div>
-              )}
-              {paymentModel === "MRR" && (
-                <p className="sm:col-span-2 text-xs text-muted-foreground">
-                  O sistema calcula o mensal (total ÷ prazo) e cria as cobranças
-                  recorrentes a partir do mês da venda até o fim do prazo.
+                <p className="col-span-full text-xs text-muted-foreground">
+                  TCV é um pagamento único do contrato. O valor entra
+                  integralmente no mês de fechamento e não é dividido nos meses
+                  seguintes. Na renovação, o cliente paga o valor cheio de novo.
                 </p>
-              )}
-              {paymentModel === "TCV" && (
-                <p className="sm:col-span-2 text-xs text-muted-foreground">
-                  O valor CHEIO entra uma única vez no mês da venda — não é
-                  distribuído pelos meses contratados. Na renovação, o cliente
-                  paga o valor cheio novamente.
-                </p>
-              )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
+
           {/* ===== Avançado — dados fiscais, contratuais e internos ===== */}
           <details className="col-span-full rounded-lg border">
             <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
@@ -309,8 +403,8 @@ export function ClientDialog({
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Salvando…" : "Salvar"}
+            <Button type="submit" disabled={pending || !loaded}>
+              {pending ? "Salvando…" : !loaded ? "Carregando…" : "Salvar"}
             </Button>
           </DialogFooter>
         </form>

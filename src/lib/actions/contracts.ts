@@ -9,6 +9,7 @@ import {
   generateBillingsForContract,
   generateBillingsForAllActive,
 } from "@/lib/services/contract-metrics";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
 function clean(v: FormDataEntryValue | null): string | null {
@@ -43,7 +44,7 @@ const ContractSchema = z.object({
   startDate: z.date({ invalid_type_error: "Informe a data de início." }),
   endDate: z.date().nullable(),
   renewalDate: z.date().nullable(),
-  billingDay: z.number().int().min(1, "Dia entre 1 e 28.").max(28, "Dia entre 1 e 28."),
+  billingDay: z.number().int().min(1, "Dia entre 1 e 31.").max(31, "Dia entre 1 e 31."),
   autoRenew: z.boolean().default(false),
   notes: z.string().trim().nullable(),
   services: z
@@ -90,15 +91,23 @@ export async function saveContract(formData: FormData): Promise<ActionResult> {
       return { ok: false, error: "Data de fim anterior ao início." };
     }
 
-    // ===== Derivação MRR ⇄ TCV (ex.: R$ 5.100 / 3 meses → 1.700/mês) =====
+    // ===== Modalidade define a forma do dinheiro =====
+    // TCV = valor CHEIO único: sem recorrência, sem mensal derivado, sem rateio.
+    //       A cobrança entra uma única vez no mês da venda/renovação.
+    // MRR = mensal recorrente: deriva total⇄mensal pelo prazo quando faltar um
+    //       (ex.: R$ 5.100 / 3 meses → 1.700/mês).
     let { monthlyValue, totalValue } = parsed;
-    if (parsed.endDate) {
+    let recurrence = parsed.recurrence;
+    if (parsed.type === "TCV") {
+      recurrence = "NONE"; // trava anti-rateio: TCV nunca gera cobrança mensal
+      monthlyValue = 0; // TCV não tem mensalidade recorrente
+    } else if (parsed.endDate) {
       const months = countMonths(parsed.startDate, parsed.endDate);
       if (totalValue === 0 && monthlyValue > 0) totalValue = monthlyValue * months;
       else if (monthlyValue === 0 && totalValue > 0)
         monthlyValue = Number((totalValue / months).toFixed(2));
     } else if (totalValue === 0 && monthlyValue > 0) {
-      totalValue = monthlyValue * 12; // TCV anualizado p/ contrato sem fim
+      totalValue = monthlyValue * 12; // MRR sem fim: total anualizado de referência
     }
 
     // Cliente pertence ao dono atual? (findFirst é escopado)
@@ -113,7 +122,7 @@ export async function saveContract(formData: FormData): Promise<ActionResult> {
       title: parsed.title,
       type: parsed.type,
       status: parsed.status,
-      recurrence: parsed.recurrence,
+      recurrence,
       monthlyValue,
       totalValue,
       setupFee: parsed.setupFee,
@@ -281,8 +290,12 @@ export async function renewClientContract(formData: FormData): Promise<ActionRes
 
     if (c.type === "TCV" || c.recurrence === "NONE") {
       // TCV renovado paga o valor CHEIO de novo no mês da renovação
-      const due = new Date(today.getFullYear(), today.getMonth(), Math.min(c.billingDay, 28));
-      if (due < today) due.setMonth(due.getMonth() + 1);
+      let due = getValidDueDateForMonth(today.getFullYear(), today.getMonth() + 1, c.billingDay);
+      if (due < today) {
+        // Vencimento do mês já passou → joga para o mês seguinte (reclampando).
+        const next = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+        due = getValidDueDateForMonth(next.getFullYear(), next.getMonth() + 1, c.billingDay);
+      }
       await prisma.billing.create({
         data: {
           clientId: c.clientId,
