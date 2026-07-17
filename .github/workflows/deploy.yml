@@ -33,19 +33,16 @@ jobs:
         env:
           NODE_ENV: production
 
-      # ===== Deploy de produção via Vercel CLI oficial =====
+      # ===== Deploy de produção via Vercel CLI oficial (build REMOTO) =====
       # Requer os secrets do repositório: VERCEL_TOKEN, VERCEL_ORG_ID,
-      # VERCEL_PROJECT_ID. `vercel pull` traz as variáveis do projeto
-      # (DATABASE_URL etc.); `vercel build` roda o build de produção
-      # (inclui `prisma migrate deploy`, idempotente); `vercel deploy
-      # --prebuilt` publica em produção.
+      # VERCEL_PROJECT_ID. O build roda nos servidores da Vercel (que têm o
+      # DATABASE_URL e demais variáveis do projeto), então `prisma migrate
+      # deploy` funciona — diferente de buildar localmente no CI. Idempotente.
       - name: Deploy to Vercel (production)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           npm i -g vercel@latest
-          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          vercel build --prod --token="$VERCEL_TOKEN"
-          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prod --yes --token="$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
