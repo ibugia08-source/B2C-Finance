@@ -48,11 +48,11 @@ export function MonthNav({ month, year }: { month: number; year: number }) {
         <ChevronLeft className="h-4 w-4" />
       </Button>
 
-      <div className="flex h-9 items-center gap-1.5 rounded-md border bg-background px-2.5">
-        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+      <div className="flex h-9 items-center gap-1 rounded-md border bg-background pl-2.5 pr-1">
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
         <Select
           aria-label="Mês"
-          className="h-7 w-auto border-0 px-1 text-sm font-medium focus-visible:ring-0"
+          className="h-7 w-[112px] rounded-md border-0 bg-transparent px-1 text-sm font-medium text-foreground focus-visible:ring-1 focus-visible:ring-offset-0"
           value={String(month)}
           onChange={(e) => go(parseInt(e.target.value, 10), year)}
         >
@@ -65,7 +65,7 @@ export function MonthNav({ month, year }: { month: number; year: number }) {
         <span className="text-muted-foreground">/</span>
         <Select
           aria-label="Ano"
-          className="h-7 w-auto border-0 px-1 text-sm font-medium focus-visible:ring-0"
+          className="h-7 w-[72px] rounded-md border-0 bg-transparent px-1 text-sm font-medium text-foreground focus-visible:ring-1 focus-visible:ring-offset-0"
           value={String(year)}
           onChange={(e) => go(month, parseInt(e.target.value, 10))}
         >
