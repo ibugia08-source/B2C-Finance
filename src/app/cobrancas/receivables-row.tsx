@@ -20,7 +20,7 @@ const MODALITY_OPTIONS = [
   { value: "TCV", label: "TCV" },
 ];
 
-const DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => ({
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   value: String(i + 1),
   label: `Todo dia ${String(i + 1).padStart(2, "0")}`,
 }));
@@ -101,20 +101,30 @@ export function ReceivableRow({
         />
       </TableCell>
       <TableCell>
-        <InlineSelect
-          ariaLabel={`Vencimento recorrente de ${row.name}`}
-          value={row.paymentDay != null ? String(row.paymentDay) : ""}
-          options={DAY_OPTIONS}
-          allowEmpty
-          emptyLabel="— definir —"
-          action={(v) =>
-            setClientPaymentDay(row.clientId, parseInt(v, 10), month, year)
-          }
-        />
-        {row.dueDateBR && (
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            neste mês: {row.dueDateBR}
-          </p>
+        {row.modality === "TCV" ? (
+          // TCV: entra só no mês de adesão/fechamento/renovação — mostra a data
+          // do evento, sem dia recorrente (§15). Não é editável como recorrência.
+          <span className="text-sm tabular-nums" title="Data de entrada/fechamento/renovação (TCV não tem vencimento recorrente)">
+            {row.dueDateBR ?? "—"}
+          </span>
+        ) : (
+          <>
+            <InlineSelect
+              ariaLabel={`Vencimento recorrente de ${row.name}`}
+              value={row.paymentDay != null ? String(row.paymentDay) : ""}
+              options={DAY_OPTIONS}
+              allowEmpty
+              emptyLabel="— definir —"
+              action={(v) =>
+                setClientPaymentDay(row.clientId, parseInt(v, 10), month, year)
+              }
+            />
+            {row.dueDateBR && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                neste mês: {row.dueDateBR}
+              </p>
+            )}
+          </>
         )}
       </TableCell>
       <TableCell className="text-right">

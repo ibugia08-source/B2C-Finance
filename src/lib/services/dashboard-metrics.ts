@@ -252,7 +252,8 @@ export async function getMonthlySeries(f: DashboardFilters): Promise<MonthlySeri
         select: { dueDate: true, amount: true, paidTotal: true },
       }),
       prisma.contract.findMany({
-        where: { status: { notIn: ["CANCELED", "PENDING"] }, ...clientWhere },
+        // Só contratos MRR: a série "MRR do mês" nunca inclui TCV (sem rateio).
+        where: { type: "MRR", status: { notIn: ["CANCELED", "PENDING"] }, ...clientWhere },
         select: { startDate: true, endDate: true, monthlyValue: true },
       }),
       prisma.payrollItem.findMany({
@@ -292,7 +293,7 @@ export async function getMonthlySeries(f: DashboardFilters): Promise<MonthlySeri
     if (i != null) folha[i] += n(item.amount) * (item.kind === "DEDUCTION" ? -1 : 1);
   }
 
-  // MRR do mês: Σ monthlyValue dos contratos cuja vigência cobre o mês.
+  // MRR do mês: Σ monthlyValue dos contratos MRR cuja vigência cobre o mês.
   months.forEach((mo, i) => {
     const monthStart = new Date(mo.y, mo.m - 1, 1);
     const monthEnd = new Date(mo.y, mo.m, 1);

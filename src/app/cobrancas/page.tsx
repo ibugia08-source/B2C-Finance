@@ -4,6 +4,7 @@ import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import {
   ensureMonthlyBillings,
   cycleStatusOf,
@@ -233,31 +234,40 @@ export default async function RecebimentosPage({
   const removedClientIds = new Set(
     billingsRaw.filter((b) => b.status === "CANCELED").map((b) => b.clientId)
   );
+  // Só clientes MRR entram automaticamente sem cobrança (mostram a mensalidade
+  // prevista). TCV NUNCA entra fora do mês de adesão/renovação (Bloco 2 §12) —
+  // aparece apenas quando tem cobrança TCV na competência (billingRows).
   const noChargeRows: Row[] = activeClients
+    .filter((c) => c.modality === "MRR")
     .filter((c) => !withBilling.has(c.id) && !removedClientIds.has(c.id))
     .filter((c) => (searchParams.cliente ? c.id === searchParams.cliente : true))
-    .map((c) => ({
-      key: c.id,
-      clientId: c.id,
-      billingId: null,
-      name: c.name,
-      phone: c.phone,
-      modality: c.modality,
-      paymentDay: c.paymentDay,
-      contractMonths: c.contractMonths,
-      amountDue: Number(c.monthlyValue ?? 0),
-      openAmount: 0,
-      description: null,
-      cycleStatus: "NO_CHARGE",
-      statusLabel: "Sem cobrança no mês",
-      daysLate: 0,
-      paidAtBR: null,
-      dueDateBR: null,
-      responsible: c.salesOwner ?? null,
-      removedInfo: null,
-      msg: msgOf(c.name, Number(c.monthlyValue ?? 0), null, 0, 0, false),
-      _sort: c.name,
-    }));
+    .map((c) => {
+      // Vencimento MRR calculado pelo dia recorrente (clamp fim de mês, §15).
+      const due = getValidDueDateForMonth(mes.year, mes.month, c.paymentDay);
+      return {
+        key: c.id,
+        clientId: c.id,
+        billingId: null,
+        name: c.name,
+        phone: c.phone,
+        modality: c.modality,
+        paymentDay: c.paymentDay,
+        contractMonths: c.contractMonths,
+        amountDue: Number(c.monthlyValue ?? 0),
+        openAmount: 0,
+        description: null,
+        cycleStatus: "NO_CHARGE",
+        statusLabel: "Sem cobrança no mês",
+        daysLate: 0,
+        paidAtBR: null,
+        dueDateBR: formatDateBR(due),
+        responsible: c.salesOwner ?? null,
+        removedInfo: null,
+        msg: msgOf(c.name, Number(c.monthlyValue ?? 0), due, 0, 0, false),
+        _sort: c.name,
+        _dueDate: due,
+      } as Row & { _dueDate: Date };
+    });
 
   const stFilter = legacyStatus(searchParams);
   const respFilter = searchParams.responsavel ?? "";

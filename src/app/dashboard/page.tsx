@@ -85,19 +85,23 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   ]);
   const {
     kpis, finance, cash, series, health, alerts, actions,
-    renewalOutlook, clients: clientsBlock, upsell, expenses, receipts,
+    revenue, renewalOutlook, clients: clientsBlock, upsell, expenses, receipts,
   } = data;
 
   const hs = HEALTH_STYLE[health.level];
   const renovacoes = renewalOutlook[0];
 
   // ===== Fórmulas oficiais da 1ª linha (docs/METRICAS_FINANCEIRAS.md) =====
-  // Em aberto = Faturamento total previsto − Recebido (clamp 0, na camada
-  // central); Vencido ⊂ Em aberto; Resultado = Recebido − Despesas do mês;
-  // Margem Operacional = Resultado / Recebido.
-  const previsto = receipts.expectedTotal;
+  // Faturamento total previsto = Faturamento MRR + Faturamento TCV (Bloco 2 §19).
+  //   MRR = Σ monthlyValue dos clientes MRR ativos no mês (getPeriodRevenue).
+  //   TCV = Σ valor cheio das cobranças TCV com competência no mês (SEM rateio).
+  //   Fonte central única: getPeriodRevenue — independe de as mensalidades já
+  //   terem sido geradas e nunca dilui TCV.
+  // Em aberto = max(Previsto − Recebido, 0) — clamp documentado p/ evitar negativo.
+  // Vencido ⊂ Em aberto; Resultado = Recebido − Despesas; Margem = Resultado / Recebido.
+  const previsto = revenue.total;
   const recebido = receipts.receiptsCorrectMonth;
-  const emAberto = receipts.openMonth;
+  const emAberto = Math.max(0, previsto - recebido);
   const vencido = receipts.overdueOpenAmount;
   const resultado = computeMonthlyResult(recebido, finance.despesas);
   const margemPct = Math.round(computeOperationalMargin(resultado, recebido) * 100);
@@ -160,9 +164,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-6">
         <MiniStat label="Resultado do mês" value={formatBRL(resultado)}
           tone={resultado >= 0 ? "pos" : "neg"} hint="recebido − despesas" />
-        <MiniStat label="Faturamento MRR (mês)" value={formatBRL(receipts.mrrReceived)} />
-        <MiniStat label="Faturamento TCV (mês)" value={formatBRL(receipts.tcvReceived)}
-          hint="valor cheio, sem rateio" />
+        <MiniStat label="Faturamento MRR (mês)" value={formatBRL(revenue.mrr)}
+          hint={`${revenue.mrrClients} cliente(s) MRR ativo(s)`} />
+        <MiniStat label="Faturamento TCV (mês)" value={formatBRL(revenue.tcv)}
+          hint="valor cheio dos TCV do mês, sem rateio" />
         <MiniStat label="Ticket médio (mês)"
           value={clientsBlock.pagosMes > 0 ? formatBRL(ticketMedio) : "—"}
           hint={`${clientsBlock.pagosMes} cliente(s) pago(s)`} />

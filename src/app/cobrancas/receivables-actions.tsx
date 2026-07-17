@@ -28,7 +28,7 @@ const MODALITY_OPTIONS = [
   { value: "TCV", label: "TCV" },
 ];
 
-const DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => ({
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   value: String(i + 1),
   label: `Todo dia ${String(i + 1).padStart(2, "0")}`,
 }));
@@ -86,7 +86,7 @@ export function StatusCell({
     return (
       <span
         className="inline-flex items-center rounded-full border bg-muted px-2.5 h-6 text-xs text-muted-foreground"
-        title="Cliente ativo sem cobrança gerada neste mês (TCV fora do mês de adesão ou sem modalidade definida)."
+        title="Cliente MRR ativo ainda sem mensalidade gerada neste mês (defina o valor mensal no cadastro)."
       >
         Sem cobrança no mês
       </span>
