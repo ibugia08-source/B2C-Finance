@@ -121,8 +121,11 @@ export default async function ClientesPage({
       }),
       prisma.client.count({ where: { status: "ACTIVE" } }),
       prisma.client.count({ where: { startedAt: { gte: start, lt: end } } }),
+      // MRR base = Σ mensalidade dos clientes ATIVOS na modalidade MRR.
+      // TCV usa totalContractValue (não mensalidade) e não entra aqui, mesmo
+      // que tenha um monthlyValue legado/residual gravado.
       prisma.client.aggregate({
-        where: { status: "ACTIVE" },
+        where: { status: "ACTIVE", modality: "MRR" },
         _sum: { monthlyValue: true },
       }),
     ]);
@@ -273,7 +276,7 @@ export default async function ClientesPage({
         <StatCard
           title="MRR base (ativos)"
           value={formatBRL(mrrBase)}
-          hint="Valor mensal dos clientes ativos"
+          hint="Mensalidade recorrente dos clientes MRR ativos"
         />
       </div>
 
