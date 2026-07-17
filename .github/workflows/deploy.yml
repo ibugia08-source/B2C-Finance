@@ -11,44 +11,42 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-      
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run linter
         run: npm run lint --if-present
-      
-      - name: Build application
+
+      # Sanity build (sem migração de banco) — falha rápido em erro de compilação.
+      - name: Build check (CI)
         run: npm run build:ci
         env:
           NODE_ENV: production
 
-      - name: Deploy to Vercel
+      # ===== Deploy de produção via Vercel CLI oficial =====
+      # Requer os secrets do repositório: VERCEL_TOKEN, VERCEL_ORG_ID,
+      # VERCEL_PROJECT_ID. `vercel pull` traz as variáveis do projeto
+      # (DATABASE_URL etc.); `vercel build` roda o build de produção
+      # (inclui `prisma migrate deploy`, idempotente); `vercel deploy
+      # --prebuilt` publica em produção.
+      - name: Deploy to Vercel (production)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: vercel/action@master
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          production: true
-      
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Build passed! Preview URL: https://${{ github.head_ref }}.vercel.app'
-            })
+        run: |
+          npm i -g vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
