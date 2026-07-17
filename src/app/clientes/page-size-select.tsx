@@ -1,9 +1,7 @@
 "use client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Select } from "@/components/ui/select";
-
-/** Tamanhos de página disponíveis na lista de clientes. */
-export const PAGE_SIZES = [20, 40, 100] as const;
+import { PAGE_SIZES } from "./_meta";
 
 /** Seletor de linhas por página (persistido na URL via ?porPagina=). */
 export function PageSizeSelect({ value }: { value: number }) {

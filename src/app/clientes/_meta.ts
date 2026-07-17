@@ -51,6 +51,11 @@ export function clientStatusVariant(status: string): BadgeVariant {
   }
 }
 
+// ===== Paginação da lista de clientes =====
+// Vive aqui (módulo neutro, sem "use client") para poder ser usado tanto no
+// server component (page.tsx) quanto no seletor client (page-size-select).
+export const PAGE_SIZES = [20, 40, 100] as const;
+
 // ===== Modalidade (MRR/TCV) =====
 export const CLIENT_MODALITIES = ["MRR", "TCV"] as const;
 export type ClientModalityValue = (typeof CLIENT_MODALITIES)[number];
