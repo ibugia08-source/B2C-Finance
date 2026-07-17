@@ -25,6 +25,7 @@ function revalidateBilling(clientId?: string) {
   revalidatePath("/clientes");
   if (clientId) revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/dashboard");
+  revalidatePath("/rotina"); // ações da Rotina refletem na hora
 }
 
 // ---------- Criação / edição manual ----------

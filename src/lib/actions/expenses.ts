@@ -238,6 +238,7 @@ export async function setExpenseStatus(
     await prisma.transaction.updateMany({ where: { id }, data: { status } });
     revalidatePath("/despesas");
     revalidatePath("/dashboard");
+    revalidatePath("/rotina"); // "Marcar como paga" pela Rotina reflete na hora
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar o status." };
