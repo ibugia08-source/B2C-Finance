@@ -2,35 +2,9 @@
 import { useRouter } from "next/navigation";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { InlineSelect } from "./inline-select";
-import { DelinquencyCell } from "./clients-actions";
 import { ClientActions } from "./row-actions";
-import { formatBRL } from "@/lib/format";
-import {
-  CLIENT_STATUSES,
-  CLIENT_STATUS_LABEL,
-  CLIENT_MODALITIES,
-  CLIENT_MODALITY_LABEL,
-  MONTHS,
-  clientStatusPill,
-  modalityPill,
-} from "./_meta";
-import {
-  setClientStatus,
-  setClientModality,
-  setClientRenewalMonth,
-} from "@/lib/actions/clients";
+import type { ClientColumn, ColumnCtx } from "./columns";
 import type { ClientRow } from "./clients-table";
-
-const STATUS_OPTIONS = CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => ({
-  value: s,
-  label: CLIENT_STATUS_LABEL[s],
-}));
-const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
-  value: m,
-  label: CLIENT_MODALITY_LABEL[m],
-}));
-const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
 
 /** Célula interativa: cliques não abrem a área do cliente (edição inline). */
 function stop(e: React.MouseEvent) {
@@ -41,12 +15,14 @@ export function ClientRowDesktop({
   client,
   selected,
   onToggle,
-  onStatusDone,
+  columns,
+  ctx,
 }: {
   client: ClientRow;
   selected: boolean;
   onToggle: () => void;
-  onStatusDone: (c: ClientRow) => (value: string) => void;
+  columns: ClientColumn[];
+  ctx: ColumnCtx;
 }) {
   const router = useRouter();
   return (
@@ -65,71 +41,16 @@ export function ClientRowDesktop({
       </TableCell>
       <TableCell className="font-medium">
         <span className="hover:underline">{client.name}</span>
-        {client.segment && (
-          <p className="text-xs text-muted-foreground">{client.segment}</p>
-        )}
       </TableCell>
-      <TableCell onClick={stop}>
-        <InlineSelect
-          ariaLabel={`Status de ${client.name}`}
-          value={client.status}
-          options={STATUS_OPTIONS}
-          pillClass={clientStatusPill}
-          action={(v) => setClientStatus(client.id, v)}
-          onDone={onStatusDone(client)}
-        />
-      </TableCell>
-      <TableCell onClick={stop}>
-        <InlineSelect
-          ariaLabel={`Modalidade de ${client.name}`}
-          value={client.modality ?? ""}
-          options={MODALITY_OPTIONS}
-          pillClass={modalityPill}
-          allowEmpty
-          emptyLabel="— definir —"
-          action={(v) => setClientModality(client.id, v || null)}
-        />
-      </TableCell>
-      <TableCell className="text-right tabular-nums whitespace-nowrap">
-        {client.refValue != null && client.refValue > 0 ? (
-          <span>
-            {formatBRL(client.refValue)}
-            <span className="ml-1 text-[10px] text-muted-foreground">
-              {client.modality === "TCV" ? "total" : "/mês"}
-            </span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </TableCell>
-      <TableCell className="text-sm whitespace-nowrap">
-        {client.modality === "TCV" ? (
-          <span className="text-muted-foreground" title="TCV é pago no ato — sem vencimento recorrente">
-            no ato
-          </span>
-        ) : client.dueDay != null ? (
-          `dia ${client.dueDay}`
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
-      </TableCell>
-      <TableCell onClick={stop}>
-        <DelinquencyCell client={client} />
-      </TableCell>
-      <TableCell onClick={stop}>
-        <InlineSelect
-          ariaLabel={`Mês de renovação de ${client.name}`}
-          value={client.renewalMonth != null ? String(client.renewalMonth) : ""}
-          options={MONTH_OPTIONS}
-          allowEmpty
-          emptyLabel="— definir —"
-          action={(v) => setClientRenewalMonth(client.id, v ? parseInt(v, 10) : null)}
-        />
-      </TableCell>
-      <TableCell className="text-center text-sm tabular-nums">
-        {client.monthsActive != null ? client.monthsActive : "—"}
-      </TableCell>
-      <TableCell className="text-sm whitespace-nowrap">{client.salesOwner ?? "—"}</TableCell>
+      {columns.map((col) => (
+        <TableCell
+          key={col.key}
+          className={col.tdClass}
+          onClick={col.interactive ? stop : undefined}
+        >
+          {col.render(client, ctx)}
+        </TableCell>
+      ))}
       <TableCell className="text-right" onClick={stop}>
         <ClientActions client={client} />
       </TableCell>

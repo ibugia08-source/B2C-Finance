@@ -1,6 +1,7 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { SlidersHorizontal } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -10,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import {
   MobileCards,
   MobileCard,
@@ -30,6 +32,12 @@ import {
 } from "./_meta";
 import { setClientModality, setClientRenewalMonth } from "@/lib/actions/clients";
 import { formatBRL } from "@/lib/format";
+import {
+  ALL_COLUMNS,
+  DEFAULT_VISIBLE,
+  STORAGE_KEY,
+  type ClientColKey,
+} from "./columns";
 import type { ClientRow } from "./clients-table";
 
 const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
@@ -48,9 +56,46 @@ export function ClientsPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lossClient, setLossClient] = useState<{ id: string; name: string } | null>(null);
 
+  // ===== Colunas customizáveis (persistidas no navegador) =====
+  const [visible, setVisible] = useState<ClientColKey[]>(DEFAULT_VISIBLE);
+  const [colMenuOpen, setColMenuOpen] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          const valid = arr.filter((k) => ALL_COLUMNS.some((c) => c.key === k));
+          setVisible(valid as ClientColKey[]);
+        }
+      }
+    } catch {
+      /* ignora localStorage indisponível */
+    }
+  }, []);
+  function toggleColumn(key: ClientColKey) {
+    setVisible((prev) => {
+      const next = prev.includes(key)
+        ? prev.filter((k) => k !== key)
+        : [...prev, key];
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignora */
+      }
+      return next;
+    });
+  }
+  // Mantém a ordem canônica de ALL_COLUMNS.
+  const cols = useMemo(
+    () => ALL_COLUMNS.filter((c) => visible.includes(c.key)),
+    [visible]
+  );
+
   const onStatusDone = (c: ClientRow) => (value: string) => {
     if (value === "CHURNED") setLossClient({ id: c.id, name: c.name });
   };
+  const ctx = { onStatusDone };
 
   const allIds = allFilteredIds;
   const allSelected = allIds.length > 0 && selected.size === allIds.length;
@@ -74,9 +119,41 @@ export function ClientsPanel({
 
   return (
     <>
-      {/* Desktop — container com rolagem horizontal CONTÍNUA (não só no rodapé
-          da página): a barra lateral fica na base desta caixa de altura fixa,
-          sempre visível; o cabeçalho fica fixo (sticky) ao rolar. */}
+      {/* Barra de ferramentas: seletor de colunas (desktop) */}
+      <div className="hidden md:flex justify-end mb-2">
+        <div className="relative">
+          <Button variant="outline" size="sm" onClick={() => setColMenuOpen((o) => !o)}>
+            <SlidersHorizontal className="h-4 w-4 mr-1" /> Colunas
+          </Button>
+          {colMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setColMenuOpen(false)} />
+              <div className="absolute right-0 z-30 mt-1 w-60 rounded-md border bg-card p-2 shadow-lg">
+                <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  Mostrar colunas
+                </p>
+                {ALL_COLUMNS.map((c) => (
+                  <label
+                    key={c.key}
+                    className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={visible.includes(c.key)}
+                      onChange={() => toggleColumn(c.key)}
+                    />
+                    {c.header}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop — rolagem horizontal CONTÍNUA (barra na base da caixa, sempre
+          visível) e cabeçalho fixo ao rolar verticalmente. */}
       <div className="hidden md:block relative max-h-[70vh] overflow-auto rounded-md border">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
@@ -90,21 +167,21 @@ export function ClientsPanel({
                 />
               </TableHead>
               <TableHead>Cliente</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Modalidade</TableHead>
-              <TableHead className="text-right">Valor</TableHead>
-              <TableHead>Vencimento</TableHead>
-              <TableHead>Pagamento (mês)</TableHead>
-              <TableHead>Renovação</TableHead>
-              <TableHead className="text-center">Meses ativo</TableHead>
-              <TableHead>Responsável</TableHead>
+              {cols.map((c) => (
+                <TableHead key={c.key} className={c.thClass}>
+                  {c.header}
+                </TableHead>
+              ))}
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {clients.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-muted-foreground py-12">
+                <TableCell
+                  colSpan={cols.length + 3}
+                  className="text-center text-muted-foreground py-12"
+                >
                   Nenhum cliente encontrado com esses filtros.
                   <br />
                   Ajuste a busca ou cadastre um novo cliente.
@@ -117,7 +194,8 @@ export function ClientsPanel({
                 client={c}
                 selected={selected.has(c.id)}
                 onToggle={() => toggleOne(c.id)}
-                onStatusDone={onStatusDone}
+                columns={cols}
+                ctx={ctx}
               />
             ))}
           </TableBody>
@@ -180,7 +258,7 @@ export function ClientsPanel({
                     ? `${formatBRL(c.refValue)} ${c.modality === "TCV" ? "(total)" : "/mês"}`
                     : "—"}
                 </Field>
-                <Field label="Inadimplência (mês)">
+                <Field label="Pagamento (mês)">
                   <DelinquencyCell client={c} />
                 </Field>
                 <Field label="Renovação">

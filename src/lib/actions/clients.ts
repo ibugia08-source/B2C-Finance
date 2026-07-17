@@ -548,6 +548,28 @@ export async function setClientModality(
   }
 }
 
+/** Valor mensal recorrente (MRR) — edição inline na lista de Clientes. */
+export async function setClientMonthlyValue(
+  id: string,
+  raw: string
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const value = raw && raw.trim() ? parseBRL(raw) : null;
+    if (value != null && value < 0)
+      return { ok: false, error: "Valor não pode ser negativo." };
+    const existing = await prisma.client.findUnique({ where: { id } });
+    if (!existing) return { ok: false, error: "Cliente não encontrado." };
+    await prisma.client.update({ where: { id }, data: { monthlyValue: value } });
+    revalidatePath("/clientes");
+    revalidatePath("/cobrancas");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao atualizar o valor mensal." };
+  }
+}
+
 /** Mês de renovação (1-12) — edição inline na carteira. */
 export async function setClientRenewalMonth(
   id: string,
