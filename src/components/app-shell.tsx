@@ -42,7 +42,9 @@ export function AppShell({
         />
         <main
           key={path}
-          className="page-enter flex-1 p-3 sm:p-4 md:p-10 pb-24 md:pb-10 max-w-7xl mx-auto w-full"
+          // Respiro progressivo: 16 → 24 → 32 → 40px (sem salto brusco 16→40).
+          // pb-24 no mobile abre espaço para a tab bar inferior.
+          className="page-enter flex-1 p-4 sm:p-6 md:p-8 lg:p-10 pb-24 md:pb-10 max-w-7xl mx-auto w-full"
         >
           {children}
         </main>

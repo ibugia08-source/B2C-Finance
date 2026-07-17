@@ -14,6 +14,7 @@ export function MobileNav({ user }: { user: UserLike }) {
   const itemClasses = (active: boolean) =>
     cn(
       "flex flex-1 flex-col items-center justify-center gap-0.5 min-h-[52px] rounded-md text-[10px] font-medium transition-colors",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       active ? "text-primary" : "text-muted-foreground hover:text-foreground"
     );
 

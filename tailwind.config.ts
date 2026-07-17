@@ -23,8 +23,10 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        display: ['"Orbitron"', "ui-sans-serif", "sans-serif"],
-        sans: ['"Inter"', "ui-sans-serif", "system-ui", "sans-serif"],
+        // Uma família só (Inter via next/font) — títulos diferenciam por peso/
+        // tracking, não por fonte. Orbitron nunca foi carregada (fallback).
+        display: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {
@@ -48,6 +50,14 @@ const config: Config = {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          soft: "hsl(var(--success-soft))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning-soft))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",

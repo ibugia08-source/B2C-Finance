@@ -42,6 +42,16 @@ function statusVariant(status: string): any {
   }
 }
 
+/** Rótulo humano do status (o banco guarda em minúsculas). */
+const STATUS_LABEL: Record<string, string> = {
+  pago: "Pago",
+  devendo: "Devendo",
+  pendente: "Pendente",
+  reembolsado: "Reembolsado",
+  cancelado: "Cancelado",
+};
+const statusLabel = (s: string) => STATUS_LABEL[s] ?? s;
+
 export default async function TransacoesPage({ searchParams }: { searchParams: Search }) {
   await getViewer("/transacoes");
 
@@ -129,7 +139,7 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
                   <TableCell>{t.responsible?.name ?? "—"}</TableCell>
                   <TableCell className="capitalize">{t.belongsTo}</TableCell>
                   <TableCell>
-                    <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+                    <Badge variant={statusVariant(t.status)}>{statusLabel(t.status)}</Badge>
                   </TableCell>
                   <TableCell className={`text-right font-medium ${t.type === "receita" ? "text-emerald-600" : ""}`}>
                     {t.type === "despesa" ? "-" : "+"}
@@ -165,7 +175,7 @@ export default async function TransacoesPage({ searchParams }: { searchParams: S
                     <span>{formatDateBR(t.date)}</span>
                     <span aria-hidden>·</span>
                     <span>{t.category?.name ?? "—"}</span>
-                    <Badge variant={statusVariant(t.status)}>{t.status}</Badge>
+                    <Badge variant={statusVariant(t.status)}>{statusLabel(t.status)}</Badge>
                   </div>
                   <div className="space-y-1.5">
                     <Field label="Cartão / Conta">

@@ -10,8 +10,10 @@ const badgeVariants = cva(
         default: "border-transparent bg-primary text-primary-foreground",
         secondary: "border-transparent bg-secondary text-secondary-foreground",
         destructive: "border-transparent bg-destructive text-destructive-foreground",
-        success: "border-transparent bg-emerald-500 text-white",
-        warning: "border-transparent bg-amber-500 text-white",
+        // Estados em pill suave (tokens --success/--warning): discretos e
+        // legíveis nos dois temas — sem verde/âmbar sólidos gritando.
+        success: "border-transparent bg-success-soft text-success",
+        warning: "border-transparent bg-warning-soft text-warning",
         outline: "text-foreground",
       },
     },

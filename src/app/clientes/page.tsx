@@ -299,12 +299,26 @@ export default async function ClientesPage({
             {total} cliente{total === 1 ? "" : "s"} · página {page} de {totalPages}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild disabled={page <= 1}>
-              <Link href={pageHref(page - 1)}>Anterior</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild disabled={page >= totalPages}>
-              <Link href={pageHref(page + 1)}>Próxima</Link>
-            </Button>
+            {/* asChild + disabled não bloqueia <Link>: na 1ª/última página
+                renderizamos botão desabilitado de verdade. */}
+            {page <= 1 ? (
+              <Button variant="outline" size="sm" disabled>
+                Anterior
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={pageHref(page - 1)}>Anterior</Link>
+              </Button>
+            )}
+            {page >= totalPages ? (
+              <Button variant="outline" size="sm" disabled>
+                Próxima
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={pageHref(page + 1)}>Próxima</Link>
+              </Button>
+            )}
           </div>
         </div>
       )}

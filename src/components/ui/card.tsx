@@ -6,7 +6,9 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-200 hover:shadow-soft",
+        // Sem hover-lift por padrão: card estático não deve sugerir clique.
+        // Cards clicáveis adicionam o próprio hover (ex.: StatCard com href).
+        "rounded-lg border bg-card text-card-foreground shadow-sm transition-shadow duration-200",
         className
       )}
       {...props}

@@ -69,14 +69,10 @@ export default async function InadimplenciaPage() {
     <div>
       <PageHeader
         title="Inadimplência"
-        description="Clientes com cobranças vencidas e recuperação"
-        actions={
-          <Button variant="outline" asChild>
-            <Link href="/cobrancas">← Cobranças</Link>
-          </Button>
-        }
+        description="Clientes com cobranças vencidas no mês e ações de recuperação"
       />
 
+      {/* Navegação entre as visões do módulo é pelas abas abaixo — sem botão duplicado. */}
       <CobrancasTabs active="/inadimplencia" />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -175,7 +171,7 @@ export default async function InadimplenciaPage() {
                           }
                         />
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/clientes/${c.clientId}?tab=recebimentos`}>
+                          <Link href={`/clientes/${c.clientId}?tab=cobrancas`}>
                             Ver recebimentos
                           </Link>
                         </Button>

@@ -88,7 +88,7 @@ export function ClientHeader({ client, summary, monthly, risk }: ClientHeaderPro
         <AttachDocumentDialog clientId={client.id} />
         <NoteDialog clientId={client.id} />
         <Button size="sm" variant="outline" asChild>
-          <Link href={`/clientes/${client.id}?tab=recebimentos`}>
+          <Link href={`/clientes/${client.id}?tab=cobrancas`}>
             <HandCoins className="h-3.5 w-3.5 mr-1" /> Nova cobrança
           </Link>
         </Button>

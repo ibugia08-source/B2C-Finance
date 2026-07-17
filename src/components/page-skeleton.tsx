@@ -13,8 +13,10 @@ export function PageSkeleton({
 }) {
   return (
     <div className="animate-pulse">
-      <div className="mb-6 space-y-2">
-        <div className="h-7 w-64 rounded-md bg-muted" />
+      {/* Mesmas medidas do PageHeader real (mb-8 · título ~text-3xl) para o
+          conteúdo não "pular" quando o skeleton dá lugar à página. */}
+      <div className="mb-8 space-y-2">
+        <div className="h-8 sm:h-9 w-64 rounded-md bg-muted" />
         <div className="h-4 w-96 max-w-full rounded-md bg-muted/70" />
       </div>
 

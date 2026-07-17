@@ -76,7 +76,8 @@ export function SidebarWithToggle({
 
   const visibleItems = visibleNavItems(user);
 
-  if (!isClient) return null;
+  // Renderiza já no SSR (estado padrão) — evita a sidebar "pipocar" após a
+  // hidratação e o layout shift em toda carga de página.
 
   // Desktop Sidebar (≥ lg: always visible)
   return (
@@ -108,8 +109,8 @@ export function SidebarWithToggle({
             )}
             <button
               onClick={toggleExpand}
-              className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded hover:bg-accent hover:text-accent-foreground transition-colors"
-              aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+              className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={expanded ? "Recolher menu" : "Expandir menu"}
             >
               {expanded ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </button>
@@ -138,20 +139,16 @@ export function SidebarWithToggle({
                 <Link
                   href={it.href}
                   className={cn(
-                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
                     "min-h-touch justify-center lg:justify-start",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     active
                       ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5"
+                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                   title={!expanded ? it.label : undefined}
                 >
-                  <Icon
-                    className={cn(
-                      "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                      active ? "" : "group-hover:scale-110"
-                    )}
-                  />
+                  <Icon className="h-5 w-5 flex-shrink-0" />
                   {expanded && <span className="flex-1">{it.label}</span>}
                 </Link>
               </div>
@@ -183,16 +180,8 @@ export function SidebarWithToggle({
         </div>
       </aside>
 
-      {/* Tablet/Mobile: Toggle Button (visible on md and below lg) */}
-      <div className="lg:hidden flex items-center">
-        <button
-          onClick={toggleMobileOpen}
-          className="p-2 h-10 w-10 flex items-center justify-center rounded hover:bg-accent hover:text-accent-foreground transition-colors ml-auto"
-          aria-label="Open sidebar"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      </div>
+      {/* Tablet (< lg): o menu abre pelo hambúrguer do MobileHeader — sem
+          botão órfão flutuando entre a sidebar e o conteúdo. */}
 
       {/* Mobile/Tablet Drawer Sidebar */}
       {mobileOpen && (
@@ -225,8 +214,8 @@ export function SidebarWithToggle({
                 </div>
                 <button
                   onClick={closeMobileMenu}
-                  className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded hover:bg-accent hover:text-accent-foreground transition-colors"
-                  aria-label="Close sidebar"
+                  className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-lg hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Fechar menu"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -254,18 +243,14 @@ export function SidebarWithToggle({
                       href={it.href}
                       onClick={closeMobileMenu}
                       className={cn(
-                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 min-h-touch",
+                        "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 min-h-touch",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         active
                           ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground hover:translate-x-0.5"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
                     >
-                      <Icon
-                        className={cn(
-                          "h-5 w-5 transition-transform duration-200",
-                          active ? "" : "group-hover:scale-110"
-                        )}
-                      />
+                      <Icon className="h-5 w-5" />
                       <span>{it.label}</span>
                     </Link>
                   </div>

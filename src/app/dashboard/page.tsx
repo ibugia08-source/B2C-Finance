@@ -320,7 +320,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ChartCard title="Receita por modalidade" hint="recebido no período">
           <HBarList
-            colorClass="bg-[#1E70D3]"
+            colorClass="bg-primary"
             items={[
               { label: "MRR (recorrente)", value: receipts.mrrReceived },
               { label: "TCV (contrato fechado)", value: receipts.tcvReceived },
@@ -331,7 +331,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           <GroupedBarChart
             labels={series.labels}
             series={[
-              { name: "Receitas", colorClass: "bg-[#1E70D3]", values: series.receitas },
+              { name: "Receitas", colorClass: "bg-primary", values: series.receitas },
               { name: "Despesas", colorClass: "bg-rose-400", values: series.despesas },
             ]}
           />
@@ -340,7 +340,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ChartCard title="Recebimento do mês" hint="recebido · em aberto · vencido">
           <HBarList
-            colorClass="bg-[#1E70D3]"
+            colorClass="bg-primary"
             items={[
               { label: "Recebido", value: recebido },
               { label: "Em aberto (no prazo)", value: Math.max(0, emAberto - vencido) },
@@ -350,7 +350,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         </ChartCard>
         <ChartCard title="Novos clientes × churn" hint="quantidade no período">
           <HBarList
-            colorClass="bg-[#1E70D3]"
+            colorClass="bg-primary"
             format={(v: number) => String(Math.round(v))}
             items={[
               { label: "Novos clientes", value: newClients.count },
@@ -362,7 +362,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartCard title="Receita perdida × novos clientes" hint="valor no período">
           <HBarList
-            colorClass="bg-[#1E70D3]"
+            colorClass="bg-primary"
             items={[
               { label: "Receita de novos clientes", value: newClients.revenue },
               { label: "Receita perdida (churn)", value: churn.value },
@@ -373,7 +373,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           <LineChart
             labels={series.labels}
             values={series.folhaPct}
-            stroke="#1E70D3"
+            stroke="hsl(var(--primary))"
             format={(v) => `${Math.round(v)}%`}
           />
         </ChartCard>
@@ -396,19 +396,19 @@ function MiniStat({
 }) {
   const color =
     tone === "pos"
-      ? "text-emerald-600"
+      ? "text-success"
       : tone === "neg"
-        ? "text-red-600"
+        ? "text-destructive"
         : tone === "warn"
-          ? "text-amber-600"
+          ? "text-warning"
           : "text-foreground";
   return (
     <div className="rounded-lg border bg-card px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
         {label}
       </p>
       <p className={`text-base font-semibold tabular-nums mt-0.5 ${color}`}>{value}</p>
-      {hint && <p className="text-[10px] text-muted-foreground truncate" title={hint}>{hint}</p>}
+      {hint && <p className="text-[11px] text-muted-foreground truncate" title={hint}>{hint}</p>}
     </div>
   );
 }

@@ -350,9 +350,9 @@ export function B2CDateRangePicker({
                   "mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs transition-colors",
                   "hover:bg-muted disabled:opacity-30 disabled:pointer-events-none",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  inRange(d) && !isEdge(d) && "bg-blue-100 text-blue-900 rounded-none dark:bg-blue-500/20 dark:text-blue-200",
-                  isEdge(d) && "bg-[#1E70D3] text-white font-semibold",
-                  sameDay(d, today) && !inRange(d) && "border border-[#1E70D3]/40"
+                  inRange(d) && !isEdge(d) && "bg-primary/15 text-foreground rounded-none",
+                  isEdge(d) && "bg-primary text-primary-foreground font-semibold",
+                  sameDay(d, today) && !inRange(d) && "border border-primary/40"
                 )}
               >
                 {d.getDate()}
@@ -489,7 +489,7 @@ export function B2CDateRangePicker({
                 <Button variant="outline" size="sm" onClick={closeDiscard}>
                   Cancelar
                 </Button>
-                <Button size="sm" className="bg-[#1E70D3] hover:bg-[#1a63bc]" onClick={confirmCustom}>
+                <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={confirmCustom}>
                   Atualizar
                 </Button>
               </div>
@@ -518,7 +518,7 @@ function PresetItem({
         "block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "bg-[#1E70D3]/10 font-medium text-[#1E70D3]"
+          ? "bg-primary/10 font-medium text-primary"
           : "text-foreground hover:bg-muted"
       )}
     >

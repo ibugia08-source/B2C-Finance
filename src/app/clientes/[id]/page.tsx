@@ -2,12 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -18,9 +16,8 @@ import {
 } from "@/components/ui/table";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { getClientSummaries } from "@/lib/services/client-metrics";
-import { ArrowLeft, FileSignature, Download, HandCoins } from "lucide-react";
+import { FileSignature, Download } from "lucide-react";
 import { ClientDialog } from "../client-dialog";
-import { ClientStatusSelect } from "../status-select";
 import { ContactDialog, ContactActions } from "./contact-dialog";
 import { CLIENT_STATUS_LABEL, clientStatusVariant } from "../_meta";
 import {
@@ -71,8 +68,10 @@ const COLLECTION_STATUS: Record<string, string> = {
 
 export default async function ClientDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams?: { tab?: string };
 }) {
   await requireAdmin();
 
@@ -139,12 +138,6 @@ export default async function ClientDetailPage({
     ]);
 
   const summary = summaryMap.get(client.id)!;
-  const monthly =
-    summary.activeContracts > 0
-      ? summary.monthlyValue
-      : client.monthlyValue != null
-        ? Number(client.monthlyValue)
-        : 0;
 
   const serial = {
     ...client,
@@ -154,105 +147,28 @@ export default async function ClientDetailPage({
   const activeServiceNames =
     summary.activeServices.length > 0 ? summary.activeServices : [];
 
+  // A aba ativa vem da URL (?tab=) — a barra de abas é a TabsNavigation do
+  // layout (header persistente). Aliases antigos continuam funcionando.
+  const TAB_ALIAS: Record<string, string> = {
+    "dados-principais": "visao-geral",
+    "dados-fiscais": "visao-geral",
+    recebimentos: "cobrancas",
+    notas: "contexto",
+  };
+  const VALID_TABS = [
+    "visao-geral", "contratos", "documentos", "cobrancas",
+    "pagamentos", "servicos", "historico", "contexto",
+  ];
+  const rawTab = searchParams?.tab ?? "visao-geral";
+  const activeTab = VALID_TABS.includes(rawTab)
+    ? rawTab
+    : TAB_ALIAS[rawTab] ?? "visao-geral";
+
   return (
     <div>
-      <div className="mb-4">
-        <Link
-          href="/clientes"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar para clientes
-        </Link>
-      </div>
-
-      <PageHeader
-        title={client.name}
-        description={[client.legalName, client.segment, client.city && `${client.city}/${client.state ?? ""}`]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          <div className="flex items-center gap-2">
-            <ClientStatusSelect clientId={client.id} status={client.status} />
-            <ClientDialog
-              initial={serial}
-              trigger={<Button variant="outline">Editar</Button>}
-            />
-          </div>
-        }
-      />
-
-      {/* Atalhos rápidos */}
-      <div className="flex flex-wrap items-center gap-2 mb-5 print:hidden">
-        <Button size="sm" asChild>
-          <Link href={`/contratos?para=${client.id}`}>
-            <FileSignature className="h-3.5 w-3.5 mr-1" /> Gerar contrato
-          </Link>
-        </Button>
-        <AttachDocumentDialog clientId={client.id} />
-        <NoteDialog clientId={client.id} />
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/cobrancas">
-            <HandCoins className="h-3.5 w-3.5 mr-1" /> Nova cobrança
-          </Link>
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Mensal contratado"
-          value={monthly > 0 ? formatBRL(monthly) : "—"}
-          hint={
-            summary.activeContracts > 0
-              ? `${summary.activeContracts} contrato(s) ativo(s)`
-              : "valor de referência do cadastro"
-          }
-        />
-        <StatCard
-          title="Receita total"
-          value={summary.totalRevenue > 0 ? formatBRL(summary.totalRevenue) : "—"}
-          intent="positive"
-        />
-        <StatCard
-          title="Em aberto"
-          value={summary.openAmount > 0 ? formatBRL(summary.openAmount) : "R$ 0,00"}
-          intent={summary.overdueAmount > 0 ? "negative" : "default"}
-          hint={
-            summary.overdueAmount > 0
-              ? `${formatBRL(summary.overdueAmount)} vencido`
-              : undefined
-          }
-        />
-        <StatCard
-          title="Próxima renovação"
-          value={summary.nextRenewal ? formatDateBR(summary.nextRenewal) : "—"}
-        />
-      </div>
-
-      <Tabs defaultValue="visao-geral">
-        <div className="overflow-x-auto pb-1">
-          <TabsList>
-            <TabsTrigger value="visao-geral">Visão geral</TabsTrigger>
-            <TabsTrigger value="contratos">
-              Contratos comerciais {contracts.length > 0 && `(${contracts.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="documentos">
-              Documentos e Contratos{" "}
-              {generatedContracts.length + documents.length > 0 &&
-                `(${generatedContracts.length + documents.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="cobrancas">
-              Cobranças {billings.length > 0 && `(${billings.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="pagamentos">
-              Pagamentos {payments.length > 0 && `(${payments.length})`}
-            </TabsTrigger>
-            <TabsTrigger value="servicos">Serviços</TabsTrigger>
-            <TabsTrigger value="historico">Histórico</TabsTrigger>
-            <TabsTrigger value="contexto">
-              Contexto {contextNotes.length > 0 && `(${contextNotes.length})`}
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      {/* Header, mini-dashboard e barra de abas vivem no layout (client-header
+          + tabs-navigation) — esta página renderiza SÓ o conteúdo da aba. */}
+      <Tabs value={activeTab}>
 
         {/* ---------- Visão geral ---------- */}
         <TabsContent value="visao-geral">

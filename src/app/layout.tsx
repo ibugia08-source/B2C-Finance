@@ -1,19 +1,30 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/auth/current-user";
+
+// Fonte auto-hospedada via next/font: sem @import bloqueante, sem FOUT,
+// só os pesos realmente usados (400–700).
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "B2C Finance — Gestão financeira da B2C Gestão",
   description:
     "B2C Finance: a plataforma financeira da B2C Gestão — clientes, contratos, cobranças, caixa, folha, relatórios e copiloto de IA.",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 5,
-    userScalable: true,
-    viewportFit: "cover",
-  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
 };
 
 // Aplica o tema antes da pintura para evitar "flash" (FOUC).
@@ -23,11 +34,11 @@ const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang="pt-BR" suppressHydrationWarning className={inter.variable}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-screen antialiased">
+      <body className="min-h-screen font-sans antialiased">
         <AppShell user={user}>{children}</AppShell>
       </body>
     </html>

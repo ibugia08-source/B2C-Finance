@@ -138,7 +138,7 @@ export function LineChart({
   labels,
   values,
   format = formatBRL,
-  stroke = "#1E70D3",
+  stroke = "hsl(var(--primary))",
 }: {
   labels: string[];
   values: number[];

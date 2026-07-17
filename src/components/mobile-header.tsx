@@ -27,7 +27,9 @@ export function MobileHeader({
   return (
     <header
       className={cn(
-        "md:hidden bg-background/95 backdrop-blur border-b supports-[backdrop-filter]:bg-background/80",
+        // Visível até lg (tablet incluso): a sidebar fixa só existe em ≥lg,
+        // então tablets abrem o menu por este hambúrguer.
+        "lg:hidden bg-background/95 backdrop-blur border-b supports-[backdrop-filter]:bg-background/80",
         sticky && "sticky top-0 z-30",
         "flex items-center h-14 px-3 gap-2"
       )}
@@ -41,9 +43,9 @@ export function MobileHeader({
             "flex items-center justify-center rounded-lg transition-colors",
             "h-10 w-10 min-h-touch",
             "hover:bg-accent hover:text-accent-foreground",
-            "active:scale-95"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           )}
-          aria-label="Open menu"
+          aria-label="Abrir menu"
         >
           <Menu className="h-5 w-5" />
         </button>

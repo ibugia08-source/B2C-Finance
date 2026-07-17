@@ -6,7 +6,7 @@ type Tone = "income" | "expense" | "cash";
 const TONE_GRADIENT: Record<Tone, string> = {
   income: "from-emerald-600 to-emerald-400",
   expense: "from-rose-600 to-rose-400",
-  cash: "from-[#1E70D3] to-[#5AA0EF]",
+  cash: "from-primary to-primary/60",
 };
 
 /**

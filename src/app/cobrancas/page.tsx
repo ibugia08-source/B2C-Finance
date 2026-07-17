@@ -15,7 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, HandCoins } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { BillingDialog } from "./billing-dialog";
 import { MonthNav } from "./month-nav";
@@ -402,17 +403,6 @@ export default async function RecebimentosPage({
 
       <CobrancasTabs active="/cobrancas" />
 
-      {/* Aviso de consolidação (Fase 3) */}
-      <Card className="mb-4 border-amber-200 bg-amber-50">
-        <CardContent className="p-4">
-          <p className="text-sm text-amber-900">
-            <strong>Módulo em consolidação:</strong> Os recebimentos individuais de cada cliente
-            agora estão disponíveis no painel do cliente (<Link href="/clientes" className="underline hover:text-amber-700">Clientes</Link> → cliente → aba &quot;Recebimentos&quot;).
-            Esta página mantém a view gerencial de operações em massa.
-          </p>
-        </CardContent>
-      </Card>
-
       {/* ===== Barra superior: mês · busca · responsável ===== */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex flex-wrap items-center gap-2">
@@ -480,14 +470,18 @@ export default async function RecebimentosPage({
       <Card>
         <CardContent className="p-0">
           {tableRows.length === 0 ? (
-            <p className="text-center text-muted-foreground py-12 px-4 text-sm">
-              {emptyMessage}{" "}
-              {!stFilter && !q && (
-                <Link href="/clientes" className="underline">
-                  Abrir Gestão de Carteira
-                </Link>
-              )}
-            </p>
+            <EmptyState
+              icon={HandCoins}
+              title="Nada por aqui neste mês"
+              description={emptyMessage}
+              action={
+                !stFilter && !q ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/clientes">Abrir Clientes</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
           ) : (
             <ReceivablesTable
               rows={tableRows}

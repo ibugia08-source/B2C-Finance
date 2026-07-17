@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Users } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import {
   Table,
   TableBody,
@@ -178,13 +179,12 @@ export function ClientsPanel({
           <TableBody>
             {clients.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={cols.length + 3}
-                  className="text-center text-muted-foreground py-12"
-                >
-                  Nenhum cliente encontrado com esses filtros.
-                  <br />
-                  Ajuste a busca ou cadastre um novo cliente.
+                <TableCell colSpan={cols.length + 3} className="p-0">
+                  <EmptyState
+                    icon={Users}
+                    title="Nenhum cliente encontrado"
+                    description="Ajuste a busca ou os filtros — ou cadastre um novo cliente pelo botão acima."
+                  />
                 </TableCell>
               </TableRow>
             )}

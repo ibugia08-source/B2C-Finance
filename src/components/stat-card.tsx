@@ -37,8 +37,10 @@ export function StatCard({
   const card = (
     <Card
       className={cn(
-        "relative overflow-hidden transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft h-full",
-        href && "cursor-pointer hover:ring-1 hover:ring-primary/30"
+        "relative overflow-hidden h-full",
+        // Só cards CLICÁVEIS sinalizam interação (lift + ring); estáticos ficam quietos.
+        href &&
+          "cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-soft hover:ring-1 hover:ring-primary/30"
       )}
     >
       <div
@@ -61,5 +63,14 @@ export function StatCard({
     </Card>
   );
 
-  return href ? <Link href={href}>{card}</Link> : card;
+  return href ? (
+    <Link
+      href={href}
+      className="block h-full rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      {card}
+    </Link>
+  ) : (
+    card
+  );
 }

@@ -62,10 +62,10 @@ export default async function ClientDetailLayout({
 
   const tabCounts: TabsCount = {
     contratos: contracts,
-    recebimentos: billings,
+    cobrancas: billings,
     pagamentos: payments,
     documentos: generatedContracts + documents,
-    notas: notes,
+    contexto: notes,
     historico: history,
   };
 
