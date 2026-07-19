@@ -1,5 +1,6 @@
 "use client";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { ClientOnly } from "./client-only";
 import { formatBRL } from "@/lib/format";
 
 /**
@@ -23,6 +24,7 @@ export function CompositionDonut({
   return (
     <div className="flex items-center gap-4">
       <div className="relative shrink-0" style={{ width: 132, height: 132 }}>
+        <ClientOnly height={132}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -43,6 +45,7 @@ export function CompositionDonut({
             <Tooltip content={<DonutTooltip total={total} />} />
           </PieChart>
         </ResponsiveContainer>
+        </ClientOnly>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <span className="text-[10px] text-muted-foreground">Total</span>
           <span className="text-sm font-semibold tabular-nums">{formatBRL(total)}</span>

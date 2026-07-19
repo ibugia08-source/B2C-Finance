@@ -14,6 +14,7 @@ import {
   Cell,
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
+import { ClientOnly } from "./client-only";
 import { formatBRL, formatBRLShort } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -87,6 +88,7 @@ export function MainChart({
           />
         </div>
 
+        <ClientOnly height={280}>
         <ResponsiveContainer width="100%" height={280}>
           {variant === "bar" ? (
             <BarChart data={chartData} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
@@ -127,6 +129,7 @@ export function MainChart({
             </LineChart>
           )}
         </ResponsiveContainer>
+        </ClientOnly>
       </CardContent>
     </Card>
   );
