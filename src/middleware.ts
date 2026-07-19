@@ -72,6 +72,9 @@ async function isSessionValid(token: string | undefined): Promise<boolean> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // TEMP: rota de diagnóstico do dashboard (protegida por token na própria rota).
+  if (pathname === "/api/dbg-dash") return NextResponse.next();
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const valid = await isSessionValid(token);
 
