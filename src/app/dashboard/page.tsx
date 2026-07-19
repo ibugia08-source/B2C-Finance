@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { SavedViews } from "@/components/saved-views";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
 import { formatBRL } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { getViewer } from "@/lib/auth/viewer";
@@ -12,9 +11,7 @@ import {
   type DashAlert,
 } from "@/lib/services/dashboard-metrics";
 import {
-  getMonthlyAverageTicket,
   getMonthlyCostPerClient,
-  getPayrollPercentageOfRevenue,
   getMonthlyChurn,
   getNewClientsSummary,
 } from "@/lib/financial/calculations";
@@ -26,20 +23,24 @@ import {
   getReceivedDetail,
   getExpensesDetail,
   getExpensesByCategory,
+  getMrrClientsDetail,
+  getTcvClientsDetail,
+  getNewClientsDetail,
+  getRenewalClientsDetail,
+  getPreviousMonthComparison,
+  buildDashboardSummary,
 } from "@/lib/services/dashboard-main";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  ChartCard,
-  GroupedBarChart,
-  LineChart,
-  HBarList,
-} from "@/components/charts";
+import { ChartCard, HBarList } from "@/components/charts";
 import { MainChart } from "@/components/dashboard/main-chart";
 import { MetricCard } from "@/components/dashboard/metric-card";
+import { SecondaryStat } from "@/components/dashboard/secondary-stat";
 import { LaunchToCash } from "@/components/dashboard/launch-to-cash";
+import { CompositionDonut } from "@/components/dashboard/composition-donut";
 import {
   FaturamentoDetail, DespesasDetail, RecebidoDetail, EmAbertoDetail, ResultadoDetail,
+  NamedValueList,
 } from "./detail-panels";
 import { MonthFilter } from "./month-filter";
 import { PersonalDashboard } from "./personal-dashboard";
@@ -47,8 +48,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  ArrowRight,
-  ListTodo,
+  Sparkles,
 } from "lucide-react";
 
 /**
@@ -105,6 +105,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     data, churn, newClients,
     main, yearly, launched,
     openByClient, receivedDetail, expensesDetail, expensesByCategory,
+    mrrClientsDetail, tcvClientsDetail, newClientsDetail, renewalClientsDetail,
   ] = await Promise.all([
     getExecutiveDashboard(filters),
     getMonthlyChurn(period.start, period.end),
@@ -116,14 +117,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     getReceivedDetail(period),
     getExpensesDetail(period),
     getExpensesByCategory(period),
+    getMrrClientsDetail(),
+    getTcvClientsDetail(period),
+    getNewClientsDetail(period),
+    getRenewalClientsDetail(selectedMonth),
   ]);
   const {
-    kpis, finance, cash, series, health, alerts, actions,
-    revenue, renewalOutlook, clients: clientsBlock, upsell, expenses, receipts,
+    finance, health, alerts,
+    clients: clientsBlock, upsell,
   } = data;
 
   const hs = HEALTH_STYLE[health.level];
-  const renovacoes = renewalOutlook[0];
 
   // ===== 5 métricas principais (camada central dashboard-main) =====
   // Faturamento total = MRR + TCV + Receita Extra manual (TCV cheio, sem rateio).
@@ -150,11 +154,25 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   }).format(new Date());
 
   // ===== Indicadores gerenciais do mês (todas as divisões protegidas) =====
-  const ticketMedio = getMonthlyAverageTicket(recebido, clientsBlock.pagosMes);
+  // Ticket médio geral = Faturamento total / clientes ativos (§2). Custo por
+  // cliente = Despesas / ativos. % Folha = Folha / Faturamento total. % Recorrência
+  // = MRR / Faturamento total. Todas com guarda de divisão por zero.
+  const ticketMedioGeral = clientsBlock.ativos > 0 ? previsto / clientsBlock.ativos : 0;
   const custoPorCliente = getMonthlyCostPerClient(finance.despesas, clientsBlock.ativos);
-  const folhaPct = Math.round(
-    getPayrollPercentageOfRevenue(finance.folhaPeriodo, recebido) * 100
-  );
+  const folhaPct = previsto > 0 ? Math.round((finance.folhaPeriodo / previsto) * 100) : 0;
+  const recorrenciaPct = previsto > 0 ? Math.round((M.mrr / previsto) * 100) : 0;
+
+  // Comparativos secundários (vs mês anterior) para o grupo Receita.
+  const prevHas = main.previousHasData;
+  const mrrDelta = getPreviousMonthComparison(M.mrr, main.previous.mrr, prevHas);
+  const tcvDelta = getPreviousMonthComparison(M.tcv, main.previous.tcv, prevHas);
+
+  // Resumo inteligente determinístico (sem IA) do mês filtrado.
+  const summary = buildDashboardSummary({
+    previsto, recebido, emAberto, vencido,
+    despesas: finance.despesas, resultado, margem: M.margem,
+    folhaPct, recorrenciaPct,
+  });
 
   return (
     <div>
@@ -252,73 +270,45 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           selectedIndex={selectedMonthIndex} />
       </div>
 
-      {/* ===== Bloco 2 — Indicadores gerenciais do mês (compactos) ===== */}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Indicadores gerenciais do mês
-      </h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-6">
-        <MiniStat label="Resultado do mês" value={formatBRL(resultado)}
-          tone={resultado >= 0 ? "pos" : "neg"} hint="recebido − despesas" />
-        <MiniStat label="Faturamento MRR (mês)" value={formatBRL(revenue.mrr)}
-          hint={`${revenue.mrrClients} cliente(s) MRR ativo(s)`} />
-        <MiniStat label="Faturamento TCV (mês)" value={formatBRL(revenue.tcv)}
-          hint="valor cheio dos TCV do mês, sem rateio" />
-        <MiniStat label="Ticket médio (mês)"
-          value={clientsBlock.pagosMes > 0 ? formatBRL(ticketMedio) : "—"}
-          hint={`${clientsBlock.pagosMes} cliente(s) pago(s)`} />
-        <MiniStat label="Custo por cliente"
-          value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
-          hint={`${clientsBlock.ativos} ativo(s)`} />
-        <MiniStat label="% Folha no faturamento" value={`${folhaPct}%`}
-          tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"}
-          hint="folha / recebido" />
-        <MiniStat label="Churn de clientes (mês)" value={String(churn.count)}
-          tone={churn.count > 0 ? "neg" : "pos"} />
-        <MiniStat label="Receita perdida (mês)" value={formatBRL(churn.value)}
-          tone={churn.value > 0 ? "neg" : "default"} />
-        <MiniStat label="Novos clientes (mês)" value={String(newClients.count)}
-          tone={newClients.count > 0 ? "pos" : "default"} />
-        <MiniStat label="Receita de novos clientes" value={formatBRL(newClients.revenue)}
-          tone={newClients.revenue > 0 ? "pos" : "default"} />
-        <MiniStat label="Total inadimplência" value={formatBRL(vencido)}
-          tone={vencido > 0 ? "neg" : "pos"} hint="vencido e não pago no mês" />
-      </div>
+      {/* ===== Alertas discretos ===== */}
+      {alerts.length > 0 && (
+        <div className="mb-6">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
+              <AlertTriangle className="h-3.5 w-3.5" /> Atenção
+            </p>
+            <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+              {alerts.map((a, i) => (
+                <li key={i}>
+                  <Link href={a.href} className="group flex items-start gap-2">
+                    <span className={`h-1.5 w-1.5 rounded-full mt-1.5 shrink-0 ${SEVERITY_DOT[a.severity]}`} />
+                    <span className="min-w-0 text-sm">
+                      <span className="font-medium group-hover:underline">{a.title}</span>
+                      <span className="text-muted-foreground"> — {a.detail}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
-      {/* ===== Linha 2 — Operação ===== */}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Operação
-      </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <StatCard href="/clientes?status=ACTIVE" title="Clientes ativos"
-          value={String(clientsBlock.ativos)} />
-        <StatCard href="/clientes?inadimplencia=pago" title="Clientes pagos"
-          value={String(clientsBlock.pagosMes)} intent="positive"
-          hint="pagamento do mês registrado" />
-        <StatCard href="/clientes?inadimplencia=devendo" title="Clientes em aberto"
-          value={String(clientsBlock.devendoMes)}
-          intent={clientsBlock.devendoMes > 0 ? "negative" : "positive"}
-          hint="ainda sem pagamento no mês" />
-        <StatCard
-          href={renovacoes ? `/clientes?mesRenovacao=${renovacoes.month}` : "/clientes"}
-          title="Renovações do mês"
-          value={String(renovacoes?.count ?? 0)}
-          intent={(renovacoes?.count ?? 0) > 0 ? "warning" : "default"}
-          hint={renovacoes ? `${formatBRL(renovacoes.expectedTotal)} esperados` : undefined} />
-        <StatCard href="/upsell" title="Upsell em aberto"
-          value={String(upsell.openCount)}
-          hint={`${formatBRL(upsell.openValue)} em oportunidades`} />
-        <StatCard href="/despesas?status=vencida" title="Despesas vencidas"
-          value={formatBRL(expenses.overdue)}
-          intent={expenses.overdue > 0 ? "negative" : "positive"}
-          hint={`${expenses.overdueCount} despesa(s)`} />
-      </div>
-
-      {/* ===== Linha 3 — Alertas e decisões ===== */}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Alertas e decisões
-      </h2>
+      {/* ===== Resumo inteligente do mês + Saúde financeira ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        <Card className="lg:col-span-1">
+        <Card className="lg:col-span-2">
+          <CardContent className="p-5">
+            <p className="text-xs uppercase tracking-wide text-primary font-medium flex items-center gap-1.5 mb-3">
+              <Sparkles className="h-3.5 w-3.5" /> Resumo inteligente do mês
+            </p>
+            <div className="space-y-1.5 text-sm leading-relaxed">
+              {summary.map((s, i) => (
+                <p key={i} className={i === 0 ? "text-foreground" : "text-muted-foreground"}>{s}</p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
               Saúde financeira
@@ -331,12 +321,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
               <div className={`h-full rounded-full ${hs.bar}`} style={{ width: `${health.score}%` }} />
             </div>
             <ul className="mt-4 space-y-1.5">
-              {health.fatores.map((fator, i) => (
+              {health.fatores.slice(0, 4).map((fator, i) => (
                 <li key={i} className="flex items-start gap-2 text-xs">
                   {fator.ok ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
                   ) : (
-                    <XCircle className="h-3.5 w-3.5 text-red-500 mt-0.5 shrink-0" />
+                    <XCircle className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
                   )}
                   <span className={fator.ok ? "text-muted-foreground" : "text-foreground"}>
                     {fator.text}
@@ -346,164 +336,114 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
             </ul>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5" /> Alertas
-            </p>
-            {alerts.length === 0 ? (
-              <p className="text-sm text-muted-foreground mt-6 text-center">
-                Nenhum alerta. Tudo em dia. 🎉
-              </p>
-            ) : (
-              <ul className="mt-3 space-y-3">
-                {alerts.map((a, i) => (
-                  <li key={i}>
-                    <Link href={a.href} className="group flex items-start gap-2.5">
-                      <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${SEVERITY_DOT[a.severity]}`} />
-                      <span className="min-w-0">
-                        <span className="text-sm font-medium group-hover:underline flex items-center gap-1">
-                          {a.title}
-                          <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </span>
-                        <span className="block text-xs text-muted-foreground">{a.detail}</span>
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5">
-              <ListTodo className="h-3.5 w-3.5" /> O que fazer agora
-            </p>
-            {actions.length === 0 ? (
-              <p className="text-sm text-muted-foreground mt-6 text-center">
-                Nenhuma ação pendente sugerida.
-              </p>
-            ) : (
-              <ol className="mt-3 space-y-2.5 list-none">
-                {actions.map((action, i) => (
-                  <li key={i}>
-                    <Link href={action.href} className="group flex items-start gap-2.5 text-sm">
-                      <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center shrink-0">
-                        {i + 1}
-                      </span>
-                      <span className="group-hover:underline">{action.text}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ol>
-            )}
-            <p className="mt-4 text-xs text-muted-foreground">
-              Sugestões detalhadas com IA na{" "}
-              <Link href="/rotina" className="underline">Rotina do dia</Link>.
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
-      {/* ===== Análises visuais ===== */}
+      {/* ===== Indicadores gerenciais agrupados ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Análises visuais · {period.label}
+        Indicadores gerenciais
       </h2>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChartCard title="Receita por modalidade" hint="recebido no período">
-          <HBarList
-            colorClass="bg-primary"
-            items={[
-              { label: "MRR (recorrente)", value: receipts.mrrReceived },
-              { label: "TCV (contrato fechado)", value: receipts.tcvReceived },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Evolução financeira mensal" hint="últimos 12 meses">
-          <GroupedBarChart
-            labels={series.labels}
-            series={[
-              { name: "Receitas", colorClass: "bg-primary", values: series.receitas },
-              { name: "Despesas", colorClass: "bg-rose-400", values: series.despesas },
-            ]}
-          />
-        </ChartCard>
+
+      {/* Grupo: Receita */}
+      <p className="text-xs font-medium text-foreground mb-2">Receita</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        <SecondaryStat label="Faturamento MRR" value={formatBRL(M.mrr)}
+          help="Soma dos valores mensais dos clientes MRR ativos no mês."
+          delta={mrrDelta}
+          detailTitle="Clientes MRR do mês"
+          detail={<NamedValueList items={mrrClientsDetail} total={M.mrr} totalLabel="Total MRR" valueSuffix="/mês" emptyText="Nenhum cliente MRR ativo." />} />
+        <SecondaryStat label="Faturamento TCV" value={formatBRL(M.tcv)}
+          help="Soma dos contratos TCV com fechamento, entrada ou renovação no mês. Não é rateado."
+          delta={tcvDelta}
+          detailTitle="Clientes TCV do mês"
+          detail={<NamedValueList items={tcvClientsDetail} total={M.tcv} totalLabel="Total TCV" emptyText="Nenhum TCV no mês." />} />
+        <SecondaryStat label="Receita de novos clientes" value={formatBRL(newClients.revenue)}
+          help="Receita dos clientes que entraram no mês (MRR = valor mensal; TCV = valor total do contrato)."
+          tone={newClients.revenue > 0 ? "pos" : "default"}
+          detailTitle="Novos clientes do mês"
+          detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
+        <SecondaryStat label="Ticket médio geral"
+          value={clientsBlock.ativos > 0 ? formatBRL(ticketMedioGeral) : "—"}
+          help="Faturamento total dividido pela quantidade de clientes ativos no mês."
+          hint={`${clientsBlock.ativos} ativo(s)`} />
+        <SecondaryStat label="% Recorrência" value={`${recorrenciaPct}%`}
+          help="Percentual do faturamento que vem de MRR (MRR / Faturamento total). Mede a previsibilidade da receita."
+          tone={recorrenciaPct >= 60 ? "pos" : recorrenciaPct >= 40 ? "warn" : "neg"} />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        <ChartCard title="Recebimento do mês" hint="recebido · em aberto · vencido">
-          <HBarList
-            colorClass="bg-primary"
-            items={[
-              { label: "Recebido", value: recebido },
-              { label: "Em aberto (no prazo)", value: Math.max(0, emAberto - vencido) },
-              { label: "Vencido", value: vencido },
+
+      {/* Grupo: Clientes */}
+      <p className="text-xs font-medium text-foreground mb-2">Clientes</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+        <SecondaryStat label="Clientes ativos" value={String(clientsBlock.ativos)}
+          help="Quantidade total de clientes ativos no mês selecionado." />
+        <SecondaryStat label="Novos clientes" value={String(newClients.count)}
+          help="Clientes que entraram no mês (por data de entrada; fallback: data de cadastro)."
+          tone={newClients.count > 0 ? "pos" : "default"}
+          detailTitle="Novos clientes do mês"
+          detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
+        <SecondaryStat label="Renovações do mês" value={String(renewalClientsDetail.length)}
+          help="Clientes cujo mês de renovação é o mês selecionado."
+          tone={renewalClientsDetail.length > 0 ? "warn" : "default"}
+          detailTitle="Renovações do mês"
+          detail={<NamedValueList items={renewalClientsDetail} emptyText="Nenhuma renovação neste mês." />} />
+        <SecondaryStat label="Churn (mês)" value={String(churn.count)}
+          help="Clientes perdidos no mês."
+          tone={churn.count > 0 ? "neg" : "pos"}
+          hint={churn.value > 0 ? `${formatBRL(churn.value)} de receita perdida` : undefined} />
+        <SecondaryStat label="Clientes em aberto" value={String(clientsBlock.devendoMes)}
+          help="Clientes ativos ainda sem pagamento registrado no mês."
+          tone={clientsBlock.devendoMes > 0 ? "neg" : "pos"} />
+      </div>
+
+      {/* Grupo: Eficiência */}
+      <p className="text-xs font-medium text-foreground mb-2">Eficiência</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        <SecondaryStat label="Custo por cliente"
+          value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
+          help="Total de despesas dividido pela quantidade de clientes ativos no mês."
+          hint={`${clientsBlock.ativos} ativo(s)`} />
+        <SecondaryStat label="% Folha no faturamento" value={`${folhaPct}%`}
+          help="Quanto a folha representa sobre o faturamento total do mês."
+          tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
+        <SecondaryStat label="Margem operacional" value={`${margemPct}%`}
+          help="Resultado do mês dividido pelo faturamento recebido."
+          tone={margemPct >= 20 ? "pos" : margemPct >= 0 ? "warn" : "neg"} />
+        <SecondaryStat label="Inadimplência (vencido)" value={formatBRL(vencido)}
+          help="Parte do em aberto do mês que já passou da data de vencimento."
+          tone={vencido > 0 ? "neg" : "pos"} />
+        <SecondaryStat label="Upsell em aberto" value={formatBRL(upsell.openValue)}
+          help="Valor das oportunidades de upsell em aberto."
+          hint={`${upsell.openCount} oportunidade(s)`} />
+      </div>
+
+      {/* ===== Análises complementares ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Análises complementares · {period.label}
+      </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <ChartCard title="Composição do faturamento" hint="MRR · TCV · Receita Extra">
+          <CompositionDonut
+            data={[
+              { label: "MRR", value: M.mrr, color: "hsl(var(--primary))" },
+              { label: "TCV", value: M.tcv, color: "hsl(262 60% 58%)" },
+              { label: "Receita Extra", value: M.extraManual, color: "hsl(var(--muted-foreground))" },
             ]}
           />
         </ChartCard>
-        <ChartCard title="Novos clientes × churn" hint="quantidade no período">
+        <ChartCard title="Despesas por categoria" hint="no período">
+          <HBarList colorClass="bg-primary" items={expensesByCategory.slice(0, 6)} />
+        </ChartCard>
+        <ChartCard title="Novos clientes × renovações" hint="quantidade no mês">
           <HBarList
             colorClass="bg-primary"
             format={(v: number) => String(Math.round(v))}
+            emptyText="Sem movimento de clientes no mês."
             items={[
               { label: "Novos clientes", value: newClients.count },
-              { label: "Perdidos (churn)", value: churn.count },
+              { label: "Renovações", value: renewalClientsDetail.length },
             ]}
           />
         </ChartCard>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard title="Receita perdida × novos clientes" hint="valor no período">
-          <HBarList
-            colorClass="bg-primary"
-            items={[
-              { label: "Receita de novos clientes", value: newClients.revenue },
-              { label: "Receita perdida (churn)", value: churn.value },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="% Folha no faturamento" hint="ideal: até 40% · últimos 12 meses">
-          <LineChart
-            labels={series.labels}
-            values={series.folhaPct}
-            stroke="hsl(var(--primary))"
-            format={(v) => `${Math.round(v)}%`}
-          />
-        </ChartCard>
-      </div>
-    </div>
-  );
-}
-
-/** Card compacto dos indicadores gerenciais (menor que o StatCard principal). */
-function MiniStat({
-  label,
-  value,
-  hint,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "default" | "pos" | "neg" | "warn";
-}) {
-  const color =
-    tone === "pos"
-      ? "text-success"
-      : tone === "neg"
-        ? "text-destructive"
-        : tone === "warn"
-          ? "text-warning"
-          : "text-foreground";
-  return (
-    <div className="rounded-lg border bg-card px-3 py-2.5">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium truncate" title={label}>
-        {label}
-      </p>
-      <p className={`text-base font-semibold tabular-nums mt-0.5 ${color}`}>{value}</p>
-      {hint && <p className="text-[11px] text-muted-foreground truncate" title={hint}>{hint}</p>}
     </div>
   );
 }

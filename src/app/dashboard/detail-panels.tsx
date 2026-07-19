@@ -1,8 +1,57 @@
 import Link from "next/link";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import type {
-  ClientOpenItem, ReceivedItem, ExpenseItem, ExpenseCategorySlice,
+  ClientOpenItem, ReceivedItem, ExpenseItem, ExpenseCategorySlice, NamedValue,
 } from "@/lib/services/dashboard-main";
+
+/** Lista resumida de clientes (MRR/TCV/novos/renovações) — detalhe de card. */
+export function NamedValueList({
+  items, total, totalLabel, valueSuffix, emptyText,
+}: {
+  items: NamedValue[];
+  total?: number;
+  totalLabel?: string;
+  valueSuffix?: string;
+  emptyText?: string;
+}) {
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground py-2">{emptyText ?? "Sem itens no período."}</p>;
+  }
+  return (
+    <div>
+      <ul className="space-y-1 max-h-72 overflow-y-auto">
+        {items.slice(0, 50).map((it, i) => {
+          const row = (
+            <>
+              <span className="truncate">
+                {it.name}
+                {it.sub && <span className="text-[10px] text-muted-foreground ml-1.5">{it.sub}</span>}
+              </span>
+              <span className="tabular-nums whitespace-nowrap">
+                {formatBRL(it.value)}{valueSuffix ?? ""}
+              </span>
+            </>
+          );
+          return (
+            <li key={it.id ?? i} className="flex items-center justify-between gap-3 text-sm">
+              {it.id ? (
+                <Link href={`/clientes/${it.id}`} className="flex items-center justify-between gap-3 w-full hover:underline">
+                  {row}
+                </Link>
+              ) : row}
+            </li>
+          );
+        })}
+      </ul>
+      {total != null && (
+        <div className="flex items-center justify-between gap-3 border-t mt-2 pt-2 text-sm font-semibold">
+          <span>{totalLabel ?? "Total"}</span>
+          <span className="tabular-nums">{formatBRL(total)}{valueSuffix ?? ""}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Painéis de DETALHE dos cards principais (abrem em modal na própria Dashboard).

@@ -433,6 +433,186 @@ export async function getExpensesByCategory(period: Period): Promise<ExpenseCate
 // Caixa: quanto do resultado do mês já foi lançado
 // ===================================================================
 
+// ===================================================================
+// Comparativo com mês anterior (helper público) — §19
+// ===================================================================
+
+/**
+ * Compara um valor com o do mês anterior. `metricType` só documenta a intenção;
+ * a direção "boa/ruim" é decidida na UI (goodWhenUp). Evita divisão por zero e
+ * distingue 0 real de "sem dados".
+ */
+export function getPreviousMonthComparison(
+  current: number,
+  previous: number,
+  hadData: boolean
+): MetricDelta {
+  return delta(current, previous, hadData);
+}
+
+// ===================================================================
+// Resumo inteligente do mês (determinístico) — §21
+// ===================================================================
+
+export type SummaryInput = {
+  previsto: number;
+  recebido: number;
+  emAberto: number;
+  vencido: number;
+  despesas: number;
+  resultado: number;
+  margem: number; // 0-1
+  folhaPct: number; // 0-100
+  recorrenciaPct: number; // 0-100
+};
+
+/**
+ * Texto determinístico (sem IA) interpretando os números reais do mês.
+ * Frases curtas, linguagem simples, sempre com base nos dados do período.
+ */
+export function buildDashboardSummary(i: SummaryInput): string[] {
+  const brl = (v: number) =>
+    v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const out: string[] = [];
+
+  if (i.previsto <= 0 && i.recebido <= 0 && i.despesas <= 0) {
+    return ["Ainda não há movimentação financeira registrada neste mês."];
+  }
+
+  out.push(
+    `Você recebeu ${brl(i.recebido)} de um faturamento previsto de ${brl(i.previsto)}.`
+  );
+  if (i.emAberto > 0) {
+    out.push(
+      i.vencido > 0
+        ? `Ainda existem ${brl(i.emAberto)} em aberto, sendo ${brl(i.vencido)} já vencidos.`
+        : `Ainda existem ${brl(i.emAberto)} em aberto, todos dentro do prazo.`
+    );
+  } else {
+    out.push("Todo o faturamento previsto do mês já foi recebido.");
+  }
+  if (i.recebido > 0) {
+    out.push(`As despesas representam ${Math.round((i.despesas / i.recebido) * 100)}% do valor recebido.`);
+  }
+  out.push(
+    i.resultado >= 0
+      ? `O resultado atual é positivo em ${brl(i.resultado)} (margem de ${Math.round(i.margem * 100)}%).`
+      : `O resultado atual está negativo em ${brl(i.resultado)} — as despesas superaram o recebido.`
+  );
+  if (i.recorrenciaPct > 0) {
+    out.push(
+      `${i.recorrenciaPct}% do faturamento vem de MRR — ${
+        i.recorrenciaPct >= 60 ? "receita bem previsível" : "há espaço para aumentar a recorrência"
+      }.`
+    );
+  }
+  return out;
+}
+
+// ===================================================================
+// Detalhes internos dos cards secundários — §11
+// ===================================================================
+
+export type NamedValue = { id?: string; name: string; sub?: string; value: number };
+
+const REVENUE_ACTIVE_STATUSES = ["ACTIVE", "RENEWAL", "DELINQUENT"];
+
+/** Clientes MRR que compõem o faturamento recorrente do período. */
+export async function getMrrClientsDetail(): Promise<NamedValue[]> {
+  const rows = await prisma.client.findMany({
+    where: { modality: "MRR", status: { in: REVENUE_ACTIVE_STATUSES as any } },
+    select: { id: true, name: true, monthlyValue: true, salesOwner: true },
+    orderBy: { monthlyValue: "desc" },
+    take: 60,
+  });
+  return rows
+    .map((r) => ({ id: r.id, name: r.name, sub: r.salesOwner ?? undefined, value: n(r.monthlyValue) }))
+    .filter((r) => r.value > 0);
+}
+
+/** Clientes TCV com fechamento/renovação (cobrança TCV) na competência do período. */
+export async function getTcvClientsDetail(period: Period): Promise<NamedValue[]> {
+  const { start, end } = period;
+  const months: { y: number; m: number }[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endRef = new Date(end); endRef.setDate(endRef.getDate() - 1);
+  const lastRef = new Date(endRef.getFullYear(), endRef.getMonth(), 1);
+  while (cur <= lastRef && months.length < 24) {
+    months.push({ y: cur.getFullYear(), m: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  if (months.length === 0) return [];
+  const billings = await prisma.billing.findMany({
+    where: {
+      revenueType: "TCV",
+      status: { not: "CANCELED" },
+      OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+    },
+    select: { amount: true, clientId: true, client: { select: { name: true } } },
+  });
+  const byClient = new Map<string, NamedValue>();
+  for (const b of billings) {
+    const cur = byClient.get(b.clientId) ?? { id: b.clientId, name: b.client.name, value: 0 };
+    cur.value += n(b.amount);
+    byClient.set(b.clientId, cur);
+  }
+  return Array.from(byClient.values()).sort((a, b) => b.value - a.value);
+}
+
+/** Novos clientes do período com a receita (MRR mensal / TCV total do contrato). */
+export async function getNewClientsDetail(period: Period): Promise<NamedValue[]> {
+  const { start, end } = period;
+  const clients = await prisma.client.findMany({
+    where: {
+      OR: [
+        { startedAt: { gte: start, lt: end } },
+        { startedAt: null, createdAt: { gte: start, lt: end } },
+      ],
+    },
+    select: { id: true, name: true, modality: true, monthlyValue: true, totalContractValue: true },
+  });
+  const tcvIds = clients.filter((c) => c.modality === "TCV").map((c) => c.id);
+  const contracts = tcvIds.length
+    ? await prisma.contract.findMany({
+        where: { clientId: { in: tcvIds } },
+        orderBy: { startDate: "desc" },
+        select: { clientId: true, totalValue: true },
+      })
+    : [];
+  const lastTcv = new Map<string, number>();
+  for (const c of contracts) if (!lastTcv.has(c.clientId)) lastTcv.set(c.clientId, n(c.totalValue));
+  return clients
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      sub: c.modality ?? undefined,
+      value:
+        c.modality === "TCV"
+          ? lastTcv.get(c.id) ?? n(c.totalContractValue) ?? n(c.monthlyValue)
+          : n(c.monthlyValue),
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Clientes com renovação no mês selecionado (mês-calendário). */
+export async function getRenewalClientsDetail(month: number): Promise<NamedValue[]> {
+  const rows = await prisma.client.findMany({
+    where: {
+      renewalMonth: month,
+      status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] },
+    },
+    select: { id: true, name: true, modality: true, monthlyValue: true, totalContractValue: true, salesOwner: true },
+    orderBy: { name: "asc" },
+    take: 60,
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    sub: r.salesOwner ?? r.modality ?? undefined,
+    value: r.modality === "TCV" ? n(r.totalContractValue) : n(r.monthlyValue),
+  }));
+}
+
 /** Marcador estável na descrição do movimento para rastrear o mês de origem. */
 export function resultLaunchTag(year: number, month: number): string {
   return `[resultado:${year}-${String(month).padStart(2, "0")}]`;

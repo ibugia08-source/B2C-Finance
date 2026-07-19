@@ -41,7 +41,7 @@ export function MetricHelp({ title, text }: { title: string; text: string }) {
       {open && (
         <span
           role="tooltip"
-          className="absolute right-0 top-6 z-30 w-56 rounded-lg border bg-popover p-3 text-left shadow-lg"
+          className="absolute right-0 top-6 z-30 w-56 max-w-[calc(100vw-2rem)] rounded-lg border bg-popover p-3 text-left shadow-lg"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="block text-xs font-semibold text-foreground mb-1">{title}</span>

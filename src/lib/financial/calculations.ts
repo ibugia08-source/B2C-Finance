@@ -175,6 +175,36 @@ export {
   type ClientsBlock,
 } from "@/lib/services/dashboard-metrics";
 
+// ===== Dashboard (redesign): métricas principais, séries anuais, detalhes,
+// resumo determinístico, composição e comparativo com mês anterior. =====
+export {
+  getDashboardMainMetrics,
+  getYearlySeries, // Faturamento/Despesas/Resultado do ano (getYearly*Series)
+  getPreviousMonthComparison,
+  buildDashboardSummary,
+  getResultLaunchedForMonth,
+  resultLaunchTag,
+  previousPeriodRange,
+  getOpenByClient,
+  getReceivedDetail,
+  getExpensesDetail,
+  getExpensesByCategory,
+  getMrrClientsDetail,
+  getTcvClientsDetail,
+  getNewClientsDetail,
+  getRenewalClientsDetail,
+  type DashboardMainMetrics,
+  type DashboardMainResult,
+  type YearlySeries,
+  type MetricDelta,
+  type SummaryInput,
+  type NamedValue,
+  type ClientOpenItem,
+  type ReceivedItem,
+  type ExpenseItem,
+  type ExpenseCategorySlice,
+} from "@/lib/services/dashboard-main";
+
 // ===== Projeções e cenários (puro) =====
 export {
   currentScenario,
