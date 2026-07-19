@@ -12,14 +12,21 @@ import {
   type DashAlert,
 } from "@/lib/services/dashboard-metrics";
 import {
-  computeMonthlyResult,
-  computeOperationalMargin,
   getMonthlyAverageTicket,
   getMonthlyCostPerClient,
   getPayrollPercentageOfRevenue,
   getMonthlyChurn,
   getNewClientsSummary,
 } from "@/lib/financial/calculations";
+import {
+  getDashboardMainMetrics,
+  getYearlySeries,
+  getResultLaunchedForMonth,
+  getOpenByClient,
+  getReceivedDetail,
+  getExpensesDetail,
+  getExpensesByCategory,
+} from "@/lib/services/dashboard-main";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,6 +35,12 @@ import {
   LineChart,
   HBarList,
 } from "@/components/charts";
+import { MainChart } from "@/components/dashboard/main-chart";
+import { MetricCard } from "@/components/dashboard/metric-card";
+import { LaunchToCash } from "@/components/dashboard/launch-to-cash";
+import {
+  FaturamentoDetail, DespesasDetail, RecebidoDetail, EmAbertoDetail, ResultadoDetail,
+} from "./detail-panels";
 import { MonthFilter } from "./month-filter";
 import { PersonalDashboard } from "./personal-dashboard";
 import {
@@ -78,10 +91,31 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   // responsável etc. vivem nos módulos e relatórios.
   const filters: Filters = { period };
 
-  const [data, churn, newClients] = await Promise.all([
+  // Ano/mês do período (para série anual e "Lançar ao caixa").
+  const selectedYear = period.start.getFullYear();
+  const isFullMonth =
+    period.start.getDate() === 1 &&
+    period.end.getDate() === 1 &&
+    (period.end.getMonth() + period.end.getFullYear() * 12) -
+      (period.start.getMonth() + period.start.getFullYear() * 12) === 1;
+  const selectedMonth = period.start.getMonth() + 1; // 1-12
+  const selectedMonthIndex = isFullMonth ? period.start.getMonth() : undefined;
+
+  const [
+    data, churn, newClients,
+    main, yearly, launched,
+    openByClient, receivedDetail, expensesDetail, expensesByCategory,
+  ] = await Promise.all([
     getExecutiveDashboard(filters),
     getMonthlyChurn(period.start, period.end),
     getNewClientsSummary(period.start, period.end),
+    getDashboardMainMetrics(period),
+    getYearlySeries(selectedYear),
+    isFullMonth ? getResultLaunchedForMonth(selectedYear, selectedMonth) : Promise.resolve(0),
+    getOpenByClient(period),
+    getReceivedDetail(period),
+    getExpensesDetail(period),
+    getExpensesByCategory(period),
   ]);
   const {
     kpis, finance, cash, series, health, alerts, actions,
@@ -91,20 +125,29 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const hs = HEALTH_STYLE[health.level];
   const renovacoes = renewalOutlook[0];
 
-  // ===== Fórmulas oficiais da 1ª linha (docs/METRICAS_FINANCEIRAS.md) =====
-  // Faturamento total previsto = Faturamento MRR + Faturamento TCV (Bloco 2 §19).
-  //   MRR = Σ monthlyValue dos clientes MRR ativos no mês (getPeriodRevenue).
-  //   TCV = Σ valor cheio das cobranças TCV com competência no mês (SEM rateio).
-  //   Fonte central única: getPeriodRevenue — independe de as mensalidades já
-  //   terem sido geradas e nunca dilui TCV.
-  // Em aberto = max(Previsto − Recebido, 0) — clamp documentado p/ evitar negativo.
-  // Vencido ⊂ Em aberto; Resultado = Recebido − Despesas; Margem = Resultado / Recebido.
-  const previsto = revenue.total;
-  const recebido = receipts.receiptsCorrectMonth;
-  const emAberto = Math.max(0, previsto - recebido);
-  const vencido = receipts.overdueOpenAmount;
-  const resultado = computeMonthlyResult(recebido, finance.despesas);
-  const margemPct = Math.round(computeOperationalMargin(resultado, recebido) * 100);
+  // ===== 5 métricas principais (camada central dashboard-main) =====
+  // Faturamento total = MRR + TCV + Receita Extra manual (TCV cheio, sem rateio).
+  // Recebido = recebimentos da competência + Receita Extra manual recebida.
+  // Em aberto = max(0, total − recebido) (= card Em Aberto / Recebimentos).
+  // Vencido ⊂ Em aberto. Resultado = Recebido − Despesas. Margem = Resultado/Recebido.
+  const M = main.current;
+  const previsto = M.faturamentoTotal;
+  const recebido = M.recebido;
+  const emAberto = M.emAberto;
+  const vencido = M.vencido;
+  const resultado = M.resultado;
+  const margemPct = Math.round(M.margem * 100);
+  const disponivelCaixa = Math.max(0, resultado - launched);
+
+  // Comparação textual usa o mês anterior; rótulo do período de comparação.
+  const prevMonthLabel = new Date(period.start.getFullYear(), period.start.getMonth() - 1, 1)
+    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+
+  // Última atualização (horário de Brasília — servidor roda em UTC).
+  const lastUpdate = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+  }).format(new Date());
 
   // ===== Indicadores gerenciais do mês (todas as divisões protegidas) =====
   const ticketMedio = getMonthlyAverageTicket(recebido, clientsBlock.pagosMes);
@@ -120,8 +163,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         description={`Visão geral do financeiro da B2C Gestão · ${period.label}`}
       />
 
-      <div className="mb-3 print:hidden">
+      <div className="mb-3 print:hidden flex items-center justify-between gap-3 flex-wrap">
         <SavedViews module="dashboard" />
+        <p className="text-[11px] text-muted-foreground">Dados atualizados em {lastUpdate}</p>
       </div>
 
       {/* Único filtro do Dashboard: mês (lista suspensa) ou intervalo livre */}
@@ -131,30 +175,81 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         </CardContent>
       </Card>
 
-      {/* ===== Linha 1 — Visão financeira do mês ===== */}
+      {/* ===== Cards principais — Faturamento · Despesas · Recebido · Em Aberto · Resultado ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Visão financeira · {period.label}
       </h2>
-      {/* Ordem obrigatória: Previsto · Despesas · Recebido · Em Aberto · Margem.
-          Vencido e Resultado saíram da 1ª linha (seguem nos módulos/relatórios). */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <StatCard href="/cobrancas" title="Faturamento total previsto"
+        <MetricCard
+          title="Faturamento total"
           value={formatBRL(previsto)}
-          hint="tudo que está previsto entrar no mês" />
-        <StatCard href="/despesas" title="Total despesas (mês)"
+          help="Soma do faturamento MRR previsto, TCV previsto e receitas extras manuais do mês selecionado."
+          delta={main.deltas.faturamentoTotal}
+          detailTitle="Faturamento total do mês"
+          detail={<FaturamentoDetail mrr={M.mrr} tcv={M.tcv} extra={M.extraManual}
+            total={M.faturamentoTotal} mrrClients={M.mrrClients} tcvClients={M.tcvClients} />}
+        />
+        <MetricCard
+          title="Total de despesas"
           value={formatBRL(finance.despesas)}
-          intent={finance.despesas > 0 ? "negative" : "default"}
-          hint="despesas do período filtrado" />
-        <StatCard href="/cobrancas?st=PAID" title="Recebido"
-          value={formatBRL(recebido)} intent="positive"
-          hint={`MRR ${formatBRL(receipts.mrrReceived)} · TCV ${formatBRL(receipts.tcvReceived)}`} />
-        <StatCard href="/cobrancas" title="Em Aberto"
-          value={formatBRL(emAberto)} intent={emAberto > 0 ? "warning" : "default"}
-          hint={`previsto − recebido · vencido ${formatBRL(vencido)}`} />
-        <StatCard href="/relatorios/financeiro-mensal" title="Margem Operacional"
-          value={`${margemPct}%`}
-          intent={margemPct >= 20 ? "positive" : margemPct >= 0 ? "warning" : "negative"}
-          hint={`resultado ${formatBRL(resultado)} / recebido`} />
+          help="Soma de todas as despesas registradas no mês, incluindo folha, ferramentas, impostos e custos operacionais."
+          delta={main.deltas.despesas}
+          goodWhenUp={false}
+          valueTone={finance.despesas > 0 ? "neg" : "default"}
+          detailTitle="Total de despesas do mês"
+          detail={<DespesasDetail categories={expensesByCategory} items={expensesDetail} total={finance.despesas} />}
+        />
+        <MetricCard
+          title="Faturamento recebido"
+          value={formatBRL(recebido)}
+          help="Total de valores efetivamente registrados como recebidos no mês selecionado."
+          delta={main.deltas.recebido}
+          valueTone="pos"
+          detailTitle="Faturamento recebido do mês"
+          detail={<RecebidoDetail items={receivedDetail} mrrReceived={M.mrrRecebido}
+            tcvReceived={M.tcvRecebido} total={recebido} />}
+        />
+        <MetricCard
+          title="Em aberto"
+          value={formatBRL(emAberto)}
+          help="Valor que ainda falta receber no mês. Fórmula: Faturamento total − Faturamento recebido. Vencido é apenas a parte já vencida."
+          delta={main.deltas.emAberto}
+          goodWhenUp={false}
+          detailTitle="Em aberto no mês"
+          detail={<EmAbertoDetail clients={openByClient} emAberto={emAberto} vencido={vencido} />}
+        />
+        <MetricCard
+          title="Resultado do mês"
+          value={formatBRL(resultado)}
+          help="Lucro ou prejuízo operacional do mês. Fórmula: Faturamento recebido − Total de despesas."
+          delta={main.deltas.resultado}
+          valueTone={resultado > 0 ? "pos" : resultado < 0 ? "neg" : "default"}
+          detailTitle="Resultado do mês"
+          detail={<ResultadoDetail recebido={recebido} despesas={finance.despesas}
+            resultado={resultado} margem={M.margem} disponivel={disponivelCaixa} />}
+          footer={
+            isFullMonth && resultado > 0 ? (
+              <LaunchToCash year={selectedYear} month={selectedMonth}
+                resultado={resultado} alreadyLaunched={launched} />
+            ) : undefined
+          }
+        />
+      </div>
+
+      {/* ===== Gráficos principais — Faturamento · Despesas · Resultado (ano) ===== */}
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+        Evolução em {selectedYear}
+      </h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <MainChart title="Faturamento"
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.faturamento[i] }))}
+          color="hsl(var(--primary))" selectedIndex={selectedMonthIndex} />
+        <MainChart title="Despesas"
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.despesas[i] }))}
+          color="hsl(var(--warning))" selectedIndex={selectedMonthIndex} />
+        <MainChart title="Resultado mensal" variant="bar" diverging
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.resultado[i] }))}
+          selectedIndex={selectedMonthIndex} />
       </div>
 
       {/* ===== Bloco 2 — Indicadores gerenciais do mês (compactos) ===== */}

@@ -9,6 +9,20 @@ export function formatBRL(value: number | null | undefined): string {
   return BRL.format(Number(value));
 }
 
+/**
+ * Moeda compacta para eixos de gráfico: R$ 1,5 mil / R$ 12 mil / R$ 1,2 mi.
+ * Mantém legibilidade sem poluir o eixo Y com valores longos.
+ */
+export function formatBRLShort(value: number | null | undefined): string {
+  const v = Number(value ?? 0);
+  if (isNaN(v)) return "R$ 0";
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toFixed(1).replace(".", ",")} mi`;
+  if (abs >= 1_000) return `${sign}R$ ${Math.round(abs / 1_000)} mil`;
+  return `${sign}R$ ${Math.round(abs)}`;
+}
+
 export function parseBRL(value: string): number {
   if (!value) return 0;
   const cleaned = value

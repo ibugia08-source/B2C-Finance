@@ -1,0 +1,448 @@
+import { prisma } from "@/lib/prisma";
+import type { Period } from "@/lib/period";
+import {
+  getPeriodRevenue,
+  getReceiptsSummary,
+} from "./revenue-metrics";
+import { getFinanceSummary } from "./finance-metrics";
+
+/**
+ * CAMADA CENTRAL DO DASHBOARD (redesign Parte 1).
+ *
+ * Reúne as 5 métricas principais do mês + composições + comparativo com o mês
+ * anterior + séries anuais dos 3 gráficos principais. Tudo aqui respeita o
+ * período filtrado e as regras MRR/TCV/Receita Extra do dicionário:
+ *
+ *  - Faturamento total = MRR previsto + TCV previsto + Receita Extra manual
+ *    (TCV entra CHEIO no mês da adesão/renovação, NUNCA rateado).
+ *  - Recebido = recebimentos confirmados na competência do mês (mesma base do
+ *    módulo Recebimentos / card Em Aberto) + Receita Extra manual recebida.
+ *  - Em aberto = max(0, Faturamento total − Recebido). Como a Receita Extra
+ *    entra dos dois lados, o Em aberto = previsto MRR/TCV − recebido cobranças
+ *    (coerente com Recebimentos e Rotina).
+ *  - Vencido ⊂ Em aberto (parte já vencida).
+ *  - Resultado = Recebido − Total de despesas.  Margem = Resultado / Recebido.
+ *
+ * Nenhum componente recalcula: importam destas funções.
+ */
+
+const n = (v: unknown): number => (v == null ? 0 : Number(v));
+
+// ===================================================================
+// 5 métricas principais + comparativo com o mês anterior
+// ===================================================================
+
+export type DashboardMainMetrics = {
+  faturamentoTotal: number; // MRR + TCV + Receita Extra manual
+  mrr: number;
+  tcv: number;
+  extraManual: number;
+  despesas: number;
+  recebido: number;
+  mrrRecebido: number;
+  tcvRecebido: number;
+  emAberto: number; // max(0, total − recebido)
+  vencido: number; // ⊂ em aberto
+  resultado: number; // recebido − despesas
+  margem: number; // 0-1
+  mrrClients: number;
+  tcvClients: number;
+};
+
+/** Snapshot cru de um período (reutilizado para o mês atual e o anterior). */
+async function periodSnapshot(start: Date, end: Date): Promise<DashboardMainMetrics> {
+  const [revenue, receipts, finance] = await Promise.all([
+    getPeriodRevenue(start, end),
+    getReceiptsSummary(start, end),
+    getFinanceSummary({ key: "custom", start, end, label: "" } as Period),
+  ]);
+
+  const extraManual = receipts.extraRevenueManual;
+  const faturamentoTotal = revenue.total + extraManual;
+  const recebido = receipts.receiptsCorrectMonth + extraManual;
+  const despesas = finance.despesas;
+  const emAberto = Math.max(0, faturamentoTotal - recebido);
+  const resultado = recebido - despesas;
+
+  return {
+    faturamentoTotal,
+    mrr: revenue.mrr,
+    tcv: revenue.tcv,
+    extraManual,
+    despesas,
+    recebido,
+    mrrRecebido: receipts.mrrReceived,
+    tcvRecebido: receipts.tcvReceived,
+    emAberto,
+    vencido: receipts.overdueOpenAmount,
+    resultado,
+    margem: recebido > 0 ? resultado / recebido : 0,
+    mrrClients: revenue.mrrClients,
+    tcvClients: revenue.tcvClients,
+  };
+}
+
+/**
+ * Período imediatamente anterior ao filtrado. Para um mês-calendário cheio
+ * (1º ao 1º do próximo), devolve o mês-calendário anterior; para um intervalo
+ * livre, devolve a janela de mesmo tamanho terminando no início do período.
+ */
+export function previousPeriodRange(period: Period): { start: Date; end: Date } {
+  const { start, end } = period;
+  const isFullMonth =
+    start.getDate() === 1 &&
+    end.getDate() === 1 &&
+    (end.getMonth() + end.getFullYear() * 12) - (start.getMonth() + start.getFullYear() * 12) === 1;
+  if (isFullMonth) {
+    return {
+      start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
+      end: new Date(start.getFullYear(), start.getMonth(), 1),
+    };
+  }
+  const len = end.getTime() - start.getTime();
+  return { start: new Date(start.getTime() - len), end: new Date(start.getTime()) };
+}
+
+export type MetricDelta = {
+  /** variação relativa (-1..∞) ou null quando não há base de comparação */
+  pct: number | null;
+  /** true se o mês anterior tinha algum dado (para distinguir 0 de "sem dados") */
+  hasBase: boolean;
+  current: number;
+  previous: number;
+};
+
+function delta(current: number, previous: number, hadData: boolean): MetricDelta {
+  const hasBase = hadData && previous !== 0;
+  return {
+    pct: hasBase ? (current - previous) / Math.abs(previous) : null,
+    hasBase,
+    current,
+    previous,
+  };
+}
+
+export type DashboardMainResult = {
+  current: DashboardMainMetrics;
+  previous: DashboardMainMetrics;
+  /** o mês anterior tinha QUALQUER movimento (define "sem dados") */
+  previousHasData: boolean;
+  deltas: {
+    faturamentoTotal: MetricDelta;
+    despesas: MetricDelta;
+    recebido: MetricDelta;
+    emAberto: MetricDelta;
+    resultado: MetricDelta;
+  };
+};
+
+export async function getDashboardMainMetrics(period: Period): Promise<DashboardMainResult> {
+  const prevRange = previousPeriodRange(period);
+  const [current, previous] = await Promise.all([
+    periodSnapshot(period.start, period.end),
+    periodSnapshot(prevRange.start, prevRange.end),
+  ]);
+
+  const previousHasData =
+    previous.faturamentoTotal !== 0 ||
+    previous.recebido !== 0 ||
+    previous.despesas !== 0;
+
+  return {
+    current,
+    previous,
+    previousHasData,
+    deltas: {
+      faturamentoTotal: delta(current.faturamentoTotal, previous.faturamentoTotal, previousHasData),
+      despesas: delta(current.despesas, previous.despesas, previousHasData),
+      recebido: delta(current.recebido, previous.recebido, previousHasData),
+      emAberto: delta(current.emAberto, previous.emAberto, previousHasData),
+      resultado: delta(current.resultado, previous.resultado, previousHasData),
+    },
+  };
+}
+
+// ===================================================================
+// Séries ANUAIS (12 meses do ano selecionado) — 3 gráficos principais
+// ===================================================================
+
+export type YearlySeries = {
+  year: number;
+  labels: string[]; // Jan..Dez
+  faturamento: number[]; // total previsto por mês (MRR+TCV+extra)
+  despesas: number[]; // total de despesas por mês
+  recebido: number[]; // recebido por competência do mês
+  resultado: number[]; // recebido − despesas por mês
+};
+
+const MONTHS_SHORT = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
+/**
+ * 12 pontos (Jan–Dez) do ano selecionado para os gráficos de Faturamento,
+ * Despesas e Resultado. Uma passada de dados por fonte, bucketizada por mês.
+ */
+export async function getYearlySeries(year: number): Promise<YearlySeries> {
+  const yStart = new Date(year, 0, 1);
+  const yEnd = new Date(year + 1, 0, 1);
+  const now = new Date();
+  const currentKey = now.getFullYear() * 12 + now.getMonth();
+
+  const [mrrClients, tcvBillings, extraRevenues, looseIncomes, payments, expenses] =
+    await Promise.all([
+      prisma.client.findMany({
+        where: { modality: "MRR" },
+        select: { monthlyValue: true, startedAt: true, churnedAt: true, status: true, createdAt: true },
+      }),
+      prisma.billing.findMany({
+        where: { revenueType: "TCV", status: { not: "CANCELED" }, competenceYear: year },
+        select: { amount: true, competenceMonth: true },
+      }),
+      prisma.extraRevenue.findMany({
+        where: { origin: "MANUAL", receivedAt: { gte: yStart, lt: yEnd } },
+        select: { amount: true, receivedAt: true },
+      }),
+      prisma.income.findMany({
+        where: { status: "RECEIVED", billingId: null, receivedAt: { gte: yStart, lt: yEnd } },
+        select: { amount: true, receivedAt: true },
+      }),
+      prisma.payment.findMany({
+        // Só pagamentos de cobranças cuja COMPETÊNCIA é do ano selecionado —
+        // bounded e suficiente (recebido é bucketizado por competência).
+        where: {
+          status: "CONFIRMED",
+          billing: { status: { not: "CANCELED" }, competenceYear: year },
+        },
+        select: {
+          amount: true,
+          paidAt: true,
+          billing: { select: { competenceMonth: true, competenceYear: true } },
+        },
+      }),
+      prisma.transaction.findMany({
+        where: { type: "despesa", status: { not: "cancelado" }, date: { gte: yStart, lt: yEnd } },
+        select: { amount: true, date: true },
+      }),
+    ]);
+
+  const zero = () => Array(12).fill(0) as number[];
+  const mrr = zero();
+  const tcv = zero();
+  const extra = zero();
+  const recebido = zero();
+  const despesas = zero();
+
+  // MRR previsto por mês: cliente MRR ativo naquele mês.
+  const activeInMonth = (
+    c: (typeof mrrClients)[number],
+    m: number
+  ) => {
+    const monthStart = new Date(year, m, 1);
+    const monthEnd = new Date(year, m + 1, 1);
+    const entered = c.startedAt ?? c.createdAt;
+    if (entered && entered >= monthEnd) return false;
+    if (c.churnedAt && c.churnedAt < monthStart) return false;
+    const key = year * 12 + m;
+    const REVENUE_ACTIVE = ["ACTIVE", "RENEWAL", "DELINQUENT"];
+    if (key >= currentKey && !REVENUE_ACTIVE.includes(c.status)) return false;
+    return true;
+  };
+  for (let m = 0; m < 12; m++) {
+    for (const c of mrrClients) {
+      if (activeInMonth(c, m)) mrr[m] += n(c.monthlyValue);
+    }
+  }
+
+  // TCV previsto por competência do mês (valor cheio, sem rateio).
+  for (const b of tcvBillings) {
+    const i = b.competenceMonth - 1;
+    if (i >= 0 && i < 12) tcv[i] += n(b.amount);
+  }
+
+  // Receita Extra manual + receitas avulsas por mês de recebimento.
+  for (const e of extraRevenues) extra[e.receivedAt.getMonth()] += n(e.amount);
+  for (const i of looseIncomes) extra[i.receivedAt.getMonth()] += n(i.amount);
+
+  // Recebido por competência (pago on-time ou adiantado; atrasado não conta no
+  // mês original — vira recuperação, fora da série de faturamento do mês).
+  for (const p of payments) {
+    const compKey = p.billing.competenceYear * 12 + (p.billing.competenceMonth - 1);
+    const paidKey = p.paidAt.getFullYear() * 12 + p.paidAt.getMonth();
+    if (p.billing.competenceYear === year && paidKey <= compKey) {
+      recebido[p.billing.competenceMonth - 1] += n(p.amount);
+    }
+  }
+  // Receita Extra também é recebimento.
+  for (let m = 0; m < 12; m++) recebido[m] += extra[m];
+
+  // Despesas por mês (data da transação).
+  for (const t of expenses) despesas[t.date.getMonth()] += n(t.amount);
+
+  const faturamento = mrr.map((v, i) => v + tcv[i] + extra[i]);
+  const resultado = recebido.map((r, i) => r - despesas[i]);
+
+  return { year, labels: MONTHS_SHORT, faturamento, despesas, recebido, resultado };
+}
+
+// ===================================================================
+// Composição do faturamento e maiores despesas (detalhe dos cards)
+// ===================================================================
+
+export type ClientOpenItem = {
+  clientId: string;
+  clientName: string;
+  salesOwner: string | null;
+  open: number;
+  dueDate: Date | null;
+  overdue: boolean;
+};
+
+/** Clientes com valor em aberto na competência do período (para o card Em Aberto). */
+export async function getOpenByClient(period: Period): Promise<ClientOpenItem[]> {
+  const { start, end } = period;
+  // Competências (ano/mês) que o período cobre.
+  const months: { y: number; m: number }[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endRef = new Date(end);
+  endRef.setDate(endRef.getDate() - 1);
+  const lastRef = new Date(endRef.getFullYear(), endRef.getMonth(), 1);
+  while (cur <= lastRef && months.length < 24) {
+    months.push({ y: cur.getFullYear(), m: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  if (months.length === 0) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const billings = await prisma.billing.findMany({
+    where: {
+      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+    },
+    select: {
+      amount: true,
+      paidTotal: true,
+      dueDate: true,
+      clientId: true,
+      client: { select: { name: true, salesOwner: true } },
+    },
+  });
+
+  const byClient = new Map<string, ClientOpenItem>();
+  for (const b of billings) {
+    const open = n(b.amount) - n(b.paidTotal);
+    if (open <= 0) continue;
+    const cur = byClient.get(b.clientId) ?? {
+      clientId: b.clientId,
+      clientName: b.client.name,
+      salesOwner: b.client.salesOwner,
+      open: 0,
+      dueDate: b.dueDate,
+      overdue: false,
+    };
+    cur.open += open;
+    // guarda o vencimento mais antigo e marca se algum já venceu
+    if (!cur.dueDate || (b.dueDate && b.dueDate < cur.dueDate)) cur.dueDate = b.dueDate;
+    if (b.dueDate && b.dueDate < today) cur.overdue = true;
+    byClient.set(b.clientId, cur);
+  }
+
+  return Array.from(byClient.values()).sort((a, b) => b.open - a.open);
+}
+
+export type ReceivedItem = {
+  clientName: string;
+  amount: number;
+  revenueType: string | null;
+  paidAt: Date;
+};
+
+/** Recebimentos confirmados do período (para o card Recebido). */
+export async function getReceivedDetail(period: Period): Promise<ReceivedItem[]> {
+  const { start, end } = period;
+  const payments = await prisma.payment.findMany({
+    where: { status: "CONFIRMED", paidAt: { gte: start, lt: end }, billing: { status: { not: "CANCELED" } } },
+    orderBy: { paidAt: "desc" },
+    take: 60,
+    select: {
+      amount: true,
+      paidAt: true,
+      billing: { select: { revenueType: true, client: { select: { name: true } } } },
+    },
+  });
+  return payments.map((p) => ({
+    clientName: p.billing.client.name,
+    amount: n(p.amount),
+    revenueType: p.billing.revenueType,
+    paidAt: p.paidAt,
+  }));
+}
+
+export type ExpenseItem = { description: string; amount: number; category: string | null; dueDate: Date | null };
+
+/** Maiores despesas do período (para o card Total de despesas). */
+export async function getExpensesDetail(period: Period): Promise<ExpenseItem[]> {
+  const { start, end } = period;
+  const rows = await prisma.transaction.findMany({
+    where: { type: "despesa", status: { not: "cancelado" }, date: { gte: start, lt: end } },
+    orderBy: { amount: "desc" },
+    take: 40,
+    select: {
+      description: true,
+      amount: true,
+      dueDate: true,
+      category: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    description: r.description,
+    amount: n(r.amount),
+    category: r.category?.name ?? null,
+    dueDate: r.dueDate,
+  }));
+}
+
+export type ExpenseCategorySlice = { label: string; value: number };
+
+/** Despesas agrupadas por categoria no período (para o detalhe de despesas). */
+export async function getExpensesByCategory(period: Period): Promise<ExpenseCategorySlice[]> {
+  const { start, end } = period;
+  const grouped = await prisma.transaction.groupBy({
+    by: ["categoryId"],
+    where: { type: "despesa", status: { not: "cancelado" }, date: { gte: start, lt: end } },
+    _sum: { amount: true },
+  });
+  const ids = grouped.map((g) => g.categoryId).filter(Boolean) as string[];
+  const cats = ids.length
+    ? await prisma.category.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    : [];
+  const name = new Map(cats.map((c) => [c.id, c.name]));
+  return grouped
+    .map((g) => ({
+      label: g.categoryId ? name.get(g.categoryId) ?? "—" : "Sem categoria",
+      value: n(g._sum.amount),
+    }))
+    .filter((s) => s.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+// ===================================================================
+// Caixa: quanto do resultado do mês já foi lançado
+// ===================================================================
+
+/** Marcador estável na descrição do movimento para rastrear o mês de origem. */
+export function resultLaunchTag(year: number, month: number): string {
+  return `[resultado:${year}-${String(month).padStart(2, "0")}]`;
+}
+
+/** Total já lançado ao caixa como "Resultado do mês" para a competência. */
+export async function getResultLaunchedForMonth(year: number, month: number): Promise<number> {
+  const agg = await prisma.cashBoxMovement.aggregate({
+    where: { type: "IN", description: { contains: resultLaunchTag(year, month) } },
+    _sum: { amount: true },
+  });
+  return n(agg._sum.amount);
+}
