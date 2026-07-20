@@ -67,7 +67,7 @@ export async function getFinanceSummary(period: Period): Promise<FinanceSummary>
       // Folha por competência dentro do período (runs cujo mês cai no range)
       prisma.payrollItem.findMany({
         where: { payroll: { status: { in: ["APPROVED", "PAID"] } } },
-        select: { amount: true, payroll: { select: { month: true, year: true } } },
+        select: { amount: true, kind: true, payroll: { select: { month: true, year: true } } },
       }),
     ]);
 
@@ -75,12 +75,15 @@ export async function getFinanceSummary(period: Period): Promise<FinanceSummary>
   const despesas = n(despesasAgg._sum.amount);
   const despesasPagas = n(despesasPagasAgg._sum.amount);
 
+  // DEDUCTION entra NEGATIVO (mesma regra de getPayrollSummary e das séries
+  // do dashboard) — sem o sinal, a folha era superestimada e contaminava
+  // folhaSobreReceita, % Folha e a Saúde Financeira.
   const folhaPeriodo = folhaItems
     .filter((i) => {
       const d = new Date(i.payroll.year, i.payroll.month - 1, 1);
       return d >= new Date(start.getFullYear(), start.getMonth(), 1) && d < end;
     })
-    .reduce((s, i) => s + n(i.amount), 0);
+    .reduce((s, i) => s + n(i.amount) * (i.kind === "DEDUCTION" ? -1 : 1), 0);
 
   const lucro = receitas - despesasPagas;
   return {

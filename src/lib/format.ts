@@ -1,3 +1,20 @@
+/**
+ * Conversor canônico Decimal/unknown → number (null/undefined → 0).
+ * Substitui as N cópias locais de `const n = (v) => ...` nos services —
+ * novas implementações devem importar DAQUI.
+ */
+export const toNumber = (v: unknown): number => (v == null ? 0 : Number(v));
+
+/** Meses PT-BR — fonte única (substitui os arrays locais espalhados). */
+export const MONTHS_PT = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+] as const;
+export const MONTHS_PT_SHORT = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+] as const;
+
 export const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",

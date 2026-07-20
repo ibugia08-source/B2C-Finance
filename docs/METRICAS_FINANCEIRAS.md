@@ -1,130 +1,102 @@
 # Dicionário de Métricas Financeiras — B2C Finance
 
-**Fonte da verdade** para nomes, significados e cálculos das métricas do sistema.
-Regra de ouro: **antes de criar uma métrica nova, verifique se ela já existe aqui
-com outro nome.** Toda métrica é calculada na camada central
-(`src/lib/financial/calculations.ts` re-exporta `src/lib/services/*`) — nunca em
-componente.
+> **Atualizado em 2026-07-20 (auditoria completa).** Fonte da verdade para nomes,
+> fórmulas e origem das métricas. Regra de ouro: antes de criar uma métrica nova,
+> verifique se ela já existe aqui com outro nome.
 
-Regra contábil oficial: **Faturamento = Recebimentos no mês correto + Receitas Extras.**
-Pagamento de mês anterior recebido depois = *inadimplência regularizada* (conta no mês
-do pagamento; o mês original permanece não recebido). Receita Extra é **apenas manual**.
-TCV nunca é rateado por mês.
+**Camada central real:** `src/lib/services/dashboard-main.ts` (Dashboard) +
+`src/lib/services/revenue-metrics.ts` (regras MRR/TCV/recebimentos) — re-exportadas
+por `src/lib/financial/calculations.ts`. Ver `docs/ARQUITETURA_FINANCEIRA.md` para o
+mapa completo e as divergências conhecidas.
+
+Regras contábeis oficiais:
+- **TCV nunca é rateado** — entra cheio no mês da adesão/fechamento/renovação
+  (cobrança `Billing revenueType=TCV` na competência).
+- **MRR** = Σ `Client.monthlyValue` dos clientes `modality=MRR` ativos no mês.
+- **Receita Extra é apenas manual** (`ExtraRevenue origin=MANUAL` + `Income` avulsa
+  sem cobrança). Nunca gerar automática.
+- Pagamento de mês anterior recebido depois = **recuperação de inadimplência**
+  (conta no mês do pagamento; o mês original permanece em aberto no fechamento).
 
 ---
 
-## As 6 métricas da 1ª linha do Dashboard (fórmulas OBRIGATÓRIAS)
+## 1ª linha do Dashboard (fórmulas OFICIAIS — `getDashboardMainMetrics`)
 
-```
-Faturamento total previsto = Σ cobranças da competência do mês (exceto canceladas)
-Recebido                   = Σ pago dentro do mês de competência (+ adiantamentos)
-Em aberto                  = max(Faturamento total previsto − Recebido, 0)
-Falta receber (Rotina)     = Em aberto do mês vigente  ← MESMO cálculo, outro nome
-Vencido                    = parte do Em aberto com vencimento passado (Vencido ⊂ Em aberto)
-Resultado                  = Recebido − Despesas do mês
-Margem Operacional         = Resultado / Recebido  (0 quando nada recebido)
-```
+| Métrica | Fórmula | Fonte |
+|---|---|---|
+| **Faturamento total** | `getPeriodRevenue().total` (MRR+TCV) **+ Receita Extra manual do mês** | `dashboard-main.ts` |
+| **Total de despesas** | Σ `Transaction type=despesa ≠cancelado` no período | `finance-metrics.ts` (`getFinanceSummary.despesas`) |
+| **Faturamento recebido** | `receiptsCorrectMonth` (pagos na competência + adiantamentos) **+ extra manual** | `revenue-metrics.ts` (`getReceiptsSummary`) |
+| **Em aberto** | `max(0, Faturamento total − Recebido)` | `dashboard-main.ts` |
+| **Vencido** (⊂ Em aberto) | Σ (amount−paidTotal) das cobranças abertas da competência com `dueDate < hoje` (`overdueOpenAmount`) | `revenue-metrics.ts` |
+| **Resultado do mês** | `Recebido − Despesas` | `dashboard-main.ts` |
+| **Margem operacional** | `Resultado / Recebido` (0 se nada recebido) | `dashboard-main.ts` |
 
 Decisões documentadas:
-- **Clamp em 0** no Em aberto: adiantamento de competência futura pode fazer
-  Recebido > Previsto; nunca exibir valor negativo.
-- **Margem sobre o Recebido** (não sobre o previsto): representa a margem
-  sobre o que realmente entrou.
-- **Inadimplência de meses anteriores NÃO entra** no Em aberto do mês atual —
-  ela aparece no card próprio "A cobrar (vencido)" da Rotina e no módulo
-  Inadimplência (aging acumulado).
-- Funções oficiais em `lib/financial/calculations.ts`:
-  `getMonthlyExpectedRevenue`, `getMonthlyReceivedRevenue`,
-  `getMonthlyOpenRevenue`, `getMonthlyOverdueRevenue`,
-  `computeMonthlyResult`, `computeOperationalMargin`
-  (base: `getReceiptsSummary` → `expectedTotal`, `receiptsCorrectMonth`,
-  `openMonth`, `overdueOpenAmount`).
+- **Clamp em 0** no Em aberto (adiantamento pode fazer Recebido > Previsto).
+- A Receita Extra manual entra **dos dois lados** (previsto e recebido) — o Em
+  aberto continua = previsto MRR/TCV − recebido de cobranças, coerente com
+  Recebimentos e Rotina.
+- **Rotina diária** usa a MESMA fórmula do Em aberto ("Falta receber") e o mesmo
+  `overdueOpenAmount` ("Vencido do mês").
+- ⚠️ `expectedTotal` (Σ TODAS as cobranças da competência, incl. SETUP/ONE_TIME)
+  é uma métrica **diferente** do Faturamento total do card. Existe em
+  `getReceiptsSummary` para usos contábeis por cobrança emitida. Não misturar.
 
-## Recebimentos (dinheiro que entra de clientes)
+## Comparativo com mês anterior
+`getPreviousMonthComparison(current, previous, hadData)` (`dashboard-main.ts`) —
+mês cheio compara com o mês-calendário anterior; intervalo livre, com janela de
+mesmo tamanho. Sem base → "Sem dados do mês anterior".
 
-| Métrica | Significado | Cálculo (campo na camada central) | Onde aparece |
-|---|---|---|---|
-| **Faturamento total previsto** | Tudo previsto para entrar no mês | `receipts.expectedTotal` | Dashboard L1 |
-| **Recebido** | Pago dentro do mês de competência | `receipts.receiptsCorrectMonth` | Dashboard L1, Recebimentos, Relatório Recebimentos |
-| **Em aberto / Falta receber** | Ainda falta receber no mês | `receipts.openMonth` = max(previsto − recebido, 0) | Dashboard L1, Rotina |
-| **Vencido** | Parte do em aberto já vencida | `receipts.overdueOpenAmount` | Dashboard L1, Recebimentos, Inadimplência |
-| **Faturamento (realizado)** | Fechamento oficial: recebido + recuperações + Receita Extra manual | `receipts.totalRevenue` | Relatório Executivo, IA |
-| **A receber** (só em Recebimentos) | Em aberto + Vencido do mês selecionado | soma dos `openAmount` das cobranças do ciclo | Painel de Recebimentos |
-| **MRR recebido** | Parte recorrente do Recebido | `receipts.mrrReceived` | Hint do card Recebido, Relatório MRR |
-| **TCV recebido** | Parte de contratos fechados do Recebido (valor cheio no mês da adesão) | `receipts.tcvReceived` | Hint do card Recebido, Relatório TCV |
-| **Clientes pagos** | Clientes com pagamento do mês registrado | `clientsBlock.pagosMes` / ciclo de Recebimentos | Dashboard L2, Recebimentos |
-| **Clientes em aberto** | Clientes ainda sem pagamento no mês | `clientsBlock.devendoMes` (com override manual) | Dashboard L2, Rotina, Carteira |
-| **Inadimplência regularizada** | Vencido de mês anterior pago depois | `receipts.paidDifferentMonthValue` (= `extraRevenueAutomatic`) | Dashboard (hint do Faturamento), Rotina |
-| **Receita Extra (manual)** | Entradas avulsas cadastradas à mão | `receipts.extraRevenueManual` (ExtraRevenue MANUAL + Income sem cobrança) | Receitas, Relatório Receita Extra |
+## Faturamento MRR / TCV (mês)
+- **MRR (oficial)** = `getPeriodRevenue().mrr` — Σ `Client.monthlyValue` dos
+  clientes MRR ativos no mês (mês corrente exige ACTIVE/RENEWAL/DELINQUENT).
+- **TCV (oficial)** = `getPeriodRevenue().tcv` — Σ `Billing revenueType=TCV` da
+  competência (valor cheio, sem rateio).
+- ⚠️ Definições PARALELAS que ainda existem (usos legados/IA — não usar em telas):
+  `mrrAtivo` e `receitaReconhecidaMes` (base **Contract**), `series.mrr`
+  (Contract, `getMonthlySeries`), `kpis.tcvVendido` (Contract.totalValue por
+  startDate). Ver ARQUITETURA_FINANCEIRA.md.
 
-**Nomes proibidos** (ambíguos — não usar em telas novas): "Valor a receber",
-"Valor pendente", "Receita esperada", "Faturamento esperado", "Previsto" para
-receita de clientes.
+## Séries anuais (gráficos do Dashboard)
+`getYearlySeries(year)` (`dashboard-main.ts`): faturamento (MRR+TCV+extra),
+despesas, recebido (por competência) e resultado — Jan..Dez do ano filtrado.
 
-## Despesas (dinheiro que sai)
-
-| Métrica | Significado | Cálculo | Onde aparece |
-|---|---|---|---|
-| **Despesas do mês** | Total de despesas do mês (não canceladas) | `expenses.total` | Despesas, hint do Resultado |
-| **Pagas** | Despesas quitadas | `expenses.paid` | Despesas |
-| **Em aberto** | Pendentes dentro do prazo | `expenses.pending` | Despesas |
-| **Vencidas** | Pendentes com vencimento passado (derivado, nunca gravado) | `expenses.overdue` | Dashboard L2, Despesas, Rotina |
-| **Recorrentes** | Despesas com recorrência no mês | `expenses.recurring` | Despesas (Resumo) |
-| **Cartão usado** | Limite usado nos cartões | `expenses.creditLimitUsed` | Despesas (Cartões) |
-| **Limite disponível** | Limite livre nos cartões | `expenses.creditLimitAvailable` | Despesas (Cartões) |
-
-## Resultado
-
-| Métrica | Significado | Cálculo | Onde aparece |
-|---|---|---|---|
-| **Resultado** | Lucro/prejuízo do mês | `finance.lucro` = receitas − despesas pagas | Dashboard L1, Relatório Financeiro mensal |
-| **Margem** | Resultado ÷ Faturamento | `finance.margem` (0–1, exibida em %) | Dashboard L1, Projeções |
-| **Caixa estimado** | Caixa atual + a receber − a pagar | `cash.saldoPrevisto` | Hint do Resultado, módulo Caixa |
-
-## Operação
-
-| Métrica | Significado | Cálculo | Onde aparece |
-|---|---|---|---|
-| **Clientes ativos** | Status ACTIVE na Carteira | `clientsBlock.ativos` | Dashboard L2, Carteira |
-| **Renovações do mês** | Clientes com `renewalMonth` = mês atual | `renewalOutlook[0]` (`getRenewalOutlook`) | Dashboard L2, Rotina, Relatório Renovações |
-| **Upsell em aberto** | Oportunidades abertas + valor | `upsell.openCount` / `openValue` | Dashboard L2, Upsell, Rotina |
-
-## Convenção de status (universal para dinheiro)
-
-`Previsto → Recebido/Pago → Em aberto → Vencido` — nenhuma tela deve criar
-sinônimos ("pendente", "atrasado", "a vencer") sem mapear para um destes.
-Em Recebimentos, os detalhes de *como* foi pago aparecem no status da linha:
-Pago · Pago com atraso · Recebido em outro mês (todos contam como "Pagos").
-
-## Histórico de decisões
-
-- 2026-07-12 — Simplificação geral: Dashboard reduzido a 3 linhas (15 cards);
-  removidos os cálculos paralelos da antiga seção "Comercial & faturamento"
-  da tela (MRR/TCV por contratos continuam no serviço apenas para a IA);
-  relatórios 25 → 18 (removidos: margem-operacional, faturamento-total,
-  pagamentos-atrasados, pagos-outro-mes, receita-perdida,
-  rentabilidade-servico, projecao-financeira — todos recortes de outros).
-- 2026-07-11 — Receita Extra passou a ser **apenas manual**; recuperação de
-  inadimplência conta direto dos pagamentos.
-- 2026-07-10 — Regra oficial de fechamento mensal implantada
-  (`payment-accounting.ts`); TCV sem rateio.
-
-## Indicadores gerenciais do mês (Bloco 2 do Dashboard)
-
-| Métrica | Fórmula | Função oficial |
+## Indicadores gerenciais
+| Métrica | Fórmula oficial | Onde |
 |---|---|---|
-| Resultado do mês | Recebido − Despesas do mês | `computeMonthlyResult` / `getMonthlyResult` |
-| Faturamento MRR (mês) | parte MRR do Recebido | `getMonthlyMrrRevenue` |
-| Faturamento TCV (mês) | parte TCV do Recebido (valor cheio, sem rateio) | `getMonthlyTcvRevenue` |
-| Ticket médio (mês) | Recebido ÷ clientes pagos (0 se nenhum) | `getMonthlyAverageTicket` |
-| Custo por cliente | Despesas do mês ÷ clientes ativos (0 se nenhum) | `getMonthlyCostPerClient` |
-| % Folha no faturamento | Folha do mês ÷ Recebido (dinheiro que entrou) | `getPayrollPercentageOfRevenue` |
-| Churn de clientes (mês) | perdas com `lostAt` no período filtrado | `getMonthlyChurnCount` |
-| Receita perdida (mês) | MRR = mensal perdido; TCV = última adesão | `getMonthlyLostRevenue` |
-| Novos clientes (mês) | entrada = `startedAt` (fallback `createdAt`) no período | `getMonthlyNewClientsCount` |
-| Receita de novos clientes | MRR = mensal; TCV = total do último contrato | `getMonthlyNewClientsRevenue` |
-| Total inadimplência | = Vencido (parte vencida do Em Aberto) | `getMonthlyDelinquencyTotal` |
+| Ticket médio geral | Faturamento total / clientes ativos | dashboard/page.tsx |
+| Custo por cliente | Despesas / clientes ativos | `getMonthlyCostPerClient` |
+| % Folha no faturamento | Folha do mês / Faturamento total | dashboard/page.tsx |
+| % Recorrência | MRR / Faturamento total | dashboard/page.tsx |
+| Folha (`folhaPeriodo`) | Σ PayrollItem (APPROVED/PAID) do mês, **DEDUCTION negativo** | `finance-metrics.ts` (bug do sinal corrigido em 2026-07-20) |
+| Churn / Receita perdida | count/Σ `ClientLoss` por `lostAt` no período | `getMonthlyChurn` |
+| Novos clientes | `startedAt` no período (fallback `createdAt`) + receita (MRR mensal / TCV total) | `getNewClientsSummary` |
+| Renovações | `Client.renewalMonth == mês` (base ativa) | `getRenewalOutlook` |
+| Inadimplência (mês) | = Vencido (`overdueOpenAmount`) | `revenue-metrics.ts` |
+| Inadimplência (aging acumulado) | `getDelinquentClients` — OVERDUE global + buckets 1-15/16-30/31-60/60+ | `billing-metrics.ts` |
+| Caixa disponível | Σ `Account.balance` + Σ `CashBox.currentAmount`; projeções 30/60/90 | `getCashSummary` |
 
-Análises visuais (abaixo dos indicadores): Receita por modalidade ·
-Evolução financeira mensal · Recebimento do mês (recebido/aberto/vencido) ·
-Novos clientes × churn · Receita perdida × novos clientes · % Folha (12m).
+## Módulo Clientes (KPIs da carteira)
+Clientes ativos (status=ACTIVE) · Novos este mês (startedAt/createdAt no mês) ·
+Perdidos este mês (CHURNED + churnedAt no mês) · Renovações próximas
+(renewalMonth = mês atual, base ativa).
+
+## Lançar ao caixa
+Resultado positivo do mês pode ser lançado (total/parcial) ao "Caixa operacional"
+(`launchResultToCash`). Anti-duplicidade: marcador `[resultado:YYYY-MM]` na
+descrição do `CashBoxMovement`; disponível = resultado − já lançado.
+
+## Funções legadas (mantidas por compatibilidade — NÃO usar em telas novas)
+`getMonthlyExpectedRevenue/ReceivedRevenue/OpenRevenue/OverdueRevenue`,
+`computeMonthlyResult/computeOperationalMargin` (aliases do dicionário antigo,
+base `expectedTotal`), `getMonthlyAverageTicket` (Recebido/pagos — o card usa
+previsto/ativos). Zero consumidores hoje; candidatas a remoção na próxima limpeza.
+
+## Divergências conhecidas (ver ARQUITETURA_FINANCEIRA.md)
+1. `finance.lucro/margem` (receitas caixa − despesas pagas) ≠ Resultado do card —
+   usados pela Saúde Financeira e IA. **Pendente de unificação.**
+2. `getCommercialKpis` usa bases globais/dueDate/createdAt — alimenta só a IA.
+3. `getLossSummary` é sempre mês corrente (ignora filtro) — alimenta alertas.
+4. Módulo Cobranças calcula KPIs do ciclo sobre `paidTotal` (visão operacional do
+   grid) — difere do Recebido contábil por `Payment.paidAt`.

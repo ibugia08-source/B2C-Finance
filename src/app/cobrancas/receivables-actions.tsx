@@ -47,14 +47,22 @@ const TERM_OPTIONS = [
   { value: "12", label: "12 meses" },
 ];
 
+// Pills de status com par dark: — sem ele, fundo claro + texto escuro ficava
+// ilegível no tema escuro.
 const STATUS_PILL: Record<string, string> = {
-  UPCOMING: "bg-amber-50 text-amber-700 border-amber-200",
-  PAID: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PAID_LATE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PAID_OTHER_MONTH: "bg-slate-100 text-slate-700 border-slate-200",
-  OVERDUE: "bg-red-50 text-red-700 border-red-200",
-  DELINQUENT: "bg-red-100 text-red-800 border-red-200",
-  PARTIAL: "bg-amber-50 text-amber-700 border-amber-200",
+  UPCOMING:
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30",
+  PAID: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30",
+  PAID_LATE:
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30",
+  PAID_OTHER_MONTH:
+    "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-500/10 dark:text-slate-300 dark:border-slate-500/30",
+  OVERDUE:
+    "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/30",
+  DELINQUENT:
+    "bg-red-100 text-red-800 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/40",
+  PARTIAL:
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/30",
   REMOVED: "bg-muted text-muted-foreground border-transparent",
   NO_CHARGE: "bg-muted text-muted-foreground border-transparent",
 };
