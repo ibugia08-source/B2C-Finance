@@ -23,14 +23,19 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        // Uma família só (Inter via next/font) — títulos diferenciam por peso/
-        // tracking, não por fonte. Orbitron nunca foi carregada (fallback).
+        // Inter (display+corpo) via next/font — títulos diferenciam por peso/
+        // tracking, não por fonte. JetBrains Mono para valores financeiros.
         display: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
         sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
+        "border-soft": "hsl(var(--border-soft))",
+        surface: {
+          soft: "hsl(var(--surface-soft))",
+          strong: "hsl(var(--surface-strong))",
+        },
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
@@ -42,6 +47,8 @@ const config: Config = {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          active: "hsl(var(--primary-active))",
+          disabled: "hsl(var(--primary-disabled))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",

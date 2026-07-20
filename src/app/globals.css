@@ -17,6 +17,8 @@
 
     --primary: 212 75% 47%;           /* azul B2C #1E70D3 */
     --primary-foreground: 0 0% 100%;
+    --primary-active: 212 75% 38%;     /* #195FB5 press-state */
+    --primary-disabled: 212 55% 78%;   /* #A8C7EA azul esmaecido */
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 13%;
@@ -37,8 +39,13 @@
     --warning-soft: 45 95% 94%;
 
     --border: 214 32% 91%;             /* #E2E8F0 */
+    --border-soft: 220 20% 94%;        /* divisor mais leve (linhas de tabela) */
     --input: 214 32% 91%;
     --ring: 212 75% 47%;
+
+    /* Superfícies de apoio (busca pill, botões secundários, plates de ícone) */
+    --surface-soft: 210 30% 97%;
+    --surface-strong: 210 24% 94%;
 
     --gold: 41 72% 45%;
     --gold-soft: 41 80% 92%;
@@ -59,6 +66,8 @@
 
     --primary: 211 89% 62%;            /* #3B82F6 azul vivo + legível */
     --primary-foreground: 0 0% 100%;
+    --primary-active: 211 80% 52%;
+    --primary-disabled: 211 40% 32%;
 
     --secondary: 240 10% 15%;          /* #252A33 painel suave */
     --secondary-foreground: 210 11% 96.5%;
@@ -79,8 +88,12 @@
     --warning-soft: 42 50% 13%;
 
     --border: 240 12% 16%;             /* #2A2F3D divisores suaves */
+    --border-soft: 240 12% 13%;
     --input: 240 12% 16%;
     --ring: 211 89% 65%;
+
+    --surface-soft: 240 12% 11%;
+    --surface-strong: 240 10% 15%;
 
     --gold: 45 85% 58%;                /* #E8B547 dourado aquecido + vivo */
     --gold-soft: 45 40% 14%;           /* profundo gold background */
@@ -123,14 +136,11 @@
 }
 
 @layer components {
-  .card-premium {
-    background:
-      radial-gradient(600px 240px at 100% 0%, hsl(var(--primary) / 0.14), transparent 60%),
-      radial-gradient(500px 220px at 0% 100%, hsl(var(--primary) / 0.05), transparent 60%),
-      hsl(var(--card));
-    @apply rounded-xl border shadow-sm transition-shadow hover:shadow-md;
-  }
+  /* Números financeiros: fonte mono (JetBrains Mono via next/font) — valores
+     visualmente estáveis e fáceis de comparar (padrão institucional). */
   .stat-number {
+    font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-weight: 500;
     @apply tabular-nums tracking-tight;
   }
   .ring-gold {
@@ -251,38 +261,6 @@
     }
   }
 
-  /* Bounce In (attention-seeking) */
-  .bounce-in {
-    animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
-  }
-  @keyframes bounce-in {
-    0% {
-      opacity: 0;
-      transform: scale(0.3);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.05);
-    }
-    70% {
-      transform: scale(0.9);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
-
-  /* Shake (error feedback) */
-  .shake {
-    animation: shake 0.4s cubic-bezier(0.36, 0, 0.66, -0.56) both;
-  }
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-6px); }
-    50% { transform: translateX(6px); }
-    75% { transform: translateX(-3px); }
-  }
-
   /* Pulse (loading, notification) */
   .pulse-soft {
     animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -290,36 +268,6 @@
   @keyframes pulse-soft {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
-  }
-
-  /* Smooth Open (expand height) */
-  .smooth-open {
-    animation: smooth-open 0.25s ease-out forwards;
-  }
-  @keyframes smooth-open {
-    from {
-      opacity: 0;
-      max-height: 0;
-      overflow: hidden;
-    }
-    to {
-      opacity: 1;
-      max-height: 1000px;
-      overflow: visible;
-    }
-  }
-
-  /* Glow Effect (FAB, primary actions) */
-  .glow {
-    animation: glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-  @keyframes glow {
-    0%, 100% {
-      box-shadow: 0 0 5px hsl(var(--primary) / 0.3), 0 0 10px hsl(var(--primary) / 0.2);
-    }
-    50% {
-      box-shadow: 0 0 10px hsl(var(--primary) / 0.5), 0 0 20px hsl(var(--primary) / 0.3);
-    }
   }
 
   /* Smooth transitions for interactive elements */

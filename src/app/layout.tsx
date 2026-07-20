@@ -1,15 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/auth/current-user";
 
-// Fonte auto-hospedada via next/font: sem @import bloqueante, sem FOUT,
-// só os pesos realmente usados (400–700).
+// Fontes auto-hospedadas via next/font: sem @import bloqueante, sem FOUT.
+// Inter para display/corpo (institucional, pesos calmos); JetBrains Mono
+// para valores financeiros (números estáveis, fáceis de comparar).
 const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -34,7 +41,7 @@ const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   return (
-    <html lang="pt-BR" suppressHydrationWarning className={inter.variable}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

@@ -53,7 +53,7 @@ export function StatCard({
         <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
           {title}
         </p>
-        <p className={cn("text-xl sm:text-2xl font-bold mt-1.5 stat-number break-words", color)}>
+        <p className={cn("text-xl sm:text-2xl font-semibold mt-1.5 stat-number break-words", color)}>
           {value}
         </p>
         {hint && (

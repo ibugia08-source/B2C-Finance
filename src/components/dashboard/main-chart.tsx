@@ -67,7 +67,7 @@ export function MainChart({
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <p className="text-sm font-medium text-foreground">{title}</p>
-            <p className="text-2xl font-bold tabular-nums mt-1">
+            <p className="text-2xl font-semibold stat-number mt-1">
               {formatBRL(mode === "acumulado" ? total : selectedValue ?? total)}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -150,9 +150,9 @@ function VariationTooltip({
   return (
     <div className="rounded-lg border bg-popover px-3 py-2 shadow-lg text-xs">
       <p className="font-medium text-foreground mb-0.5">{label}</p>
-      <p className="tabular-nums text-foreground">{formatBRL(value)}</p>
+      <p className="stat-number text-foreground">{formatBRL(value)}</p>
       {variation != null && (
-        <p className={cn("tabular-nums mt-0.5", variation >= 0 ? "text-success" : "text-destructive")}>
+        <p className={cn("stat-number mt-0.5", variation >= 0 ? "text-success" : "text-destructive")}>
           {variation >= 0 ? "▲" : "▼"} {Math.abs(variation * 100).toFixed(1).replace(".", ",")}% vs mês anterior
         </p>
       )}
@@ -171,14 +171,14 @@ function Segmented<T extends string>({
   options: { value: T; label: string }[];
 }) {
   return (
-    <div className="inline-flex items-center rounded-lg border bg-muted/40 p-0.5">
+    <div className="inline-flex items-center rounded-full border bg-surface-strong/60 p-0.5">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            "px-2.5 py-1 text-xs font-medium rounded-md transition-colors",
+            "px-3 py-1 text-xs font-medium rounded-full transition-colors",
             value === o.value
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"

@@ -44,7 +44,7 @@ export function KpiCard({
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
             {title}
           </p>
-          <p className={cn("text-2xl font-bold tabular-nums mt-1.5", color)}>{value}</p>
+          <p className={cn("text-2xl font-semibold stat-number mt-1.5", color)}>{value}</p>
           {hint && <p className="text-[11px] text-muted-foreground mt-1 truncate">{hint}</p>}
         </CardContent>
       </Link>
