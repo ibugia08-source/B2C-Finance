@@ -56,6 +56,8 @@ const OWNED_MODELS = new Set<string>([
   "OfferService",
   "Upsell",
   "ExtraRevenue",
+  // Rotina diária (estado do dia: remoções + checklist)
+  "RoutineItemState",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

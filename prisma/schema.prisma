@@ -74,6 +74,7 @@ model User {
   ownedOfferServices  OfferService[] @relation("OwnerOfferService")
   ownedUpsells        Upsell[]       @relation("OwnerUpsell")
   ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
+  ownedRoutineItemStates RoutineItemState[] @relation("OwnerRoutineItemState")
 }
 
 model Person {
@@ -448,6 +449,25 @@ model CashBoxMovement {
 
   @@index([cashBoxId])
   @@index([date])
+  @@index([ownerId])
+}
+
+// Estado dos itens da ROTINA DIÁRIA por dia: itens removidos da rotina do dia
+// ("removed" — só oculta da lista operacional; NÃO altera cliente/cobrança/
+// despesa) e ações do checklist concluídas ("done"). Histórico auditável.
+model RoutineItemState {
+  id          String   @id @default(cuid())
+  routineDate DateTime // dia da rotina (meia-noite local)
+  itemType    String // "cobranca" | "pagamento" | "acao"
+  itemKey     String // clientId | transactionId | chave estável da ação
+  status      String // "removed" | "done"
+  reason      String? // motivo opcional da remoção
+  actorName   String? // quem executou a ação
+  ownerId     String?
+  owner       User?    @relation("OwnerRoutineItemState", fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([routineDate, itemType, itemKey])
   @@index([ownerId])
 }
 

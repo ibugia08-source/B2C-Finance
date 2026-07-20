@@ -229,6 +229,33 @@ export async function deleteExpense(
   }
 }
 
+/**
+ * Altera o VENCIMENTO de uma despesa (Rotina diária → "Alterar vencimento").
+ * Afeta apenas esta despesa/ocorrência — não existe recorrência encadeada no
+ * modelo (cada ocorrência é uma Transaction própria), então nada é quebrado.
+ */
+export async function setExpenseDueDate(
+  id: string,
+  dueDateRaw: string
+): Promise<ActionResult> {
+  await getViewer();
+  try {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dueDateRaw ?? "").trim());
+    if (!m) return { ok: false, error: "Informe uma data válida." };
+    // Meio-dia local evita a data "voltar um dia" por fuso horário.
+    const dueDate = new Date(+m[1], +m[2] - 1, +m[3], 12);
+    if (isNaN(dueDate.getTime())) return { ok: false, error: "Data inválida." };
+
+    await prisma.transaction.updateMany({ where: { id }, data: { dueDate } });
+    revalidatePath("/despesas");
+    revalidatePath("/dashboard");
+    revalidatePath("/rotina");
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao alterar o vencimento." };
+  }
+}
+
 export async function setExpenseStatus(
   id: string,
   status: (typeof STATUS)[number]

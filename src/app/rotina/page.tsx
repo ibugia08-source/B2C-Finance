@@ -6,13 +6,12 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getCashSummary, getFinanceSummary } from "@/lib/services/finance-metrics";
+import { getCashSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
-import { getRenewalOutlook, getReceiptsSummary, getPeriodRevenue } from "@/lib/services/revenue-metrics";
-import { getMonthlySeries } from "@/lib/services/dashboard-metrics";
-import { limitesUsadosPorCartao } from "@/lib/services/calculations";
+import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
 import { AISuggestionsPanel } from "./ai-suggestions";
 import { MarkExpensePaid } from "./expense-actions";
+import { DismissButton, ActionCheck, ExpenseDueDateDialog } from "./routine-controls";
 import { MONTH_LABEL } from "@/app/clientes/_meta";
 import { SavedViews } from "@/components/saved-views";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,24 +21,22 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { MessageDialog } from "@/app/cobrancas/message-dialog";
-import { NoteDialog } from "@/app/cobrancas/note-dialog";
 import { PaymentDialog } from "@/app/cobrancas/payment-dialog";
-import {
-  MessageSquareText, Handshake, BadgeDollarSign, NotebookPen,
-  AlertTriangle, CheckCircle2, ArrowRight, Star, Repeat2, ExternalLink,
-} from "lucide-react";
+import type { MessageTone } from "@/lib/billing-message";
+import { MessageSquareText, BadgeDollarSign, ExternalLink, ListChecks } from "lucide-react";
 
 /**
- * ROTINA DIÁRIA — central de AÇÕES do dia (não é uma segunda Dashboard).
- * Estrutura: resumo rápido (4 métricas operacionais) → alertas → IA →
- * 1. Cobranças de hoje · 2. Clientes vencidos · 3. Despesas ·
- * 4. Alertas · 5. Oportunidades — tudo com ação rápida na própria tela.
+ * ROTINA DIÁRIA — central de EXECUÇÃO do dia (a análise vive na Dashboard).
+ * Estrutura: métricas do dia → Cobranças (a receber) → Pagamentos (a pagar)
+ * → Ações de hoje (checklist) → Sugestões da IA (no final).
  *
- * Regras financeiras (camada central, MESMAS fórmulas do Dashboard):
- *  - Falta receber = previsto do mês − recebido do mês (getReceiptsSummary.openMonth)
- *  - Vencido = parte do falta receber já vencida (overdueOpenAmount ⊂ openMonth)
- *  - MRR/TCV via cobranças (Billing) por competência: TCV só tem cobrança no
- *    mês do fechamento/renovação — nunca aparece como recorrente mensal.
+ * Regras:
+ *  - Cobranças = clientes vencidos (vermelho) + vencendo hoje/próximos 3 dias
+ *    (amarelo). Fonte: Billing por competência (TCV nunca vira recorrente).
+ *  - Pagamentos = despesas da empresa vencidas (vermelho) + hoje/3 dias (amarelo).
+ *  - "Remover da rotina de hoje" só OCULTA o item do dia (RoutineItemState);
+ *    nunca apaga nem altera cliente, cobrança, despesa ou status financeiro.
+ *  - Checklist "Ações de hoje" persiste conclusões por dia.
  */
 
 const PRIORITY_META: Record<string, { label: string; variant: any }> = {
@@ -48,14 +45,10 @@ const PRIORITY_META: Record<string, { label: string; variant: any }> = {
   baixa: { label: "Baixa", variant: "secondary" },
 };
 
-const REVENUE_TYPE_LABEL: Record<string, string> = {
-  MRR: "MRR",
-  TCV: "TCV",
-  SETUP: "Setup",
-  ONE_TIME: "Avulsa",
-  RECOVERY: "Recuperação",
-  OTHER: "Outra",
-};
+// Cores suaves das linhas (design system): vencido = vermelho discreto;
+// vence hoje/3 dias = amarelo discreto.
+const ROW_OVERDUE = "bg-red-50/70 dark:bg-red-500/[0.07]";
+const ROW_SOON = "bg-warning-soft/60";
 
 export default async function RotinaPage() {
   await requireAdmin();
@@ -63,334 +56,383 @@ export default async function RotinaPage() {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const in4 = new Date(today);
+  in4.setDate(in4.getDate() + 4); // hoje + próximos 3 dias (limite exclusivo)
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const in7 = new Date(today);
-  in7.setDate(in7.getDate() + 7);
-  const in30 = new Date(today);
-  in30.setDate(in30.getDate() + 30);
-  const period = resolvePeriod({ periodo: "mes" });
 
-  const [
-    queue, cash, accounts, dueToday, payToday, criticalExpenses, weekExpenses,
-    receiptsMes, revenue, renewals, renewalWindows, finance, series, openUpsells, cardsAll,
-  ] = await Promise.all([
-    getCollectionQueue(),
-    getCashSummary(period),
-    prisma.account.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    // Bloco 1 — cobranças que VENCEM HOJE (Billing = respeita MRR/TCV por
-    // competência: TCV só existe como cobrança no mês do fechamento).
-    prisma.billing.findMany({
-      where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today, lt: tomorrow } },
-      orderBy: { amount: "desc" },
-      select: {
-        id: true, description: true, amount: true, paidTotal: true, dueDate: true,
-        revenueType: true, status: true, competenceMonth: true, competenceYear: true,
-        client: { select: { id: true, name: true, phone: true } },
-      },
-    }),
-    prisma.transaction.findMany({
-      where: {
-        type: "despesa", status: { in: ["pendente", "devendo"] },
-        OR: [{ dueDate: { gte: today, lt: tomorrow } }, { dueDate: null, date: { gte: today, lt: tomorrow } }],
-      },
-      orderBy: { amount: "desc" },
-      select: { id: true, description: true, amount: true },
-    }),
-    prisma.transaction.findMany({
-      where: { type: "despesa", status: { in: ["pendente", "devendo"] }, dueDate: { lt: today } },
-      orderBy: { dueDate: "asc" },
-      take: 10,
-      select: { id: true, description: true, amount: true, dueDate: true },
-    }),
-    prisma.transaction.findMany({
-      where: { type: "despesa", status: { in: ["pendente", "devendo"] }, dueDate: { gte: tomorrow, lt: in7 } },
-      orderBy: { dueDate: "asc" },
-      take: 10,
-      select: { id: true, description: true, amount: true, dueDate: true },
-    }),
-    // Métricas OFICIAIS do mês vigente — mesma função/fórmula do Dashboard.
-    // Falta receber = previsto − recebido; nunca soma inadimplência antiga
-    // (essa vive na fila de vencidos, seção própria).
-    getReceiptsSummary(period.start, period.end),
-    // Faturamento previsto do mês (MRR + TCV) — MESMA fonte do Dashboard.
-    getPeriodRevenue(period.start, period.end),
-    prisma.contract.findMany({
-      where: { status: { in: ["ACTIVE", "RENEWAL"] }, renewalDate: { not: null, lte: in30 } },
-      orderBy: { renewalDate: "asc" },
-      take: 6,
-      select: { id: true, title: true, renewalDate: true, client: { select: { name: true } } },
-    }),
-    getRenewalOutlook([0, 1]),
-    getFinanceSummary(resolvePeriod({ periodo: "mes" })),
-    getMonthlySeries({ period: resolvePeriod({ periodo: "mes" }) }),
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // ---- Fase 1: fila de vencidos (agregador com várias queries internas) ----
+  const queue = await getCollectionQueue();
+
+  // ---- Fase 2: consultas leves do dia (uma leva só) ----
+  const [accounts, dueSoonBillings, overdueExpenses, upcomingExpenses, states] =
+    await Promise.all([
+      prisma.account.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      // Cobranças que vencem hoje ou nos próximos 3 dias (a receber)
+      prisma.billing.findMany({
+        where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today, lt: in4 } },
+        orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
+        select: {
+          id: true, description: true, amount: true, paidTotal: true, dueDate: true,
+          competenceMonth: true, competenceYear: true,
+          client: { select: { id: true, name: true, phone: true } },
+        },
+      }),
+      // Pagamentos vencidos (a pagar)
+      prisma.transaction.findMany({
+        where: { type: "despesa", status: { in: ["pendente", "devendo"] }, dueDate: { lt: today } },
+        orderBy: { dueDate: "asc" },
+        take: 25,
+        select: { id: true, description: true, amount: true, dueDate: true, category: { select: { name: true } } },
+      }),
+      // Pagamentos que vencem hoje ou nos próximos 3 dias
+      prisma.transaction.findMany({
+        where: {
+          type: "despesa", status: { in: ["pendente", "devendo"] },
+          OR: [
+            { dueDate: { gte: today, lt: in4 } },
+            { dueDate: null, date: { gte: today, lt: tomorrow } },
+          ],
+        },
+        orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
+        take: 25,
+        select: { id: true, description: true, amount: true, dueDate: true, date: true, category: { select: { name: true } } },
+      }),
+      // Estado do dia: itens removidos da rotina + ações concluídas
+      prisma.routineItemState.findMany({
+        where: { routineDate: today },
+        select: { itemType: true, itemKey: true, status: true },
+      }),
+    ]);
+
+  // ---- Fase 3: contexto para o checklist ----
+  const [cash, renewalWindows, openUpsells] = await Promise.all([
+    getCashSummary(resolvePeriod({ periodo: "mes" })),
+    getRenewalOutlook([0]),
     prisma.upsell.findMany({
       where: { status: { in: ["OPPORTUNITY", "NEGOTIATION"] } },
       orderBy: { value: "desc" },
-      take: 5,
-      select: { id: true, title: true, value: true, responsible: true, client: { select: { name: true } } },
-    }),
-    prisma.creditCard.findMany({
-      where: { active: true },
-      select: { id: true, name: true, limitTotal: true, dueDay: true },
+      take: 3,
+      select: { id: true, value: true, responsible: true, client: { select: { name: true } } },
     }),
   ]);
 
-  // Responsável comercial dos clientes da fila de vencidos (Bloco 2).
-  const ownerByClient = new Map<string, string | null>(
-    queue.length
-      ? (
-          await prisma.client.findMany({
-            where: { id: { in: queue.map((q) => q.clientId) } },
-            select: { id: true, salesOwner: true },
-          })
-        ).map((c) => [c.id, c.salesOwner])
-      : []
-  );
-
   const n = (v: unknown) => (v == null ? 0 : Number(v));
+  const removed = new Set(
+    states.filter((s) => s.status === "removed").map((s) => `${s.itemType}:${s.itemKey}`)
+  );
+  const doneActions = new Set(
+    states.filter((s) => s.itemType === "acao" && s.status === "done").map((s) => s.itemKey)
+  );
+  const daysUntil = (d: Date) => Math.round((d.getTime() - today.getTime()) / 86400000);
+  const mesRef = (m: number, y: number) => `${MONTH_LABEL[m] ?? m}/${y}`;
 
-  // ===== Resumo rápido (métricas operacionais — nomenclatura única §18) =====
-  // Falta receber = FÓRMULA IDÊNTICA ao card "Em Aberto" do Dashboard:
-  // max(0, previsto (MRR+TCV via getPeriodRevenue) − recebido do mês).
-  const faltaReceber = Math.max(0, revenue.total - receiptsMes.receiptsCorrectMonth);
-  const vencidoMes = receiptsMes.overdueOpenAmount; // ⊂ falta receber (mesma fonte do Dashboard)
-  const totalPagarHoje = payToday.reduce((s, t) => s + n(t.amount), 0);
-  const totalCritico = criticalExpenses.reduce((s, t) => s + n(t.amount), 0);
-  const cobrarHoje = queue.filter((q) => !q.contactedToday);
+  // ===== COBRANÇAS (a receber) — vencidos + hoje/3 dias =====
+  const vencidos = queue.filter((q) => !removed.has(`cobranca:${q.clientId}`));
+  const queueIds = new Set(queue.map((q) => q.clientId));
+  const proximos = dueSoonBillings
+    .filter((b) => !removed.has(`cobranca:${b.client.id}`) && !queueIds.has(b.client.id))
+    .map((b) => {
+      const open = n(b.amount) - n(b.paidTotal);
+      const dias = daysUntil(b.dueDate);
+      // Prioridade: hoje/amanhã = Média · 2-3 dias = Baixa · valor alto sobe 1 nível
+      let priority: "alta" | "media" | "baixa" = dias <= 1 ? "media" : "baixa";
+      if (open >= 5000) priority = priority === "media" ? "alta" : "media";
+      return { b, open, dias, priority };
+    })
+    .filter((x) => x.open > 0);
+  // Ordenação: vencidos há mais tempo → recentes (a fila já vem por score;
+  // reordenamos por atraso) → vence hoje → próximos 3 dias.
+  const vencidosSorted = [...vencidos].sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-  // ===== Cartões: vencimento próximo (5 dias) e limite preocupante (>80%) =====
-  const usedByCard = await limitesUsadosPorCartao(cardsAll.map((c) => c.id));
-  const dayOfMonth = new Date().getDate();
-  const cardWarnings: { text: string; critical: boolean }[] = [];
-  for (const c of cardsAll) {
-    const daysToDue = (c.dueDay - dayOfMonth + 31) % 31;
-    if (daysToDue <= 5) {
-      cardWarnings.push({
-        text: `${c.name}: fatura vence dia ${c.dueDay} (${daysToDue === 0 ? "hoje" : `em ${daysToDue}d`})`,
-        critical: daysToDue <= 1,
-      });
-    }
-    const used = usedByCard.get(c.id) ?? 0;
-    if (c.limitTotal > 0 && used / c.limitTotal >= 0.8) {
-      cardWarnings.push({
-        text: `${c.name}: ${Math.round((used / c.limitTotal) * 100)}% do limite usado (${formatBRL(used)} de ${formatBRL(c.limitTotal)})`,
-        critical: used / c.limitTotal >= 0.95,
-      });
-    }
-  }
+  const cobrVencidasTotal = vencidosSorted.reduce((s, q) => s + q.totalOverdue, 0);
+  const cobrProximasTotal = proximos.reduce((s, x) => s + x.open, 0);
 
-  // ===== Bloco 4 — Alertas (o que está acontecendo · por que importa) =====
-  const last = (arr: number[]) => arr[arr.length - 1] ?? 0;
-  const prev = (arr: number[]) => arr[arr.length - 2] ?? 0;
-  const trendAlerts: { text: string; critical: boolean }[] = [];
-  if (vencidoMes > 0 && revenue.total > 0 && vencidoMes / revenue.total >= 0.25) {
-    trendAlerts.push({
-      text: `Vencido alto: ${formatBRL(vencidoMes)} (${Math.round((vencidoMes / revenue.total) * 100)}% do previsto do mês) — priorize a fila de cobrança.`,
-      critical: vencidoMes / revenue.total >= 0.4,
-    });
-  }
-  if (prev(series.mrr) > 0 && last(series.mrr) < prev(series.mrr)) {
-    trendAlerts.push({
-      text: `Queda de MRR: ${formatBRL(last(series.mrr) - prev(series.mrr))} vs mês anterior.`,
-      critical: last(series.mrr) < prev(series.mrr) * 0.9,
-    });
-  }
-  if (prev(series.receitas) > 0 && last(series.receitas) < prev(series.receitas) * 0.85) {
-    trendAlerts.push({
-      text: `Queda de faturamento: ${formatBRL(last(series.receitas))} vs ${formatBRL(prev(series.receitas))} no mês anterior.`,
-      critical: true,
-    });
-  }
-  if (prev(series.despesas) > 0 && last(series.despesas) > prev(series.despesas) * 1.2) {
-    trendAlerts.push({
-      text: `Alta de despesas: ${formatBRL(last(series.despesas))} (+${Math.round((last(series.despesas) / prev(series.despesas) - 1) * 100)}% vs mês anterior).`,
-      critical: false,
-    });
-  }
-  if (finance.receitas > 0 && finance.margem < 0.2) {
-    trendAlerts.push({
-      text: `Margem do mês em ${Math.round(finance.margem * 100)}% — abaixo do saudável (20%+).`,
-      critical: finance.margem < 0,
-    });
-  }
-  const cashAlerts: string[] = [];
-  if (cash.caixaDisponivel <= 0) cashAlerts.push(`Caixa disponível zerado/negativo (${formatBRL(cash.caixaDisponivel)}).`);
-  if (cash.projecao30 < 0) cashAlerts.push(`Projeção de caixa NEGATIVA em 30 dias (${formatBRL(cash.projecao30)}).`);
-  const pagarSemana = totalPagarHoje + totalCritico + weekExpenses.reduce((s, t) => s + n(t.amount), 0);
-  if (pagarSemana > cash.caixaDisponivel && cash.caixaDisponivel > 0)
-    cashAlerts.push(`Compromissos da semana (${formatBRL(pagarSemana)}) maiores que o caixa (${formatBRL(cash.caixaDisponivel)}).`);
+  // ===== PAGAMENTOS (a pagar) — vencidos + hoje/3 dias =====
+  type PayRow = {
+    id: string; description: string; category: string | null; amount: number;
+    dueDate: Date | null; overdue: boolean; dias: number;
+    priority: "alta" | "media" | "baixa";
+  };
+  const payPriority = (overdue: boolean, dias: number, amount: number, label: string): PayRow["priority"] => {
+    const critical = amount >= 3000 || /imposto|folha|das\b|fgts|inss/i.test(label);
+    if (overdue) return "alta";
+    if (dias <= 1) return critical ? "alta" : "media";
+    return critical ? "media" : "baixa";
+  };
+  const payVencidos: PayRow[] = overdueExpenses
+    .filter((e) => !removed.has(`pagamento:${e.id}`))
+    .map((e) => ({
+      id: e.id, description: e.description, category: e.category?.name ?? null,
+      amount: n(e.amount), dueDate: e.dueDate, overdue: true,
+      dias: e.dueDate ? Math.abs(daysUntil(e.dueDate)) : 0,
+      priority: payPriority(true, 0, n(e.amount), `${e.description} ${e.category?.name ?? ""}`),
+    }))
+    .sort((a, b) => b.dias - a.dias);
+  const payProximos: PayRow[] = upcomingExpenses
+    .filter((e) => !removed.has(`pagamento:${e.id}`))
+    .map((e) => {
+      const due = e.dueDate ?? e.date;
+      const dias = Math.max(0, daysUntil(due));
+      return {
+        id: e.id, description: e.description, category: e.category?.name ?? null,
+        amount: n(e.amount), dueDate: e.dueDate, overdue: false, dias,
+        priority: payPriority(false, dias, n(e.amount), `${e.description} ${e.category?.name ?? ""}`),
+      };
+    })
+    .sort((a, b) => a.dias - b.dias || b.amount - a.amount);
 
-  const renewalsThisMonth = renewalWindows[0];
-  const renewalsNextMonth = renewalWindows[1];
-  const promessas = queue.filter((q) => q.promise);
+  const pagVencidosTotal = payVencidos.reduce((s, p) => s + p.amount, 0);
+  const pagProximosTotal = payProximos.reduce((s, p) => s + p.amount, 0);
 
-  // ===== Ações pendentes COM PRIORIDADE (valor × atraso × impacto §8) =====
-  type Tarefa = { priority: "alta" | "media" | "baixa"; text: string; href: string };
-  const tarefas: Tarefa[] = [];
-  for (const q of cobrarHoje.filter((x) => x.priority === "alta").slice(0, 3)) {
-    tarefas.push({ priority: "alta", text: `Cobrar ${q.clientName} — ${formatBRL(q.totalOverdue)} vencidos há ${q.daysOverdue} dia(s)`, href: "#vencidos" });
-  }
-  if (cash.projecao30 < 0)
-    tarefas.push({ priority: "alta", text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo em 30 dias", href: "/cobrancas" });
-  if (totalCritico > 0)
-    tarefas.push({ priority: "alta", text: `Resolver ${criticalExpenses.length} despesa(s) vencida(s) — ${formatBRL(totalCritico)}`, href: "#despesas" });
-  for (const p of promessas.filter((x) => x.promise?.broken).slice(0, 2)) {
-    tarefas.push({ priority: "alta", text: `Retomar contato com ${p.clientName} — promessa de pagamento vencida`, href: "#vencidos" });
-  }
-  for (const b of dueToday.slice(0, 3)) {
-    tarefas.push({
-      priority: "media",
-      text: `Registrar pagamento de ${b.client.name} — ${formatBRL(n(b.amount) - n(b.paidTotal))} vence hoje`,
-      href: "#hoje",
+  // ===== AÇÕES DE HOJE (checklist com chaves estáveis por dia) =====
+  type Acao = { key: string; priority: "alta" | "media" | "baixa"; text: string; href?: string };
+  const acoes: Acao[] = [];
+  for (const q of vencidosSorted.filter((x) => x.priority === "alta").slice(0, 3)) {
+    acoes.push({
+      key: `cobrar:${q.clientId}`, priority: "alta",
+      text: `Cobrar ${q.clientName} — ${formatBRL(q.totalOverdue)} vencidos há ${q.daysOverdue} dia(s)`,
+      href: "#cobrancas",
     });
   }
-  if (totalPagarHoje > 0)
-    tarefas.push({ priority: "media", text: `Pagar ${payToday.length} despesa(s) de hoje — ${formatBRL(totalPagarHoje)}`, href: "#despesas" });
-  if (renewalsThisMonth && renewalsThisMonth.count > 0)
-    tarefas.push({
-      priority: "media",
-      text: `Encaminhar ${renewalsThisMonth.count} renovação(ões) do mês — ${formatBRL(renewalsThisMonth.expectedTotal)} esperado`,
-      href: `/clientes?mesRenovacao=${renewalsThisMonth.month}`,
+  for (const p of vencidosSorted.filter((x) => x.promise?.broken).slice(0, 2)) {
+    acoes.push({
+      key: `promessa:${p.clientId}`, priority: "alta",
+      text: `Retomar contato com ${p.clientName} — promessa de pagamento vencida`,
+      href: "#cobrancas",
     });
-  for (const w of cardWarnings.filter((c) => c.critical).slice(0, 2)) {
-    tarefas.push({ priority: "media", text: w.text, href: "/despesas?aba=cartoes" });
+  }
+  if (payVencidos.length > 0) {
+    acoes.push({
+      key: "despesas-vencidas", priority: "alta",
+      text: `Resolver ${payVencidos.length} pagamento(s) vencido(s) — ${formatBRL(pagVencidosTotal)}`,
+      href: "#pagamentos",
+    });
+  }
+  const pagHoje = payProximos.filter((p) => p.dias === 0);
+  if (pagHoje.length > 0) {
+    acoes.push({
+      key: "pagar-hoje", priority: "media",
+      text: `Pagar ${pagHoje.length} despesa(s) que vencem hoje — ${formatBRL(pagHoje.reduce((s, p) => s + p.amount, 0))}`,
+      href: "#pagamentos",
+    });
+  }
+  const cobrHoje = proximos.filter((x) => x.dias === 0);
+  if (cobrHoje.length > 0) {
+    acoes.push({
+      key: "cobrancas-hoje", priority: "media",
+      text: `Acompanhar ${cobrHoje.length} cobrança(s) que vencem hoje — ${formatBRL(cobrHoje.reduce((s, x) => s + x.open, 0))}`,
+      href: "#cobrancas",
+    });
+  }
+  if (cash.projecao30 < 0) {
+    acoes.push({
+      key: "caixa-projecao", priority: "alta",
+      text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo em 30 dias",
+      href: "/cobrancas",
+    });
+  }
+  const renov = renewalWindows[0];
+  if (renov && renov.count > 0) {
+    acoes.push({
+      key: `renovacoes:${renov.month}`, priority: "media",
+      text: `Encaminhar ${renov.count} renovação(ões) do mês — ${formatBRL(renov.expectedTotal)} esperado`,
+      href: `/clientes?mesRenovacao=${renov.month}`,
+    });
   }
   for (const u of openUpsells.slice(0, 2)) {
-    tarefas.push({
-      priority: "baixa",
+    acoes.push({
+      key: `upsell:${u.id}`, priority: "baixa",
       text: `Avançar upsell de ${u.client.name} — ${formatBRL(Number(u.value))}${u.responsible ? ` (${u.responsible})` : ""}`,
       href: "/upsell",
     });
   }
   const ORDER = { alta: 0, media: 1, baixa: 2 } as const;
-  tarefas.sort((a, b) => ORDER[a.priority] - ORDER[b.priority]);
+  acoes.sort((a, b) => {
+    const da = doneActions.has(a.key) ? 1 : 0;
+    const db = doneActions.has(b.key) ? 1 : 0;
+    return da - db || ORDER[a.priority] - ORDER[b.priority];
+  });
+  const acoesPendentes = acoes.filter((a) => !doneActions.has(a.key)).length;
 
-  const mesRef = (m: number, y: number) => `${MONTH_LABEL[m] ?? m}/${y}`;
+  // Tom padrão da mensagem por atraso (amigável → direta → urgente).
+  const toneFor = (daysOverdue: number): MessageTone =>
+    daysOverdue >= 15 ? "urgente" : daysOverdue > 0 ? "direto" : "amigavel";
+  const ROUTINE_TONES: MessageTone[] = ["amigavel", "direto", "urgente"];
 
   return (
     <div>
       <PageHeader
-        title="Rotina Diária"
-        description={`Acompanhe as ações financeiras que precisam de atenção hoje · ${formatDateBR(new Date())}`}
+        title="Rotina diária"
+        description="Acompanhe cobranças, pagamentos e ações financeiras que precisam de atenção hoje."
       />
 
       <div className="mb-3">
         <SavedViews module="rotina" />
       </div>
 
-      {/* ===== Resumo rápido — 4 métricas operacionais (§3/§18) ===== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      {/* ===== Métricas principais (hoje + próximos 3 dias) ===== */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
         <StatCard
-          href="/cobrancas"
-          title="Falta receber (mês)"
-          value={formatBRL(faltaReceber)}
-          hint="previsto do mês − recebido (= Em Aberto do Dashboard)"
+          href="#cobrancas"
+          title="Cobranças vencidas"
+          value={String(vencidosSorted.length)}
+          intent={vencidosSorted.length > 0 ? "negative" : "positive"}
+          hint={formatBRL(cobrVencidasTotal)}
         />
         <StatCard
-          href="#vencidos"
-          title="Vencido (mês)"
-          value={formatBRL(vencidoMes)}
-          intent={vencidoMes > 0 ? "negative" : "positive"}
-          hint="parte do falta receber já vencida"
+          href="#cobrancas"
+          title="Cobranças próximas"
+          value={String(proximos.length)}
+          intent={proximos.length > 0 ? "warning" : "default"}
+          hint={`${formatBRL(cobrProximasTotal)} · hoje a 3 dias`}
         />
         <StatCard
-          href="#despesas"
-          title="Despesas a pagar"
-          value={formatBRL(totalPagarHoje + totalCritico)}
-          intent={totalCritico > 0 ? "negative" : "default"}
-          hint={totalCritico > 0 ? `${formatBRL(totalCritico)} já vencido!` : `${payToday.length} despesa(s) hoje`}
+          href="#pagamentos"
+          title="Pagamentos vencidos"
+          value={String(payVencidos.length)}
+          intent={payVencidos.length > 0 ? "negative" : "positive"}
+          hint={formatBRL(pagVencidosTotal)}
         />
         <StatCard
-          href="#vencidos"
-          title="Clientes para cobrar"
-          value={String(queue.length)}
-          intent={queue.length > 0 ? "negative" : "positive"}
-          hint={`${cobrarHoje.length} ainda sem contato hoje`}
+          href="#pagamentos"
+          title="Pagamentos próximos"
+          value={String(payProximos.length)}
+          intent={payProximos.length > 0 ? "warning" : "default"}
+          hint={`${formatBRL(pagProximosTotal)} · hoje a 3 dias`}
+        />
+        <StatCard
+          href="#acoes"
+          title="Ações pendentes"
+          value={String(acoesPendentes)}
+          intent={acoesPendentes > 0 ? "warning" : "positive"}
+          hint={`${acoes.length - acoesPendentes} concluída(s) hoje`}
         />
       </div>
 
-      {/* ===== Bloco 4 — Alertas importantes ===== */}
-      {(cashAlerts.length > 0 || trendAlerts.length > 0 || cardWarnings.length > 0) && (
-        <Card className="mb-4 border-amber-500/40 bg-amber-500/5">
-          <CardContent className="p-4 space-y-1">
-            {cashAlerts.map((a, i) => (
-              <p key={`c${i}`} className="text-sm flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" /> {a}
-              </p>
-            ))}
-            {trendAlerts.map((a, i) => (
-              <p key={`t${i}`} className="text-sm flex items-center gap-2">
-                <AlertTriangle className={`h-4 w-4 shrink-0 ${a.critical ? "text-red-500" : "text-amber-500"}`} />
-                {a.text}
-              </p>
-            ))}
-            {cardWarnings.map((a, i) => (
-              <p key={`w${i}`} className="text-sm flex items-center gap-2">
-                <AlertTriangle className={`h-4 w-4 shrink-0 ${a.critical ? "text-red-500" : "text-amber-500"}`} />
-                {a.text}
-              </p>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="mb-6">
-        <AISuggestionsPanel />
-      </div>
-
-      {/* ===== Bloco 1 — Cobranças de hoje ===== */}
-      <h2 id="hoje" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
-        Cobranças de hoje
+      {/* ===== COBRANÇAS ===== */}
+      <h2 id="cobrancas" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
+        Cobranças
       </h2>
+      <p className="text-xs text-muted-foreground mb-3 -mt-1">
+        Valores a receber dos clientes — vencidos e vencendo até 3 dias.
+      </p>
       <Card className="mb-6">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Modalidade</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right">Valor devido</TableHead>
                 <TableHead>Vencimento</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Prioridade</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {dueToday.length === 0 && (
+              {vencidosSorted.length === 0 && proximos.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    Nenhuma cobrança vence hoje.
+                    Nenhuma cobrança precisando de atenção. 🎉
                   </TableCell>
                 </TableRow>
               )}
-              {dueToday.map((b) => {
-                const open = n(b.amount) - n(b.paidTotal);
+              {vencidosSorted.map((q) => {
+                const pm = PRIORITY_META[q.priority];
                 return (
-                  <TableRow key={b.id}>
+                  <TableRow key={q.clientId} className={ROW_OVERDUE}>
                     <TableCell>
-                      <span className="font-medium">{b.client.name}</span>
-                      <span className="block text-xs text-muted-foreground max-w-[260px] truncate">
+                      <Link href={`/clientes/${q.clientId}`} className="font-medium hover:underline">
+                        {q.clientName}
+                      </Link>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {q.billingCount} cobrança(s) em aberto
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-destructive">
+                      {formatBRL(q.totalOverdue)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {formatDateBR(q.anchorBilling.dueDate)}
+                      <span className="block text-[11px] text-destructive">
+                        venceu há {q.daysOverdue} dia(s)
+                      </span>
+                    </TableCell>
+                    <TableCell><Badge variant="destructive">Vencido</Badge></TableCell>
+                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 justify-end">
+                        <MessageDialog
+                          phone={q.phone}
+                          billingId={q.anchorBilling.id}
+                          tones={ROUTINE_TONES}
+                          defaultTone={toneFor(q.daysOverdue)}
+                          input={{
+                            clientName: q.clientName,
+                            openAmount: formatBRL(q.totalOverdue),
+                            dueDate: formatDateBR(q.anchorBilling.dueDate),
+                            daysOverdue: q.daysOverdue,
+                            serviceNames: q.anchorBilling.serviceNames,
+                            hasPromise: !!q.promise,
+                            contactCount: q.attempts,
+                          }}
+                          trigger={
+                            <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
+                              <MessageSquareText className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
+                        <PaymentDialog
+                          billing={{
+                            id: q.anchorBilling.id,
+                            openAmount: q.anchorBilling.openAmount,
+                            description: q.anchorBilling.description,
+                          }}
+                          accounts={accounts}
+                          trigger={
+                            <Button variant="ghost" size="icon" title="Registrar pagamento">
+                              <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
+                            </Button>
+                          }
+                        />
+                        <DismissButton itemType="cobranca" itemKey={q.clientId} itemLabel={q.clientName} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {proximos.map(({ b, open, dias, priority }) => {
+                const pm = PRIORITY_META[priority];
+                return (
+                  <TableRow key={b.id} className={ROW_SOON}>
+                    <TableCell>
+                      <Link href={`/clientes/${b.client.id}`} className="font-medium hover:underline">
+                        {b.client.name}
+                      </Link>
+                      <span className="block text-[11px] text-muted-foreground max-w-[220px] truncate">
                         {b.description}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {REVENUE_TYPE_LABEL[b.revenueType ?? ""] ?? "—"}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="text-right font-medium">{formatBRL(open)}</TableCell>
-                    <TableCell className="text-sm">hoje · {formatDateBR(b.dueDate)}</TableCell>
-                    <TableCell>
-                      <Badge variant={b.status === "PARTIAL" ? "warning" : "secondary"}>
-                        {b.status === "PARTIAL" ? "Parcial" : "Em aberto"}
-                      </Badge>
+                    <TableCell className="text-sm">
+                      {formatDateBR(b.dueDate)}
+                      <span className="block text-[11px] text-warning">
+                        {dias === 0 ? "vence hoje" : dias === 1 ? "vence amanhã" : `vence em ${dias} dias`}
+                      </span>
                     </TableCell>
+                    <TableCell><Badge variant="warning">Em aberto</Badge></TableCell>
+                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
                     <TableCell>
                       <div className="flex gap-1 justify-end">
                         <MessageDialog
                           phone={b.client.phone}
                           billingId={b.id}
+                          tones={ROUTINE_TONES}
+                          defaultTone="amigavel"
                           input={{
                             clientName: b.client.name,
                             openAmount: formatBRL(open),
@@ -402,7 +444,7 @@ export default async function RotinaPage() {
                             referenceMonth: mesRef(b.competenceMonth, b.competenceYear),
                           }}
                           trigger={
-                            <Button variant="ghost" size="icon" title="Gerar cobrança / WhatsApp">
+                            <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
                               <MessageSquareText className="h-4 w-4" />
                             </Button>
                           }
@@ -416,11 +458,7 @@ export default async function RotinaPage() {
                             </Button>
                           }
                         />
-                        <Button variant="ghost" size="icon" asChild title="Ver cliente">
-                          <Link href={`/clientes/${b.client.id}?tab=cobrancas`}>
-                            <ArrowRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                        <DismissButton itemType="cobranca" itemKey={b.client.id} itemLabel={b.client.name} />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -431,129 +469,72 @@ export default async function RotinaPage() {
         </CardContent>
       </Card>
 
-      {/* ===== Bloco 2 — Clientes vencidos (fila priorizada) ===== */}
-      <h2 id="vencidos" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
-        Clientes vencidos — fila priorizada
+      {/* ===== PAGAMENTOS ===== */}
+      <h2 id="pagamentos" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
+        Pagamentos
       </h2>
+      <p className="text-xs text-muted-foreground mb-3 -mt-1">
+        Valores que a agência precisa pagar — despesas vencidas e vencendo até 3 dias.
+      </p>
       <Card className="mb-6">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Despesa</TableHead>
+                <TableHead>Categoria</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+                <TableHead>Vencimento</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Prioridade</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead className="text-right">Vencido</TableHead>
-                <TableHead>Atraso</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead>Situação</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {queue.length === 0 && (
+              {payVencidos.length === 0 && payProximos.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                    Nenhuma cobrança vencida. Carteira em dia! 🎉
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                    Nenhum pagamento precisando de atenção. 🎉
                   </TableCell>
                 </TableRow>
               )}
-              {queue.map((q) => {
-                const pm = PRIORITY_META[q.priority];
+              {[...payVencidos, ...payProximos].map((p) => {
+                const pm = PRIORITY_META[p.priority];
                 return (
-                  <TableRow key={q.clientId} className={q.contactedToday ? "opacity-60" : ""}>
-                    <TableCell>
-                      <Badge variant={pm.variant}>{pm.label}</Badge>
+                  <TableRow key={p.id} className={p.overdue ? ROW_OVERDUE : ROW_SOON}>
+                    <TableCell className="font-medium max-w-[240px] truncate">{p.description}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{p.category ?? "—"}</TableCell>
+                    <TableCell className={`text-right font-medium ${p.overdue ? "text-destructive" : ""}`}>
+                      {formatBRL(p.amount)}
                     </TableCell>
-                    <TableCell>
-                      <span className="font-medium flex items-center gap-1.5">
-                        {q.clientName}
-                        {q.keyAccount && <Star className="h-3.5 w-3.5 text-amber-500" aria-label="Cliente-chave" />}
-                        {q.recurring && <Repeat2 className="h-3.5 w-3.5 text-sky-500" aria-label="Recorrente" />}
+                    <TableCell className="text-sm">
+                      {p.dueDate ? formatDateBR(p.dueDate) : "hoje"}
+                      <span className={`block text-[11px] ${p.overdue ? "text-destructive" : "text-warning"}`}>
+                        {p.overdue
+                          ? `vencido há ${p.dias} dia(s)`
+                          : p.dias === 0 ? "vence hoje" : p.dias === 1 ? "vence amanhã" : `vence em ${p.dias} dias`}
                       </span>
-                      <span className="block text-xs text-muted-foreground max-w-[240px]">
-                        {q.reasons.slice(0, 2).join(" · ")}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-red-600">
-                      {formatBRL(q.totalOverdue)}
-                      <span className="block text-[10px] text-muted-foreground">{q.billingCount} cobrança(s)</span>
-                    </TableCell>
-                    <TableCell className="text-sm">{q.daysOverdue}d</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {ownerByClient.get(q.clientId) ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {q.contactedToday && (
-                        <span className="flex items-center gap-1 text-emerald-600">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> contatado hoje
-                        </span>
-                      )}
-                      {q.promise ? (
-                        <span className={q.promise.broken ? "text-red-600 font-medium" : ""}>
-                          promessa {q.promise.at ? `p/ ${formatDateBR(q.promise.at)}` : "sem data"}
-                          {q.promise.broken ? " (vencida!)" : ""}
-                        </span>
-                      ) : q.lastContactAt ? (
-                        <>último contato {formatDateBR(q.lastContactAt)} · {q.attempts} tentativa(s)</>
-                      ) : (
-                        "nunca contatado"
-                      )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-1 justify-end">
-                        <MessageDialog
-                          phone={q.phone}
-                          billingId={q.anchorBilling.id}
-                          input={{
-                            clientName: q.clientName,
-                            openAmount: formatBRL(q.totalOverdue),
-                            dueDate: formatDateBR(q.anchorBilling.dueDate),
-                            daysOverdue: q.daysOverdue,
-                            serviceNames: q.anchorBilling.serviceNames,
-                            hasPromise: !!q.promise,
-                            contactCount: q.attempts,
-                          }}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Cobrar no WhatsApp / gerar mensagem">
-                              <MessageSquareText className="h-4 w-4" />
-                            </Button>
-                          }
+                      <Badge variant={p.overdue ? "destructive" : "warning"}>
+                        {p.overdue ? "Vencido" : "Pendente"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 justify-end items-center">
+                        <MarkExpensePaid id={p.id} />
+                        <ExpenseDueDateDialog
+                          expenseId={p.id}
+                          description={p.description}
+                          currentDue={p.dueDate ? iso(p.dueDate) : iso(today)}
                         />
-                        <NoteDialog
-                          billingId={q.anchorBilling.id}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Registrar contato / resposta">
-                              <NotebookPen className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <NoteDialog
-                          billingId={q.anchorBilling.id}
-                          promise
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Registrar promessa de pagamento">
-                              <Handshake className="h-4 w-4 text-amber-600" />
-                            </Button>
-                          }
-                        />
-                        <PaymentDialog
-                          billing={{
-                            id: q.anchorBilling.id,
-                            openAmount: q.anchorBilling.openAmount,
-                            description: q.anchorBilling.description,
-                          }}
-                          accounts={accounts}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Registrar pagamento (cobrança mais antiga)">
-                              <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                          }
-                        />
-                        <Button variant="ghost" size="icon" asChild title="Ver recebimentos do cliente">
-                          <Link href={`/clientes/${q.clientId}?tab=cobrancas`}>
-                            <ArrowRight className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" asChild title="Ver despesa">
+                          <Link href="/despesas">
+                            <ExternalLink className="h-4 w-4 text-muted-foreground" />
                           </Link>
                         </Button>
+                        <DismissButton itemType="pagamento" itemKey={p.id} itemLabel={p.description} />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -564,154 +545,53 @@ export default async function RotinaPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ===== Ações pendentes (tarefas com prioridade) ===== */}
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-3">
-              Ações pendentes de hoje
+      {/* ===== AÇÕES DE HOJE ===== */}
+      <h2 id="acoes" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
+        Ações de hoje
+      </h2>
+      <Card className="mb-6">
+        <CardContent className="p-5">
+          {acoes.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              Nada urgente hoje. Dia tranquilo! 🎉
             </p>
-            {tarefas.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Nada urgente. Dia tranquilo! 🎉</p>
-            ) : (
-              <ol className="space-y-2.5">
-                {tarefas.slice(0, 10).map((t, i) => {
-                  const pm = PRIORITY_META[t.priority];
-                  return (
-                    <li key={i}>
-                      <Link href={t.href} className="group flex items-start gap-2.5 text-sm">
-                        <Badge variant={pm.variant} className="shrink-0 mt-0.5 text-[10px] px-1.5">
+          ) : (
+            <ul className="space-y-2.5">
+              {acoes.map((a) => {
+                const pm = PRIORITY_META[a.priority];
+                const done = doneActions.has(a.key);
+                return (
+                  <li key={a.key} className="flex items-start gap-2">
+                    <ActionCheck itemKey={a.key} done={done}>
+                      <span className="inline-flex items-start gap-2">
+                        <Badge variant={done ? "outline" : pm.variant} className="shrink-0 mt-0.5 text-[10px] px-1.5">
                           {pm.label}
                         </Badge>
-                        <span className="group-hover:underline">{t.text}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ===== Bloco 3 — Despesas do dia / próximas ===== */}
-        <Card id="despesas" className="scroll-mt-24">
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-3">
-              Despesas {totalCritico > 0 && <span className="text-red-600">· vencidas!</span>}
-            </p>
-            {payToday.length === 0 && criticalExpenses.length === 0 && weekExpenses.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma despesa precisando de atenção.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {criticalExpenses.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2">
-                    <span className="text-red-600 min-w-0">
-                      <span className="block truncate">{e.description}</span>
-                      <span className="block text-[10px]">vencida em {e.dueDate ? formatDateBR(e.dueDate) : "—"}</span>
-                    </span>
-                    <span className="flex items-center gap-1 whitespace-nowrap">
-                      <span className="font-medium text-red-600">{formatBRL(Number(e.amount))}</span>
-                      <MarkExpensePaid id={e.id} />
-                    </span>
-                  </li>
-                ))}
-                {payToday.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0">
-                      <span className="block truncate">{e.description}</span>
-                      <span className="block text-[10px] text-muted-foreground">vence hoje</span>
-                    </span>
-                    <span className="flex items-center gap-1 whitespace-nowrap">
-                      <span className="font-medium">{formatBRL(Number(e.amount))}</span>
-                      <MarkExpensePaid id={e.id} />
-                    </span>
-                  </li>
-                ))}
-                {weekExpenses.map((e) => (
-                  <li key={e.id} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0">
-                      <span className="block truncate">{e.description}</span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        vence {e.dueDate ? formatDateBR(e.dueDate) : "—"}
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-1 whitespace-nowrap">
-                      <span className="font-medium">{formatBRL(Number(e.amount))}</span>
-                      <MarkExpensePaid id={e.id} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button variant="outline" size="sm" className="mt-3 w-full" asChild>
-              <Link href="/despesas">
-                <ExternalLink className="h-3.5 w-3.5 mr-1" /> Ver despesas
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* ===== Bloco 5 — Oportunidades ===== */}
-        <Card>
-          <CardContent className="p-5">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-3">
-              Oportunidades
-            </p>
-            {(!renewalsThisMonth || renewalsThisMonth.count === 0) &&
-            renewals.length === 0 &&
-            openUpsells.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma oportunidade mapeada.</p>
-            ) : (
-              <div className="space-y-4 text-sm">
-                {renewalsThisMonth && renewalsThisMonth.count > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-amber-600 mb-1.5">Renovações do mês</p>
-                    <Link
-                      href={`/clientes?mesRenovacao=${renewalsThisMonth.month}`}
-                      className="hover:underline"
-                    >
-                      {renewalsThisMonth.count} cliente(s) · {formatBRL(renewalsThisMonth.expectedTotal)} esperado
-                    </Link>
-                    <span className="block text-xs text-muted-foreground">
-                      próximo mês: {renewalsNextMonth?.count ?? 0} renovação(ões)
-                    </span>
-                  </div>
-                )}
-                {renewals.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1.5">Contratos para renovar (30d)</p>
-                    <ul className="space-y-1">
-                      {renewals.map((r) => (
-                        <li key={r.id} className="flex justify-between gap-2">
-                          <span className="truncate">{r.client.name}</span>
-                          <span className="whitespace-nowrap text-muted-foreground">
-                            {r.renewalDate ? formatDateBR(r.renewalDate) : "—"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {openUpsells.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-emerald-600 mb-1.5">Upsell em negociação</p>
-                    <ul className="space-y-1">
-                      {openUpsells.map((u) => (
-                        <li key={u.id} className="flex justify-between gap-2">
-                          <Link href="/upsell" className="truncate hover:underline">
-                            {u.client.name}
+                        {a.href ? (
+                          <Link href={a.href} className={done ? "" : "hover:underline"}>
+                            {a.text}
                           </Link>
-                          <span className="whitespace-nowrap font-medium">{formatBRL(Number(u.value))}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                        ) : (
+                          a.text
+                        )}
+                      </span>
+                    </ActionCheck>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {acoes.length > 0 && (
+            <p className="text-[11px] text-muted-foreground mt-4 flex items-center gap-1.5">
+              <ListChecks className="h-3.5 w-3.5" />
+              {acoesPendentes} pendente(s) · {acoes.length - acoesPendentes} concluída(s) — o checklist zera a cada dia.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ===== Sugestões inteligentes (IA) — no final ===== */}
+      <AISuggestionsPanel />
     </div>
   );
 }

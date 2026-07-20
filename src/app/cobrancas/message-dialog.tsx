@@ -27,14 +27,22 @@ export function MessageDialog({
   phone,
   trigger,
   billingId,
+  tones,
+  defaultTone,
 }: {
   input: BillingMessageInput;
   phone: string | null;
   trigger: React.ReactNode;
   /** quando informado, registra no histórico que a cobrança foi enviada/copiada */
   billingId?: string;
+  /** restringe os tons exibidos (ex.: Rotina diária usa amigável/direto/urgente) */
+  tones?: MessageTone[];
+  /** tom pré-selecionado (default: "padrao" ou o 1º de `tones`) */
+  defaultTone?: MessageTone;
 }) {
-  const [tone, setTone] = useState<MessageTone>("padrao");
+  const [tone, setTone] = useState<MessageTone>(
+    defaultTone ?? tones?.[0] ?? "padrao"
+  );
   const [copied, setCopied] = useState(false);
   const [text, setText] = useState<string | null>(null);
 
@@ -66,8 +74,8 @@ export function MessageDialog({
                 setText(null); // volta ao template do novo tom
               }}
             >
-              {Object.entries(TONE_LABEL).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
+              {(tones ?? (Object.keys(TONE_LABEL) as MessageTone[])).map((v) => (
+                <option key={v} value={v}>{TONE_LABEL[v]}</option>
               ))}
             </Select>
           </div>

@@ -38,7 +38,7 @@ export type NavItem = {
 // Fonte única de navegação — usada pela sidebar (desktop), pela barra inferior e pela gaveta "Mais" (mobile).
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", short: "Início", icon: LayoutDashboard, primary: true },
-  { href: "/rotina", label: "Rotina do dia", short: "Rotina", icon: CalendarCheck2, adminOnly: true },
+  { href: "/rotina", label: "Rotina diária", short: "Rotina", icon: CalendarCheck2, adminOnly: true },
 
   { section: "Agência", href: "/clientes", label: "Clientes", short: "Clientes", icon: Building2, adminOnly: true, primary: true },
   { section: "Agência", href: "/contratos", label: "Contratos", icon: FileSignature, adminOnly: true },
