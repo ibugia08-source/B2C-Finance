@@ -89,11 +89,19 @@ export function SidebarWithToggle({
           expanded ? "lg:w-72" : "lg:w-20"
         )}
       >
-        {/* Header with Logo & Toggle */}
-        <div className="border-b px-4 py-4 lg:px-6 lg:py-5">
-          <div className="flex items-center justify-between gap-2">
-            {expanded && (
-              <div className="flex items-end gap-2 flex-1">
+        {/* Header with Logo & Toggle.
+            Recolhida (w-20 = 80px): logo e botão EMPILHADOS e centralizados —
+            lado a lado o wordmark (64px) + botão (32px) não cabem e o logo
+            vazava por cima do hambúrguer. */}
+        <div className={cn("border-b", expanded ? "px-4 py-4 lg:px-6 lg:py-5" : "px-2 py-4")}>
+          <div
+            className={cn(
+              "flex items-center gap-2",
+              expanded ? "justify-between" : "flex-col justify-center gap-2.5"
+            )}
+          >
+            {expanded ? (
+              <div className="flex items-end gap-2 flex-1 min-w-0">
                 <B2CLogo height={30} />
                 <div className="pb-0.5">
                   <h1 className="text-lg font-semibold tracking-tight leading-none text-foreground">
@@ -101,11 +109,8 @@ export function SidebarWithToggle({
                   </h1>
                 </div>
               </div>
-            )}
-            {!expanded && (
-              <div className="mx-auto">
-                <B2CLogo height={24} />
-              </div>
+            ) : (
+              <B2CLogo height={16} />
             )}
             <button
               onClick={toggleExpand}
