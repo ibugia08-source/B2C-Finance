@@ -19,7 +19,14 @@ const OPTIONS: { key: Theme; icon: typeof Sun; label: string }[] = [
   { key: "dark", icon: Moon, label: "Escuro" },
 ];
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  orientation = "horizontal",
+}: {
+  className?: string;
+  /** "vertical" empilha os 3 botões — usado na sidebar recolhida (80px). */
+  orientation?: "horizontal" | "vertical";
+}) {
   const [theme, setTheme] = useState<Theme>("dark");
   const [mounted, setMounted] = useState(false);
 
@@ -48,6 +55,7 @@ export function ThemeToggle({ className }: { className?: string }) {
     <div
       className={cn(
         "inline-flex items-center gap-0.5 rounded-lg border bg-card/60 p-0.5",
+        orientation === "vertical" && "flex-col",
         className
       )}
       role="group"

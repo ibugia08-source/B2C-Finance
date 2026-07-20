@@ -161,28 +161,33 @@ export function SidebarWithToggle({
           })}
         </nav>
 
-        {/* Footer: Theme & User */}
-        <div className="border-t px-3 py-3 space-y-2">
-          <div className="flex items-center justify-between px-2 gap-2">
-            {expanded && (
+        {/* Footer: Theme & User.
+            Recolhida (80px): tudo empilhado e centralizado — o toggle de tema
+            horizontal (~92px) e o UserMenu completo (~250px) vazavam da barra. */}
+        {expanded ? (
+          <div className="border-t px-3 py-3 space-y-2">
+            <div className="flex items-center justify-between px-2 gap-2">
               <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
                 Tema
               </span>
-            )}
-            <ThemeToggle />
-          </div>
-          {user && (
-            <div className="flex items-center justify-center lg:justify-start px-2">
-              <UserMenu user={user} />
+              <ThemeToggle />
             </div>
-          )}
-          {expanded && (
+            {user && (
+              <div className="flex items-center justify-start px-2">
+                <UserMenu user={user} />
+              </div>
+            )}
             <div className="border-t pt-2 px-2 text-[11px] text-muted-foreground flex items-center justify-between">
               <span>B2C Finance</span>
               <span className="text-primary font-medium">by B2C</span>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="border-t px-2 py-3 flex flex-col items-center gap-3">
+            <ThemeToggle orientation="vertical" />
+            {user && <UserMenu user={user} compact />}
+          </div>
+        )}
       </aside>
 
       {/* Tablet (< lg): o menu abre pelo hambúrguer do MobileHeader — sem

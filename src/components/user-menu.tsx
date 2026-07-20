@@ -6,8 +6,11 @@ import { LogOut } from "lucide-react";
 
 export function UserMenu({
   user,
+  compact = false,
 }: {
   user: { name: string; email: string; role: "ADMIN" | "USER" };
+  /** Sidebar recolhida (80px): só avatar + botão sair, empilhados. */
+  compact?: boolean;
 }) {
   const [pending, start] = useTransition();
   const initials = user.name
@@ -16,6 +19,30 @@ export function UserMenu({
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  if (compact) {
+    return (
+      <div className="flex flex-col items-center gap-1.5 py-1">
+        <div
+          title={`${user.name} · ${user.email}`}
+          className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold"
+        >
+          {initials || "U"}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 min-h-0 min-w-0"
+          title="Sair"
+          disabled={pending}
+          onClick={() => start(() => logoutAction())}
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-3 px-3 py-3 border-t bg-card/40">
