@@ -1,8 +1,6 @@
 import { PageHeader } from "@/components/page-header";
-import { SavedViews } from "@/components/saved-views";
-import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, monthRange } from "@/lib/format";
+import { monthRange } from "@/lib/format";
 import {
   getMonthDelinquencies,
   type MonthDelinquency,
@@ -12,14 +10,13 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
-import { ContractUploadDialog } from "./contract-upload-dialog";
 import { ClientFilters } from "./filters";
+import { KpiCard } from "./kpi-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { PageSizeSelect } from "./page-size-select";
 import { PAGE_SIZES } from "./_meta";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
-import { getPeriodRevenue } from "@/lib/services/revenue-metrics";
 import type { DelinquencyValue } from "./_meta";
 
 type Search = {
@@ -32,6 +29,8 @@ type Search = {
   segmento?: string;
   responsavel?: string;
   ordem?: string; // az | za
+  entrada?: string; // "mes" → só clientes que entraram no mês atual
+  perda?: string; // "mes" → só clientes perdidos no mês atual
   pagina?: string;
   porPagina?: string; // 20 | 40 | 100 linhas por página
 };
@@ -43,12 +42,34 @@ export default async function ClientesPage({
 }) {
   await requireAdmin();
 
+  const now0 = new Date();
+  const { start: mesStart, end: mesEnd } = monthRange(now0);
+
   // ---------- where (filtros que rodam no banco) ----------
   const where: any = {};
   // Perdidos saem da lista padrão (botão "Perda de cliente"); para revê-los,
-  // use o chip/filtro de status "Perdido / Cancelado".
-  if (searchParams.status) where.status = searchParams.status;
-  else where.status = { not: "CHURNED" };
+  // use o filtro de status "Perdido / Cancelado" ou o card "Perdidos este mês".
+  if (searchParams.perda === "mes") {
+    // Card "Clientes perdidos este mês": perdidos com saída no mês atual.
+    where.status = "CHURNED";
+    where.churnedAt = { gte: mesStart, lt: mesEnd };
+  } else if (searchParams.status) {
+    where.status = searchParams.status;
+  } else {
+    where.status = { not: "CHURNED" };
+  }
+  // Card "Novos clientes este mês": entrada no mês (startedAt; fallback createdAt).
+  if (searchParams.entrada === "mes") {
+    where.AND = [
+      ...(where.AND ?? []),
+      {
+        OR: [
+          { startedAt: { gte: mesStart, lt: mesEnd } },
+          { startedAt: null, createdAt: { gte: mesStart, lt: mesEnd } },
+        ],
+      },
+    ];
+  }
   if (searchParams.segmento) where.segment = searchParams.segmento;
   if (searchParams.modalidade) where.modality = searchParams.modalidade;
   if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
@@ -99,7 +120,7 @@ export default async function ClientesPage({
   // ---------- índice leve de TODOS os clientes do filtro (ordenado) ----------
   // Usado para: (1) inadimplência do mês por cliente, (2) filtro Pago/Devendo,
   // (3) seleção "todos os filtrados". Campos mínimos → barato mesmo com muitos.
-  const [index, services, segmentRows, ownerRows, ativos, novosMes, revenue] =
+  const [index, segmentRows, ownerRows, ativos, novosMes, perdidosMes, renovacoesProx] =
     await Promise.all([
       prisma.client.findMany({
         where,
@@ -111,11 +132,6 @@ export default async function ClientesPage({
           delinquencyOverrideYear: true,
           delinquencyOverrideBy: true,
         },
-      }),
-      prisma.service.findMany({
-        where: { active: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
       }),
       prisma.client.findMany({
         where: { segment: { not: null } },
@@ -130,12 +146,26 @@ export default async function ClientesPage({
         orderBy: { salesOwner: "asc" },
       }),
       prisma.client.count({ where: { status: "ACTIVE" } }),
-      prisma.client.count({ where: { startedAt: { gte: start, lt: end } } }),
-      // Faturamento do mês pela camada central (mesma fonte do Dashboard):
-      //  · revenue.mrr = Σ mensalidade dos clientes MRR ativos no mês
-      //  · revenue.tcv = Σ cobranças TCV com competência no mês (valor cheio)
-      // Nunca mistura modalidades nem rateia TCV.
-      getPeriodRevenue(start, end),
+      // Novos do mês: entrada (startedAt; fallback createdAt) no mês atual.
+      prisma.client.count({
+        where: {
+          OR: [
+            { startedAt: { gte: start, lt: end } },
+            { startedAt: null, createdAt: { gte: start, lt: end } },
+          ],
+        },
+      }),
+      // Perdidos este mês: saída (churnedAt) dentro do mês atual.
+      prisma.client.count({
+        where: { status: "CHURNED", churnedAt: { gte: start, lt: end } },
+      }),
+      // Renovações próximas: mês de renovação = mês atual (clientes da base).
+      prisma.client.count({
+        where: {
+          renewalMonth: curMonth,
+          status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] },
+        },
+      }),
     ]);
 
   const autoDelinq = await getMonthDelinquencies(
@@ -244,9 +274,6 @@ export default async function ClientesPage({
 
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
-  const mrrBase = revenue.mrr; // Σ mensalidade dos clientes MRR ativos no mês
-  const tcvTotal = revenue.tcv; // Σ TCV faturado no mês (adesões/renovações)
-  const devendoMes = index.filter((c) => effectiveDelinquency(c).value === "DEVENDO").length;
 
   function pageHref(p: number) {
     const params = new URLSearchParams(searchParams as Record<string, string>);
@@ -259,48 +286,50 @@ export default async function ClientesPage({
       <PageHeader
         title="Clientes"
         description="Carteira de clientes da B2C Gestão — cadastro, financeiro e recebimentos em um só módulo"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <ContractUploadDialog />
-            <ClientDialog />
-          </div>
-        }
+        actions={<ClientDialog />}
       />
 
       <CobrancasTabs active="/clientes" />
 
-      <div className="mb-3 print:hidden">
-        <SavedViews module="clientes" />
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
-        <StatCard title="Clientes ativos" value={String(ativos)} intent="positive" />
-        <StatCard title="Novos no mês" value={String(novosMes)} />
-        <StatCard
-          title="Devendo no mês"
-          value={String(devendoMes)}
-          intent={devendoMes > 0 ? "negative" : "default"}
-          hint="Inadimplência da competência atual"
+      {/* ===== Métricas da carteira (4) — clicáveis, com tooltip "?" ===== */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <KpiCard
+          title="Clientes ativos"
+          value={String(ativos)}
+          tone="pos"
+          help="Total de clientes com status ativo na carteira."
+          hint="clique para filtrar os ativos"
+          href="/clientes?status=ACTIVE"
         />
-        <StatCard
-          title="MRR base (ativos)"
-          value={formatBRL(mrrBase)}
-          hint="Soma das mensalidades dos clientes MRR ativos"
+        <KpiCard
+          title="Novos clientes este mês"
+          value={String(novosMes)}
+          tone={novosMes > 0 ? "pos" : "default"}
+          help="Quantidade de clientes que entraram na carteira neste mês (data de entrada; sem ela, data de cadastro)."
+          hint="clique para ver os novos do mês"
+          href="/clientes?entrada=mes"
         />
-        <StatCard
-          title="TCV total (mês)"
-          value={formatBRL(tcvTotal)}
-          hint="Valor cheio faturado no mês dos clientes TCV"
+        <KpiCard
+          title="Clientes perdidos este mês"
+          value={String(perdidosMes)}
+          tone={perdidosMes > 0 ? "neg" : "default"}
+          help="Quantidade de clientes que foram perdidos neste mês (data da saída registrada na perda)."
+          hint="clique para ver os perdidos do mês"
+          href="/clientes?perda=mes"
+        />
+        <KpiCard
+          title="Renovações próximas"
+          value={String(renovacoesProx)}
+          tone={renovacoesProx > 0 ? "warn" : "default"}
+          help="Clientes com renovação prevista para o período próximo (mês de renovação = mês atual)."
+          hint="clique para ver as renovações"
+          href={`/clientes?mesRenovacao=${curMonth}`}
         />
       </div>
 
       <Card className="mb-4">
         <CardContent className="p-4">
-          <ClientFilters
-            services={services.map((s) => ({ value: s.id, label: s.name }))}
-            segments={segments}
-            owners={owners}
-          />
+          <ClientFilters segments={segments} owners={owners} />
         </CardContent>
       </Card>
 

@@ -25,10 +25,16 @@ export function ClientRowDesktop({
   ctx: ColumnCtx;
 }) {
   const router = useRouter();
+  // Cliente devendo no mês → destaque vermelho MUITO suave (legível, discreto).
+  const devendo = client.delinquency?.value === "DEVENDO";
   return (
     <TableRow
       data-state={selected ? "selected" : undefined}
-      className="cursor-pointer"
+      className={`cursor-pointer ${
+        devendo
+          ? "bg-red-50/70 hover:bg-red-50 dark:bg-red-500/[0.07] dark:hover:bg-red-500/[0.11] border-l-2 border-l-red-300 dark:border-l-red-500/40"
+          : ""
+      }`}
       onClick={() => router.push(`/clientes/${client.id}`)}
       title="Abrir a área do cliente"
     >

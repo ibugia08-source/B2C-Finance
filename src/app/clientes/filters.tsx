@@ -1,10 +1,11 @@
 "use client";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Filter, X } from "lucide-react";
 import {
   CLIENT_STATUSES,
   CLIENT_STATUS_LABEL,
@@ -13,133 +14,101 @@ import {
   MONTHS,
 } from "./_meta";
 
-type Option = { value: string; label: string };
-
 /**
- * Filtros essenciais da carteira (item 9 do briefing): busca, status,
- * modalidade, inadimplência do mês, mês de renovação, serviço, segmento,
- * responsável e ordenação. Chips para as visões mais usadas.
+ * Filtros do módulo Clientes — simples e diretos: busca (nome/razão social/
+ * CNPJ), Status, Modalidade, Responsável, Inadimplência, Mês de renovação e
+ * Segmento. Os filtros só são aplicados ao clicar em FILTRAR; LIMPAR FILTROS
+ * restaura a lista padrão.
  */
 export function ClientFilters({
-  services,
   segments,
   owners,
 }: {
-  services: Option[];
   segments: string[];
   owners: string[];
 }) {
   const router = useRouter();
   const sp = useSearchParams();
 
-  function push(params: URLSearchParams) {
-    params.delete("pagina");
-    router.push(`/clientes?${params.toString()}`);
+  // Estado local: só vai para a URL ao clicar em "Filtrar".
+  const [q, setQ] = useState(sp.get("q") ?? "");
+  const [status, setStatus] = useState(sp.get("status") ?? "");
+  const [modalidade, setModalidade] = useState(sp.get("modalidade") ?? "");
+  const [responsavel, setResponsavel] = useState(sp.get("responsavel") ?? "");
+  const [inadimplencia, setInadimplencia] = useState(sp.get("inadimplencia") ?? "");
+  const [mesRenovacao, setMesRenovacao] = useState(sp.get("mesRenovacao") ?? "");
+  const [segmento, setSegmento] = useState(sp.get("segmento") ?? "");
+
+  const hasAny = Array.from(sp.keys()).some((k) => k !== "pagina" && k !== "porPagina");
+
+  function apply(e?: React.FormEvent) {
+    e?.preventDefault();
+    const params = new URLSearchParams();
+    // Preserva o tamanho de página escolhido.
+    const porPagina = sp.get("porPagina");
+    if (porPagina) params.set("porPagina", porPagina);
+    if (q.trim()) params.set("q", q.trim());
+    if (status) params.set("status", status);
+    if (modalidade) params.set("modalidade", modalidade);
+    if (responsavel) params.set("responsavel", responsavel);
+    if (inadimplencia) params.set("inadimplencia", inadimplencia);
+    if (mesRenovacao) params.set("mesRenovacao", mesRenovacao);
+    if (segmento) params.set("segmento", segmento);
+    router.push(`/clientes${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
-  function update(name: string, value: string) {
-    const params = new URLSearchParams(sp.toString());
-    if (value) params.set(name, value);
-    else params.delete(name);
-    push(params);
+  function clear() {
+    setQ(""); setStatus(""); setModalidade(""); setResponsavel("");
+    setInadimplencia(""); setMesRenovacao(""); setSegmento("");
+    const porPagina = sp.get("porPagina");
+    router.push(`/clientes${porPagina ? `?porPagina=${porPagina}` : ""}`);
   }
-
-  function onSearch(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    update("q", String(new FormData(e.currentTarget).get("q") ?? "").trim());
-  }
-
-  const chips: { key: string; label: string; params: Record<string, string> }[] = [
-    { key: "ativos", label: "Ativos", params: { status: "ACTIVE" } },
-    { key: "devendo", label: "Devendo no mês", params: { inadimplencia: "devendo" } },
-    { key: "mrr", label: "MRR", params: { modalidade: "MRR" } },
-    { key: "tcv", label: "TCV", params: { modalidade: "TCV" } },
-    { key: "pausados", label: "Pausados", params: { status: "PAUSED" } },
-    { key: "perdidos", label: "Perdidos", params: { status: "CHURNED" } },
-  ];
-  function isChipActive(p: Record<string, string>) {
-    return Object.entries(p).every(([k, v]) => sp.get(k) === v);
-  }
-  function toggleChip(p: Record<string, string>) {
-    const params = new URLSearchParams(sp.toString());
-    const active = isChipActive(p);
-    for (const [k, v] of Object.entries(p)) {
-      if (active) params.delete(k);
-      else params.set(k, v);
-    }
-    push(params);
-  }
-
-  const hasAny = Array.from(sp.keys()).some((k) => k !== "pagina");
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {chips.map((c) => (
-          <button key={c.key} type="button" onClick={() => toggleChip(c.params)}>
-            <Badge variant={isChipActive(c.params) ? "default" : "outline"}>
-              {c.label}
-            </Badge>
-          </button>
-        ))}
-        {hasAny && (
-          <Button
-            variant="ghost"
-            size="sm"
-            type="button"
-            onClick={() => router.push("/clientes")}
-          >
-            Limpar filtros
-          </Button>
-        )}
-      </div>
-
+    <form onSubmit={apply} className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 items-end">
-        <form onSubmit={onSearch} className="col-span-2">
+        <div className="col-span-2">
           <Label className="text-xs">Buscar</Label>
           <Input
-            name="q"
-            defaultValue={sp.get("q") ?? ""}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
             placeholder="Nome, razão social ou CNPJ/CPF…"
           />
-        </form>
+        </div>
 
         <div>
           <Label className="text-xs">Status</Label>
-          <Select
-            value={sp.get("status") ?? ""}
-            onChange={(e) => update("status", e.target.value)}
-          >
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Todos</option>
             {CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => (
-              <option key={s} value={s}>
-                {CLIENT_STATUS_LABEL[s]}
-              </option>
+              <option key={s} value={s}>{CLIENT_STATUS_LABEL[s]}</option>
             ))}
           </Select>
         </div>
 
         <div>
           <Label className="text-xs">Modalidade</Label>
-          <Select
-            value={sp.get("modalidade") ?? ""}
-            onChange={(e) => update("modalidade", e.target.value)}
-          >
+          <Select value={modalidade} onChange={(e) => setModalidade(e.target.value)}>
             <option value="">Todas</option>
             {CLIENT_MODALITIES.map((m) => (
-              <option key={m} value={m}>
-                {CLIENT_MODALITY_LABEL[m]}
-              </option>
+              <option key={m} value={m}>{CLIENT_MODALITY_LABEL[m]}</option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label className="text-xs">Responsável</Label>
+          <Select value={responsavel} onChange={(e) => setResponsavel(e.target.value)}>
+            <option value="">Todos</option>
+            {owners.map((o) => (
+              <option key={o} value={o}>{o}</option>
             ))}
           </Select>
         </div>
 
         <div>
           <Label className="text-xs">Inadimplência (mês)</Label>
-          <Select
-            value={sp.get("inadimplencia") ?? ""}
-            onChange={(e) => update("inadimplencia", e.target.value)}
-          >
+          <Select value={inadimplencia} onChange={(e) => setInadimplencia(e.target.value)}>
             <option value="">Todos</option>
             <option value="pago">Pago</option>
             <option value="devendo">Devendo</option>
@@ -148,75 +117,39 @@ export function ClientFilters({
 
         <div>
           <Label className="text-xs">Mês de renovação</Label>
-          <Select
-            value={sp.get("mesRenovacao") ?? ""}
-            onChange={(e) => update("mesRenovacao", e.target.value)}
-          >
+          <Select value={mesRenovacao} onChange={(e) => setMesRenovacao(e.target.value)}>
             <option value="">Todos</option>
             {MONTHS.map((m) => (
-              <option key={m.value} value={String(m.value)}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-xs">Serviço</Label>
-          <Select
-            value={sp.get("servico") ?? ""}
-            onChange={(e) => update("servico", e.target.value)}
-          >
-            <option value="">Todos</option>
-            {services.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
+              <option key={m.value} value={String(m.value)}>{m.label}</option>
             ))}
           </Select>
         </div>
 
         <div>
           <Label className="text-xs">Segmento</Label>
-          <Select
-            value={sp.get("segmento") ?? ""}
-            onChange={(e) => update("segmento", e.target.value)}
-          >
+          <Select value={segmento} onChange={(e) => setSegmento(e.target.value)}>
             <option value="">Todos</option>
             {segments.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
+              <option key={s} value={s}>{s}</option>
             ))}
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-xs">Responsável</Label>
-          <Select
-            value={sp.get("responsavel") ?? ""}
-            onChange={(e) => update("responsavel", e.target.value)}
-          >
-            <option value="">Todos</option>
-            {owners.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div>
-          <Label className="text-xs">Ordenação</Label>
-          <Select
-            value={sp.get("ordem") ?? "az"}
-            onChange={(e) => update("ordem", e.target.value)}
-          >
-            <option value="az">Nome A–Z</option>
-            <option value="za">Nome Z–A</option>
           </Select>
         </div>
       </div>
-    </div>
+
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm">
+          <Filter className="h-3.5 w-3.5 mr-1.5" /> Filtrar
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={clear}
+          disabled={!hasAny && !q && !status && !modalidade && !responsavel && !inadimplencia && !mesRenovacao && !segmento}
+        >
+          <X className="h-3.5 w-3.5 mr-1.5" /> Limpar filtros
+        </Button>
+      </div>
+    </form>
   );
 }

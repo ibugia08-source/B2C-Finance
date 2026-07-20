@@ -203,13 +203,13 @@ export function ClientDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button>
-            <Plus className="h-4 w-4 mr-1" /> Novo cliente
+            <Plus className="h-4 w-4 mr-1" /> Cadastrar novo cliente
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{initial?.id ? "Editar cliente" : "Novo cliente"}</DialogTitle>
+          <DialogTitle>{initial?.id ? "Editar cliente" : "Cadastrar novo cliente"}</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={handleSubmit(onSubmit)}
