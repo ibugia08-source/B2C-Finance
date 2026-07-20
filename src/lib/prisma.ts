@@ -58,6 +58,8 @@ const OWNED_MODELS = new Set<string>([
   "ExtraRevenue",
   // Rotina diária (estado do dia: remoções + checklist)
   "RoutineItemState",
+  // Inadimplência manual por competência (histórico mês a mês)
+  "ClientMonthDelinquency",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

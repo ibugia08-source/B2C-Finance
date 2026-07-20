@@ -44,9 +44,12 @@ export function ClientFilters({
   function apply(e?: React.FormEvent) {
     e?.preventDefault();
     const params = new URLSearchParams();
-    // Preserva o tamanho de página escolhido.
+    // Preserva o tamanho de página e a COMPETÊNCIA selecionada (contexto do
+    // módulo, não é filtro — "Limpar filtros" também a mantém).
     const porPagina = sp.get("porPagina");
     if (porPagina) params.set("porPagina", porPagina);
+    const mes = sp.get("mes");
+    if (mes) params.set("mes", mes);
     if (q.trim()) params.set("q", q.trim());
     if (status) params.set("status", status);
     if (modalidade) params.set("modalidade", modalidade);
@@ -60,8 +63,12 @@ export function ClientFilters({
   function clear() {
     setQ(""); setStatus(""); setModalidade(""); setResponsavel("");
     setInadimplencia(""); setMesRenovacao(""); setSegmento("");
+    const params = new URLSearchParams();
     const porPagina = sp.get("porPagina");
-    router.push(`/clientes${porPagina ? `?porPagina=${porPagina}` : ""}`);
+    if (porPagina) params.set("porPagina", porPagina);
+    const mes = sp.get("mes");
+    if (mes) params.set("mes", mes);
+    router.push(`/clientes${params.toString() ? `?${params.toString()}` : ""}`);
   }
 
   return (

@@ -114,7 +114,9 @@ export function DelinquencyCell({ client }: { client: ClientRow }) {
         pillClass={(v) => delinquencyPill((v || "SEM_COBRANCA") as any)}
         allowEmpty
         emptyLabel={client.delinquency.manual ? "Automático" : DELINQUENCY_LABEL.SEM_COBRANCA}
-        action={(v) => setClientDelinquency(client.id, v || null)}
+        action={(v) =>
+          setClientDelinquency(client.id, v || null, client.refMonth, client.refYear)
+        }
       />
       {client.delinquency.manual && (
         <span className="text-[10px] text-muted-foreground">

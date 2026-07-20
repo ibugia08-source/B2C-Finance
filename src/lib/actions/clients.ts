@@ -657,13 +657,16 @@ export async function setClientRenewalMonth(
 }
 
 /**
- * Override manual da inadimplência do mês atual (Pago/Devendo).
- * Grava valor + competência (mês/ano correntes) + quem/quando ajustou.
- * `status = null` limpa o override e volta ao cálculo automático.
+ * Override manual da inadimplência POR COMPETÊNCIA (Pago/Devendo).
+ * Grava em ClientMonthDelinquency no mês/ano informados (default: mês atual)
+ * — cada mês guarda o próprio ajuste, sem apagar os dos outros meses.
+ * `status = null` limpa o override daquela competência (volta ao automático).
  */
 export async function setClientDelinquency(
   id: string,
-  status: string | null
+  status: string | null,
+  refMonth?: number,
+  refYear?: number
 ): Promise<ActionResult> {
   const viewer = await requireAdmin();
   try {
@@ -674,29 +677,29 @@ export async function setClientDelinquency(
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
 
+    const now = new Date();
+    const month = refMonth && refMonth >= 1 && refMonth <= 12 ? Math.trunc(refMonth) : now.getMonth() + 1;
+    const year = refYear && refYear >= 1990 && refYear <= 2100 ? Math.trunc(refYear) : now.getFullYear();
+
     if (value == null) {
-      await prisma.client.update({
-        where: { id },
-        data: {
-          delinquencyOverride: null,
-          delinquencyOverrideMonth: null,
-          delinquencyOverrideYear: null,
-          delinquencyOverrideAt: null,
-          delinquencyOverrideBy: null,
-        },
+      await prisma.clientMonthDelinquency.deleteMany({
+        where: { clientId: id, month, year },
       });
     } else {
-      const now = new Date();
-      await prisma.client.update({
-        where: { id },
-        data: {
-          delinquencyOverride: value,
-          delinquencyOverrideMonth: now.getMonth() + 1,
-          delinquencyOverrideYear: now.getFullYear(),
-          delinquencyOverrideAt: now,
-          delinquencyOverrideBy: viewer.name,
-        },
+      const current = await prisma.clientMonthDelinquency.findFirst({
+        where: { clientId: id, month, year },
+        select: { id: true },
       });
+      if (current) {
+        await prisma.clientMonthDelinquency.updateMany({
+          where: { id: current.id },
+          data: { status: value, setBy: viewer.name, setAt: now },
+        });
+      } else {
+        await prisma.clientMonthDelinquency.create({
+          data: { clientId: id, month, year, status: value, setBy: viewer.name },
+        });
+      }
     }
     revalidatePath("/clientes");
     revalidatePath("/dashboard");

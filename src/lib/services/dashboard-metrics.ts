@@ -535,28 +535,28 @@ async function getClientsBlock(): Promise<ClientsBlock> {
       prisma.client.count({ where: { status: "ACTIVE", modality: "TCV" } }),
       prisma.client.findMany({
         where: { status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] } },
-        select: {
-          id: true,
-          delinquencyOverride: true,
-          delinquencyOverrideMonth: true,
-          delinquencyOverrideYear: true,
-        },
+        select: { id: true },
       }),
     ]);
 
-  const auto = await getMonthDelinquencies(
-    allClients.map((c) => c.id),
-    curMonth,
-    curYear
-  );
+  // Overrides manuais da competência corrente (histórico por mês —
+  // ClientMonthDelinquency; mesma fonte do módulo Clientes).
+  const [auto, overrides] = await Promise.all([
+    getMonthDelinquencies(
+      allClients.map((c) => c.id),
+      curMonth,
+      curYear
+    ),
+    prisma.clientMonthDelinquency.findMany({
+      where: { year: curYear, month: curMonth },
+      select: { clientId: true, status: true },
+    }),
+  ]);
+  const overrideBy = new Map(overrides.map((o) => [o.clientId, o.status]));
   let devendoMes = 0;
   let pagosMes = 0;
   for (const c of allClients) {
-    const overrideActive =
-      c.delinquencyOverride != null &&
-      c.delinquencyOverrideMonth === curMonth &&
-      c.delinquencyOverrideYear === curYear;
-    const value = overrideActive ? c.delinquencyOverride : auto.get(c.id);
+    const value = overrideBy.get(c.id) ?? auto.get(c.id);
     if (value === "DEVENDO") devendoMes += 1;
     else if (value === "PAGO") pagosMes += 1;
   }

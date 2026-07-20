@@ -23,6 +23,10 @@ export type ClientRow = {
     manual: boolean;
     by: string | null;
   };
+  // Competência selecionada no módulo (?mes=) — o ajuste de inadimplência
+  // é gravado NESTE mês/ano (histórico por competência).
+  refMonth: number;
+  refYear: number;
 };
 
 export function ClientsTable({

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { monthRange } from "@/lib/format";
+import { monthRange, parseMonthParam } from "@/lib/format";
 import {
   getMonthDelinquencies,
   type MonthDelinquency,
@@ -14,8 +14,9 @@ import { ClientFilters } from "./filters";
 import { KpiCard } from "./kpi-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
+import { MonthNav } from "@/app/cobrancas/month-nav";
 import { PageSizeSelect } from "./page-size-select";
-import { PAGE_SIZES } from "./_meta";
+import { PAGE_SIZES, MONTH_LABEL } from "./_meta";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { DelinquencyValue } from "./_meta";
 
@@ -29,6 +30,7 @@ type Search = {
   segmento?: string;
   responsavel?: string;
   ordem?: string; // az | za
+  mes?: string; // competência YYYY-MM (seletor de mês do módulo)
   entrada?: string; // "mes" → só clientes que entraram no mês atual
   perda?: string; // "mes" → só clientes perdidos no mês atual
   pagina?: string;
@@ -42,8 +44,17 @@ export default async function ClientesPage({
 }) {
   await requireAdmin();
 
+  // ===== COMPETÊNCIA SELECIONADA (?mes=YYYY-MM) — todo o módulo gira em
+  // torno dela: inadimplência, vencimentos, KPIs e ajustes gravados no mês.
   const now0 = new Date();
-  const { start: mesStart, end: mesEnd } = monthRange(now0);
+  const mesSel = parseMonthParam(searchParams.mes);
+  const selMonth = mesSel?.month ?? now0.getMonth() + 1;
+  const selYear = mesSel?.year ?? now0.getFullYear();
+  const isCurrentMonth =
+    selMonth === now0.getMonth() + 1 && selYear === now0.getFullYear();
+  const selRef = new Date(selYear, selMonth - 1, 1);
+  const { start: mesStart, end: mesEnd } = monthRange(selRef);
+  const selLabel = `${MONTH_LABEL[selMonth]}/${selYear}`;
 
   // ---------- where (filtros que rodam no banco) ----------
   const where: any = {};
@@ -112,26 +123,28 @@ export default async function ClientesPage({
   const pageSize = (PAGE_SIZES as readonly number[]).includes(requestedSize)
     ? requestedSize
     : 20;
-  const now = new Date();
-  const curMonth = now.getMonth() + 1;
-  const curYear = now.getFullYear();
-  const { start, end } = monthRange();
+  // Toda a página usa a COMPETÊNCIA selecionada (não o relógio):
+  // inadimplência, vencimento na linha, meses ativos e KPIs do mês.
+  const curMonth = selMonth;
+  const curYear = selYear;
+  const start = mesStart;
+  const end = mesEnd;
 
   // ---------- índice leve de TODOS os clientes do filtro (ordenado) ----------
   // Usado para: (1) inadimplência do mês por cliente, (2) filtro Pago/Devendo,
   // (3) seleção "todos os filtrados". Campos mínimos → barato mesmo com muitos.
-  const [index, segmentRows, ownerRows, ativos, novosMes, perdidosMes, renovacoesProx] =
+  const [index, monthOverrides, segmentRows, ownerRows, ativos, novosMes, perdidosMes, renovacoesProx] =
     await Promise.all([
       prisma.client.findMany({
         where,
         orderBy: { name: searchParams.ordem === "za" ? "desc" : "asc" },
-        select: {
-          id: true,
-          delinquencyOverride: true,
-          delinquencyOverrideMonth: true,
-          delinquencyOverrideYear: true,
-          delinquencyOverrideBy: true,
-        },
+        select: { id: true },
+      }),
+      // Overrides manuais de inadimplência DA COMPETÊNCIA selecionada
+      // (histórico por mês em ClientMonthDelinquency).
+      prisma.clientMonthDelinquency.findMany({
+        where: { year: curYear, month: curMonth },
+        select: { clientId: true, status: true, setBy: true },
       }),
       prisma.client.findMany({
         where: { segment: { not: null } },
@@ -145,7 +158,20 @@ export default async function ClientesPage({
         select: { salesOwner: true },
         orderBy: { salesOwner: "asc" },
       }),
-      prisma.client.count({ where: { status: "ACTIVE" } }),
+      // Ativos: mês corrente = status ACTIVE; mês passado = quem estava na
+      // base naquele mês (entrou antes do fim; não havia saído antes do início).
+      isCurrentMonth
+        ? prisma.client.count({ where: { status: "ACTIVE" } })
+        : prisma.client.count({
+            where: {
+              status: { notIn: ["PROSPECT", "LEAD"] },
+              OR: [
+                { startedAt: { lt: mesEnd } },
+                { startedAt: null, createdAt: { lt: mesEnd } },
+              ],
+              AND: [{ OR: [{ churnedAt: null }, { churnedAt: { gte: mesStart } }] }],
+            },
+          }),
       // Novos do mês: entrada (startedAt; fallback createdAt) no mês atual.
       prisma.client.count({
         where: {
@@ -174,23 +200,21 @@ export default async function ClientesPage({
     curYear
   );
 
-  // Inadimplência EFETIVA: override manual da competência corrente vence o auto.
+  // Overrides manuais da competência (ClientMonthDelinquency → mapa por cliente).
+  const overrideByClient = new Map(
+    monthOverrides.map((o) => [o.clientId, { status: o.status, by: o.setBy }])
+  );
+
+  // Inadimplência EFETIVA da competência: override manual do mês vence o auto.
   type IndexRow = (typeof index)[number];
   function effectiveDelinquency(c: IndexRow): {
     value: DelinquencyValue | "SEM_COBRANCA";
     manual: boolean;
     by: string | null;
   } {
-    const overrideActive =
-      c.delinquencyOverride != null &&
-      c.delinquencyOverrideMonth === curMonth &&
-      c.delinquencyOverrideYear === curYear;
-    if (overrideActive) {
-      return {
-        value: c.delinquencyOverride as DelinquencyValue,
-        manual: true,
-        by: c.delinquencyOverrideBy ?? null,
-      };
+    const ov = overrideByClient.get(c.id);
+    if (ov) {
+      return { value: ov.status as DelinquencyValue, manual: true, by: ov.by ?? null };
     }
     return {
       value: (autoDelinq.get(c.id) ?? "SEM_COBRANCA") as MonthDelinquency,
@@ -269,11 +293,19 @@ export default async function ClientesPage({
         dueDay: dueThisMonth ? dueThisMonth.getDate() : null,
         monthsActive,
         delinquency: effectiveDelinquency(indexById.get(r.id)!),
+        // Ajuste de inadimplência na linha é gravado NESTA competência.
+        refMonth: curMonth,
+        refYear: curYear,
       };
     });
 
   const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
+
+  // Sufixo de competência para os links dos cards (preserva o mês selecionado).
+  const mesQS = isCurrentMonth
+    ? ""
+    : `&mes=${selYear}-${String(selMonth).padStart(2, "0")}`;
 
   function pageHref(p: number) {
     const params = new URLSearchParams(searchParams as Record<string, string>);
@@ -285,45 +317,63 @@ export default async function ClientesPage({
     <div className="pb-24">
       <PageHeader
         title="Clientes"
-        description="Carteira de clientes da B2C Gestão — cadastro, financeiro e recebimentos em um só módulo"
-        actions={<ClientDialog />}
+        description={`Carteira de clientes da B2C Gestão · competência ${selLabel}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Seletor da competência: ◀ [Mês][Ano] ▶ — tudo na página (lista,
+                inadimplência, vencimentos, KPIs e ajustes) pertence a este mês. */}
+            <MonthNav month={selMonth} year={selYear} />
+            <ClientDialog />
+          </div>
+        }
       />
 
       <CobrancasTabs active="/clientes" />
 
+      {!isCurrentMonth && (
+        <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] px-4 py-2.5 text-sm">
+          Você está gerenciando <strong>{selLabel}</strong> — a inadimplência, os
+          vencimentos e os ajustes feitos aqui ficam gravados nessa competência.
+        </div>
+      )}
+
       {/* ===== Métricas da carteira (4) — clicáveis, com tooltip "?" ===== */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <KpiCard
-          title="Clientes ativos"
+          title={isCurrentMonth ? "Clientes ativos" : `Ativos em ${MONTH_LABEL[selMonth]}`}
           value={String(ativos)}
           tone="pos"
-          help="Total de clientes com status ativo na carteira."
-          hint="clique para filtrar os ativos"
-          href="/clientes?status=ACTIVE"
+          help={
+            isCurrentMonth
+              ? "Total de clientes com status ativo na carteira."
+              : "Clientes que estavam na base durante o mês selecionado (entraram antes do fim do mês e não haviam saído)."
+          }
+          hint={isCurrentMonth ? "clique para filtrar os ativos" : selLabel}
+          href={`/clientes?status=ACTIVE${mesQS}`}
         />
         <KpiCard
-          title="Novos clientes este mês"
+          title="Novos no mês"
           value={String(novosMes)}
           tone={novosMes > 0 ? "pos" : "default"}
-          help="Quantidade de clientes que entraram na carteira neste mês (data de entrada; sem ela, data de cadastro)."
-          hint="clique para ver os novos do mês"
-          href="/clientes?entrada=mes"
+          help="Clientes que entraram na carteira no mês selecionado (data de entrada; sem ela, data de cadastro)."
+          hint={`entradas em ${selLabel}`}
+          href={`/clientes?entrada=mes${mesQS}`}
         />
         <KpiCard
-          title="Clientes perdidos este mês"
+          title="Perdidos no mês"
           value={String(perdidosMes)}
           tone={perdidosMes > 0 ? "neg" : "default"}
-          help="Quantidade de clientes que foram perdidos neste mês (data da saída registrada na perda)."
-          hint="clique para ver os perdidos do mês"
-          href="/clientes?perda=mes"
+          help="Clientes perdidos no mês selecionado (data da saída registrada na perda)."
+          hint={`saídas em ${selLabel}`}
+          href={`/clientes?perda=mes${mesQS}`}
         />
         <KpiCard
-          title="Renovações próximas"
+          title="Renovações do mês"
           value={String(renovacoesProx)}
           tone={renovacoesProx > 0 ? "warn" : "default"}
-          help="Clientes com renovação prevista para o período próximo (mês de renovação = mês atual)."
-          hint="clique para ver as renovações"
-          href={`/clientes?mesRenovacao=${curMonth}`}
+          help="Clientes com mês de renovação igual ao mês selecionado."
+          hint={`renovações em ${selLabel}`}
+          href={`/clientes?mesRenovacao=${curMonth}${mesQS}`}
         />
       </div>
 

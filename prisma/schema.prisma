@@ -75,6 +75,7 @@ model User {
   ownedUpsells        Upsell[]       @relation("OwnerUpsell")
   ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
   ownedRoutineItemStates RoutineItemState[] @relation("OwnerRoutineItemState")
+  ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
 }
 
 model Person {
@@ -702,10 +703,34 @@ model Client {
   upsells       Upsell[]
   extraRevenues ExtraRevenue[]
 
+  // Inadimplência manual por competência (histórico mês a mês)
+  monthDelinquencies ClientMonthDelinquency[]
+
   @@index([ownerId])
   @@index([status])
   @@index([modality])
   @@index([renewalMonth])
+}
+
+// Override MANUAL de inadimplência POR COMPETÊNCIA (mês/ano) — histórico
+// completo: o gestor pode gerenciar qualquer mês (seletor no módulo Clientes)
+// e o ajuste fica gravado naquele mês, sem apagar os ajustes de outros meses.
+// Substitui os campos delinquencyOverride* do Client (legados, backfillados).
+model ClientMonthDelinquency {
+  id       String            @id @default(cuid())
+  clientId String
+  client   Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  month    Int // 1-12 (competência)
+  year     Int
+  status   DelinquencyStatus // PAGO | DEVENDO
+  setBy    String? // quem ajustou
+  setAt    DateTime          @default(now())
+  ownerId  String?
+  owner    User?             @relation("OwnerClientMonthDelinquency", fields: [ownerId], references: [id])
+
+  @@index([year, month])
+  @@index([clientId, year, month])
+  @@index([ownerId])
 }
 
 // Registro de PERDA de cliente (churn). Criado automaticamente quando o
