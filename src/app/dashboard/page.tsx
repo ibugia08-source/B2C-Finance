@@ -101,18 +101,24 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const selectedMonth = period.start.getMonth() + 1; // 1-12
   const selectedMonthIndex = isFullMonth ? period.start.getMonth() : undefined;
 
+  // IMPORTANTE (produção): o Prisma na Vercel tem pool pequeno (connection
+  // limit ~5). Cada agregador abre VÁRIAS queries em paralelo internamente;
+  // rodar TODOS num único Promise.all satura o pool e estoura o pool_timeout
+  // (erro "Timed out fetching a new connection"). Por isso buscamos em FASES
+  // sequenciais — nunca dois agregadores pesados ao mesmo tempo.
+  const data = await getExecutiveDashboard(filters);
+  const main = await getDashboardMainMetrics(period);
+  const [yearly, churn, newClients, launched] = await Promise.all([
+    getYearlySeries(selectedYear),
+    getMonthlyChurn(period.start, period.end),
+    getNewClientsSummary(period.start, period.end),
+    isFullMonth ? getResultLaunchedForMonth(selectedYear, selectedMonth) : Promise.resolve(0),
+  ]);
+  // Detalhes dos cards (queries leves) — um lote só, depois dos pesados.
   const [
-    data, churn, newClients,
-    main, yearly, launched,
     openByClient, receivedDetail, expensesDetail, expensesByCategory,
     mrrClientsDetail, tcvClientsDetail, newClientsDetail, renewalClientsDetail,
   ] = await Promise.all([
-    getExecutiveDashboard(filters),
-    getMonthlyChurn(period.start, period.end),
-    getNewClientsSummary(period.start, period.end),
-    getDashboardMainMetrics(period),
-    getYearlySeries(selectedYear),
-    isFullMonth ? getResultLaunchedForMonth(selectedYear, selectedMonth) : Promise.resolve(0),
     getOpenByClient(period),
     getReceivedDetail(period),
     getExpensesDetail(period),

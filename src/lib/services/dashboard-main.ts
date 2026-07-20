@@ -138,10 +138,11 @@ export type DashboardMainResult = {
 
 export async function getDashboardMainMetrics(period: Period): Promise<DashboardMainResult> {
   const prevRange = previousPeriodRange(period);
-  const [current, previous] = await Promise.all([
-    periodSnapshot(period.start, period.end),
-    periodSnapshot(prevRange.start, prevRange.end),
-  ]);
+  // Sequencial (não Promise.all): cada snapshot já abre ~13 queries paralelas;
+  // rodá-los juntos dobraria o pico de conexões e pressiona o pool pequeno da
+  // produção (connection limit ~5). Sequencial mantém o pico em ~13.
+  const current = await periodSnapshot(period.start, period.end);
+  const previous = await periodSnapshot(prevRange.start, prevRange.end);
 
   const previousHasData =
     previous.faturamentoTotal !== 0 ||
