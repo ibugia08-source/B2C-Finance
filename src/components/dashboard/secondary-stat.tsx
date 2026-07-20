@@ -59,7 +59,7 @@ export function SecondaryStat({
           </p>
           {help && <MetricHelp title={label} text={help} />}
         </div>
-        <p className={cn("text-base font-semibold stat-number mt-0.5", color)}>{value}</p>
+        <p className={cn("text-base font-semibold stat-number mt-0.5 whitespace-nowrap", color)}>{value}</p>
         {delta ? (
           <DeltaMini delta={delta} goodWhenUp={goodWhenUp} />
         ) : (

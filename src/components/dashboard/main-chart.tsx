@@ -67,7 +67,7 @@ export function MainChart({
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <p className="text-sm font-medium text-foreground">{title}</p>
-            <p className="text-2xl font-semibold stat-number mt-1">
+            <p className="text-xl 2xl:text-2xl font-semibold stat-number mt-1 whitespace-nowrap">
               {formatBRL(mode === "acumulado" ? total : selectedValue ?? total)}
             </p>
             <p className="text-[11px] text-muted-foreground mt-0.5">

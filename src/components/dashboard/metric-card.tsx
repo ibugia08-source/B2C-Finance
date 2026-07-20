@@ -63,7 +63,7 @@ export function MetricCard({
             </button>
             <MetricHelp title={title} text={help} />
           </div>
-          <p className={cn("text-2xl font-semibold stat-number mt-1.5", valueColor)}>{value}</p>
+          <p className={cn("text-lg xl:text-xl 2xl:text-2xl font-semibold stat-number mt-1.5 whitespace-nowrap", valueColor)}>{value}</p>
           <DeltaLine delta={delta} goodWhenUp={goodWhenUp} />
           {footer && <div className="mt-3" onClick={(e) => e.stopPropagation()}>{footer}</div>}
         </CardContent>

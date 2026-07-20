@@ -81,7 +81,7 @@ export default async function ProjecoesPage() {
       />
 
       {/* Baseline do mês (números reais que alimentam a simulação) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4 mb-5">
         <StatCard title="Faturamento do mês" value={formatBRL(baseline.receita)}
           hint={`MRR ${formatBRL(baseline.mrr)} + TCV ${formatBRL(baseline.tcv)}`} />
         <StatCard title="Despesas + folha" value={formatBRL(baseline.despesas + baseline.folha)}
