@@ -550,7 +550,7 @@ function lossValue(l: { modality: string | null; monthlyValue: unknown; referenc
 
 /** Churn do PERÍODO FILTRADO (≠ getLossSummary, que é sempre o mês atual). */
 export type MonthlyChurn = { count: number; value: number };
-export async function getMonthlyChurn(start: Date, end: Date): Promise<MonthlyChurn> {
+async function getMonthlyChurnImpl(start: Date, end: Date): Promise<MonthlyChurn> {
   const losses = await prisma.clientLoss.findMany({
     where: { lostAt: { gte: start, lt: end } },
     select: { modality: true, monthlyValue: true, referenceValue: true },
@@ -567,7 +567,7 @@ export async function getMonthlyChurn(start: Date, end: Date): Promise<MonthlyCh
  * (fallback: valor mensal de referência).
  */
 export type NewClientsSummary = { count: number; revenue: number };
-export async function getNewClientsSummary(
+async function getNewClientsSummaryImpl(
   start: Date,
   end: Date
 ): Promise<NewClientsSummary> {
@@ -686,3 +686,8 @@ export const getReceiptsSummary = ownerCached("receipts-summary", getReceiptsSum
   revalidate: 300,
   tags: [CACHE_TAGS.REVENUE_METRICS],
 });
+
+/** Versões cacheadas por (usuário, argumentos) — TTL 300s. */
+export const getMonthlyChurn = ownerCached("getmonthlychurn", getMonthlyChurnImpl, { revalidate: 300, tags: [CACHE_TAGS.REVENUE_METRICS] });
+
+export const getNewClientsSummary = ownerCached("new-clients-summary", getNewClientsSummaryImpl, { revalidate: 300, tags: [CACHE_TAGS.REVENUE_METRICS] });

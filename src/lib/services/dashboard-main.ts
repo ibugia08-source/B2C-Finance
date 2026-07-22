@@ -354,7 +354,7 @@ export type ClientOpenItem = {
 };
 
 /** Clientes com valor em aberto na competência do período (para o card Em Aberto). */
-export async function getOpenByClient(period: Period): Promise<ClientOpenItem[]> {
+async function getOpenByClientImpl(period: Period): Promise<ClientOpenItem[]> {
   const { start, end } = period;
   // Competências (ano/mês) que o período cobre.
   const months: { y: number; m: number }[] = [];
@@ -415,7 +415,7 @@ export type ReceivedItem = {
 };
 
 /** Recebimentos confirmados do período (para o card Recebido). */
-export async function getReceivedDetail(period: Period): Promise<ReceivedItem[]> {
+async function getReceivedDetailImpl(period: Period): Promise<ReceivedItem[]> {
   const { start, end } = period;
   const payments = await prisma.payment.findMany({
     where: { status: "CONFIRMED", paidAt: { gte: start, lt: end }, billing: { status: { not: "CANCELED" } } },
@@ -438,7 +438,7 @@ export async function getReceivedDetail(period: Period): Promise<ReceivedItem[]>
 export type ExpenseItem = { description: string; amount: number; category: string | null; dueDate: Date | null };
 
 /** Maiores despesas do período (para o card Total de despesas). */
-export async function getExpensesDetail(period: Period): Promise<ExpenseItem[]> {
+async function getExpensesDetailImpl(period: Period): Promise<ExpenseItem[]> {
   const { start, end } = period;
   const rows = await prisma.transaction.findMany({
     where: { type: "despesa", status: { not: "cancelado" }, date: { gte: start, lt: end } },
@@ -462,7 +462,7 @@ export async function getExpensesDetail(period: Period): Promise<ExpenseItem[]> 
 export type ExpenseCategorySlice = { label: string; value: number };
 
 /** Despesas agrupadas por categoria no período (para o detalhe de despesas). */
-export async function getExpensesByCategory(period: Period): Promise<ExpenseCategorySlice[]> {
+async function getExpensesByCategoryImpl(period: Period): Promise<ExpenseCategorySlice[]> {
   const { start, end } = period;
   const grouped = await prisma.transaction.groupBy({
     by: ["categoryId"],
@@ -572,7 +572,7 @@ export type NamedValue = { id?: string; name: string; sub?: string; value: numbe
 const REVENUE_ACTIVE_STATUSES = ["ACTIVE", "RENEWAL", "DELINQUENT"];
 
 /** Clientes MRR que compõem o faturamento recorrente do período. */
-export async function getMrrClientsDetail(): Promise<NamedValue[]> {
+async function getMrrClientsDetailImpl(): Promise<NamedValue[]> {
   const rows = await prisma.client.findMany({
     where: { modality: "MRR", status: { in: REVENUE_ACTIVE_STATUSES as any } },
     select: { id: true, name: true, monthlyValue: true, salesOwner: true },
@@ -585,7 +585,7 @@ export async function getMrrClientsDetail(): Promise<NamedValue[]> {
 }
 
 /** Clientes TCV com fechamento/renovação (cobrança TCV) na competência do período. */
-export async function getTcvClientsDetail(period: Period): Promise<NamedValue[]> {
+async function getTcvClientsDetailImpl(period: Period): Promise<NamedValue[]> {
   const { start, end } = period;
   const months: { y: number; m: number }[] = [];
   const cur = new Date(start.getFullYear(), start.getMonth(), 1);
@@ -614,7 +614,7 @@ export async function getTcvClientsDetail(period: Period): Promise<NamedValue[]>
 }
 
 /** Novos clientes do período com a receita (MRR mensal / TCV total do contrato). */
-export async function getNewClientsDetail(period: Period): Promise<NamedValue[]> {
+async function getNewClientsDetailImpl(period: Period): Promise<NamedValue[]> {
   const { start, end } = period;
   const clients = await prisma.client.findMany({
     where: {
@@ -649,7 +649,7 @@ export async function getNewClientsDetail(period: Period): Promise<NamedValue[]>
 }
 
 /** Clientes com renovação no mês selecionado (mês-calendário). */
-export async function getRenewalClientsDetail(month: number): Promise<NamedValue[]> {
+async function getRenewalClientsDetailImpl(month: number): Promise<NamedValue[]> {
   const rows = await prisma.client.findMany({
     where: {
       renewalMonth: month,
@@ -673,7 +673,7 @@ export function resultLaunchTag(year: number, month: number): string {
 }
 
 /** Total já lançado ao caixa como "Resultado do mês" para a competência. */
-export async function getResultLaunchedForMonth(year: number, month: number): Promise<number> {
+async function getResultLaunchedForMonthImpl(year: number, month: number): Promise<number> {
   const agg = await prisma.cashBoxMovement.aggregate({
     where: { type: "IN", description: { contains: resultLaunchTag(year, month) } },
     _sum: { amount: true },
@@ -686,3 +686,14 @@ export const getYearlySeries = ownerCached("yearly-series", getYearlySeriesImpl,
   revalidate: 300,
   tags: [CACHE_TAGS.DASHBOARD_METRICS],
 });
+
+/** Versões cacheadas por (usuário, argumentos) — TTL 300s. */
+export const getOpenByClient = ownerCached("getopenbyclient", getOpenByClientImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getReceivedDetail = ownerCached("getreceiveddetail", getReceivedDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getExpensesDetail = ownerCached("getexpensesdetail", getExpensesDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getExpensesByCategory = ownerCached("getexpensesbycategory", getExpensesByCategoryImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getMrrClientsDetail = ownerCached("getmrrclientsdetail", getMrrClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getTcvClientsDetail = ownerCached("gettcvclientsdetail", getTcvClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getNewClientsDetail = ownerCached("getnewclientsdetail", getNewClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getRenewalClientsDetail = ownerCached("getrenewalclientsdetail", getRenewalClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
+export const getResultLaunchedForMonth = ownerCached("getresultlaunchedformonth", getResultLaunchedForMonthImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
