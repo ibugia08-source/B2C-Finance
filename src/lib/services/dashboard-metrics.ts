@@ -9,6 +9,7 @@ import {
   type CashSummary,
 } from "./finance-metrics";
 import { getDelinquentClients } from "./billing-metrics";
+import { mrrAtivo, tcvVendido } from "./contract-metrics";
 import {
   getPeriodRevenue,
   getReceiptsSummary,
@@ -149,23 +150,10 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
           renewalDate: { not: null, lte: renewLimit },
         },
       }),
-      prisma.contract.aggregate({
-        where: {
-          ...contractClientWhere,
-          status: { in: ["ACTIVE", "RENEWAL"] },
-          startDate: { lte: today },
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
-        },
-        _sum: { monthlyValue: true },
-      }),
-      prisma.contract.aggregate({
-        where: {
-          ...contractClientWhere,
-          startDate: { gte: start, lt: end },
-          status: { notIn: ["CANCELED"] },
-        },
-        _sum: { totalValue: true },
-      }),
+      // Delegado a contract-metrics (fonte única da métrica contratual) —
+      // antes estas 2 queries eram cópias inline das mesmas agregações.
+      mrrAtivo(f.clientId),
+      tcvVendido(start, end, f.clientId),
     ]);
 
   const openOf = (a: { _sum: { amount: any; paidTotal: any } }) =>
@@ -181,8 +169,8 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
     receitaPendente,
     receitaVencida,
     inadimplenciaTaxa: totalAberto > 0 ? receitaVencida / totalAberto : 0,
-    mrrAtivo: n(mrr._sum.monthlyValue),
-    tcvVendido: n(tcv._sum.totalValue),
+    mrrAtivo: mrr,
+    tcvVendido: tcv,
     novosClientes: novos,
     clientesAtivos: ativos,
     clientesInadimplentes: delinq.length,
