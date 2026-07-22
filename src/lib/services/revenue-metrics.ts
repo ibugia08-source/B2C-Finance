@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -79,7 +80,7 @@ function clientEntityWhere(f: RevenueFilters): Record<string, unknown> {
  * TCV por período: Σ Billing revenueType=TCV (competência no período), que é
  * onde o valor cheio da adesão/renovação é lançado — sem rateio mensal.
  */
-export async function getPeriodRevenue(
+async function getPeriodRevenueImpl(
   start: Date,
   end: Date,
   filters: RevenueFilters = {}
@@ -168,6 +169,13 @@ export async function getPeriodRevenue(
     total: mrr + tcv,
   };
 }
+
+// Cache revenue calculations for 1 hour to reduce repeated calculations
+export const getPeriodRevenue = unstable_cache(
+  getPeriodRevenueImpl,
+  ["period-revenue"],
+  { revalidate: 3600, tags: ["revenue-metrics"] }
+);
 
 // ===================================================================
 // Fechamento mensal — RECEBIMENTOS × RECEITA EXTRA (regra oficial B2C)
