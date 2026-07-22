@@ -6,7 +6,9 @@ const prisma = new PrismaClient();
 const ADMIN = {
   name: process.env.ADMIN_NAME ?? "Admin B2C Finance",
   email: process.env.ADMIN_EMAIL ?? "admin@b2cfinance.local",
-  password: process.env.ADMIN_PASSWORD ?? "admin123",
+  // Sem fallback: uma senha padrão publicada no repositório viraria
+  // credencial conhecida em qualquer ambiente que rodasse o seed sem env.
+  password: process.env.ADMIN_PASSWORD,
 };
 
 const PEOPLE = [
@@ -112,6 +114,11 @@ async function main() {
   console.log("→ Seed: usuário admin");
   let admin = await prisma.user.findUnique({ where: { email: ADMIN.email } });
   if (!admin) {
+    if (!ADMIN.password) {
+      throw new Error(
+        "ADMIN_PASSWORD não definido. Defina a env var para criar o usuário admin do seed."
+      );
+    }
     const passwordHash = await bcrypt.hash(ADMIN.password, 10);
     admin = await prisma.user.create({
       data: {
@@ -122,7 +129,7 @@ async function main() {
         active: true,
       },
     });
-    console.log(`  ✓ admin criado: ${ADMIN.email} (senha: ${ADMIN.password})`);
+    console.log(`  ✓ admin criado: ${ADMIN.email}`);
   } else {
     console.log(`  • admin já existe: ${ADMIN.email}`);
   }
