@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { CACHE_TAGS } from "@/lib/cache-tags";
+import { CACHE_TAGS, getBillingUpdateTags } from "@/lib/cache-tags";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";

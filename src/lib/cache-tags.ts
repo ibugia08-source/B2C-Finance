@@ -53,16 +53,33 @@ export const CACHE_TAGS = {
 } as const;
 
 /**
- * Invalidar múltiplos tags de uma vez
+ * Returns a set of tags to invalidate for client updates.
+ * Use in server actions with revalidateTag().
  */
-export function invalidateCacheTags(tags: string[]) {
-  return Promise.all(tags.map((tag) => invalidateTag(tag)));
+export function getClientUpdateTags(clientId: string) {
+  return [
+    CACHE_TAGS.CLIENT_ID(clientId),
+    CACHE_TAGS.CLIENTS,
+    CACHE_TAGS.CLIENT_BILLINGS(clientId),
+    CACHE_TAGS.BILLING_CYCLE,
+    CACHE_TAGS.DASHBOARD,
+    CACHE_TAGS.CONTRACTS,
+  ];
 }
 
 /**
- * Helper: invalidar tag (implementado em server actions como revalidateTag)
+ * Returns a set of tags to invalidate for billing updates.
+ * Use in server actions with revalidateTag().
  */
-async function invalidateTag(tag: string) {
-  // Implementado via revalidateTag() em server actions
-  // Este é apenas um placeholder para documentação
+export function getBillingUpdateTags(clientId?: string) {
+  const tags = [
+    CACHE_TAGS.BILLINGS,
+    CACHE_TAGS.BILLING_CYCLE,
+    CACHE_TAGS.DASHBOARD,
+  ];
+  if (clientId) {
+    tags.push(CACHE_TAGS.CLIENT_BILLINGS(clientId));
+    tags.push(CACHE_TAGS.CLIENT_ID(clientId));
+  }
+  return tags;
 }
