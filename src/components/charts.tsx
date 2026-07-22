@@ -57,7 +57,7 @@ export function HBarList({
       {items.map((item, i) => {
         const pct = total > 0 ? Math.round((item.value / total) * 100) : 0;
         return (
-          <div key={i} title={`${item.label}: ${format(item.value)} (${pct}%)`}>
+          <div key={`bar-${i}`} title={`${item.label}: ${format(item.value)} (${pct}%)`}>
             <div className="flex items-baseline justify-between gap-2 mb-1">
               <span className="text-sm truncate">{item.label}</span>
               <span className="text-sm font-medium tabular-nums whitespace-nowrap">

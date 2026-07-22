@@ -130,7 +130,7 @@ export function TemplateUploadDialog() {
                 </div>
               )}
               {analysis.warnings.map((w, i) => (
-                <p key={i} className="text-xs text-amber-600 flex gap-1.5">
+                <p key={`warning-${i}`} className="text-xs text-amber-600 flex gap-1.5">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" /> {w}
                 </p>
               ))}

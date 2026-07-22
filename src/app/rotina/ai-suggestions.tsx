@@ -74,7 +74,7 @@ export function AISuggestionsPanel() {
             {suggestions.map((s, i) => {
               const pm = PRIORITY_META[s.priority];
               return (
-                <li key={i} className="flex items-start gap-2.5">
+                <li key={`suggestion-${i}`} className="flex items-start gap-2.5">
                   <Badge variant={pm.variant} className="mt-0.5 shrink-0">
                     {pm.label}
                   </Badge>

@@ -140,10 +140,15 @@ export async function totalPorPessoa() {
     _sum: { amount: true },
     where: { status: { not: "cancelado" }, type: "despesa" },
   });
-  const people = await prisma.person.findMany();
+  const personIds = rows.map((r) => r.responsibleId).filter((id): id is string => id != null);
+  const people = await prisma.person.findMany({
+    where: { id: { in: personIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(people.map((p) => [p.id, p.name]));
   return rows.map((r) => ({
     personId: r.responsibleId,
-    name: people.find((p) => p.id === r.responsibleId)?.name ?? "Sem responsável",
+    name: r.responsibleId ? (nameMap.get(r.responsibleId) ?? "Sem responsável") : "Sem responsável",
     total: r._sum.amount ?? 0,
   }));
 }
@@ -154,10 +159,15 @@ export async function totalPorCartao() {
     _sum: { amount: true },
     where: { status: { not: "cancelado" }, type: "despesa", cardId: { not: null } },
   });
-  const cards = await prisma.creditCard.findMany();
+  const cardIds = rows.map((r) => r.cardId).filter((id): id is string => id != null);
+  const cards = await prisma.creditCard.findMany({
+    where: { id: { in: cardIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(cards.map((c) => [c.id, c.name]));
   return rows.map((r) => ({
     cardId: r.cardId,
-    name: cards.find((c) => c.id === r.cardId)?.name ?? "?",
+    name: r.cardId ? (nameMap.get(r.cardId) ?? "?") : "?",
     total: r._sum.amount ?? 0,
   }));
 }
@@ -291,10 +301,15 @@ export async function quemMeDeve() {
     _sum: { amount: true },
     where: { status: { in: ["aberto", "atrasado", "renegociado"] } },
   });
-  const people = await prisma.person.findMany();
+  const personIds = rows.map((r) => r.personId).filter((id): id is string => id != null);
+  const people = await prisma.person.findMany({
+    where: { id: { in: personIds } },
+    select: { id: true, name: true },
+  });
+  const nameMap = new Map(people.map((p) => [p.id, p.name]));
   return rows.map((r) => ({
     personId: r.personId,
-    name: people.find((p) => p.id === r.personId)?.name ?? "?",
+    name: r.personId ? (nameMap.get(r.personId) ?? "?") : "?",
     total: r._sum.amount ?? 0,
   }));
 }

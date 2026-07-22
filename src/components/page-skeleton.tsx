@@ -23,7 +23,7 @@ export function PageSkeleton({
       {cards > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {Array.from({ length: cards }).map((_, i) => (
-            <Card key={i}>
+            <Card key={`skeleton-card-${i}`}>
               <CardContent className="p-5 space-y-3">
                 <div className="h-3 w-24 rounded bg-muted" />
                 <div className="h-7 w-32 rounded bg-muted" />
@@ -36,7 +36,7 @@ export function PageSkeleton({
       <Card>
         <CardContent className="p-4 space-y-3">
           {Array.from({ length: rows }).map((_, i) => (
-            <div key={i} className="h-9 w-full rounded bg-muted/60" />
+            <div key={`skeleton-row-${i}`} className="h-9 w-full rounded bg-muted/60" />
           ))}
         </CardContent>
       </Card>

@@ -111,7 +111,7 @@ export function DespesasDetail({
           <p className="text-xs text-muted-foreground mb-1 mt-4">Maiores despesas</p>
           <ul className="space-y-1">
             {items.slice(0, 6).map((it, i) => (
-              <li key={i} className="flex items-center justify-between gap-3 text-sm">
+              <li key={`expense-${i}`} className="flex items-center justify-between gap-3 text-sm">
                 <span className="truncate">{it.description}</span>
                 <span className="tabular-nums whitespace-nowrap">{formatBRL(it.amount)}</span>
               </li>
@@ -141,7 +141,7 @@ export function RecebidoDetail({
       ) : (
         <ul className="space-y-1 max-h-52 overflow-y-auto">
           {items.slice(0, 30).map((it, i) => (
-            <li key={i} className="flex items-center justify-between gap-3 text-sm">
+            <li key={`received-${i}`} className="flex items-center justify-between gap-3 text-sm">
               <span className="truncate">
                 {it.clientName}
                 <span className="text-[10px] text-muted-foreground ml-1.5">

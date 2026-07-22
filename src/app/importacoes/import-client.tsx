@@ -102,8 +102,8 @@ export function ImportClient({ defs }: { defs: DefMeta[] }) {
           {ok.headerErrors.length > 0 && (
             <Card className="border-destructive/50">
               <CardContent className="p-4 space-y-1">
-                {ok.headerErrors.map((e, i) => (
-                  <p key={i} className="text-sm text-destructive">• {e}</p>
+                {ok.headerErrors.map((e) => (
+                  <p key={e} className="text-sm text-destructive">• {e}</p>
                 ))}
               </CardContent>
             </Card>
@@ -126,8 +126,8 @@ export function ImportClient({ defs }: { defs: DefMeta[] }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ok.erros.map((e, i) => (
-                        <TableRow key={i}>
+                      {ok.erros.map((e) => (
+                        <TableRow key={`${e.linha}-${e.campo}`}>
                           <TableCell className="font-mono text-xs">{e.linha}</TableCell>
                           <TableCell className="text-sm">{e.campo}</TableCell>
                           <TableCell className="text-sm text-destructive">{e.erro}</TableCell>
@@ -165,8 +165,8 @@ export function ImportClient({ defs }: { defs: DefMeta[] }) {
                     </TableHeader>
                     <TableBody>
                       {ok.preview.rows.map((r, i) => (
-                        <TableRow key={i}>
-                          {r.map((c, j) => <TableCell key={j} className="text-sm whitespace-nowrap">{c}</TableCell>)}
+                        <TableRow key={`preview-${i}`}>
+                          {r.map((c, j) => <TableCell key={`${i}-${j}`} className="text-sm whitespace-nowrap">{c}</TableCell>)}
                         </TableRow>
                       ))}
                     </TableBody>

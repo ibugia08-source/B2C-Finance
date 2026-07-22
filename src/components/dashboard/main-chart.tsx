@@ -104,7 +104,7 @@ export function MainChart({
               <Bar dataKey="value" radius={[3, 3, 0, 0]} maxBarSize={26}>
                 {chartData.map((d, i) => (
                   <Cell
-                    key={i}
+                    key={`cell-${i}`}
                     fill={barColor(d.value)}
                     fillOpacity={selectedIndex == null || i === selectedIndex ? 1 : 0.45}
                   />

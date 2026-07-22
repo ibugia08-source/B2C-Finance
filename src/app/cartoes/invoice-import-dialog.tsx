@@ -404,7 +404,7 @@ function PdfImportPanel({
               </TableHeader>
               <TableBody>
                 {preview.rows.map((r: PdfPreviewRow, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={`pdf-row-${i}`}>
                     <TableCell>{formatDateBR(r.date)}</TableCell>
                     <TableCell className="max-w-xs truncate">{r.description}</TableCell>
                     <TableCell className="text-right">{formatBRL(r.amount)}</TableCell>
@@ -508,7 +508,7 @@ function CsvDiagnostics({ preview }: { preview: Extract<PreviewResult, { ok: tru
           </TableHeader>
           <TableBody>
             {rowsToShow.map((r, i) => (
-              <TableRow key={i}>
+              <TableRow key={`csv-row-${i}`}>
                 <TableCell>{r.date ? formatDateBR(r.date) : "—"}</TableCell>
                 <TableCell className="max-w-xs truncate">{r.description || "—"}</TableCell>
                 <TableCell className="text-right">{formatBRL(r.amount)}</TableCell>

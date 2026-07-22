@@ -285,7 +285,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
             </p>
             <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
               {alerts.map((a, i) => (
-                <li key={i}>
+                <li key={`alert-${i}`}>
                   <Link href={a.href} className="group flex items-start gap-2">
                     <span className={`h-1.5 w-1.5 rounded-full mt-1.5 shrink-0 ${SEVERITY_DOT[a.severity]}`} />
                     <span className="min-w-0 text-sm">
@@ -309,7 +309,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
             </p>
             <div className="space-y-1.5 text-sm leading-relaxed">
               {summary.map((s, i) => (
-                <p key={i} className={i === 0 ? "text-foreground" : "text-muted-foreground"}>{s}</p>
+                <p key={`summary-${i}`} className={i === 0 ? "text-foreground" : "text-muted-foreground"}>{s}</p>
               ))}
             </div>
           </CardContent>
@@ -328,7 +328,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
             </div>
             <ul className="mt-4 space-y-1.5">
               {health.fatores.slice(0, 4).map((fator, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs">
+                <li key={`health-${i}`} className="flex items-start gap-2 text-xs">
                   {fator.ok ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-success mt-0.5 shrink-0" />
                   ) : (

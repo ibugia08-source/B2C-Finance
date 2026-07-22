@@ -39,7 +39,7 @@ export function CompositionDonut({
               stroke="none"
             >
               {items.map((d, i) => (
-                <Cell key={i} fill={d.color} />
+                <Cell key={`donut-cell-${i}`} fill={d.color} />
               ))}
             </Pie>
             <Tooltip content={<DonutTooltip total={total} />} />
