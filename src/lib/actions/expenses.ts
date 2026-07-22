@@ -114,27 +114,22 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
 
       if (parsed.scope === "future" && existing.recurrenceGroupId) {
         // Esta e as próximas ocorrências do grupo (não pagas).
-        const future = await prisma.transaction.findMany({
+        // Uma única query em lote (antes: 1 updateMany POR ocorrência).
+        // status/vencimento de cada ocorrência são preservados.
+        await prisma.transaction.updateMany({
           where: {
             recurrenceGroupId: existing.recurrenceGroupId,
             dueDate: { gte: existing.dueDate ?? existing.date },
             status: { not: "pago" },
           },
-          select: { id: true, dueDate: true },
+          data: {
+            description: base.description,
+            notes: base.notes,
+            amount: base.amount,
+            expenseType: base.expenseType,
+            cardId: base.cardId,
+          },
         });
-        for (const f of future) {
-          await prisma.transaction.updateMany({
-            where: { id: f.id },
-            data: {
-              description: base.description,
-              notes: base.notes,
-              amount: base.amount,
-              expenseType: base.expenseType,
-              cardId: base.cardId,
-              // status/vencimento de cada ocorrência são preservados
-            },
-          });
-        }
       } else {
         await prisma.transaction.update({ where: { id: parsed.id }, data: base });
       }

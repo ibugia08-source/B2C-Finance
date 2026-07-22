@@ -128,22 +128,23 @@ export async function ensurePayroll(
         where: { month, year, status: "PENDING" },
         include: { client: { select: { name: true } } },
       });
-      for (const c of pending) {
+      if (pending.length > 0) {
+        // Lote único (antes: 2 queries POR comissão) — mesma atomicidade.
         await prisma.$transaction([
-          prisma.payrollItem.create({
-            data: {
+          prisma.payrollItem.createMany({
+            data: pending.map((c) => ({
               payrollId: run.id,
               employeeId: c.employeeId,
-              kind: "COMMISSION",
+              kind: "COMMISSION" as PayrollItemKind,
               amount: c.amount,
               notes:
                 [c.client?.name ? `Comissão — ${c.client.name}` : "Comissão", c.notes]
                   .filter(Boolean)
                   .join(" · "),
-            },
+            })),
           }),
-          prisma.commission.update({
-            where: { id: c.id },
+          prisma.commission.updateMany({
+            where: { id: { in: pending.map((c) => c.id) } },
             data: { status: "APPROVED" },
           }),
         ]);
