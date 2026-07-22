@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { saveOffer } from "@/lib/actions/offers";
 import { Plus } from "lucide-react";
+import { formatDecimalInput as fmt } from "@/lib/format";
 
 export const OFFER_MODALITY_LABEL: Record<string, string> = {
   MRR: "MRR (recorrente mensal)",
@@ -42,9 +43,6 @@ export function OfferDialog({
   const [selectedServices, setSelectedServices] = useState<Set<string>>(
     new Set<string>(initial?.serviceIds ?? [])
   );
-
-  const fmt = (v: any) =>
-    v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 
   function toggleService(id: string) {
     setSelectedServices((prev) => {

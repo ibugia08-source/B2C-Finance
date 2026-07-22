@@ -15,7 +15,7 @@
  *
  * Uso: npx tsx scripts/test-fechamento-mensal.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_fechamento__";

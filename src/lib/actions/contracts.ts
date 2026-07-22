@@ -1,10 +1,10 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ContractStatus, ContractType, RecurrenceType } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
+import { parseBRL, parseDateBR, formatBRL, clean } from "@/lib/format";
 import {
   generateBillingsForContract,
   generateBillingsForAllActive,
@@ -12,10 +12,6 @@ import {
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 const money = (v: FormDataEntryValue | null): number => parseBRL(String(v ?? "0"));
 const date = (v: FormDataEntryValue | null): Date | null => {
   const raw = clean(v);
@@ -321,8 +317,6 @@ export async function renewClientContract(formData: FormData): Promise<ActionRes
     });
 
     revalidateContracts(c.clientId);
-    revalidatePath("/clientes");
-    revalidatePath("/cobrancas");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao renovar o contrato." };
@@ -375,8 +369,5 @@ export async function generateAllBillings(): Promise<ActionResult & { created?: 
 }
 
 function revalidateContracts(clientId?: string) {
-  revalidatePath("/acordos");
-  revalidatePath("/clientes");
-  if (clientId) revalidatePath(`/clientes/${clientId}`);
-  revalidatePath("/dashboard");
+  revalidateAgency({ clientId });
 }

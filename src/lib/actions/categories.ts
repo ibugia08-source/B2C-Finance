@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 
 const CategorySchema = z.object({
@@ -29,11 +30,13 @@ export async function saveCategory(formData: FormData) {
       data: { name: parsed.name, color: parsed.color, kind: parsed.kind },
     });
   }
+  revalidateFinance();
   revalidatePath("/configuracoes");
 }
 
 export async function deleteCategory(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.category.delete({ where: { id } });
+  revalidateFinance();
   revalidatePath("/configuracoes");
 }

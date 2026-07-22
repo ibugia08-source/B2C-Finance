@@ -1,4 +1,10 @@
+// Classificação de pagador por pontualidade (fração de cobranças pagas em dia)
+const GOOD_PAYER_ONTIME_RATE = 0.8;
+const IRREGULAR_PAYER_ONTIME_RATE = 0.5;
+
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas financeiras POR CLIENTE em lote (zero N+1).
@@ -38,7 +44,6 @@ const EMPTY: ClientSummary = {
   situation: "SEM_COBRANCA",
 };
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export async function getClientSummaries(
   clientIds: string[]
@@ -63,7 +68,7 @@ export async function getClientSummaries(
         by: ["clientId"],
         where: {
           clientId: { in: clientIds },
-          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+          status: { in: [...BILLING_OPEN_STATUSES] },
         },
         _sum: { amount: true, paidTotal: true },
         _min: { dueDate: true },
@@ -177,10 +182,10 @@ export async function getClientRiskProfile(
   } else if (paidCount === 0) {
     riskLevel = "sem_historico";
     payerLabel = "Sem histórico";
-  } else if (paidCount >= 3 && (onTimeRate ?? 0) >= 0.8) {
+  } else if (paidCount >= 3 && (onTimeRate ?? 0) >= GOOD_PAYER_ONTIME_RATE) {
     riskLevel = "baixo";
     payerLabel = "Bom pagador";
-  } else if ((onTimeRate ?? 1) < 0.5) {
+  } else if ((onTimeRate ?? 1) < IRREGULAR_PAYER_ONTIME_RATE) {
     riskLevel = "alto";
     payerLabel = "Pagador irregular";
   } else {

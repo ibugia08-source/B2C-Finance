@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { limitesUsadosPorCartao } from "./calculations";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas de DESPESAS + cartões (mini dashboard do módulo Despesas e
@@ -13,7 +14,6 @@ import { limitesUsadosPorCartao } from "./calculations";
  *  - "Débitos em faturas" = faturas de cartão em aberto (total − pago).
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export type ExpenseSummary = {
   total: number; // despesas do mês (não canceladas)

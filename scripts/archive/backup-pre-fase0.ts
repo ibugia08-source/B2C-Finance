@@ -3,7 +3,7 @@
  * Exporta toda a DB em JSON antes de ajustes de schema
  * Uso: npx tsx scripts/backup-pre-fase0.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 import * as fs from "fs";
 import * as path from "path";

@@ -9,7 +9,7 @@
  * Usa o MESMO código de produção. TAG + cleanup.
  * Uso: npx tsx scripts/test-carteira-venda-exclusao.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_carteira__";

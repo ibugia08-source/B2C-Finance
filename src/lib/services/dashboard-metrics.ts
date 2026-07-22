@@ -1,6 +1,9 @@
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { ownerCached } from "@/lib/owner-cache";
+import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, toNumber as n } from "@/lib/format";
 import {
   getFinanceSummary,
   getCashSummary,
@@ -8,6 +11,7 @@ import {
   type CashSummary,
 } from "./finance-metrics";
 import { getDelinquentClients } from "./billing-metrics";
+import { mrrAtivo, tcvVendido } from "./contract-metrics";
 import {
   getPeriodRevenue,
   getReceiptsSummary,
@@ -35,7 +39,6 @@ import { getMonthDelinquencies } from "./client-metrics";
  *    pelo período.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export type DashboardFilters = {
   period: Period;
@@ -132,7 +135,7 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
         _sum: { amount: true },
       }),
       prisma.billing.aggregate({
-        where: { ...bw, status: { in: ["PENDING", "PARTIAL"] } },
+        where: { ...bw, status: { in: [...BILLING_AWAITING_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.billing.aggregate({
@@ -149,23 +152,10 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
           renewalDate: { not: null, lte: renewLimit },
         },
       }),
-      prisma.contract.aggregate({
-        where: {
-          ...contractClientWhere,
-          status: { in: ["ACTIVE", "RENEWAL"] },
-          startDate: { lte: today },
-          OR: [{ endDate: null }, { endDate: { gte: today } }],
-        },
-        _sum: { monthlyValue: true },
-      }),
-      prisma.contract.aggregate({
-        where: {
-          ...contractClientWhere,
-          startDate: { gte: start, lt: end },
-          status: { notIn: ["CANCELED"] },
-        },
-        _sum: { totalValue: true },
-      }),
+      // Delegado a contract-metrics (fonte única da métrica contratual) —
+      // antes estas 2 queries eram cópias inline das mesmas agregações.
+      mrrAtivo(f.clientId),
+      tcvVendido(start, end, f.clientId),
     ]);
 
   const openOf = (a: { _sum: { amount: any; paidTotal: any } }) =>
@@ -181,8 +171,8 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
     receitaPendente,
     receitaVencida,
     inadimplenciaTaxa: totalAberto > 0 ? receitaVencida / totalAberto : 0,
-    mrrAtivo: n(mrr._sum.monthlyValue),
-    tcvVendido: n(tcv._sum.totalValue),
+    mrrAtivo: mrr,
+    tcvVendido: tcv,
     novosClientes: novos,
     clientesAtivos: ativos,
     clientesInadimplentes: delinq.length,
@@ -429,6 +419,13 @@ export type Health = {
   fatores: { ok: boolean; text: string }[];
 };
 
+// Limiares do health-score (frações da base indicada em cada regra)
+const INADIMPLENCIA_ALTA = 0.25;
+const INADIMPLENCIA_ATENCAO = 0.1;
+const FOLHA_SOBRE_RECEITA_CRITICA = 0.5;
+const FOLHA_SOBRE_RECEITA_ALTA = 0.4;
+const FIXAS_SOBRE_RECEITA_LIMITE = 0.6;
+
 export function computeHealth(
   finance: FinanceSummary,
   cash: CashSummary,
@@ -452,16 +449,16 @@ export function computeHealth(
   else ok(`Lucro de ${formatBRL(finance.lucro)} no período`);
 
   const inadPct = Math.round(inadimplenciaTaxa * 100);
-  if (inadimplenciaTaxa > 0.25) hit(15, `Inadimplência alta: ${inadPct}% do que está em aberto já venceu`);
-  else if (inadimplenciaTaxa > 0.1) hit(8, `Inadimplência em ${inadPct}% do aberto — atenção`);
+  if (inadimplenciaTaxa > INADIMPLENCIA_ALTA) hit(15, `Inadimplência alta: ${inadPct}% do que está em aberto já venceu`);
+  else if (inadimplenciaTaxa > INADIMPLENCIA_ATENCAO) hit(8, `Inadimplência em ${inadPct}% do aberto — atenção`);
   else ok(`Inadimplência controlada (${inadPct}%)`);
 
   const folhaPct = Math.round(finance.folhaSobreReceita * 100);
-  if (finance.folhaSobreReceita > 0.5) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
-  else if (finance.folhaSobreReceita > 0.4) hit(10, `Folha em ${folhaPct}% da receita — acima do ideal de 40%`);
+  if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_CRITICA) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
+  else if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_ALTA) hit(10, `Folha em ${folhaPct}% da receita — acima do ideal de 40%`);
   else ok(`Folha em ${folhaPct}% da receita`);
 
-  if (finance.receitas > 0 && finance.despesasFixas > finance.receitas * 0.6)
+  if (finance.receitas > 0 && finance.despesasFixas > finance.receitas * FIXAS_SOBRE_RECEITA_LIMITE)
     hit(8, `Despesas fixas consomem ${Math.round((finance.despesasFixas / finance.receitas) * 100)}% da receita`);
   else ok("Despesas fixas sob controle");
 
@@ -564,7 +561,7 @@ async function getClientsBlock(): Promise<ClientsBlock> {
   return { ativos, pausados, perdidos, mrrAtivos, tcvAtivos, devendoMes, pagosMes };
 }
 
-export async function getExecutiveDashboard(f: DashboardFilters): Promise<ExecutiveDashboard> {
+async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<ExecutiveDashboard> {
   const in7days = new Date();
   in7days.setDate(in7days.getDate() + 7);
   const today = new Date();
@@ -704,3 +701,9 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
     clients, upsell, expenses, receipts,
   };
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getExecutiveDashboard = ownerCached("executive-dashboard", getExecutiveDashboardImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD],
+});

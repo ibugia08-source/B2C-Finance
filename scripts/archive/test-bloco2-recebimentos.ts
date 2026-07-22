@@ -12,7 +12,7 @@
  * Usa o MESMO código de produção. Dados com TAG + cleanup ao final.
  * Uso: npx tsx scripts/test-bloco2-recebimentos.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_bloco2__";

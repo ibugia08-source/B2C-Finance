@@ -1,7 +1,8 @@
 "use server";
+import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
 
@@ -52,15 +53,13 @@ export async function saveCashBox(formData: FormData) {
     await prisma.cashBox.create({ data });
   }
 
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function deleteCashBox(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.cashBox.delete({ where: { id } });
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 const MoveSchema = z.object({
@@ -106,8 +105,7 @@ export async function registerCashMovement(formData: FormData) {
     }),
   ]);
 
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 /**
@@ -159,7 +157,7 @@ export async function launchResultToCash(input: {
     const disponivel = resultado - alreadyLaunched;
     if (disponivel <= 0)
       return { ok: false, error: "Todo o resultado deste mês já foi lançado ao caixa." };
-    if (amount > disponivel + 0.005)
+    if (amount > disponivel + MONEY_EPSILON)
       return {
         ok: false,
         error: `Valor acima do disponível para lançar (${disponivel.toFixed(2)}).`,
@@ -198,8 +196,7 @@ export async function launchResultToCash(input: {
       }),
     ]);
 
-    revalidatePath("/caixa");
-    revalidatePath("/dashboard");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao lançar ao caixa." };
@@ -221,6 +218,5 @@ export async function deleteCashMovement(id: string) {
       data: { currentAmount: box.currentAmount + delta },
     }),
   ]);
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }

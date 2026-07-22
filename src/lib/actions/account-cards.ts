@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL } from "@/lib/format";
 
@@ -41,8 +41,7 @@ export async function saveAccountCard(formData: FormData) {
   } else {
     await prisma.accountCard.create({ data });
   }
-  revalidatePath(`/cartoes/${parsed.cardId}`);
-  revalidatePath("/cartoes");
+  revalidateFinance({ cardId: parsed.cardId });
 }
 
 export async function deleteAccountCard(id: string) {
@@ -50,7 +49,6 @@ export async function deleteAccountCard(id: string) {
   const existing = await prisma.accountCard.findUnique({ where: { id } });
   await prisma.accountCard.delete({ where: { id } });
   if (existing) {
-    revalidatePath(`/cartoes/${existing.cardId}`);
-    revalidatePath("/cartoes");
+    revalidateFinance({ cardId: existing.cardId });
   }
 }

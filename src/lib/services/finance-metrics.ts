@@ -1,5 +1,9 @@
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { ownerCached } from "@/lib/owner-cache";
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Núcleo financeiro operacional — cálculos consolidados da agência.
@@ -16,7 +20,6 @@ import type { Period } from "@/lib/period";
  *    − despesas pendentes no horizonte − parcelas de passivos no horizonte.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 // ===================================================================
 // Resultado operacional do período
@@ -35,7 +38,7 @@ export type FinanceSummary = {
   folhaSobreReceita: number; // 0-1
 };
 
-export async function getFinanceSummary(period: Period): Promise<FinanceSummary> {
+async function getFinanceSummaryImpl(period: Period): Promise<FinanceSummary> {
   const { start, end } = period;
 
   const [txReceita, incomeReceived, despesasAgg, despesasPagasAgg, fixasAgg, variaveisAgg, folhaItems] =
@@ -125,7 +128,7 @@ async function projecao(caixa: number, dias: number): Promise<number> {
   const [entradas, saidas, passivos] = await Promise.all([
     prisma.billing.aggregate({
       where: {
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        status: { in: [...BILLING_OPEN_STATUSES] },
         dueDate: { lte: limite },
       },
       _sum: { amount: true, paidTotal: true },
@@ -152,7 +155,7 @@ async function projecao(caixa: number, dias: number): Promise<number> {
   );
 }
 
-export async function getCashSummary(period: Period): Promise<CashSummary> {
+async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
   const { start, end } = period;
 
   const [accounts, boxes, inflow, outflow, openBillings, pendingExpenses] =
@@ -168,7 +171,7 @@ export async function getCashSummary(period: Period): Promise<CashSummary> {
         _sum: { amount: true },
       }),
       prisma.billing.aggregate({
-        where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+        where: { status: { in: [...BILLING_OPEN_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.transaction.aggregate({
@@ -230,7 +233,7 @@ export async function getBalanceSummary(): Promise<BalanceSummary> {
       prisma.account.aggregate({ where: { active: true }, _sum: { balance: true } }),
       prisma.cashBox.aggregate({ _sum: { currentAmount: true } }),
       prisma.billing.aggregate({
-        where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+        where: { status: { in: [...BILLING_OPEN_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.asset.aggregate({ _sum: { value: true } }),
@@ -334,3 +337,15 @@ export async function getPayrollSummary(
     folhaSobreReceita: receitas > 0 ? total / receitas : 0,
   };
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getFinanceSummary = ownerCached("finance-summary", getFinanceSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD_METRICS],
+});
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getCashSummary = ownerCached("cash-summary", getCashSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD_METRICS],
+});

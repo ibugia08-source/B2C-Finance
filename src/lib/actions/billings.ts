@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import {
   BillingStatus,
@@ -9,36 +9,12 @@ import {
   RevenueType,
 } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
-import { CACHE_TAGS } from "@/lib/cache-tags";
+import { parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateBilling(clientId?: string) {
-  // Invalidate server component cache paths
-  revalidatePath("/cobrancas");
-  revalidatePath("/pagamentos");
-  revalidatePath("/inadimplencia");
-  revalidatePath("/clientes");
-  if (clientId) revalidatePath(`/clientes/${clientId}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/rotina");
-
-  // Invalidate cached function tags (critical for sync)
-  revalidateTag(CACHE_TAGS.BILLINGS);
-  revalidateTag(CACHE_TAGS.BILLING_CYCLE);
-  revalidateTag(CACHE_TAGS.DASHBOARD);
-  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
-  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
-  if (clientId) {
-    revalidateTag(CACHE_TAGS.CLIENT_ID(clientId));
-    revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(clientId));
-  }
+  revalidateAgency({ clientId });
 }
 
 // ---------- Criação / edição manual ----------
@@ -157,7 +133,7 @@ export async function registerBillingPayment(
     if (!result.ok) return result;
 
     revalidateBilling(result.clientId);
-    revalidatePath("/receitas");
+    revalidateFinance(); // pagamento gera Receita Extra (Income)
     return { ok: true };
   } catch (e: any) {
     return {
@@ -177,7 +153,7 @@ export async function deleteBillingPayment(id: string): Promise<ActionResult> {
     const result = await revertBillingPayment(id);
     if (!result.ok) return result;
     revalidateBilling(result.clientId);
-    revalidatePath("/receitas");
+    revalidateFinance(); // reverte a Receita Extra (Income)
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o pagamento." };

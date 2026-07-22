@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas contratuais da agência — separação explícita entre:
@@ -13,16 +14,23 @@ import { getValidDueDateForMonth } from "@/lib/financial/due-date";
  *  TCV 5.100 · reconhecida 1.700/mês · MRR equivalente 1.700 na vigência.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 /** Contratos considerados "vigentes" para MRR. */
 const LIVE_STATUSES = ["ACTIVE", "RENEWAL"] as const;
 
-/** MRR ativo agora: Σ monthlyValue dos contratos vigentes hoje. */
-export async function mrrAtivo(): Promise<number> {
+/**
+ * MRR ativo agora: Σ monthlyValue dos contratos vigentes hoje.
+ *
+ * ATENÇÃO — métrica CONTRATUAL, diferente do MRR de faturamento
+ * (revenue-metrics.getPeriodRevenue, baseado em Client.monthlyValue e
+ * cobranças). Os dois coexistem de propósito: este mede carteira de
+ * contratos; o outro, faturamento por competência.
+ */
+export async function mrrAtivo(clientId?: string): Promise<number> {
   const today = new Date();
   const agg = await prisma.contract.aggregate({
     where: {
+      ...(clientId ? { clientId } : {}),
       status: { in: LIVE_STATUSES as any },
       startDate: { lte: today },
       OR: [{ endDate: null }, { endDate: { gte: today } }],
@@ -33,9 +41,10 @@ export async function mrrAtivo(): Promise<number> {
 }
 
 /** TCV vendido no período (por data de início do contrato). */
-export async function tcvVendido(start: Date, end: Date): Promise<number> {
+export async function tcvVendido(start: Date, end: Date, clientId?: string): Promise<number> {
   const agg = await prisma.contract.aggregate({
     where: {
+      ...(clientId ? { clientId } : {}),
       startDate: { gte: start, lt: end },
       status: { notIn: ["CANCELED"] },
     },

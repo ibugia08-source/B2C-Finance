@@ -2,7 +2,7 @@
  * Teste (temporário) da fila de cobrança priorizada e mensagens.
  * Uso: npx tsx scripts/test-rotina.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_rot__";

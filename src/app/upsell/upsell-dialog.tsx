@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveUpsell } from "@/lib/actions/upsells";
 import { Plus } from "lucide-react";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
 import { UPSELL_STATUSES, UPSELL_STATUS_LABEL } from "./_meta";
 
 type Opt = { id: string; name: string };
@@ -36,9 +36,6 @@ export function UpsellDialog({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  const fmt = (v: any) =>
-    v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>

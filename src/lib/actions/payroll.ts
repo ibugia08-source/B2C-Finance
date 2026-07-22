@@ -1,22 +1,20 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import {
+  revalidatePayroll as revalidatePayrollDomain,
+  revalidateFinance,
+} from "@/lib/revalidate";
 import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
+import { parseBRL, parseDateBR, parseMonthParam, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidatePayroll() {
-  revalidatePath("/folha");
-  revalidatePath("/despesas");
-  revalidatePath("/dashboard");
+  revalidatePayrollDomain();
+  // A folha gera despesas (Transaction) — mantém as telas financeiras em dia.
+  revalidateFinance();
 }
 
 // ---------- Colaboradores ----------
@@ -130,22 +128,23 @@ export async function ensurePayroll(
         where: { month, year, status: "PENDING" },
         include: { client: { select: { name: true } } },
       });
-      for (const c of pending) {
+      if (pending.length > 0) {
+        // Lote único (antes: 2 queries POR comissão) — mesma atomicidade.
         await prisma.$transaction([
-          prisma.payrollItem.create({
-            data: {
+          prisma.payrollItem.createMany({
+            data: pending.map((c) => ({
               payrollId: run.id,
               employeeId: c.employeeId,
-              kind: "COMMISSION",
+              kind: "COMMISSION" as PayrollItemKind,
               amount: c.amount,
               notes:
                 [c.client?.name ? `Comissão — ${c.client.name}` : "Comissão", c.notes]
                   .filter(Boolean)
                   .join(" · "),
-            },
+            })),
           }),
-          prisma.commission.update({
-            where: { id: c.id },
+          prisma.commission.updateMany({
+            where: { id: { in: pending.map((c) => c.id) } },
             data: { status: "APPROVED" },
           }),
         ]);

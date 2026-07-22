@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
 
@@ -100,15 +100,13 @@ export async function saveIncome(formData: FormData) {
     await prisma.income.create({ data });
   }
 
-  revalidatePath("/receitas");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function deleteIncome(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.income.delete({ where: { id } });
-  revalidatePath("/receitas");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function setIncomeStatus(
@@ -117,6 +115,5 @@ export async function setIncomeStatus(
 ) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.income.update({ where: { id }, data: { status } });
-  revalidatePath("/receitas");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }

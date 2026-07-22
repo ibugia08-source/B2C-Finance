@@ -1,3 +1,4 @@
+import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
@@ -28,7 +29,7 @@ export async function buildAgencySnapshotText(): Promise<string> {
     getExecutiveDashboard({ period }),
     getDelinquentClients(),
     prisma.billing.findMany({
-      where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today, lte: in15 } },
+      where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today, lte: in15 } },
       orderBy: { dueDate: "asc" },
       take: 12,
       select: {

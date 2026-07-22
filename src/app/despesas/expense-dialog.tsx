@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveExpense } from "@/lib/actions/expenses";
 import { Plus } from "lucide-react";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 
 type CardOpt = { id: string; name: string };
@@ -41,7 +41,6 @@ export function ExpenseDialog({
   const [recurrence, setRecurrence] = useState<string>(initial?.recurrence ?? "NONE");
   const isEditRecurring = Boolean(initial?.recurrenceGroupId);
 
-  const fmt = (v: any) => (v != null ? Number(v).toFixed(2).replace(".", ",") : "");
   const invoiceRef =
     initial?.cardInvoiceYear && initial?.cardInvoiceMonth
       ? `${initial.cardInvoiceYear}-${String(initial.cardInvoiceMonth).padStart(2, "0")}`

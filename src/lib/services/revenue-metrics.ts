@@ -1,6 +1,10 @@
+import { ownerCached } from "@/lib/owner-cache";
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { toNumber as n } from "@/lib/format";
+import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -18,7 +22,6 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  *  - Total do mês = MRR do mês + TCV do mês.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 // Status que CONTAM como cliente ativo para faturamento no mês corrente.
 // DELINQUENT conta (é ativo devendo); PAUSED/CHURNED/INACTIVE/PROSPECT não.
@@ -171,16 +174,27 @@ async function getPeriodRevenueImpl(
   };
 }
 
-// Cache revenue calculations for 1 hour to reduce repeated calculations
-export const getPeriodRevenue = unstable_cache(
-  getPeriodRevenueImpl,
-  (start: Date, end: Date) => [
-    "period-revenue",
-    start.toISOString().split("T")[0],
-    end.toISOString().split("T")[0],
-  ],
+/**
+ * Cache de 1h. O ownerId é resolvido FORA do callback cacheado (dentro dele,
+ * cookies() lança erro → o escopo caía no fail-closed "__no_owner__" e o
+ * cache servia zeros) e entra como argumento — logo, como parte da chave:
+ * cada usuário tem sua própria entrada, sem vazamento entre contas.
+ */
+const getPeriodRevenueCached = unstable_cache(
+  (ownerId: string | null, start: Date, end: Date, filters: RevenueFilters) =>
+    runWithOwner(ownerId, () => getPeriodRevenueImpl(start, end, filters)),
+  ["period-revenue"],
   { revalidate: 3600, tags: [CACHE_TAGS.REVENUE_METRICS] }
 );
+
+export async function getPeriodRevenue(
+  start: Date,
+  end: Date,
+  filters: RevenueFilters = {}
+): Promise<PeriodRevenue> {
+  const ownerId = await resolveOwnerId();
+  return getPeriodRevenueCached(ownerId, start, end, filters);
+}
 
 // ===================================================================
 // Fechamento mensal — RECEBIMENTOS × RECEITA EXTRA (regra oficial B2C)
@@ -220,7 +234,7 @@ export type ReceiptsSummary = {
   overdueOpenAmount: number;
 };
 
-export async function getReceiptsSummary(
+async function getReceiptsSummaryImpl(
   start: Date,
   end: Date,
   filters: RevenueFilters = {}
@@ -271,7 +285,7 @@ export async function getReceiptsSummary(
     months.length
       ? prisma.billing.findMany({
           where: {
-            status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+            status: { in: [...BILLING_OPEN_STATUSES] },
             OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
             ...(clientFilter as any),
           },
@@ -536,7 +550,7 @@ function lossValue(l: { modality: string | null; monthlyValue: unknown; referenc
 
 /** Churn do PERÍODO FILTRADO (≠ getLossSummary, que é sempre o mês atual). */
 export type MonthlyChurn = { count: number; value: number };
-export async function getMonthlyChurn(start: Date, end: Date): Promise<MonthlyChurn> {
+async function getMonthlyChurnImpl(start: Date, end: Date): Promise<MonthlyChurn> {
   const losses = await prisma.clientLoss.findMany({
     where: { lostAt: { gte: start, lt: end } },
     select: { modality: true, monthlyValue: true, referenceValue: true },
@@ -553,7 +567,7 @@ export async function getMonthlyChurn(start: Date, end: Date): Promise<MonthlyCh
  * (fallback: valor mensal de referência).
  */
 export type NewClientsSummary = { count: number; revenue: number };
-export async function getNewClientsSummary(
+async function getNewClientsSummaryImpl(
   start: Date,
   end: Date
 ): Promise<NewClientsSummary> {
@@ -666,3 +680,14 @@ export async function computeLossSnapshots(
     salesOwner: c.salesOwner,
   }));
 }
+
+/** Versão cacheada por (usuário, período, filtros) — TTL 300s. */
+export const getReceiptsSummary = ownerCached("receipts-summary", getReceiptsSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.REVENUE_METRICS],
+});
+
+/** Versões cacheadas por (usuário, argumentos) — TTL 300s. */
+export const getMonthlyChurn = ownerCached("getmonthlychurn", getMonthlyChurnImpl, { revalidate: 300, tags: [CACHE_TAGS.REVENUE_METRICS] });
+
+export const getNewClientsSummary = ownerCached("new-clients-summary", getNewClientsSummaryImpl, { revalidate: 300, tags: [CACHE_TAGS.REVENUE_METRICS] });

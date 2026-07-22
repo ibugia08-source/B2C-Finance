@@ -2,7 +2,7 @@
  * Teste (temporário) do snapshot da agência para a IA.
  * Uso: npx tsx scripts/test-ai-context.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_ia__";

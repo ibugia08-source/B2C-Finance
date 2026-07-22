@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
 import { applyRules } from "@/lib/services/rules";
@@ -113,24 +113,19 @@ export async function saveTransaction(formData: FormData) {
     await attachToInvoice(tx.id);
   }
 
-  revalidatePath("/transacoes");
-  revalidatePath("/dashboard");
-  revalidatePath("/cartoes");
+  revalidateFinance();
 }
 
 export async function deleteTransaction(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.transaction.delete({ where: { id } });
-  revalidatePath("/transacoes");
-  revalidatePath("/dashboard");
-  revalidatePath("/cartoes");
+  revalidateFinance();
 }
 
 export async function setTransactionStatus(id: string, status: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.transaction.update({ where: { id }, data: { status } });
-  revalidatePath("/transacoes");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 function normalizeDescription(s: string) {
@@ -272,9 +267,5 @@ export async function setTransactionResponsible(
     }
   }
 
-  revalidatePath("/cartoes");
-  revalidatePath(`/cartoes/${tx.cardId}`);
-  revalidatePath("/transacoes");
-  revalidatePath("/pessoas");
-  revalidatePath("/dashboard");
+  revalidateFinance({ cardId: tx.cardId });
 }

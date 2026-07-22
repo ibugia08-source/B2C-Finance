@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { parseCompetence, type ImportColumn, type ValidatedRow } from "./engine";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Definições de importação em massa — uma por módulo.
@@ -9,7 +10,6 @@ import { parseCompetence, type ImportColumn, type ValidatedRow } from "./engine"
  * ownerId é injetado pela extensão do Prisma (escopo da sessão).
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
 export type ImportRefs = {

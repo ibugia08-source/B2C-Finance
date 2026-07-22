@@ -2,7 +2,7 @@
  * Teste (temporário) do isolamento por ownerId nos novos modelos do ERP.
  * Uso: npx tsx scripts/test-erp-isolation.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 async function main() {

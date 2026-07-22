@@ -1,9 +1,9 @@
 "use server";
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath, revalidateTag } from "next/cache";
-import { CACHE_TAGS, getBillingUpdateTags } from "@/lib/cache-tags";
+import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL } from "@/lib/format";
+import { parseBRL, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
@@ -14,19 +14,9 @@ import type { ActionResult } from "./clients";
  * do cliente; o status é do recebimento do mês.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateAll(clientId?: string) {
-  revalidateTag(CACHE_TAGS.BILLINGS);
-  revalidateTag(CACHE_TAGS.CLIENTS);
-  revalidateTag(CACHE_TAGS.BILLING_CYCLE);
-  revalidateTag(CACHE_TAGS.DASHBOARD);
-  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
-  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
-  if (clientId) {
-    revalidateTag(CACHE_TAGS.CLIENT_ID(clientId));
-    revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(clientId));
-  }
+  revalidateAgency({ clientId });
 }
 
 /** Cobrança em aberto do cliente na competência (para sincronizar edições). */
@@ -36,7 +26,7 @@ async function openBillingOf(clientId: string, month: number, year: number) {
       clientId,
       competenceMonth: month,
       competenceYear: year,
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      status: { in: [...BILLING_OPEN_STATUSES] },
     },
     orderBy: { dueDate: "asc" },
   });
@@ -185,8 +175,7 @@ export async function setMonthChargeStatus(
       });
       if (!res.ok) return res;
       revalidateAll(b.clientId);
-      revalidatePath("/pagamentos");
-      revalidatePath("/receitas");
+      revalidateFinance(); // pagamento pode gerar Receita Extra (Income)
       return { ok: true };
     }
 
@@ -305,7 +294,6 @@ export async function addPastDelinquency(formData: FormData): Promise<ActionResu
     });
 
     revalidateAll(client.id);
-    revalidatePath("/inadimplencia");
     return { ok: true, id: billing.id };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao registrar a inadimplência." };
@@ -348,8 +336,7 @@ export async function deleteBillingPayments(billingId: string): Promise<ActionRe
       },
     });
     revalidateAll(b.clientId);
-    revalidatePath("/pagamentos");
-    revalidatePath("/receitas");
+    revalidateFinance(); // reverte a Receita Extra (Income)
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o pagamento." };
@@ -372,7 +359,7 @@ export async function bulkSetMonthStatus(
       const res = await setMonthChargeStatus(id, status);
       if (res.ok) changed++;
     }
-    revalidatePath("/cobrancas");
+    revalidateAll();
     return changed > 0
       ? { ok: true }
       : {

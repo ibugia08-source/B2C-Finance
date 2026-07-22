@@ -82,9 +82,25 @@ function injectOwnerData<T extends Record<string, any>>(data: T, uid: string): T
 }
 
 function makeClient() {
+  // PRISMA_LOG=1 → loga cada query com duração (profiling manual/FASE 3).
+  // Desligado por padrão; sem efeito em produção.
+  const logQueries = process.env.PRISMA_LOG === "1";
   const base = new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+    log: logQueries
+      ? ([{ emit: "event", level: "query" }, "error"] as any)
+      : process.env.NODE_ENV === "development"
+        ? ["error", "warn"]
+        : ["error"],
   });
+  if (logQueries) {
+    let count = 0;
+    (base as any).$on("query", (e: { duration: number; query: string }) => {
+      count += 1;
+      console.log(
+        `[prisma #${String(count).padStart(3)}] ${String(e.duration).padStart(5)}ms  ${e.query.slice(0, 110)}`
+      );
+    });
+  }
 
   return base.$extends({
     query: {

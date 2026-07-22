@@ -1,9 +1,9 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
-import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
+import { parseBRL, parseDateBR, parseMonthParam, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 /**
@@ -43,10 +43,6 @@ const Schema = z.object({
   scope: z.enum(["one", "future"]).default("one"),
 });
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 /** Intervalo em meses de cada recorrência. */
 function intervalOf(rec: (typeof RECURRENCES)[number], custom: number | null): number {
@@ -118,27 +114,22 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
 
       if (parsed.scope === "future" && existing.recurrenceGroupId) {
         // Esta e as próximas ocorrências do grupo (não pagas).
-        const future = await prisma.transaction.findMany({
+        // Uma única query em lote (antes: 1 updateMany POR ocorrência).
+        // status/vencimento de cada ocorrência são preservados.
+        await prisma.transaction.updateMany({
           where: {
             recurrenceGroupId: existing.recurrenceGroupId,
             dueDate: { gte: existing.dueDate ?? existing.date },
             status: { not: "pago" },
           },
-          select: { id: true, dueDate: true },
+          data: {
+            description: base.description,
+            notes: base.notes,
+            amount: base.amount,
+            expenseType: base.expenseType,
+            cardId: base.cardId,
+          },
         });
-        for (const f of future) {
-          await prisma.transaction.updateMany({
-            where: { id: f.id },
-            data: {
-              description: base.description,
-              notes: base.notes,
-              amount: base.amount,
-              expenseType: base.expenseType,
-              cardId: base.cardId,
-              // status/vencimento de cada ocorrência são preservados
-            },
-          });
-        }
       } else {
         await prisma.transaction.update({ where: { id: parsed.id }, data: base });
       }
@@ -174,9 +165,7 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
       }
     }
 
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/transacoes");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a despesa.";
@@ -197,8 +186,7 @@ export async function endRecurrence(groupId: string): Promise<ActionResult> {
         status: { not: "pago" },
       },
     });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao encerrar a recorrência." };
@@ -220,9 +208,7 @@ export async function deleteExpense(
     } else {
       await prisma.transaction.deleteMany({ where: { id } });
     }
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/transacoes");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir a despesa." };
@@ -247,9 +233,7 @@ export async function setExpenseDueDate(
     if (isNaN(dueDate.getTime())) return { ok: false, error: "Data inválida." };
 
     await prisma.transaction.updateMany({ where: { id }, data: { dueDate } });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/rotina");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao alterar o vencimento." };
@@ -263,9 +247,7 @@ export async function setExpenseStatus(
   await getViewer();
   try {
     await prisma.transaction.updateMany({ where: { id }, data: { status } });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/rotina"); // "Marcar como paga" pela Rotina reflete na hora
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar o status." };

@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL } from "@/lib/format";
 
@@ -57,11 +57,11 @@ export async function saveRule(formData: FormData) {
   } else {
     await prisma.categorizationRule.create({ data: { ...parsed, id: undefined } as any });
   }
-  revalidatePath("/regras");
+  revalidateFinance();
 }
 
 export async function deleteRule(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.categorizationRule.delete({ where: { id } });
-  revalidatePath("/regras");
+  revalidateFinance();
 }

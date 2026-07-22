@@ -1,11 +1,10 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath, revalidateTag } from "next/cache";
-import { CACHE_TAGS } from "@/lib/cache-tags";
+import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
+import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 /**
@@ -90,10 +89,6 @@ const ClientSchema = z
   });
 
 /** Normaliza um campo do FormData: string vazia vira null. */
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 /**
  * Registra a PERDA (ClientLoss) dos clientes que estão virando CHURNED:
@@ -304,22 +299,10 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
             data: { startedAt: entry },
           });
         }
-        revalidatePath("/acordos");
-        revalidatePath("/cobrancas");
       }
     }
 
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
-
-    // Invalidate cache tags to sync dashboard, rotina, and billing data
-    revalidateTag(CACHE_TAGS.CLIENTS);
-    revalidateTag(CACHE_TAGS.CLIENT_ID(id));
-    revalidateTag(CACHE_TAGS.BILLINGS);
-    revalidateTag(CACHE_TAGS.BILLING_CYCLE);
-    revalidateTag(CACHE_TAGS.DASHBOARD);
-    revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
-    revalidateTag(CACHE_TAGS.REVENUE_METRICS);
+    revalidateAgency({ clientId: id });
 
     return { ok: true, id };
   } catch (e: any) {
@@ -470,9 +453,7 @@ export async function deleteClient(id: string): Promise<ActionResult> {
     const { deleteClientsDeep } = await import("@/lib/services/client-purge");
     const res = await deleteClientsDeep([id]);
     if (res.deleted === 0) return { ok: false, error: "Cliente não encontrado." };
-    revalidatePath("/clientes");
-    revalidatePath("/cobrancas");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o cliente." };
@@ -500,9 +481,7 @@ export async function setClientStatus(
         churnedAt: s === "CHURNED" ? existing.churnedAt ?? new Date() : null,
       },
     });
-    revalidatePath("/clientes");
-    revalidatePath(`/clientes/${id}`);
-    revalidatePath("/dashboard");
+    revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
@@ -558,9 +537,7 @@ export async function markClientLost(
       data: { status: "CHURNED", churnedAt: lostAt },
     });
 
-    revalidatePath("/clientes");
-    revalidatePath(`/clientes/${id}`);
-    revalidatePath("/dashboard");
+    revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao registrar a perda." };
@@ -589,8 +566,7 @@ export async function setClientLossReason(
       where: { id: last.id },
       data: { reason: text },
     });
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao salvar o motivo da perda." };
@@ -611,9 +587,7 @@ export async function setClientModality(
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
     await prisma.client.update({ where: { id }, data: { modality: value } });
-    revalidateTag(CACHE_TAGS.CLIENT_ID(id));
-    revalidateTag(CACHE_TAGS.CLIENTS);
-    revalidateTag(CACHE_TAGS.DASHBOARD);
+    revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a modalidade.";
@@ -634,9 +608,7 @@ export async function setClientMonthlyValue(
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
     await prisma.client.update({ where: { id }, data: { monthlyValue: value } });
-    revalidatePath("/clientes");
-    revalidatePath("/cobrancas");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar o valor mensal." };
@@ -657,8 +629,7 @@ export async function setClientRenewalMonth(
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
     await prisma.client.update({ where: { id }, data: { renewalMonth: value } });
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o mês de renovação.";
@@ -711,8 +682,7 @@ export async function setClientDelinquency(
         });
       }
     }
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a inadimplência.";
@@ -783,8 +753,7 @@ export async function bulkUpdateClients(input: {
     }
 
     await prisma.client.updateMany({ where: { id: { in: parsed.ids } }, data });
-    revalidatePath("/clientes");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar em massa.";
@@ -799,9 +768,7 @@ export async function bulkDeleteClients(ids: string[]): Promise<ActionResult> {
     if (!ids.length) return { ok: false, error: "Selecione ao menos um cliente." };
     const { deleteClientsDeep } = await import("@/lib/services/client-purge");
     await deleteClientsDeep(ids);
-    revalidatePath("/clientes");
-    revalidatePath("/cobrancas");
-    revalidatePath("/dashboard");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir em massa." };
@@ -872,7 +839,7 @@ export async function saveClientContact(formData: FormData): Promise<ActionResul
       await prisma.clientContact.create({ data });
     }
 
-    revalidatePath(`/clientes/${parsed.clientId}`);
+    revalidateAgency({ clientId: parsed.clientId });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar o contato.";
@@ -886,7 +853,7 @@ export async function deleteClientContact(id: string): Promise<ActionResult> {
     const existing = await prisma.clientContact.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contato não encontrado." };
     await prisma.clientContact.deleteMany({ where: { id } });
-    revalidatePath(`/clientes/${existing.clientId}`);
+    revalidateAgency({ clientId: existing.clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o contato." };

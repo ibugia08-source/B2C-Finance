@@ -11,9 +11,16 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "b2c_session";
 
-const SECRET =
-  process.env.SESSION_SECRET ??
-  "b2c-dev-secret-change-me-please-32chars-or-more";
+const SECRET = (() => {
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    // Fail-closed: sem secret em produção, qualquer fallback publicado no
+    // repositório permitiria forjar cookies de sessão.
+    throw new Error("SESSION_SECRET não definido — obrigatório em produção.");
+  }
+  return "b2c-dev-secret-change-me-please-32chars-or-more";
+})();
 
 const PUBLIC_PATHS = new Set<string>(["/login"]);
 

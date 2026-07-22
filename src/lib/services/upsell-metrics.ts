@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas de UPSELL (vendas internas para a base).
@@ -9,7 +10,6 @@ import { prisma } from "@/lib/prisma";
  *    ainda abertas não contam no denominador.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export const UPSELL_OPEN_STATUSES = ["OPPORTUNITY", "NEGOTIATION"] as const;
 

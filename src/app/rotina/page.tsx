@@ -1,3 +1,4 @@
+import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -73,7 +74,7 @@ export default async function RotinaPage() {
       prisma.account.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
       // Cobranças que vencem hoje ou nos próximos 3 dias (a receber)
       prisma.billing.findMany({
-        where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today, lt: in4 } },
+        where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today, lt: in4 } },
         orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
         select: {
           id: true, description: true, amount: true, paidTotal: true, dueDate: true,

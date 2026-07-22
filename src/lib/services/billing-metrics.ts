@@ -1,4 +1,7 @@
+import { BILLING_AWAITING_STATUSES, BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
+import { resolveOwnerId } from "@/lib/auth/owner-scope";
 
 /**
  * Métricas de cobrança. Convenções:
@@ -8,18 +11,29 @@ import { prisma } from "@/lib/prisma";
  *  - a vencer = em aberto com vencimento >= hoje
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
-export const OPEN_STATUSES = ["PENDING", "PARTIAL", "OVERDUE"] as const;
+export const OPEN_STATUSES = BILLING_OPEN_STATUSES;
 
 /**
  * Marca como OVERDUE toda cobrança aberta com vencimento no passado.
- * Chamada nas páginas de cobrança (barata: 1 updateMany indexado).
+ *
+ * Throttle em memória por dono (1h): a marcação é idempotente e muda no
+ * máximo 1×/dia por cobrança — não precisa rodar a CADA page view (antes
+ * era uma escrita no caminho crítico de dashboard, cobranças, pagamentos,
+ * relatórios e inadimplência). Reinicia em cold start, o que é inofensivo.
  */
+const MARK_OVERDUE_TTL_MS = 60 * 60 * 1000;
+const lastMarkedAt = new Map<string, number>();
+
 export async function markOverdueBillings(): Promise<number> {
+  const owner = (await resolveOwnerId()) ?? "__anon__";
+  const last = lastMarkedAt.get(owner) ?? 0;
+  if (Date.now() - last < MARK_OVERDUE_TTL_MS) return 0;
+  lastMarkedAt.set(owner, Date.now());
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const r = await prisma.billing.updateMany({
-    where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { lt: today } },
+    where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { lt: today } },
     data: { status: "OVERDUE" },
   });
   return r.count;
@@ -51,7 +65,7 @@ export async function getBillingKpis(
       _sum: { amount: true, paidTotal: true },
     }),
     prisma.billing.aggregate({
-      where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today } },
+      where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today } },
       _sum: { amount: true, paidTotal: true },
     }),
     prisma.billing.aggregate({

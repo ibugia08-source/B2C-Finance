@@ -2,7 +2,7 @@
  * Teste (temporário) da camada de relatórios + visões salvas.
  * Uso: npx tsx scripts/test-reports.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_rel__";

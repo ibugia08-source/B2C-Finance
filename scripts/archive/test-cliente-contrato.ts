@@ -2,7 +2,7 @@
  * Teste (temporário) do cadastro de cliente com modelo MRR/TCV e renovação.
  * Uso: npx tsx scripts/test-cliente-contrato.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_cc__";

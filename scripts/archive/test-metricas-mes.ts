@@ -13,7 +13,7 @@
  * Delta-based (getReceiptsSummary antes/depois), TAG + cleanup.
  * Uso: npx tsx scripts/test-metricas-mes.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_metricas__";

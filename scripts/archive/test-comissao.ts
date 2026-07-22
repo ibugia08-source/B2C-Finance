@@ -2,7 +2,7 @@
  * Teste (temporário) do fluxo de comissões na folha.
  * Uso: npx tsx scripts/test-comissao.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_com__";
