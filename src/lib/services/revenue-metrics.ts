@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { toNumber as n } from "@/lib/format";
+import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -172,14 +173,27 @@ async function getPeriodRevenueImpl(
   };
 }
 
-// Cache revenue calculations for 1 hour to reduce repeated calculations
-// keyParts deve ser string[] estático; os argumentos (start, end) já compõem
-// a chave do cache automaticamente via serialização do unstable_cache.
-export const getPeriodRevenue = unstable_cache(
-  getPeriodRevenueImpl,
+/**
+ * Cache de 1h. O ownerId é resolvido FORA do callback cacheado (dentro dele,
+ * cookies() lança erro → o escopo caía no fail-closed "__no_owner__" e o
+ * cache servia zeros) e entra como argumento — logo, como parte da chave:
+ * cada usuário tem sua própria entrada, sem vazamento entre contas.
+ */
+const getPeriodRevenueCached = unstable_cache(
+  (ownerId: string | null, start: Date, end: Date, filters: RevenueFilters) =>
+    runWithOwner(ownerId, () => getPeriodRevenueImpl(start, end, filters)),
   ["period-revenue"],
   { revalidate: 3600, tags: [CACHE_TAGS.REVENUE_METRICS] }
 );
+
+export async function getPeriodRevenue(
+  start: Date,
+  end: Date,
+  filters: RevenueFilters = {}
+): Promise<PeriodRevenue> {
+  const ownerId = await resolveOwnerId();
+  return getPeriodRevenueCached(ownerId, start, end, filters);
+}
 
 // ===================================================================
 // Fechamento mensal — RECEBIMENTOS × RECEITA EXTRA (regra oficial B2C)

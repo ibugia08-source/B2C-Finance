@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import type { Period } from "@/lib/period";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { toNumber as n } from "@/lib/format";
+import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 import {
   getPeriodRevenue,
   getReceiptsSummary,
@@ -196,14 +197,23 @@ async function getDashboardMainMetricsImpl(period: Period): Promise<DashboardMai
   };
 }
 
-// Cache dashboard metrics for 5 minutes per period to reduce database pressure
-// keyParts deve ser string[] estático; os argumentos (period) já compõem a
-// chave do cache automaticamente via serialização do unstable_cache.
-export const getDashboardMainMetrics = unstable_cache(
-  getDashboardMainMetricsImpl,
+/**
+ * Cache de 5 min. O ownerId é resolvido FORA do callback cacheado (dentro
+ * dele, cookies() lança erro → o escopo caía no fail-closed "__no_owner__"
+ * e o cache servia zeros) e entra como argumento — logo, como parte da
+ * chave: cada usuário tem sua própria entrada, sem vazamento entre contas.
+ */
+const getDashboardMainMetricsCached = unstable_cache(
+  (ownerId: string | null, period: Period) =>
+    runWithOwner(ownerId, () => getDashboardMainMetricsImpl(period)),
   ["dashboard-main-metrics"],
   { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] }
 );
+
+export async function getDashboardMainMetrics(period: Period): Promise<DashboardMainResult> {
+  const ownerId = await resolveOwnerId();
+  return getDashboardMainMetricsCached(ownerId, period);
+}
 
 // ===================================================================
 // Séries ANUAIS (12 meses do ano selecionado) — 3 gráficos principais
