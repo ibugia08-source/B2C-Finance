@@ -1,6 +1,8 @@
+import { CACHE_TAGS } from "@/lib/cache-tags";
 // Cliente cuja receita dos últimos 90 dias representa ≥ 20% do total é "key account"
 const KEY_ACCOUNT_REVENUE_SHARE = 0.2;
 
+import { ownerCached } from "@/lib/owner-cache";
 import { prisma } from "@/lib/prisma";
 import { getDelinquentClients } from "./billing-metrics";
 import type { MessageTone } from "@/lib/billing-message";
@@ -53,7 +55,7 @@ export type CollectionQueueItem = {
   };
 };
 
-export async function getCollectionQueue(): Promise<CollectionQueueItem[]> {
+async function getCollectionQueueImpl(): Promise<CollectionQueueItem[]> {
   const delinquents = await getDelinquentClients();
   if (delinquents.length === 0) return [];
   const ids = delinquents.map((d) => d.clientId);
@@ -205,3 +207,9 @@ export async function getCollectionQueue(): Promise<CollectionQueueItem[]> {
 
   return items.sort((a, b) => b.score - a.score);
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getCollectionQueue = ownerCached("collection-queue", getCollectionQueueImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD],
+});

@@ -1,3 +1,4 @@
+import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
@@ -237,7 +238,7 @@ const MONTHS_SHORT = [
  * 12 pontos (Jan–Dez) do ano selecionado para os gráficos de Faturamento,
  * Despesas e Resultado. Uma passada de dados por fonte, bucketizada por mês.
  */
-export async function getYearlySeries(year: number): Promise<YearlySeries> {
+async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const yStart = new Date(year, 0, 1);
   const yEnd = new Date(year + 1, 0, 1);
   const now = new Date();
@@ -679,3 +680,9 @@ export async function getResultLaunchedForMonth(year: number, month: number): Pr
   });
   return n(agg._sum.amount);
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getYearlySeries = ownerCached("yearly-series", getYearlySeriesImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD_METRICS],
+});

@@ -1,3 +1,5 @@
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
@@ -559,7 +561,7 @@ async function getClientsBlock(): Promise<ClientsBlock> {
   return { ativos, pausados, perdidos, mrrAtivos, tcvAtivos, devendoMes, pagosMes };
 }
 
-export async function getExecutiveDashboard(f: DashboardFilters): Promise<ExecutiveDashboard> {
+async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<ExecutiveDashboard> {
   const in7days = new Date();
   in7days.setDate(in7days.getDate() + 7);
   const today = new Date();
@@ -699,3 +701,9 @@ export async function getExecutiveDashboard(f: DashboardFilters): Promise<Execut
     clients, upsell, expenses, receipts,
   };
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getExecutiveDashboard = ownerCached("executive-dashboard", getExecutiveDashboardImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD],
+});

@@ -1,3 +1,5 @@
+import { CACHE_TAGS } from "@/lib/cache-tags";
+import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
@@ -36,7 +38,7 @@ export type FinanceSummary = {
   folhaSobreReceita: number; // 0-1
 };
 
-export async function getFinanceSummary(period: Period): Promise<FinanceSummary> {
+async function getFinanceSummaryImpl(period: Period): Promise<FinanceSummary> {
   const { start, end } = period;
 
   const [txReceita, incomeReceived, despesasAgg, despesasPagasAgg, fixasAgg, variaveisAgg, folhaItems] =
@@ -153,7 +155,7 @@ async function projecao(caixa: number, dias: number): Promise<number> {
   );
 }
 
-export async function getCashSummary(period: Period): Promise<CashSummary> {
+async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
   const { start, end } = period;
 
   const [accounts, boxes, inflow, outflow, openBillings, pendingExpenses] =
@@ -335,3 +337,15 @@ export async function getPayrollSummary(
     folhaSobreReceita: receitas > 0 ? total / receitas : 0,
   };
 }
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getFinanceSummary = ownerCached("finance-summary", getFinanceSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD_METRICS],
+});
+
+/** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
+export const getCashSummary = ownerCached("cash-summary", getCashSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.DASHBOARD_METRICS],
+});

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { toNumber as n } from "@/lib/format";
+import { resolveOwnerId } from "@/lib/auth/owner-scope";
 
 /**
  * CICLO MENSAL DE RECEBIMENTOS — a "planilha mensal inteligente".
@@ -27,10 +28,28 @@ const CYCLE_ACTIVE = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;
  * Qualquer cobrança MRR já existente na competência — inclusive CANCELADA
  * (= removida do mês) — bloqueia a recriação.
  */
+// Throttle em memória por (dono, competência): o ensure é idempotente e só
+// gera algo novo quando entra cliente MRR ou vira o mês — não precisa rodar
+// a CADA carga de /cobrancas. Mutações de agência chamam
+// bustBillingCycleThrottle() (via revalidateAgency), então cliente novo
+// aparece imediatamente. Reinicia em cold start — inofensivo.
+const ENSURE_TTL_MS = 60 * 60 * 1000;
+const lastEnsuredAt = new Map<string, number>();
+
+export function bustBillingCycleThrottle() {
+  lastEnsuredAt.clear();
+}
+
 export async function ensureMonthlyBillings(
   month: number,
   year: number
 ): Promise<{ created: number }> {
+  const throttleKey = `${(await resolveOwnerId()) ?? "__anon__"}:${year}-${month}`;
+  if (Date.now() - (lastEnsuredAt.get(throttleKey) ?? 0) < ENSURE_TTL_MS) {
+    return { created: 0 };
+  }
+  lastEnsuredAt.set(throttleKey, Date.now());
+
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 1);
   const today = new Date();

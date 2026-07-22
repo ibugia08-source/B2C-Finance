@@ -1,5 +1,6 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS } from "./cache-tags";
+import { bustBillingCycleThrottle } from "./services/receivables-cycle";
 
 /**
  * Invalidação de cache por DOMÍNIO — fonte única.
@@ -73,6 +74,9 @@ export function revalidateAgency(
     revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(opts.clientId));
   }
   if (opts.contractId) revalidatePath(`/contratos/${opts.contractId}`);
+  // Garante que cliente MRR recém-cadastrado gere a mensalidade na próxima
+  // carga de /cobrancas, sem esperar o throttle de 1h do ensureMonthlyBillings.
+  bustBillingCycleThrottle();
   revalidateTag(CACHE_TAGS.CLIENTS);
   revalidateTag(CACHE_TAGS.BILLINGS);
   revalidateTag(CACHE_TAGS.BILLING_CYCLE);

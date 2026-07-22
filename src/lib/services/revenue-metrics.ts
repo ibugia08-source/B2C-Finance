@@ -1,3 +1,4 @@
+import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
@@ -233,7 +234,7 @@ export type ReceiptsSummary = {
   overdueOpenAmount: number;
 };
 
-export async function getReceiptsSummary(
+async function getReceiptsSummaryImpl(
   start: Date,
   end: Date,
   filters: RevenueFilters = {}
@@ -679,3 +680,9 @@ export async function computeLossSnapshots(
     salesOwner: c.salesOwner,
   }));
 }
+
+/** Versão cacheada por (usuário, período, filtros) — TTL 300s. */
+export const getReceiptsSummary = ownerCached("receipts-summary", getReceiptsSummaryImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.REVENUE_METRICS],
+});
