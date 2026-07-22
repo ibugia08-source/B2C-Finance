@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -174,7 +175,7 @@ async function getPeriodRevenueImpl(
 export const getPeriodRevenue = unstable_cache(
   getPeriodRevenueImpl,
   ["period-revenue"],
-  { revalidate: 3600, tags: ["revenue-metrics"] }
+  { revalidate: 3600, tags: [CACHE_TAGS.REVENUE_METRICS] }
 );
 
 // ===================================================================

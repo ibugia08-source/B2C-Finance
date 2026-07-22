@@ -311,6 +311,16 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
 
     revalidatePath("/clientes");
     revalidatePath("/dashboard");
+
+    // Invalidate cache tags to sync dashboard, rotina, and billing data
+    revalidateTag(CACHE_TAGS.CLIENTS);
+    revalidateTag(CACHE_TAGS.CLIENT_ID(id));
+    revalidateTag(CACHE_TAGS.BILLINGS);
+    revalidateTag(CACHE_TAGS.BILLING_CYCLE);
+    revalidateTag(CACHE_TAGS.DASHBOARD);
+    revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
+    revalidateTag(CACHE_TAGS.REVENUE_METRICS);
+
     return { ok: true, id };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar o cliente.";

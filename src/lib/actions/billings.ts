@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import {
   BillingStatus,
@@ -10,6 +10,7 @@ import {
 } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR } from "@/lib/format";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ActionResult } from "./clients";
 
 function clean(v: FormDataEntryValue | null): string | null {
@@ -19,13 +20,25 @@ function clean(v: FormDataEntryValue | null): string | null {
 const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateBilling(clientId?: string) {
+  // Invalidate server component cache paths
   revalidatePath("/cobrancas");
   revalidatePath("/pagamentos");
   revalidatePath("/inadimplencia");
   revalidatePath("/clientes");
   if (clientId) revalidatePath(`/clientes/${clientId}`);
   revalidatePath("/dashboard");
-  revalidatePath("/rotina"); // ações da Rotina refletem na hora
+  revalidatePath("/rotina");
+
+  // Invalidate cached function tags (critical for sync)
+  revalidateTag(CACHE_TAGS.BILLINGS);
+  revalidateTag(CACHE_TAGS.BILLING_CYCLE);
+  revalidateTag(CACHE_TAGS.DASHBOARD);
+  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
+  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
+  if (clientId) {
+    revalidateTag(CACHE_TAGS.CLIENT_ID(clientId));
+    revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(clientId));
+  }
 }
 
 // ---------- Criação / edição manual ----------

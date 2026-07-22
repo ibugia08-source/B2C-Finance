@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import type { Period } from "@/lib/period";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import {
   getPeriodRevenue,
   getReceiptsSummary,
@@ -198,7 +199,7 @@ async function getDashboardMainMetricsImpl(period: Period): Promise<DashboardMai
 export const getDashboardMainMetrics = unstable_cache(
   getDashboardMainMetricsImpl,
   ["dashboard-main-metrics"],
-  { revalidate: 300, tags: ["dashboard-metrics"] }
+  { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] }
 );
 
 // ===================================================================

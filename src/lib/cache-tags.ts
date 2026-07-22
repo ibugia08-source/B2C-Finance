@@ -33,8 +33,10 @@ export const CACHE_TAGS = {
 
   // Dashboard & Metrics
   DASHBOARD: "cache:dashboard",
-  DASHBOARD_METRICS: (month: number, year: number) =>
+  DASHBOARD_METRICS: "cache:dashboard-metrics",
+  DASHBOARD_METRICS_MONTH: (month: number, year: number) =>
     `cache:dashboard:${year}-${String(month).padStart(2, "0")}`,
+  REVENUE_METRICS: "cache:revenue-metrics",
   EXECUTIVE_SUMMARY: (month: number, year: number) =>
     `cache:executive:${year}-${String(month).padStart(2, "0")}`,
 
