@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -47,13 +47,13 @@ export function ReceivablesPanel({
   const allSelected = allKeys.length > 0 && selected.size === allKeys.length;
   const someSelected = selected.size > 0 && !allSelected;
 
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(allKeys));
-  const toggleOne = (k: string) =>
+  const toggleAll = useCallback(() => setSelected(allSelected ? new Set() : new Set(allKeys)), [allSelected, allKeys]);
+  const toggleOne = useCallback((k: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(k) ? next.delete(k) : next.add(k);
       return next;
-    });
+    }), []);
 
   const selectedRows = useMemo(
     () => rows.filter((r) => selected.has(r.key)),

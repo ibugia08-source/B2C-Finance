@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SlidersHorizontal, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -93,10 +93,10 @@ export function ClientsPanel({
     [visible]
   );
 
-  const onStatusDone = (c: ClientRow) => (value: string) => {
+  const onStatusDone = useCallback((c: ClientRow) => (value: string) => {
     if (value === "CHURNED") setLossClient({ id: c.id, name: c.name });
-  };
-  const ctx = { onStatusDone };
+  }, []);
+  const ctx = useMemo(() => ({ onStatusDone }), [onStatusDone]);
 
   const allIds = allFilteredIds;
   const allSelected = allIds.length > 0 && selected.size === allIds.length;
@@ -105,13 +105,13 @@ export function ClientsPanel({
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(allIds));
   }
-  function toggleOne(id: string) {
+  const toggleOne = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  }
+  }, []);
   function clearSelection() {
     setSelected(new Set());
   }

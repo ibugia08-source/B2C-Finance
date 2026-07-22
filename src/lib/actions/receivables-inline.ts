@@ -444,13 +444,19 @@ export async function bulkRemoveClientsFromList(
         where: { id: { in: bareClientIds } },
         select: { id: true, name: true, monthlyValue: true, paymentDay: true },
       });
+      // Batch query to find existing billings for all clients at once
+      const existingBillings = await prisma.billing.findMany({
+        where: {
+          clientId: { in: bareClientIds },
+          competenceMonth: month,
+          competenceYear: year,
+        },
+        select: { clientId: true, id: true },
+      });
+      const existingClientIds = new Set(existingBillings.map((b) => b.clientId));
       for (const c of clients) {
         // Se já existir cobrança na competência (corrida), não duplica.
-        const existing = await prisma.billing.findFirst({
-          where: { clientId: c.id, competenceMonth: month, competenceYear: year },
-          select: { id: true },
-        });
-        if (existing) continue;
+        if (existingClientIds.has(c.id)) continue;
         const marker = await prisma.billing.create({
           data: {
             clientId: c.id,

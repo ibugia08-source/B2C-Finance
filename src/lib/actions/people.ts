@@ -88,29 +88,43 @@ export async function registerPersonPayment(formData: FormData) {
     include: { transaction: true },
   });
 
+  // Prepare batch updates
+  const paidIds: string[] = [];
+  const paidTxIds: string[] = [];
+  const partialUpdates: { id: string; newAmount: number }[] = [];
+
   for (const r of open) {
     if (remaining <= 0) break;
     if (r.amount <= remaining) {
       remaining -= r.amount;
-      await prisma.receivable.update({
-        where: { id: r.id },
-        data: { status: "pago", paidAt: parsed.paidAt },
-      });
-      // Marca a transação relacionada como reembolsada/paga (devia → reembolsado)
-      if (r.transactionId) {
-        await prisma.transaction.update({
-          where: { id: r.transactionId },
-          data: { status: "reembolsado" },
-        });
-      }
+      paidIds.push(r.id);
+      if (r.transactionId) paidTxIds.push(r.transactionId);
     } else {
-      // Quitação parcial: reduz o valor restante
-      await prisma.receivable.update({
-        where: { id: r.id },
-        data: { amount: r.amount - remaining },
-      });
+      partialUpdates.push({ id: r.id, newAmount: r.amount - remaining });
       remaining = 0;
     }
+  }
+
+  // Execute batch updates
+  if (paidIds.length > 0) {
+    await prisma.receivable.updateMany({
+      where: { id: { in: paidIds } },
+      data: { status: "pago", paidAt: parsed.paidAt },
+    });
+    if (paidTxIds.length > 0) {
+      await prisma.transaction.updateMany({
+        where: { id: { in: paidTxIds } },
+        data: { status: "reembolsado" },
+      });
+    }
+  }
+
+  // Partial updates need individual calls (conditions vary)
+  for (const upd of partialUpdates) {
+    await prisma.receivable.update({
+      where: { id: upd.id },
+      data: { amount: upd.newAmount },
+    });
   }
 
   revalidatePath("/pessoas");

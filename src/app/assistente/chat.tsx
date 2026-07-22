@@ -7,7 +7,7 @@ import { SimpleMarkdown } from "./markdown";
 import { B2CAvatar, B2CMascot } from "@/components/mascot";
 import { Send, User } from "lucide-react";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; id?: string };
 
 const SUGGESTIONS = [
   "Como está minha saúde financeira este mês?",
@@ -25,6 +25,14 @@ const AGENCY_SUGGESTIONS = [
   "O que preciso fazer essa semana para melhorar meu caixa?",
 ];
 
+function generateMsgId() {
+  return crypto.randomUUID();
+}
+
+function ensureMessageIds(msgs: Msg[]): Msg[] {
+  return msgs.map((m) => ({ ...m, id: m.id || generateMsgId() }));
+}
+
 export function Chat({
   conversationId,
   initialMessages,
@@ -40,7 +48,7 @@ export function Chat({
   agency?: boolean;
 }) {
   const [convId, setConvId] = useState(conversationId);
-  const [messages, setMessages] = useState<Msg[]>(initialMessages);
+  const [messages, setMessages] = useState<Msg[]>(ensureMessageIds(initialMessages));
   const [input, setInput] = useState("");
   const [tokens, setTokens] = useState(initialTokens);
   const [error, setError] = useState<string | null>(null);
@@ -55,13 +63,13 @@ export function Chat({
     const content = text.trim();
     if (!content || pending) return;
     setError(null);
-    setMessages((m) => [...m, { role: "user", content }]);
+    setMessages((m) => [...m, { role: "user", content, id: generateMsgId() }]);
     setInput("");
     start(async () => {
       const r = await sendChatMessage(convId, content);
       if (r.ok) {
         setConvId(r.conversationId);
-        setMessages((m) => [...m, { role: "assistant", content: r.answer }]);
+        setMessages((m) => [...m, { role: "assistant", content: r.answer, id: generateMsgId() }]);
         setTokens((t) => t + r.tokens);
       } else {
         setError(r.error);
@@ -99,8 +107,8 @@ export function Chat({
           </div>
         )}
 
-        {messages.map((m, i) => (
-          <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+        {messages.map((m) => (
+          <div key={m.id} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             {m.role === "assistant" && (
               <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                 <B2CAvatar size={26} />

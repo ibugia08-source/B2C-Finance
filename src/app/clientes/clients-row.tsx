@@ -1,4 +1,5 @@
 "use client";
+import { memo } from "react";
 import { useRouter } from "next/navigation";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +12,7 @@ function stop(e: React.MouseEvent) {
   e.stopPropagation();
 }
 
-export function ClientRowDesktop({
+function ClientRowDesktopInner({
   client,
   selected,
   onToggle,
@@ -63,3 +64,5 @@ export function ClientRowDesktop({
     </TableRow>
   );
 }
+
+export const ClientRowDesktop = memo(ClientRowDesktopInner);

@@ -1,4 +1,5 @@
 "use client";
+import { memo, useCallback } from "react";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -28,7 +29,7 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
 const fmtBRL = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export function ReceivableRow({
+function ReceivableRowInner({
   row,
   selected,
   onToggle,
@@ -43,7 +44,7 @@ export function ReceivableRow({
   month: number;
   year: number;
 }) {
-  const onStatusChange = (r: ReceivableRow) => async (v: string): Promise<ActionResult> => {
+  const onStatusChange = useCallback((r: ReceivableRow) => async (v: string): Promise<ActionResult> => {
     if (!r.billingId)
       return { ok: false, error: `Cliente sem cobrança neste mês — use "Incluir cliente no mês".` };
     if (v === "PAID") {
@@ -55,7 +56,7 @@ export function ReceivableRow({
         return { ok: false, error: "Pagamento não registrado." };
     }
     return setMonthChargeStatus(r.billingId, v as any);
-  };
+  }, []);
 
   return (
     <TableRow data-state={selected ? "selected" : undefined}>
@@ -146,3 +147,5 @@ export function ReceivableRow({
     </TableRow>
   );
 }
+
+export const ReceivableRow = memo(ReceivableRowInner);
