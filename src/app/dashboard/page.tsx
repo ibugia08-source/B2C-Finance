@@ -33,11 +33,10 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChartCard, HBarList } from "@/components/charts";
-import { MainChart } from "@/components/dashboard/main-chart";
+import { MainChart, CompositionDonut } from "@/components/dashboard/charts-lazy";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { SecondaryStat } from "@/components/dashboard/secondary-stat";
 import { LaunchToCash } from "@/components/dashboard/launch-to-cash";
-import { CompositionDonut } from "@/components/dashboard/composition-donut";
 import {
   FaturamentoDetail, DespesasDetail, RecebidoDetail, EmAbertoDetail, ResultadoDetail,
   NamedValueList,
