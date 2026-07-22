@@ -2,6 +2,7 @@
   "name": "B2C Finance",
   "version": 2,
   "public": false,
+  "regions": ["gru1"],
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "env": {
