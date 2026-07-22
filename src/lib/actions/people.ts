@@ -1,7 +1,8 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { z } from "zod";
 import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
 
@@ -131,6 +132,11 @@ export async function registerPersonPayment(formData: FormData) {
   revalidatePath(`/pessoas/${parsed.personId}`);
   revalidatePath("/dashboard");
   revalidatePath("/transacoes");
+
+  // Invalidate cache tags to sync dashboard
+  revalidateTag(CACHE_TAGS.DASHBOARD);
+  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
+  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
 
   return { ok: true, paymentId: payment.id, leftover: remaining };
 }

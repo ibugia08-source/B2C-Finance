@@ -21,6 +21,8 @@ function revalidateAll(clientId?: string) {
   revalidateTag(CACHE_TAGS.CLIENTS);
   revalidateTag(CACHE_TAGS.BILLING_CYCLE);
   revalidateTag(CACHE_TAGS.DASHBOARD);
+  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
+  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
   if (clientId) {
     revalidateTag(CACHE_TAGS.CLIENT_ID(clientId));
     revalidateTag(CACHE_TAGS.CLIENT_BILLINGS(clientId));
