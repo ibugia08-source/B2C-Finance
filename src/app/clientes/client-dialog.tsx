@@ -1,7 +1,5 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +98,7 @@ const FormSchema = z
     }
   });
 type FormValues = z.infer<typeof FormSchema>;
+const FORM_KEYS = Object.keys(FormSchema.innerType().shape) as (keyof FormValues)[];
 
 /** Formata dinheiro para o input: number → "1500,00"; string (form/IA) intacta. */
 function moneyStr(v: any): string {
@@ -146,6 +145,7 @@ export function ClientDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const [pending, start] = useTransition();
   const isNew = !initial?.id;
   // Em edição, a lista passa uma projeção enxuta — carregamos o registro
@@ -153,13 +153,10 @@ export function ClientDialog({
   const [data, setData] = useState<any>(initial);
   const [loaded, setLoaded] = useState<boolean>(isNew);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(FormSchema),
-    values: toFormValues(data),
-  });
-  const { register, handleSubmit, formState, watch } = form;
-  const err = formState.errors;
-  const paymentModel = watch("paymentModel");
+  // Valores default dos inputs (não-controlados). O `key` no <form> força
+  // remount quando o registro completo chega, repopulando os campos.
+  const dv = toFormValues(data);
+  const [paymentModel, setPaymentModel] = useState<string>(dv.paymentModel);
 
   useEffect(() => {
     if (!open || isNew || loaded) return;
@@ -168,6 +165,7 @@ export function ClientDialog({
       const full = await getClientForEdit(initial.id);
       if (active && full) {
         setData(full);
+        setPaymentModel(toFormValues(full).paymentModel);
         setLoaded(true);
       }
     })();
@@ -176,16 +174,31 @@ export function ClientDialog({
     };
   }, [open, isNew, loaded, initial?.id]);
 
-  function onSubmit(values: FormValues) {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const raw = Object.fromEntries(
+      FORM_KEYS.map((k) => [k, String(fd.get(k) ?? "")])
+    );
+    const parsed = FormSchema.safeParse(raw);
+    if (!parsed.success) {
+      const next: Partial<Record<keyof FormValues, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0] as keyof FormValues;
+        if (field && !next[field]) next[field] = issue.message;
+      }
+      setErrors(next);
+      return;
+    }
+    setErrors({});
     start(async () => {
       setServerError(null);
-      const fd = new FormData();
-      if (initial?.id) fd.set("id", initial.id);
-      for (const [k, v] of Object.entries(values)) fd.set(k, v);
-      const res = await saveClient(fd);
+      const out = new FormData();
+      if (initial?.id) out.set("id", initial.id);
+      for (const [k, v] of Object.entries(parsed.data)) out.set(k, v);
+      const res = await saveClient(out);
       if (res.ok) {
         setOpen(false);
-        form.reset();
       } else {
         setServerError(res.error);
       }
@@ -197,7 +210,10 @@ export function ClientDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setServerError(null);
+        if (!o) {
+          setServerError(null);
+          setErrors({});
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -212,29 +228,30 @@ export function ClientDialog({
           <DialogTitle>{initial?.id ? "Editar cliente" : "Cadastrar novo cliente"}</DialogTitle>
         </DialogHeader>
         <form
-          onSubmit={handleSubmit(onSubmit)}
+          key={loaded ? "full" : "lite"}
+          onSubmit={onSubmit}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {/* ===== Campos principais — o essencial para operar ===== */}
           <div className="col-span-full">
             <Label>Nome do cliente *</Label>
-            <Input {...register("name")} placeholder="ex.: Clínica Sorriso" />
-            {err.name && <FieldError msg={err.name.message} />}
+            <Input name="name" defaultValue={dv.name} placeholder="ex.: Clínica Sorriso" />
+            {errors.name && <FieldError msg={errors.name} />}
           </div>
 
           <div>
             <Label>WhatsApp / Telefone</Label>
-            <Input {...register("phone")} placeholder="(71) 9 9999-9999" />
+            <Input name="phone" defaultValue={dv.phone} placeholder="(71) 9 9999-9999" />
           </div>
           <div>
             <Label>E-mail</Label>
-            <Input type="email" {...register("email")} placeholder="contato@cliente.com" />
-            {err.email && <FieldError msg={err.email.message} />}
+            <Input type="email" name="email" defaultValue={dv.email} placeholder="contato@cliente.com" />
+            {errors.email && <FieldError msg={errors.email} />}
           </div>
 
           <div>
             <Label>Status</Label>
-            <Select {...register("status")}>
+            <Select name="status" defaultValue={dv.status}>
               {CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => (
                 <option key={s} value={s}>
                   {CLIENT_STATUS_LABEL[s]}
@@ -244,7 +261,7 @@ export function ClientDialog({
           </div>
           <div>
             <Label>Responsável</Label>
-            <Input {...register("salesOwner")} placeholder="quem cuida deste cliente" />
+            <Input name="salesOwner" defaultValue={dv.salesOwner} placeholder="quem cuida deste cliente" />
           </div>
 
           {/* ===== Modalidade & cobrança — campos dinâmicos por MRR/TCV ===== */}
@@ -254,7 +271,11 @@ export function ClientDialog({
             </p>
             <div>
               <Label>Modalidade</Label>
-              <Select {...register("paymentModel")}>
+              <Select
+                name="paymentModel"
+                value={paymentModel}
+                onChange={(e) => setPaymentModel(e.target.value)}
+              >
                 <option value="">— definir depois —</option>
                 <option value="MRR">MRR — mensalidade recorrente</option>
                 <option value="TCV">TCV — valor fechado (pago no ato)</option>
@@ -264,8 +285,8 @@ export function ClientDialog({
               <Label>
                 {paymentModel === "TCV" ? "Entrada / fechamento *" : "Entrada"}
               </Label>
-              <Input type="date" {...register("startedAt")} />
-              {err.startedAt && <FieldError msg={err.startedAt.message} />}
+              <Input type="date" name="startedAt" defaultValue={dv.startedAt} />
+              {errors.startedAt && <FieldError msg={errors.startedAt} />}
             </div>
 
             {paymentModel === "MRR" && (
@@ -273,11 +294,12 @@ export function ClientDialog({
                 <div>
                   <Label>Valor mensal recorrente (R$) *</Label>
                   <Input
-                    {...register("monthlyValue")}
+                    name="monthlyValue"
+                    defaultValue={dv.monthlyValue}
                     inputMode="decimal"
                     placeholder="ex.: 1.500,00"
                   />
-                  {err.monthlyValue && <FieldError msg={err.monthlyValue.message} />}
+                  {errors.monthlyValue && <FieldError msg={errors.monthlyValue} />}
                 </div>
                 <div>
                   <Label>Dia recorrente de pagamento *</Label>
@@ -285,17 +307,19 @@ export function ClientDialog({
                     type="number"
                     min={1}
                     max={31}
-                    {...register("paymentDay")}
+                    name="paymentDay"
+                    defaultValue={dv.paymentDay}
                     placeholder="ex.: 10"
                   />
-                  {err.paymentDay && <FieldError msg={err.paymentDay.message} />}
+                  {errors.paymentDay && <FieldError msg={errors.paymentDay} />}
                 </div>
                 <div>
                   <Label>Prazo do contrato (meses)</Label>
                   <Input
                     type="number"
                     min={1}
-                    {...register("contractMonths")}
+                    name="contractMonths"
+                    defaultValue={dv.contractMonths}
                     placeholder="ex.: 12"
                   />
                 </div>
@@ -311,12 +335,13 @@ export function ClientDialog({
                 <div>
                   <Label>Valor total do contrato (R$) *</Label>
                   <Input
-                    {...register("totalContractValue")}
+                    name="totalContractValue"
+                    defaultValue={dv.totalContractValue}
                     inputMode="decimal"
                     placeholder="ex.: 3.000,00"
                   />
-                  {err.totalContractValue && (
-                    <FieldError msg={err.totalContractValue.message} />
+                  {errors.totalContractValue && (
+                    <FieldError msg={errors.totalContractValue} />
                   )}
                 </div>
                 <div>
@@ -324,10 +349,11 @@ export function ClientDialog({
                   <Input
                     type="number"
                     min={1}
-                    {...register("contractMonths")}
+                    name="contractMonths"
+                    defaultValue={dv.contractMonths}
                     placeholder="ex.: 3"
                   />
-                  {err.contractMonths && <FieldError msg={err.contractMonths.message} />}
+                  {errors.contractMonths && <FieldError msg={errors.contractMonths} />}
                 </div>
                 <p className="col-span-full text-xs text-muted-foreground">
                   TCV é um pagamento único do contrato. O valor entra
@@ -346,51 +372,51 @@ export function ClientDialog({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 pt-1">
               <div>
                 <Label>Razão social</Label>
-                <Input {...register("legalName")} />
+                <Input name="legalName" defaultValue={dv.legalName} />
               </div>
               <div>
                 <Label>CNPJ / CPF</Label>
-                <Input {...register("document")} placeholder="00.000.000/0000-00" />
+                <Input name="document" defaultValue={dv.document} placeholder="00.000.000/0000-00" />
               </div>
               <div>
                 <Label>Segmento / nicho</Label>
-                <Input {...register("segment")} placeholder="ex.: odontologia" />
+                <Input name="segment" defaultValue={dv.segment} placeholder="ex.: odontologia" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
                   <Label>Cidade</Label>
-                  <Input {...register("city")} />
+                  <Input name="city" defaultValue={dv.city} />
                 </div>
                 <div>
                   <Label>UF</Label>
-                  <Input {...register("state")} maxLength={2} placeholder="BA" />
-                  {err.state && <FieldError msg={err.state.message} />}
+                  <Input name="state" defaultValue={dv.state} maxLength={2} placeholder="BA" />
+                  {errors.state && <FieldError msg={errors.state} />}
                 </div>
               </div>
               <div>
                 <Label>Endereço (usado nos contratos)</Label>
-                <Input {...register("address")} placeholder="rua, nº, bairro, cidade/UF" />
+                <Input name="address" defaultValue={dv.address} placeholder="rua, nº, bairro, cidade/UF" />
               </div>
               <div>
                 <Label>Representante legal</Label>
-                <Input {...register("legalRepresentative")} placeholder="quem assina o contrato" />
+                <Input name="legalRepresentative" defaultValue={dv.legalRepresentative} placeholder="quem assina o contrato" />
               </div>
               <div>
                 <Label>Origem</Label>
-                <Input {...register("origin")} placeholder="indicação, tráfego, orgânico…" />
+                <Input name="origin" defaultValue={dv.origin} placeholder="indicação, tráfego, orgânico…" />
               </div>
               <div>
                 <Label>Responsável operacional</Label>
-                <Input {...register("opsOwner")} />
+                <Input name="opsOwner" defaultValue={dv.opsOwner} />
               </div>
               <div className="col-span-full">
                 <Label>Tags</Label>
-                <Input {...register("tags")} placeholder="vip, mensal, tráfego" />
+                <Input name="tags" defaultValue={dv.tags} placeholder="vip, mensal, tráfego" />
                 <p className="text-xs text-muted-foreground mt-1">Separe por vírgula.</p>
               </div>
               <div className="col-span-full">
                 <Label>Observações</Label>
-                <Textarea {...register("notes")} />
+                <Textarea name="notes" defaultValue={dv.notes} />
               </div>
             </div>
           </details>
