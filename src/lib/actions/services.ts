@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/viewer";
 import type { ActionResult } from "./clients";
+import { clean } from "@/lib/format";
 
 // Serviço = catálogo puro (nome, descrição, categoria, status).
 // Valores de venda vivem nas OFERTAS (Planos), não aqui.
@@ -15,10 +16,6 @@ const ServiceSchema = z.object({
   active: z.boolean().default(true),
 });
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 export async function saveService(formData: FormData): Promise<ActionResult> {
   await requireAdmin();

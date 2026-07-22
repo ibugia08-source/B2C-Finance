@@ -5,6 +5,15 @@
  */
 export const toNumber = (v: unknown): number => (v == null ? 0 : Number(v));
 
+/**
+ * Normaliza campo de FormData: trim; vazio/ausente → null.
+ * Fonte única das cópias locais de `clean()` nas server actions.
+ */
+export function clean(v: FormDataEntryValue | null): string | null {
+  const s = (v == null ? "" : String(v)).trim();
+  return s === "" ? null : s;
+}
+
 /** Meses PT-BR — fonte única (substitui os arrays locais espalhados). */
 export const MONTHS_PT = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -38,6 +47,14 @@ export function formatBRLShort(value: number | null | undefined): string {
   if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toFixed(1).replace(".", ",")} mi`;
   if (abs >= 1_000) return `${sign}R$ ${Math.round(abs / 1_000)} mil`;
   return `${sign}R$ ${Math.round(abs)}`;
+}
+
+/**
+ * Valor numérico → string para <input> de moeda ("1234,56"); nulo → "".
+ * Fonte única das cópias locais de `fmt` nos dialogs de formulário.
+ */
+export function formatDecimalInput(v: number | string | null | undefined): string {
+  return v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 }
 
 export function parseBRL(value: string): number {

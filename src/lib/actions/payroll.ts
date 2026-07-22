@@ -4,14 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
+import { parseBRL, parseDateBR, parseMonthParam, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidatePayroll() {
   revalidatePath("/folha");

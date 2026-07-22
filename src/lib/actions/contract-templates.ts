@@ -12,7 +12,7 @@ import {
   GeneratedContractStatus,
 } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
+import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import {
   extractTemplateVariables,
   fillTemplate,
@@ -25,10 +25,6 @@ const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_UPLOAD_MB = Number(process.env.B2C_MAX_UPLOAD_MB ?? 10);
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 async function readUpload(
   file: unknown,

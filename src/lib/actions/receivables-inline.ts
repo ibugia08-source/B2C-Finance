@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS, getBillingUpdateTags } from "@/lib/cache-tags";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL } from "@/lib/format";
+import { parseBRL, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
@@ -14,7 +14,6 @@ import type { ActionResult } from "./clients";
  * do cliente; o status é do recebimento do mês.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateAll(clientId?: string) {
   revalidateTag(CACHE_TAGS.BILLINGS);

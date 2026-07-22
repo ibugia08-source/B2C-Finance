@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas financeiras POR CLIENTE em lote (zero N+1).
@@ -38,7 +39,6 @@ const EMPTY: ClientSummary = {
   situation: "SEM_COBRANCA",
 };
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export async function getClientSummaries(
   clientIds: string[]

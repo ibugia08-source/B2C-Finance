@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { UpsellStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
+import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 const UpsellSchema = z.object({
@@ -20,10 +20,6 @@ const UpsellSchema = z.object({
   notes: z.string().trim().nullable(),
 });
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 export async function saveUpsell(formData: FormData): Promise<ActionResult> {
   await requireAdmin();

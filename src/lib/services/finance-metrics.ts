@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Núcleo financeiro operacional — cálculos consolidados da agência.
@@ -16,7 +17,6 @@ import type { Period } from "@/lib/period";
  *    − despesas pendentes no horizonte − parcelas de passivos no horizonte.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 // ===================================================================
 // Resultado operacional do período

@@ -2,7 +2,7 @@
  * Teste (temporário) da importação em massa via XLSX.
  * Uso: npx tsx scripts/test-imports.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 import * as XLSX from "xlsx";
 

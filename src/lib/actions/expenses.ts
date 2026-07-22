@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { parseBRL, parseDateBR, parseMonthParam } from "@/lib/format";
+import { parseBRL, parseDateBR, parseMonthParam, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 /**
@@ -43,10 +43,6 @@ const Schema = z.object({
   scope: z.enum(["one", "future"]).default("one"),
 });
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 /** Intervalo em meses de cada recorrência. */
 function intervalOf(rec: (typeof RECURRENCES)[number], custom: number | null): number {

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, toNumber as n } from "@/lib/format";
 import {
   getFinanceSummary,
   getCashSummary,
@@ -35,7 +35,6 @@ import { getMonthDelinquencies } from "./client-metrics";
  *    pelo período.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export type DashboardFilters = {
   period: Period;

@@ -9,15 +9,10 @@ import {
   RevenueType,
 } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
+import { parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 function revalidateBilling(clientId?: string) {
   // Invalidate server component cache paths

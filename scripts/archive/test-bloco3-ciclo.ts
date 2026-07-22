@@ -10,7 +10,7 @@
  * Usa o MESMO código de produção (ensureMonthlyBillings / cycleStatusOf).
  * Dados com TAG + cleanup. Uso: npx tsx scripts/test-bloco3-ciclo.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_bloco3__";

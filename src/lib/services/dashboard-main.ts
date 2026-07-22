@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import type { Period } from "@/lib/period";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { toNumber as n } from "@/lib/format";
 import {
   getPeriodRevenue,
   getReceiptsSummary,
@@ -28,7 +29,6 @@ import { getFinanceSummary } from "./finance-metrics";
  * Nenhum componente recalcula: importam destas funções.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 // ===================================================================
 // 5 métricas principais + comparativo com o mês anterior

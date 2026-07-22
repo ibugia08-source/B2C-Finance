@@ -5,7 +5,7 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
 import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR } from "@/lib/format";
+import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
 /**
@@ -90,10 +90,6 @@ const ClientSchema = z
   });
 
 /** Normaliza um campo do FormData: string vazia vira null. */
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 /**
  * Registra a PERDA (ClientLoss) dos clientes que estão virando CHURNED:

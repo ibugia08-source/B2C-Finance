@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -18,7 +19,6 @@ import { CACHE_TAGS } from "@/lib/cache-tags";
  *  - Total do mês = MRR do mês + TCV do mês.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 // Status que CONTAM como cliente ativo para faturamento no mês corrente.
 // DELINQUENT conta (é ativo devendo); PAUSED/CHURNED/INACTIVE/PROSPECT não.

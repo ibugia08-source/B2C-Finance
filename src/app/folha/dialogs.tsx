@@ -15,11 +15,10 @@ import {
 import {
   Plus, Pencil, Trash2, Play, CheckCircle2, BadgeDollarSign, Percent, RefreshCw,
 } from "lucide-react";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
 
 import { EMPLOYEE_TYPE_LABEL, ITEM_KIND_LABEL } from "./_meta";
 
-const fmt = (v: any) => (v != null ? Number(v).toFixed(2).replace(".", ",") : "");
 
 export function EmployeeDialog({ initial, trigger }: { initial?: any; trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);

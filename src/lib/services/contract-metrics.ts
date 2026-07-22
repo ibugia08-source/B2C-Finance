@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas contratuais da agência — separação explícita entre:
@@ -13,7 +14,6 @@ import { getValidDueDateForMonth } from "@/lib/financial/due-date";
  *  TCV 5.100 · reconhecida 1.700/mês · MRR equivalente 1.700 na vigência.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 /** Contratos considerados "vigentes" para MRR. */
 const LIVE_STATUSES = ["ACTIVE", "RENEWAL"] as const;

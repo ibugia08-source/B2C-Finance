@@ -2,7 +2,7 @@
  * Teste (temporário) do dashboard executivo — services + cálculos.
  * Uso: npx tsx scripts/test-dashboard.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 const TAG = "__teste_dash__";

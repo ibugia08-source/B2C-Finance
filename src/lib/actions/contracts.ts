@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { ContractStatus, ContractType, RecurrenceType } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
+import { parseBRL, parseDateBR, formatBRL, clean } from "@/lib/format";
 import {
   generateBillingsForContract,
   generateBillingsForAllActive,
@@ -12,10 +12,6 @@ import {
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 const money = (v: FormDataEntryValue | null): number => parseBRL(String(v ?? "0"));
 const date = (v: FormDataEntryValue | null): Date | null => {
   const raw = clean(v);

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Métricas de cobrança. Convenções:
@@ -8,7 +9,6 @@ import { prisma } from "@/lib/prisma";
  *  - a vencer = em aberto com vencimento >= hoje
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 export const OPEN_STATUSES = ["PENDING", "PARTIAL", "OVERDUE"] as const;
 
 /**

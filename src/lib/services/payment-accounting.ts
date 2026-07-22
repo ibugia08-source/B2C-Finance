@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * Núcleo CONTÁBIL do pagamento de cobrança (fechamento mensal B2C).
@@ -17,7 +18,6 @@ import { prisma } from "@/lib/prisma";
  *    avulsas (billingId null) não se misturam — sem dupla contagem.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export type SettleInput = {
   billingId: string;

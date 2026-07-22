@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { OfferModality } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { parseBRL } from "@/lib/format";
+import { parseBRL, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 /**
@@ -25,10 +25,6 @@ const OfferSchema = z.object({
   serviceIds: z.array(z.string().min(1)).default([]),
 });
 
-function clean(v: FormDataEntryValue | null): string | null {
-  const s = (v == null ? "" : String(v)).trim();
-  return s === "" ? null : s;
-}
 
 export async function saveOffer(formData: FormData): Promise<ActionResult> {
   await requireAdmin();

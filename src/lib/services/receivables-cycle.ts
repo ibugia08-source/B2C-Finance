@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { toNumber as n } from "@/lib/format";
 
 /**
  * CICLO MENSAL DE RECEBIMENTOS — a "planilha mensal inteligente".
@@ -16,7 +17,6 @@ import { getValidDueDateForMonth } from "@/lib/financial/due-date";
  * cancelada — a geração NÃO recria) e TCV fora do mês de adesão/renovação.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 /** Status ativo para efeito de faturamento mensal. */
 const CYCLE_ACTIVE = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;

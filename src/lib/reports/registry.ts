@@ -9,7 +9,7 @@ import {
 import { getUpsellKpis } from "@/lib/services/upsell-metrics";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { limitesUsadosPorCartao } from "@/lib/services/calculations";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, toNumber as n } from "@/lib/format";
 import {
   type ReportQuery,
   amountRange,
@@ -23,7 +23,6 @@ import {
  * originais nunca são alterados.
  */
 
-const n = (v: unknown): number => (v == null ? 0 : Number(v));
 
 export type ColumnKind = "text" | "money" | "int" | "percent" | "date";
 

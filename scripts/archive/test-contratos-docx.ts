@@ -3,7 +3,7 @@
  * extração de variáveis, storage, geração de DOCX e dossiê do cliente.
  * Uso: npx tsx scripts/test-contratos-docx.ts
  */
-import { loadEnv } from "./env";
+import { loadEnv } from "../env";
 loadEnv();
 
 import { readFileSync, existsSync } from "fs";
