@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import type { Period } from "@/lib/period";
 import {
   getPeriodRevenue,
@@ -49,14 +50,12 @@ export type DashboardMainMetrics = {
   tcvClients: number;
 };
 
-/** Snapshot cru de um período (reutilizado para o mês atual e o anterior). */
-async function periodSnapshot(start: Date, end: Date): Promise<DashboardMainMetrics> {
-  const [revenue, receipts, finance] = await Promise.all([
-    getPeriodRevenue(start, end),
-    getReceiptsSummary(start, end),
-    getFinanceSummary({ key: "custom", start, end, label: "" } as Period),
-  ]);
-
+/** Build metrics object from raw data */
+function buildMetrics(
+  revenue: Awaited<ReturnType<typeof getPeriodRevenue>>,
+  receipts: Awaited<ReturnType<typeof getReceiptsSummary>>,
+  finance: Awaited<ReturnType<typeof getFinanceSummary>>
+): DashboardMainMetrics {
   const extraManual = receipts.extraRevenueManual;
   const faturamentoTotal = revenue.total + extraManual;
   const recebido = receipts.receiptsCorrectMonth + extraManual;
@@ -80,6 +79,36 @@ async function periodSnapshot(start: Date, end: Date): Promise<DashboardMainMetr
     mrrClients: revenue.mrrClients,
     tcvClients: revenue.tcvClients,
   };
+}
+
+/** Fetch both current and previous period snapshots in parallel for better pool utilization */
+async function dualPeriodSnapshot(
+  currentStart: Date,
+  currentEnd: Date,
+  prevStart: Date,
+  prevEnd: Date
+): Promise<[DashboardMainMetrics, DashboardMainMetrics]> {
+  // Fetch both periods in parallel instead of sequentially
+  const [
+    [currRevenue, currReceipts, currFinance],
+    [prevRevenue, prevReceipts, prevFinance],
+  ] = await Promise.all([
+    Promise.all([
+      getPeriodRevenue(currentStart, currentEnd),
+      getReceiptsSummary(currentStart, currentEnd),
+      getFinanceSummary({ key: "custom", start: currentStart, end: currentEnd, label: "" } as Period),
+    ]),
+    Promise.all([
+      getPeriodRevenue(prevStart, prevEnd),
+      getReceiptsSummary(prevStart, prevEnd),
+      getFinanceSummary({ key: "custom", start: prevStart, end: prevEnd, label: "" } as Period),
+    ]),
+  ]);
+
+  return [
+    buildMetrics(currRevenue, currReceipts, currFinance),
+    buildMetrics(prevRevenue, prevReceipts, prevFinance),
+  ];
 }
 
 /**
@@ -136,13 +165,15 @@ export type DashboardMainResult = {
   };
 };
 
-export async function getDashboardMainMetrics(period: Period): Promise<DashboardMainResult> {
+async function getDashboardMainMetricsImpl(period: Period): Promise<DashboardMainResult> {
   const prevRange = previousPeriodRange(period);
-  // Sequencial (não Promise.all): cada snapshot já abre ~13 queries paralelas;
-  // rodá-los juntos dobraria o pico de conexões e pressiona o pool pequeno da
-  // produção (connection limit ~5). Sequencial mantém o pico em ~13.
-  const current = await periodSnapshot(period.start, period.end);
-  const previous = await periodSnapshot(prevRange.start, prevRange.end);
+  // Busca ambos os períodos em paralelo: reduz de 2×periodSnapshot sequenciais para 1 batch
+  // dualPeriodSnapshot internamente paraleliza as 6 queries (3 por período) mantendo o pico
+  // de conexões sob controle com estrutura de Promise.all dupla
+  const [current, previous] = await dualPeriodSnapshot(
+    period.start, period.end,
+    prevRange.start, prevRange.end
+  );
 
   const previousHasData =
     previous.faturamentoTotal !== 0 ||
@@ -162,6 +193,13 @@ export async function getDashboardMainMetrics(period: Period): Promise<Dashboard
     },
   };
 }
+
+// Cache dashboard metrics for 5 minutes per period to reduce database pressure
+export const getDashboardMainMetrics = unstable_cache(
+  getDashboardMainMetricsImpl,
+  ["dashboard-main-metrics"],
+  { revalidate: 300, tags: ["dashboard-metrics"] }
+);
 
 // ===================================================================
 // Séries ANUAIS (12 meses do ano selecionado) — 3 gráficos principais

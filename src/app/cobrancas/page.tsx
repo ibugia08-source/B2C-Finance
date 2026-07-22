@@ -125,10 +125,12 @@ export default async function RecebimentosPage({
           salesOwner: true, contractMonths: true, monthlyValue: true,
         },
         orderBy: { name: "asc" },
+        take: 1000,
       }),
       prisma.client.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
+        take: 2000,
       }),
       prisma.contract.findMany({
         orderBy: { title: "asc" },
