@@ -172,13 +172,11 @@ async function getPeriodRevenueImpl(
 }
 
 // Cache revenue calculations for 1 hour to reduce repeated calculations
+// keyParts deve ser string[] estático; os argumentos (start, end) já compõem
+// a chave do cache automaticamente via serialização do unstable_cache.
 export const getPeriodRevenue = unstable_cache(
   getPeriodRevenueImpl,
-  (start: Date, end: Date) => [
-    "period-revenue",
-    start.toISOString().split("T")[0],
-    end.toISOString().split("T")[0],
-  ],
+  ["period-revenue"],
   { revalidate: 3600, tags: [CACHE_TAGS.REVENUE_METRICS] }
 );
 

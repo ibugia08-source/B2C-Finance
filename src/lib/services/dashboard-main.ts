@@ -196,13 +196,11 @@ async function getDashboardMainMetricsImpl(period: Period): Promise<DashboardMai
 }
 
 // Cache dashboard metrics for 5 minutes per period to reduce database pressure
+// keyParts deve ser string[] estático; os argumentos (period) já compõem a
+// chave do cache automaticamente via serialização do unstable_cache.
 export const getDashboardMainMetrics = unstable_cache(
   getDashboardMainMetricsImpl,
-  (period: Period) => [
-    "dashboard-main-metrics",
-    period.start.toISOString().split("T")[0],
-    period.end.toISOString().split("T")[0],
-  ],
+  ["dashboard-main-metrics"],
   { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] }
 );
 
