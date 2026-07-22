@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR, parseMonthParam, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
@@ -170,9 +170,7 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
       }
     }
 
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/transacoes");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a despesa.";
@@ -193,8 +191,7 @@ export async function endRecurrence(groupId: string): Promise<ActionResult> {
         status: { not: "pago" },
       },
     });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao encerrar a recorrência." };
@@ -216,9 +213,7 @@ export async function deleteExpense(
     } else {
       await prisma.transaction.deleteMany({ where: { id } });
     }
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/transacoes");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir a despesa." };
@@ -243,9 +238,7 @@ export async function setExpenseDueDate(
     if (isNaN(dueDate.getTime())) return { ok: false, error: "Data inválida." };
 
     await prisma.transaction.updateMany({ where: { id }, data: { dueDate } });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/rotina");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao alterar o vencimento." };
@@ -259,9 +252,7 @@ export async function setExpenseStatus(
   await getViewer();
   try {
     await prisma.transaction.updateMany({ where: { id }, data: { status } });
-    revalidatePath("/despesas");
-    revalidatePath("/dashboard");
-    revalidatePath("/rotina"); // "Marcar como paga" pela Rotina reflete na hora
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar o status." };

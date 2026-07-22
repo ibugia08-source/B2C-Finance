@@ -1,8 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath, revalidateTag } from "next/cache";
-import { CACHE_TAGS } from "@/lib/cache-tags";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR, formatBRL } from "@/lib/format";
 
@@ -31,13 +30,13 @@ export async function savePerson(formData: FormData) {
       data: { name: parsed.name, type: parsed.type, notes: parsed.notes ?? null },
     });
   }
-  revalidatePath("/pessoas");
+  revalidateFinance();
 }
 
 export async function deletePerson(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.person.delete({ where: { id } });
-  revalidatePath("/pessoas");
+  revalidateFinance();
 }
 
 const PaymentSchema = z.object({
@@ -128,15 +127,7 @@ export async function registerPersonPayment(formData: FormData) {
     });
   }
 
-  revalidatePath("/pessoas");
-  revalidatePath(`/pessoas/${parsed.personId}`);
-  revalidatePath("/dashboard");
-  revalidatePath("/transacoes");
-
-  // Invalidate cache tags to sync dashboard
-  revalidateTag(CACHE_TAGS.DASHBOARD);
-  revalidateTag(CACHE_TAGS.DASHBOARD_METRICS);
-  revalidateTag(CACHE_TAGS.REVENUE_METRICS);
+  revalidateFinance({ personId: parsed.personId });
 
   return { ok: true, paymentId: payment.id, leftover: remaining };
 }
@@ -146,8 +137,7 @@ export async function deletePersonPayment(id: string) {
   const p = await prisma.personPayment.findUnique({ where: { id } });
   if (!p) return;
   await prisma.personPayment.delete({ where: { id } });
-  revalidatePath("/pessoas");
-  revalidatePath(`/pessoas/${p.personId}`);
+  revalidateFinance({ personId: p.personId });
 }
 
 const TxStatusSchema = z.enum([
@@ -177,11 +167,7 @@ export async function setPersonTxStatus(transactionId: string, status: string) {
     }
   }
 
-  revalidatePath("/pessoas");
-  if (tx.responsibleId) revalidatePath(`/pessoas/${tx.responsibleId}`);
-  revalidatePath("/transacoes");
-  revalidatePath("/dashboard");
-  if (tx.cardId) revalidatePath(`/cartoes/${tx.cardId}`);
+  revalidateFinance({ personId: tx.responsibleId, cardId: tx.cardId });
 }
 
 export async function setPersonTxCategory(
@@ -193,10 +179,7 @@ export async function setPersonTxCategory(
     where: { id: transactionId },
     data: { categoryId: categoryId || null },
   });
-  revalidatePath("/pessoas");
-  if (tx.responsibleId) revalidatePath(`/pessoas/${tx.responsibleId}`);
-  revalidatePath("/transacoes");
-  if (tx.cardId) revalidatePath(`/cartoes/${tx.cardId}`);
+  revalidateFinance({ personId: tx.responsibleId, cardId: tx.cardId });
 }
 
 /**

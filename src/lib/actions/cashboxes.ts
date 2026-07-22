@@ -2,7 +2,7 @@
 import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
 
@@ -53,15 +53,13 @@ export async function saveCashBox(formData: FormData) {
     await prisma.cashBox.create({ data });
   }
 
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function deleteCashBox(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.cashBox.delete({ where: { id } });
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 const MoveSchema = z.object({
@@ -107,8 +105,7 @@ export async function registerCashMovement(formData: FormData) {
     }),
   ]);
 
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 /**
@@ -199,8 +196,7 @@ export async function launchResultToCash(input: {
       }),
     ]);
 
-    revalidatePath("/caixa");
-    revalidatePath("/dashboard");
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao lançar ao caixa." };
@@ -222,6 +218,5 @@ export async function deleteCashMovement(id: string) {
       data: { currentAmount: box.currentAmount + delta },
     }),
   ]);
-  revalidatePath("/caixa");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }

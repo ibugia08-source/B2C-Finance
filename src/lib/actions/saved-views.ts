@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
 import type { ActionResult } from "./clients";
@@ -40,7 +40,7 @@ export async function saveView(fd: FormData): Promise<ActionResult> {
     const view = await prisma.savedView.create({
       data: { ...parsed.data, visibility, createdBy: viewer.id },
     });
-    revalidatePath("/");
+    revalidateFinance();
     return { ok: true, id: view.id };
   } catch (e) {
     console.error("saveView", e);
@@ -57,7 +57,7 @@ export async function deleteView(id: string): Promise<ActionResult> {
       return { ok: false, error: "Sem permissão para excluir esta visão." };
     }
     await prisma.savedView.delete({ where: { id } });
-    revalidatePath("/");
+    revalidateFinance();
     return { ok: true };
   } catch (e) {
     console.error("deleteView", e);

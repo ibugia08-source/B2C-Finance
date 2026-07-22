@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL } from "@/lib/format";
 
@@ -50,7 +50,7 @@ export async function saveCard(formData: FormData) {
   } else {
     await prisma.creditCard.create({ data });
   }
-  revalidatePath("/cartoes");
+  revalidateFinance();
 }
 
 // Criação rápida de conta bancária (usada na importação inline). Retorna o id.
@@ -82,8 +82,7 @@ export async function createBankAccountQuick(
       dueDay: parsed.dueDay,
     },
   });
-  revalidatePath("/cartoes");
-  revalidatePath("/cartoes");
+  revalidateFinance();
   return { id: created.id };
 }
 
@@ -91,12 +90,11 @@ export async function quickRenameCard(id: string, name: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   if (!name.trim()) throw new Error("Nome obrigatório");
   await prisma.creditCard.update({ where: { id }, data: { name: name.trim() } });
-  revalidatePath("/cartoes");
-  revalidatePath(`/cartoes/${id}`);
+  revalidateFinance({ cardId: id });
 }
 
 export async function deleteCard(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.creditCard.delete({ where: { id } });
-  revalidatePath("/cartoes");
+  revalidateFinance();
 }

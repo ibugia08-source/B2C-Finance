@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import {
   parseInvoicePdf,
   PdfImportError,
@@ -270,11 +270,7 @@ export async function commitPdfImport(formData: FormData): Promise<PdfCommitResu
     },
   });
 
-  revalidatePath("/cartoes");
-  revalidatePath(`/cartoes/${cardId}`);
-  revalidatePath("/transacoes");
-  revalidatePath("/cartoes");
-  revalidatePath("/dashboard");
+  revalidateFinance({ cardId });
 
   return {
     ok: true,

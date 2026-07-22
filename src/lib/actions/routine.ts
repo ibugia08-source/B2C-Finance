@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAgency } from "@/lib/revalidate";
 import { requireAdmin } from "@/lib/auth/viewer";
 
 /**
@@ -52,7 +52,7 @@ export async function dismissRoutineItem(
         },
       });
     }
-    revalidatePath("/rotina");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao remover da rotina." };
@@ -87,7 +87,7 @@ export async function setRoutineActionDone(
     } else if (!done && existing) {
       await prisma.routineItemState.deleteMany({ where: { id: existing.id } });
     }
-    revalidatePath("/rotina");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar a ação." };

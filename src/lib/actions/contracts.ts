@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ContractStatus, ContractType, RecurrenceType } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -317,8 +317,6 @@ export async function renewClientContract(formData: FormData): Promise<ActionRes
     });
 
     revalidateContracts(c.clientId);
-    revalidatePath("/clientes");
-    revalidatePath("/cobrancas");
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao renovar o contrato." };
@@ -371,8 +369,5 @@ export async function generateAllBillings(): Promise<ActionResult & { created?: 
 }
 
 function revalidateContracts(clientId?: string) {
-  revalidatePath("/acordos");
-  revalidatePath("/clientes");
-  if (clientId) revalidatePath(`/clientes/${clientId}`);
-  revalidatePath("/dashboard");
+  revalidateAgency({ clientId });
 }

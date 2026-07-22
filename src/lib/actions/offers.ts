@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateCatalog } from "@/lib/revalidate";
 import { z } from "zod";
 import { OfferModality } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -77,7 +77,7 @@ export async function saveOffer(formData: FormData): Promise<ActionResult> {
       });
     }
 
-    revalidatePath("/ofertas");
+    revalidateCatalog();
     return { ok: true, id };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a oferta.";
@@ -89,7 +89,7 @@ export async function deleteOffer(id: string): Promise<ActionResult> {
   await requireAdmin();
   try {
     await prisma.offer.deleteMany({ where: { id } });
-    revalidatePath("/ofertas");
+    revalidateCatalog();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir a oferta." };
@@ -105,7 +105,7 @@ export async function toggleOfferActive(id: string): Promise<ActionResult> {
       where: { id },
       data: { active: !existing.active },
     });
-    revalidatePath("/ofertas");
+    revalidateCatalog();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar a oferta." };

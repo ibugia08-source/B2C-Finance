@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateCatalog, revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { UpsellStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -82,8 +82,7 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
       id = created.id;
     }
 
-    revalidatePath("/upsell");
-    revalidatePath("/dashboard");
+    revalidateCatalog();
     return { ok: true, id };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a oportunidade.";
@@ -137,9 +136,8 @@ export async function setUpsellStatus(
       },
     });
 
-    revalidatePath("/upsell");
-    revalidatePath("/dashboard");
-    revalidatePath("/receitas");
+    revalidateCatalog();
+    revalidateFinance();
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
@@ -151,8 +149,7 @@ export async function deleteUpsell(id: string): Promise<ActionResult> {
   await requireAdmin();
   try {
     await prisma.upsell.deleteMany({ where: { id } });
-    revalidatePath("/upsell");
-    revalidatePath("/dashboard");
+    revalidateCatalog();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir a oportunidade." };

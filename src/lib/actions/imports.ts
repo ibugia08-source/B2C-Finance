@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/viewer";
 import { readSheet, validateRows, type RowError } from "@/lib/imports/engine";
@@ -115,7 +115,7 @@ export async function runImport(fd: FormData): Promise<ImportResult> {
         },
       });
       confirmed = { imported, batchId: batch.id };
-      revalidatePath("/importacoes");
+      revalidateFinance();
     }
 
     return {

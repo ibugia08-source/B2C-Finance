@@ -1,6 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { revalidateCatalog } from "@/lib/revalidate";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/viewer";
 import type { ActionResult } from "./clients";
@@ -36,7 +37,7 @@ export async function saveService(formData: FormData): Promise<ActionResult> {
     } else {
       saved = await prisma.service.create({ data });
     }
-    revalidatePath("/servicos");
+    revalidateCatalog();
     revalidatePath("/acordos");
     return { ok: true, id: saved.id };
   } catch (e: any) {
@@ -58,7 +59,7 @@ export async function deleteService(id: string): Promise<ActionResult> {
       };
     }
     await prisma.service.deleteMany({ where: { id } });
-    revalidatePath("/servicos");
+    revalidateCatalog();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o serviço." };

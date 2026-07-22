@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { parseBRL } from "@/lib/format";
 import { getViewer } from "@/lib/auth/viewer";
 
@@ -18,14 +18,13 @@ export async function payInvoice(formData: FormData) {
     where: { id },
     data: { paid: newPaid, status },
   });
-  revalidatePath("/cartoes");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function setInvoiceStatus(id: string, status: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.creditCardInvoice.update({ where: { id }, data: { status } });
-  revalidatePath("/cartoes");
+  revalidateFinance();
 }
 
 /**
@@ -56,9 +55,5 @@ export async function deleteInvoice(id: string) {
     prisma.creditCardInvoice.delete({ where: { id } }),
   ]);
 
-  revalidatePath("/cartoes");
-  revalidatePath("/transacoes");
-  revalidatePath("/cartoes");
-  revalidatePath(`/cartoes/${inv.cardId}`);
-  revalidatePath("/dashboard");
+  revalidateFinance({ cardId: inv.cardId });
 }

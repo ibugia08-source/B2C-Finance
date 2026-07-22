@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAssistant } from "@/lib/revalidate";
 import { requireAdmin, getViewer } from "@/lib/auth/viewer";
 import {
   getAISettings,
@@ -181,7 +181,7 @@ export async function saveAISettings(formData: FormData) {
     create: { id: SINGLETON_ID, ...data, apiKey: data.apiKey ?? null },
     update: data,
   });
-  revalidatePath("/assistente");
+  revalidateAssistant();
 }
 
 export async function testAIConnection(): Promise<{ ok: boolean; message: string }> {
@@ -267,7 +267,7 @@ export async function sendChatMessage(
     data: { updatedAt: new Date() },
   });
 
-  revalidatePath("/assistente");
+  revalidateAssistant();
   return {
     ok: true,
     conversationId: convId,
@@ -280,7 +280,7 @@ export async function clearConversation(conversationId: string) {
   await getViewer();
   // deleteMany é escopado por dono → só apaga se a conversa for do próprio usuário.
   await prisma.aIConversation.deleteMany({ where: { id: conversationId } });
-  revalidatePath("/assistente");
+  revalidateAssistant();
 }
 
 // ---------- Análise sob demanda ----------
@@ -328,7 +328,7 @@ Use os números reais do retrato financeiro. Seja específico e priorize o que t
     }
   }
 
-  revalidatePath("/assistente");
+  revalidateAssistant();
   return { ok: true, report, tokens: result.usage.promptTokens + result.usage.completionTokens };
 }
 
@@ -430,14 +430,14 @@ export async function addMemory(formData: FormData) {
   const kind = String(formData.get("kind") || "note");
   if (!content) return;
   await prisma.aIMemory.create({ data: { content, kind, source: "manual" } });
-  revalidatePath("/assistente");
+  revalidateAssistant();
 }
 
 export async function deleteMemory(id: string) {
   await getViewer();
   // deleteMany é escopado por dono → só apaga memória do próprio usuário.
   await prisma.aIMemory.deleteMany({ where: { id } });
-  revalidatePath("/assistente");
+  revalidateAssistant();
 }
 
 export async function toggleMemoryPin(id: string) {
@@ -446,5 +446,5 @@ export async function toggleMemoryPin(id: string) {
   const m = await prisma.aIMemory.findUnique({ where: { id } });
   if (!m) return;
   await prisma.aIMemory.update({ where: { id }, data: { pinned: !m.pinned } });
-  revalidatePath("/assistente");
+  revalidateAssistant();
 }

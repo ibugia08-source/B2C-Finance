@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import crypto from "crypto";
 import {
@@ -157,7 +157,7 @@ export async function createContractTemplate(formData: FormData): Promise<Action
         warnings: warnings as any,
       },
     });
-    revalidatePath("/contratos");
+    revalidateAgency();
     return { ok: true, id: created.id };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar o modelo." };
@@ -173,8 +173,7 @@ export async function updateContractTemplate(formData: FormData): Promise<Action
     if (!existing) return { ok: false, error: "Modelo não encontrado." };
     const meta = parseTemplateMeta(formData);
     await prisma.contractTemplate.update({ where: { id }, data: { ...meta } });
-    revalidatePath("/contratos");
-    revalidatePath(`/contratos/${id}`);
+    revalidateAgency({ contractId: id });
     return { ok: true, id };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o modelo." };
@@ -200,7 +199,7 @@ export async function updateTemplateVariables(formData: FormData): Promise<Actio
       where: { id },
       data: { variables: incoming as any },
     });
-    revalidatePath(`/contratos/${id}`);
+    revalidateAgency({ contractId: id });
     return { ok: true, id };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar as variáveis." };
@@ -216,8 +215,7 @@ export async function setContractTemplateStatus(
     const existing = await prisma.contractTemplate.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Modelo não encontrado." };
     await prisma.contractTemplate.update({ where: { id }, data: { status } });
-    revalidatePath("/contratos");
-    revalidatePath(`/contratos/${id}`);
+    revalidateAgency({ contractId: id });
     return { ok: true, id };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao alterar o status." };
@@ -241,7 +239,7 @@ export async function deleteContractTemplate(id: string): Promise<ActionResult> 
     }
     await prisma.contractTemplate.delete({ where: { id } });
     await removeFile(existing.filePath);
-    revalidatePath("/contratos");
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o modelo." };
@@ -319,8 +317,7 @@ export async function generateContractFromTemplate(formData: FormData): Promise<
         generatedFilePath,
       },
     });
-    revalidatePath("/contratos");
-    if (parsed.clientId) revalidatePath(`/clientes/${parsed.clientId}`);
+    revalidateAgency({ clientId: parsed.clientId });
     return { ok: true, id: created.id };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao gerar o contrato." };
@@ -336,8 +333,7 @@ export async function setGeneratedContractStatus(
     const existing = await prisma.generatedContract.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contrato não encontrado." };
     await prisma.generatedContract.update({ where: { id }, data: { status } });
-    revalidatePath("/contratos");
-    if (existing.clientId) revalidatePath(`/clientes/${existing.clientId}`);
+    revalidateAgency({ clientId: existing.clientId });
     return { ok: true, id };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao alterar o status." };
@@ -351,8 +347,7 @@ export async function deleteGeneratedContract(id: string): Promise<ActionResult>
     if (!existing) return { ok: false, error: "Contrato não encontrado." };
     await prisma.generatedContract.delete({ where: { id } });
     await removeFile(existing.generatedFilePath);
-    revalidatePath("/contratos");
-    if (existing.clientId) revalidatePath(`/clientes/${existing.clientId}`);
+    revalidateAgency({ clientId: existing.clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o contrato gerado." };
@@ -403,7 +398,7 @@ export async function saveClientDocument(formData: FormData): Promise<ActionResu
         size: upload.size,
       },
     });
-    revalidatePath(`/clientes/${clientId}`);
+    revalidateAgency({ clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao anexar o documento." };
@@ -417,7 +412,7 @@ export async function deleteClientDocument(id: string): Promise<ActionResult> {
     if (!existing) return { ok: false, error: "Documento não encontrado." };
     await prisma.clientDocument.delete({ where: { id } });
     await removeFile(existing.filePath);
-    revalidatePath(`/clientes/${existing.clientId}`);
+    revalidateAgency({ clientId: existing.clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o documento." };
@@ -464,7 +459,7 @@ export async function saveClientNote(formData: FormData): Promise<ActionResult> 
         },
       });
     }
-    revalidatePath(`/clientes/${parsed.clientId}`);
+    revalidateAgency({ clientId: parsed.clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a observação." };
@@ -477,7 +472,7 @@ export async function deleteClientNote(id: string): Promise<ActionResult> {
     const existing = await prisma.clientNote.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Observação não encontrada." };
     await prisma.clientNote.delete({ where: { id } });
-    revalidatePath(`/clientes/${existing.clientId}`);
+    revalidateAgency({ clientId: existing.clientId });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir a observação." };

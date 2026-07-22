@@ -1,5 +1,5 @@
 "use server";
-import { revalidatePath } from "next/cache";
+import { revalidateAdmin, revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
@@ -58,8 +58,8 @@ export async function createUser(formData: FormData) {
     });
   }
 
-  revalidatePath("/usuarios");
-  revalidatePath("/pessoas");
+  revalidateAdmin();
+  revalidateFinance();
 }
 
 export async function updateUser(formData: FormData) {
@@ -100,8 +100,8 @@ export async function updateUser(formData: FormData) {
     });
   }
 
-  revalidatePath("/usuarios");
-  revalidatePath("/pessoas");
+  revalidateAdmin();
+  revalidateFinance();
 }
 
 export async function deleteUser(id: string) {
@@ -109,8 +109,8 @@ export async function deleteUser(id: string) {
   // Solta vínculo de Person, se houver
   await prisma.person.updateMany({ where: { userId: id }, data: { userId: null } });
   await prisma.user.delete({ where: { id } });
-  revalidatePath("/usuarios");
-  revalidatePath("/pessoas");
+  revalidateAdmin();
+  revalidateFinance();
 }
 
 export async function linkPersonToUser(personId: string, userId: string | null) {
@@ -126,7 +126,6 @@ export async function linkPersonToUser(personId: string, userId: string | null) 
     where: { id: personId },
     data: { userId },
   });
-  revalidatePath("/pessoas");
-  revalidatePath(`/pessoas/${personId}`);
-  revalidatePath("/usuarios");
+  revalidateAdmin();
+  revalidateFinance({ personId });
 }

@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
 
@@ -51,8 +51,7 @@ export async function saveReceivable(formData: FormData) {
       },
     });
   }
-  revalidatePath("/pessoas");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function markReceivablePaid(id: string) {
@@ -61,12 +60,11 @@ export async function markReceivablePaid(id: string) {
     where: { id },
     data: { status: "pago", paidAt: new Date() },
   });
-  revalidatePath("/pessoas");
-  revalidatePath("/dashboard");
+  revalidateFinance();
 }
 
 export async function deleteReceivable(id: string) {
   await getViewer(); // sessão obrigatória (dados escopados por dono)
   await prisma.receivable.delete({ where: { id } });
-  revalidatePath("/pessoas");
+  revalidateFinance();
 }

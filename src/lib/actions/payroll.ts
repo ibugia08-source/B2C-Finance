@@ -1,6 +1,9 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import {
+  revalidatePayroll as revalidatePayrollDomain,
+  revalidateFinance,
+} from "@/lib/revalidate";
 import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/viewer";
@@ -9,9 +12,9 @@ import type { ActionResult } from "./clients";
 
 
 function revalidatePayroll() {
-  revalidatePath("/folha");
-  revalidatePath("/despesas");
-  revalidatePath("/dashboard");
+  revalidatePayrollDomain();
+  // A folha gera despesas (Transaction) — mantém as telas financeiras em dia.
+  revalidateFinance();
 }
 
 // ---------- Colaboradores ----------

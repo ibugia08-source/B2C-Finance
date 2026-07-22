@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
+import { revalidateFinance } from "@/lib/revalidate";
 import { parseFile, type ParseDiagnostics, type ParsedRow } from "@/lib/services/parseImport";
 import {
   analyzeImportRows,
@@ -230,13 +230,7 @@ export async function commitImport(formData: FormData): Promise<CommitResult> {
     reference,
   });
 
-  revalidatePath("/transacoes");
-  revalidatePath("/dashboard");
-  revalidatePath("/cartoes");
-  if (cardId) {
-    revalidatePath("/cartoes");
-    revalidatePath(`/cartoes/${cardId}`);
-  }
+  revalidateFinance({ cardId });
 
   return {
     ok: true,
@@ -291,9 +285,5 @@ export async function deleteImportBatch(id: string) {
     }
   }
 
-  revalidatePath("/cartoes");
-  revalidatePath("/transacoes");
-  revalidatePath("/cartoes");
-  if (batch.cardId) revalidatePath(`/cartoes/${batch.cardId}`);
-  revalidatePath("/dashboard");
+  revalidateFinance({ cardId: batch.cardId });
 }
