@@ -2,9 +2,9 @@
 import { Button } from "@/components/ui/button";
 import { ClientDialog } from "./client-dialog";
 import { ClientLossDialog } from "./loss-dialog";
-import { Pencil, Trash2, Eye, UserX, FileText, MessageCircle } from "lucide-react";
+import { MoreVertical, DollarSign, Eye, Pencil, Trash2, UserX } from "lucide-react";
 import { deleteClient } from "@/lib/actions/clients";
-import { useTransition } from "react";
+import { useTransition, useState } from "react";
 import Link from "next/link";
 
 export function ClientActions({
@@ -13,76 +13,105 @@ export function ClientActions({
   client: any;
 }) {
   const [pending, start] = useTransition();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="flex gap-1 justify-end flex-wrap">
-      {/* View client details */}
-      <Button variant="ghost" size="icon" asChild title="Ver detalhes">
-        <Link href={`/clientes/${client.id}`}>
-          <Eye className="h-4 w-4" />
-        </Link>
-      </Button>
-
-      {/* View client billings / cobranças */}
-      <Button variant="ghost" size="icon" asChild title="Ver cobranças">
+    <div className="flex gap-2 justify-end items-center">
+      {/* Registrar Pagamento - Primary Action */}
+      <Button
+        variant="default"
+        size="sm"
+        asChild
+        className="text-xs"
+      >
         <Link href={`/cobrancas?cliente=${encodeURIComponent(client.id)}`}>
-          <FileText className="h-4 w-4" />
+          <DollarSign className="h-4 w-4 mr-1" />
+          Pagamento
         </Link>
       </Button>
 
-      {/* Generate message for active clients */}
-      {client.status !== "CHURNED" && (
+      {/* Ver Detalhes - Primary Action */}
+      <Button
+        variant="outline"
+        size="sm"
+        asChild
+        className="text-xs"
+      >
+        <Link href={`/clientes/${client.id}`}>
+          <Eye className="h-4 w-4 mr-1" />
+          Detalhes
+        </Link>
+      </Button>
+
+      {/* More Actions Dropdown */}
+      <div className="relative">
         <Button
           variant="ghost"
           size="icon"
-          title="Gerar mensagem de cobrança"
-          asChild
+          onClick={() => setMenuOpen(!menuOpen)}
+          className="h-8 w-8"
         >
-          <Link href={`/clientes/${client.id}?tab=cobrancas&action=message`}>
-            <MessageCircle className="h-4 w-4" />
-          </Link>
+          <MoreVertical className="h-4 w-4" />
         </Button>
-      )}
 
-      {/* Edit client */}
-      <ClientDialog
-        initial={client}
-        trigger={
-          <Button variant="ghost" size="icon" title="Editar">
-            <Pencil className="h-4 w-4" />
-          </Button>
-        }
-      />
+        {menuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-30"
+              onClick={() => setMenuOpen(false)}
+            />
+            <div className="absolute right-0 top-8 z-40 w-48 rounded-md border bg-card shadow-lg">
+              {/* Edit */}
+              <ClientDialog
+                initial={client}
+                trigger={
+                  <button
+                    onClick={() => setMenuOpen(false)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted rounded-t-md"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Editar
+                  </button>
+                }
+              />
 
-      {/* Mark as churned */}
-      {client.status !== "CHURNED" && (
-        <ClientLossDialog
-          clientId={client.id}
-          clientName={client.name}
-          trigger={
-            <Button variant="ghost" size="icon" title="Perda de cliente">
-              <UserX className="h-4 w-4 text-destructive" />
-            </Button>
-          }
-        />
-      )}
+              {/* Mark as churned */}
+              {client.status !== "CHURNED" && (
+                <ClientLossDialog
+                  clientId={client.id}
+                  clientName={client.name}
+                  trigger={
+                    <button
+                      onClick={() => setMenuOpen(false)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted text-amber-600"
+                    >
+                      <UserX className="h-4 w-4" />
+                      Marcar como perdido
+                    </button>
+                  }
+                />
+              )}
 
-      {/* Delete client */}
-      <Button
-        variant="ghost"
-        size="icon"
-        title="Excluir"
-        disabled={pending}
-        onClick={() => {
-          if (!confirm(`Excluir o cliente "${client.name}"?`)) return;
-          start(async () => {
-            const res = await deleteClient(client.id);
-            if (!res.ok) alert(res.error);
-          });
-        }}
-      >
-        <Trash2 className="h-4 w-4 text-destructive" />
-      </Button>
+              {/* Delete */}
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  if (!confirm(`Excluir o cliente "${client.name}"?`)) return;
+                  start(async () => {
+                    const res = await deleteClient(client.id);
+                    if (!res.ok) alert(res.error);
+                  });
+                }}
+                disabled={pending}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted text-destructive rounded-b-md"
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
