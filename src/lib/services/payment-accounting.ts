@@ -1,3 +1,4 @@
+import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 
@@ -53,7 +54,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
     return { ok: false, error: "Cobrança cancelada não recebe pagamento." };
 
   const openAmount = n(billing.amount) - n(billing.paidTotal);
-  if (input.amount > openAmount + 0.01) {
+  if (input.amount > openAmount + MONEY_EPSILON) {
     return {
       ok: false,
       error: `Valor maior que o saldo em aberto (${openAmount.toFixed(2)}).`,
@@ -62,7 +63,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
 
   const wasOverdue = billing.status === "OVERDUE";
   const newPaidTotal = n(billing.paidTotal) + input.amount;
-  const fullyPaid = newPaidTotal >= n(billing.amount) - 0.01;
+  const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
 
   // ===== Classificação do fechamento mensal =====
   const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
@@ -153,7 +154,7 @@ export async function revertBillingPayment(paymentId: string): Promise<
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const status =
-    newPaidTotal <= 0.01 ? (b.dueDate < today ? "OVERDUE" : "PENDING") : "PARTIAL";
+    newPaidTotal <= MONEY_EPSILON ? (b.dueDate < today ? "OVERDUE" : "PENDING") : "PARTIAL";
 
   await prisma.$transaction([
     prisma.payment.delete({ where: { id: paymentId } }),
@@ -181,7 +182,7 @@ export async function revertBillingPayment(paymentId: string): Promise<
     });
     if (er) {
       const remaining = n(er.amount) - n(payment.amount);
-      if (remaining <= 0.01) {
+      if (remaining <= MONEY_EPSILON) {
         await prisma.extraRevenue.deleteMany({ where: { id: er.id } });
       } else {
         await prisma.extraRevenue.updateMany({

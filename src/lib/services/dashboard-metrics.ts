@@ -1,3 +1,4 @@
+import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
 import { formatBRL, formatDateBR, toNumber as n } from "@/lib/format";
@@ -131,7 +132,7 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
         _sum: { amount: true },
       }),
       prisma.billing.aggregate({
-        where: { ...bw, status: { in: ["PENDING", "PARTIAL"] } },
+        where: { ...bw, status: { in: [...BILLING_AWAITING_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.billing.aggregate({
@@ -428,6 +429,13 @@ export type Health = {
   fatores: { ok: boolean; text: string }[];
 };
 
+// Limiares do health-score (frações da base indicada em cada regra)
+const INADIMPLENCIA_ALTA = 0.25;
+const INADIMPLENCIA_ATENCAO = 0.1;
+const FOLHA_SOBRE_RECEITA_CRITICA = 0.5;
+const FOLHA_SOBRE_RECEITA_ALTA = 0.4;
+const FIXAS_SOBRE_RECEITA_LIMITE = 0.6;
+
 export function computeHealth(
   finance: FinanceSummary,
   cash: CashSummary,
@@ -451,16 +459,16 @@ export function computeHealth(
   else ok(`Lucro de ${formatBRL(finance.lucro)} no período`);
 
   const inadPct = Math.round(inadimplenciaTaxa * 100);
-  if (inadimplenciaTaxa > 0.25) hit(15, `Inadimplência alta: ${inadPct}% do que está em aberto já venceu`);
-  else if (inadimplenciaTaxa > 0.1) hit(8, `Inadimplência em ${inadPct}% do aberto — atenção`);
+  if (inadimplenciaTaxa > INADIMPLENCIA_ALTA) hit(15, `Inadimplência alta: ${inadPct}% do que está em aberto já venceu`);
+  else if (inadimplenciaTaxa > INADIMPLENCIA_ATENCAO) hit(8, `Inadimplência em ${inadPct}% do aberto — atenção`);
   else ok(`Inadimplência controlada (${inadPct}%)`);
 
   const folhaPct = Math.round(finance.folhaSobreReceita * 100);
-  if (finance.folhaSobreReceita > 0.5) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
-  else if (finance.folhaSobreReceita > 0.4) hit(10, `Folha em ${folhaPct}% da receita — acima do ideal de 40%`);
+  if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_CRITICA) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
+  else if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_ALTA) hit(10, `Folha em ${folhaPct}% da receita — acima do ideal de 40%`);
   else ok(`Folha em ${folhaPct}% da receita`);
 
-  if (finance.receitas > 0 && finance.despesasFixas > finance.receitas * 0.6)
+  if (finance.receitas > 0 && finance.despesasFixas > finance.receitas * FIXAS_SOBRE_RECEITA_LIMITE)
     hit(8, `Despesas fixas consomem ${Math.round((finance.despesasFixas / finance.receitas) * 100)}% da receita`);
   else ok("Despesas fixas sob controle");
 

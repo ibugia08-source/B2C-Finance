@@ -1,3 +1,4 @@
+import { BILLING_AWAITING_STATUSES, BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 
@@ -9,7 +10,7 @@ import { toNumber as n } from "@/lib/format";
  *  - a vencer = em aberto com vencimento >= hoje
  */
 
-export const OPEN_STATUSES = ["PENDING", "PARTIAL", "OVERDUE"] as const;
+export const OPEN_STATUSES = BILLING_OPEN_STATUSES;
 
 /**
  * Marca como OVERDUE toda cobrança aberta com vencimento no passado.
@@ -19,7 +20,7 @@ export async function markOverdueBillings(): Promise<number> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const r = await prisma.billing.updateMany({
-    where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { lt: today } },
+    where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { lt: today } },
     data: { status: "OVERDUE" },
   });
   return r.count;
@@ -51,7 +52,7 @@ export async function getBillingKpis(
       _sum: { amount: true, paidTotal: true },
     }),
     prisma.billing.aggregate({
-      where: { status: { in: ["PENDING", "PARTIAL"] }, dueDate: { gte: today } },
+      where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today } },
       _sum: { amount: true, paidTotal: true },
     }),
     prisma.billing.aggregate({

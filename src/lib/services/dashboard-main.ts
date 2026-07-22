@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import type { Period } from "@/lib/period";
@@ -361,7 +362,7 @@ export async function getOpenByClient(period: Period): Promise<ClientOpenItem[]>
 
   const billings = await prisma.billing.findMany({
     where: {
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      status: { in: [...BILLING_OPEN_STATUSES] },
       OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
     },
     select: {

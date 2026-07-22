@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -269,7 +270,7 @@ export async function getReceiptsSummary(
     months.length
       ? prisma.billing.findMany({
           where: {
-            status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+            status: { in: [...BILLING_OPEN_STATUSES] },
             OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
             ...(clientFilter as any),
           },

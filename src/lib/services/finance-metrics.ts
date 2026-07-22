@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
 import { toNumber as n } from "@/lib/format";
@@ -125,7 +126,7 @@ async function projecao(caixa: number, dias: number): Promise<number> {
   const [entradas, saidas, passivos] = await Promise.all([
     prisma.billing.aggregate({
       where: {
-        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        status: { in: [...BILLING_OPEN_STATUSES] },
         dueDate: { lte: limite },
       },
       _sum: { amount: true, paidTotal: true },
@@ -168,7 +169,7 @@ export async function getCashSummary(period: Period): Promise<CashSummary> {
         _sum: { amount: true },
       }),
       prisma.billing.aggregate({
-        where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+        where: { status: { in: [...BILLING_OPEN_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.transaction.aggregate({
@@ -230,7 +231,7 @@ export async function getBalanceSummary(): Promise<BalanceSummary> {
       prisma.account.aggregate({ where: { active: true }, _sum: { balance: true } }),
       prisma.cashBox.aggregate({ _sum: { currentAmount: true } }),
       prisma.billing.aggregate({
-        where: { status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+        where: { status: { in: [...BILLING_OPEN_STATUSES] } },
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.asset.aggregate({ _sum: { value: true } }),

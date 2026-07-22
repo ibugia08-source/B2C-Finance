@@ -1,4 +1,5 @@
 "use server";
+import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { getViewer } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
@@ -159,7 +160,7 @@ export async function launchResultToCash(input: {
     const disponivel = resultado - alreadyLaunched;
     if (disponivel <= 0)
       return { ok: false, error: "Todo o resultado deste mês já foi lançado ao caixa." };
-    if (amount > disponivel + 0.005)
+    if (amount > disponivel + MONEY_EPSILON)
       return {
         ok: false,
         error: `Valor acima do disponível para lançar (${disponivel.toFixed(2)}).`,

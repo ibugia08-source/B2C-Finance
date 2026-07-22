@@ -1,4 +1,5 @@
 "use server";
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { CACHE_TAGS, getBillingUpdateTags } from "@/lib/cache-tags";
@@ -35,7 +36,7 @@ async function openBillingOf(clientId: string, month: number, year: number) {
       clientId,
       competenceMonth: month,
       competenceYear: year,
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      status: { in: [...BILLING_OPEN_STATUSES] },
     },
     orderBy: { dueDate: "asc" },
   });
