@@ -14,7 +14,7 @@ import {
 import { setClientPaymentDay, setClientChargeAmount, setMonthChargeStatus } from "@/lib/actions/receivables-inline";
 import { setClientModality } from "@/lib/actions/clients";
 import type { ActionResult } from "@/lib/actions/clients";
-import type { ReceivableRow } from "./receivables-table";
+import type { ReceivableRow as ReceivableRowType } from "./receivables-table";
 
 const MODALITY_OPTIONS = [
   { value: "MRR", label: "MRR" },
@@ -37,14 +37,14 @@ function ReceivableRowInner({
   month,
   year,
 }: {
-  row: ReceivableRow;
+  row: ReceivableRowType;
   selected: boolean;
   onToggle: () => void;
   accounts: { id: string; name: string }[];
   month: number;
   year: number;
 }) {
-  const onStatusChange = useCallback((r: ReceivableRow) => async (v: string): Promise<ActionResult> => {
+  const onStatusChange = useCallback((r: ReceivableRowType) => async (v: string): Promise<ActionResult> => {
     if (!r.billingId)
       return { ok: false, error: `Cliente sem cobrança neste mês — use "Incluir cliente no mês".` };
     if (v === "PAID") {

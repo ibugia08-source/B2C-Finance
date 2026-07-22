@@ -71,8 +71,8 @@ export function getClientUpdateTags(clientId: string) {
  * Returns a set of tags to invalidate for billing updates.
  * Use in server actions with revalidateTag().
  */
-export function getBillingUpdateTags(clientId?: string) {
-  const tags = [
+export function getBillingUpdateTags(clientId?: string): string[] {
+  const tags: string[] = [
     CACHE_TAGS.BILLINGS,
     CACHE_TAGS.BILLING_CYCLE,
     CACHE_TAGS.DASHBOARD,
