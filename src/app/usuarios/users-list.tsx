@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { UserRowActions } from "./row-actions";
 import { Search, ShieldCheck, UserCheck } from "lucide-react";
+import { ROLE_LABEL, type Role } from "@/lib/permissions";
 import {
   MobileCards,
   MobileCard,
@@ -25,9 +26,25 @@ export type UserRow = {
   active: boolean;
   personId: string | null;
   personName: string | null;
+  /** Ajustes finos de permissão (diferenças vs. o padrão do papel). */
+  permissions: { permission: string; enabled: boolean }[];
 };
 
-export function UsersList({ users, people }: { users: UserRow[]; people: any[] }) {
+const roleLabel = (r: string) => ROLE_LABEL[r as Role] ?? r;
+
+export function UsersList({
+  users,
+  people,
+  canEdit,
+  canDelete,
+  canManagePermissions,
+}: {
+  users: UserRow[];
+  people: any[];
+  canEdit: boolean;
+  canDelete: boolean;
+  canManagePermissions: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
   const [status, setStatus] = useState("");
@@ -63,8 +80,11 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
             <Label className="text-xs">Papel</Label>
             <Select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="">Todos</option>
-              <option value="ADMIN">Administrador</option>
-              <option value="USER">Usuário</option>
+              {Object.entries(ROLE_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </Select>
           </div>
           <div className="w-full sm:w-40">
@@ -109,7 +129,7 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
                   <TableCell>{u.email}</TableCell>
                   <TableCell>
                     <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
-                      {u.role === "ADMIN" ? "Administrador" : "Usuário"}
+                      {roleLabel(u.role)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -128,7 +148,13 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <UserRowActions user={u} people={people} />
+                    <UserRowActions
+                      user={u}
+                      people={people}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      canManagePermissions={canManagePermissions}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -159,7 +185,7 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
                   <Field label="E-mail">{u.email}</Field>
                   <Field label="Papel">
                     <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
-                      {u.role === "ADMIN" ? "Administrador" : "Usuário"}
+                      {roleLabel(u.role)}
                     </Badge>
                   </Field>
                   <Field label="Pessoa vinculada">
@@ -174,7 +200,13 @@ export function UsersList({ users, people }: { users: UserRow[]; people: any[] }
                   </Field>
                 </div>
                 <MobileCardActions>
-                  <UserRowActions user={u} people={people} />
+                  <UserRowActions
+                    user={u}
+                    people={people}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    canManagePermissions={canManagePermissions}
+                  />
                 </MobileCardActions>
               </MobileCard>
             ))
