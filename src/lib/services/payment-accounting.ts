@@ -156,12 +156,16 @@ export async function revertBillingPayment(paymentId: string): Promise<
   const status =
     newPaidTotal <= MONEY_EPSILON ? (b.dueDate < today ? "OVERDUE" : "PENDING") : "PARTIAL";
 
-  await prisma.$transaction([
-    prisma.payment.delete({ where: { id: paymentId } }),
-    prisma.income.deleteMany({
+  // Transação interativa: pagamento, Income de conciliação, saldo/status da
+  // cobrança E a Receita Extra automática são revertidos de forma atômica —
+  // uma falha em qualquer passo desfaz tudo (antes, a Receita Extra ficava
+  // fora da transação e podia divergir em caso de erro no meio).
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.delete({ where: { id: paymentId } });
+    await tx.income.deleteMany({
       where: { billingId: b.id, amount: n(payment.amount), receivedAt: payment.paidAt },
-    }),
-    prisma.billing.update({
+    });
+    await tx.billing.update({
       where: { id: b.id },
       data: {
         paidTotal: newPaidTotal,
@@ -170,28 +174,29 @@ export async function revertBillingPayment(paymentId: string): Promise<
         isLate: false,
         paidInDifferentMonth: false,
       },
-    }),
-  ]);
-
-  // Reverte a Receita Extra automática correspondente.
-  const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
-  const paidKey = payment.paidAt.getFullYear() * 12 + payment.paidAt.getMonth();
-  if (paidKey > compKey) {
-    const er = await prisma.extraRevenue.findFirst({
-      where: { originBillingId: b.id, origin: "AUTOMATIC" },
     });
-    if (er) {
-      const remaining = n(er.amount) - n(payment.amount);
-      if (remaining <= MONEY_EPSILON) {
-        await prisma.extraRevenue.deleteMany({ where: { id: er.id } });
-      } else {
-        await prisma.extraRevenue.updateMany({
-          where: { id: er.id },
-          data: { amount: remaining },
-        });
+
+    // Reverte a Receita Extra automática correspondente (pagamento feito em
+    // mês posterior à competência).
+    const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
+    const paidKey = payment.paidAt.getFullYear() * 12 + payment.paidAt.getMonth();
+    if (paidKey > compKey) {
+      const er = await tx.extraRevenue.findFirst({
+        where: { originBillingId: b.id, origin: "AUTOMATIC" },
+      });
+      if (er) {
+        const remaining = n(er.amount) - n(payment.amount);
+        if (remaining <= MONEY_EPSILON) {
+          await tx.extraRevenue.deleteMany({ where: { id: er.id } });
+        } else {
+          await tx.extraRevenue.updateMany({
+            where: { id: er.id },
+            data: { amount: remaining },
+          });
+        }
       }
     }
-  }
+  });
 
   return { ok: true, clientId: b.clientId };
 }
