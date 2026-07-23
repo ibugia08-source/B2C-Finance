@@ -24,6 +24,29 @@ const SECRET = (() => {
 
 const PUBLIC_PATHS = new Set<string>(["/login"]);
 
+// ===== Rate limit do login por IP (anti força bruta) =====
+// Melhor esforço por instância Edge (memória local — sem custo por request).
+// Complementa o bloqueio POR CONTA após falhas seguidas (lib/actions/auth.ts),
+// que é persistente no banco e pega ataques distribuídos na mesma conta.
+const LOGIN_WINDOW_MS = 60_000;
+const LOGIN_MAX_PER_WINDOW = 10;
+const loginHits = new Map<string, { count: number; reset: number }>();
+
+function isLoginRateLimited(ip: string): boolean {
+  const now = Date.now();
+  // Faxina ocasional para a memória não crescer sem limite.
+  if (loginHits.size > 5000) {
+    for (const [k, v] of loginHits) if (v.reset < now) loginHits.delete(k);
+  }
+  const cur = loginHits.get(ip);
+  if (!cur || cur.reset < now) {
+    loginHits.set(ip, { count: 1, reset: now + LOGIN_WINDOW_MS });
+    return false;
+  }
+  cur.count += 1;
+  return cur.count > LOGIN_MAX_PER_WINDOW;
+}
+
 function b64urlDecodeToBytes(s: string): Uint8Array {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
@@ -78,6 +101,18 @@ async function isSessionValid(token: string | undefined): Promise<boolean> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Tentativas de login (POST) limitadas por IP.
+  if (pathname === "/login" && req.method === "POST") {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+    if (isLoginRateLimited(ip)) {
+      return new NextResponse("Muitas tentativas de login. Aguarde um minuto.", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
+    }
+  }
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const valid = await isSessionValid(token);

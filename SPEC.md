@@ -49,6 +49,11 @@ lê/escreve dados reais. Nunca rode `wipe-data.ts`, seeds destrutivos ou
   `await getViewer();` — sessão obrigatória. Não remova, não "simplifique".
 - Não mexa em `src/middleware.ts`, `src/lib/auth/` ou `src/lib/prisma.ts`
   sem revisão de alguém sênior — é a fundação de auth + isolamento multiusuário.
+- **Tabela nova em migration → inclua `ALTER TABLE "X" ENABLE ROW LEVEL
+  SECURITY;`** no fim da migration. O app (Prisma, role dona) não é afetado;
+  isso mantém a API pública do Supabase bloqueada e o painel sem
+  "Unrestricted". As roles `anon`/`authenticated` já não têm GRANT em tabelas
+  novas (default privileges revogados na migration 20260724000000).
 
 ## 5. Multiusuário (ownerId) — como funciona e como não quebrar
 
