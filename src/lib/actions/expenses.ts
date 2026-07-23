@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR, parseMonthParam, clean } from "@/lib/format";
@@ -65,7 +65,7 @@ function addMonths(d: Date, m: number): Date {
 }
 
 export async function saveExpense(formData: FormData): Promise<ActionResult> {
-  await getViewer();
+  await requirePermission("despesas.editar");
   try {
     const dueRaw = clean(formData.get("dueDate"));
     const invoiceRef = parseMonthParam(clean(formData.get("cardInvoiceRef"))); // "YYYY-MM"
@@ -175,7 +175,7 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
 
 /** Encerra a recorrência: remove ocorrências FUTURAS não pagas do grupo. */
 export async function endRecurrence(groupId: string): Promise<ActionResult> {
-  await getViewer();
+  await requirePermission("despesas.editar");
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -197,7 +197,7 @@ export async function deleteExpense(
   id: string,
   scope: "one" | "group" = "one"
 ): Promise<ActionResult> {
-  await getViewer();
+  await requirePermission("despesas.excluir");
   try {
     const existing = await prisma.transaction.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Despesa não encontrada." };
@@ -224,7 +224,7 @@ export async function setExpenseDueDate(
   id: string,
   dueDateRaw: string
 ): Promise<ActionResult> {
-  await getViewer();
+  await requirePermission("despesas.editar");
   try {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dueDateRaw ?? "").trim());
     if (!m) return { ok: false, error: "Informe uma data válida." };
@@ -244,7 +244,7 @@ export async function setExpenseStatus(
   id: string,
   status: (typeof STATUS)[number]
 ): Promise<ActionResult> {
-  await getViewer();
+  await requirePermission("despesas.marcar_como_paga");
   try {
     await prisma.transaction.updateMany({ where: { id }, data: { status } });
     revalidateFinance();

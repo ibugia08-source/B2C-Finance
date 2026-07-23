@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { revalidateCatalog } from "@/lib/revalidate";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import type { ActionResult } from "./clients";
 import { clean } from "@/lib/format";
 
@@ -19,7 +19,7 @@ const ServiceSchema = z.object({
 
 
 export async function saveService(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("servicos.gerenciar");
   try {
     const parsed = ServiceSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -49,7 +49,7 @@ export async function saveService(formData: FormData): Promise<ActionResult> {
 }
 
 export async function deleteService(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("servicos.gerenciar");
   try {
     const inUse = await prisma.contractService.count({ where: { serviceId: id } });
     if (inUse > 0) {

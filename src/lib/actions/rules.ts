@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL } from "@/lib/format";
@@ -22,7 +22,7 @@ const Schema = z.object({
 });
 
 export async function saveRule(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("regras.gerenciar");
   const num = (k: string) => {
     const v = String(formData.get(k) || "").trim();
     if (!v) return null;
@@ -61,7 +61,7 @@ export async function saveRule(formData: FormData) {
 }
 
 export async function deleteRule(id: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("regras.gerenciar");
   await prisma.categorizationRule.delete({ where: { id } });
   revalidateFinance();
 }

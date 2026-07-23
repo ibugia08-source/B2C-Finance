@@ -8,7 +8,7 @@ import {
   PaymentMethod,
   RevenueType,
 } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
@@ -35,7 +35,7 @@ const BillingSchema = z.object({
 });
 
 export async function saveBilling(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.editar");
   try {
     const comp = clean(formData.get("competence")) ?? ""; // "YYYY-MM"
     const [cy, cm] = comp.split("-").map(Number);
@@ -113,7 +113,7 @@ const PaymentSchema = z.object({
 export async function registerBillingPayment(
   formData: FormData
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.registrar_pagamento");
   try {
     const parsed = PaymentSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),
@@ -145,7 +145,7 @@ export async function registerBillingPayment(
 
 /** Exclui um pagamento e reverte saldo/status/flags e Receita Extra. */
 export async function deleteBillingPayment(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.excluir");
   try {
     const { revertBillingPayment } = await import(
       "@/lib/services/payment-accounting"
@@ -171,7 +171,7 @@ export async function deleteBillingPayment(id: string): Promise<ActionResult> {
 export async function deleteBillingPaymentsBulk(
   ids: string[]
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.excluir");
   try {
     const unique = Array.from(new Set(ids.filter(Boolean)));
     if (unique.length === 0)
@@ -227,7 +227,7 @@ export async function cancelBilling(
   id: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     const b = await prisma.billing.findUnique({ where: { id } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -270,7 +270,7 @@ export async function cancelBillingsBulk(
   ids: string[],
   reason?: string | null
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     const unique = Array.from(new Set(ids.filter(Boolean)));
     if (unique.length === 0) return { ok: false, error: "Nenhuma cobrança selecionada." };
@@ -345,7 +345,7 @@ export async function cancelBillingsBulk(
 
 /** Recoloca no ciclo do mês uma cobrança removida por engano. */
 export async function restoreBilling(id: string): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     const b = await prisma.billing.findUnique({ where: { id } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -384,7 +384,7 @@ export async function registerBillingContact(
   channel: "whatsapp" | "copia",
   excerpt: string
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.gerar_cobranca");
   try {
     const b = await prisma.billing.findUnique({ where: { id: billingId } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -418,7 +418,7 @@ export async function rescheduleBilling(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.alterar_vencimento");
   try {
     const newDue = parseDateBR(String(formData.get("dueDate") ?? ""));
     if (!newDue) return { ok: false, error: "Informe a nova data de vencimento." };
@@ -463,7 +463,7 @@ const NoteSchema = z.object({
 });
 
 export async function addCollectionNote(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.gerar_cobranca");
   try {
     const parsed = NoteSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),

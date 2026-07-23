@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateCatalog } from "@/lib/revalidate";
 import { z } from "zod";
 import { OfferModality } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
@@ -27,7 +27,7 @@ const OfferSchema = z.object({
 
 
 export async function saveOffer(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("ofertas.gerenciar");
   try {
     const parsed = OfferSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -86,7 +86,7 @@ export async function saveOffer(formData: FormData): Promise<ActionResult> {
 }
 
 export async function deleteOffer(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("ofertas.gerenciar");
   try {
     await prisma.offer.deleteMany({ where: { id } });
     revalidateCatalog();
@@ -97,7 +97,7 @@ export async function deleteOffer(id: string): Promise<ActionResult> {
 }
 
 export async function toggleOfferActive(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("ofertas.gerenciar");
   try {
     const existing = await prisma.offer.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Oferta não encontrada." };

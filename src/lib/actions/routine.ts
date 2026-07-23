@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { revalidateAgency } from "@/lib/revalidate";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 
 /**
  * Ações da ROTINA DIÁRIA — estado por dia em RoutineItemState.
@@ -29,7 +29,7 @@ export async function dismissRoutineItem(
   itemKey: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("rotina.concluir_acao");
   try {
     if (!ITEM_TYPES.includes(itemType)) return { ok: false, error: "Tipo inválido." };
     const key = String(itemKey ?? "").trim();
@@ -64,7 +64,7 @@ export async function setRoutineActionDone(
   itemKey: string,
   done: boolean
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("rotina.concluir_acao");
   try {
     const key = String(itemKey ?? "").trim();
     if (!key) return { ok: false, error: "Ação inválida." };

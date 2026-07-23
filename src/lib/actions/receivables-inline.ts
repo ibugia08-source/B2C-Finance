@@ -2,7 +2,7 @@
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
@@ -42,7 +42,7 @@ export async function setClientPaymentDay(
   month: number,
   year: number
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.alterar_vencimento");
   try {
     if (!Number.isInteger(day) || day < 1 || day > 31)
       return { ok: false, error: "Dia de vencimento deve ser entre 1 e 31." };
@@ -82,7 +82,7 @@ export async function setClientChargeAmount(
   month: number,
   year: number
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.editar");
   try {
     const amount = parseBRL(amountRaw);
     if (!Number.isFinite(amount) || amount <= 0)
@@ -116,7 +116,7 @@ export async function setClientContractMonths(
   clientId: string,
   months: number | null
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.editar");
   try {
     if (months != null && (!Number.isInteger(months) || months < 1 || months > 120))
       return { ok: false, error: "Prazo inválido (1 a 120 meses)." };
@@ -151,7 +151,7 @@ export async function setMonthChargeStatus(
   billingId: string,
   status: MonthChargeStatus
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.editar");
   try {
     const b = await prisma.billing.findUnique({ where: { id: billingId } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -229,7 +229,7 @@ export async function setMonthChargeStatus(
  * fica como inadimplência regularizada pela regra padrão.
  */
 export async function addPastDelinquency(formData: FormData): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.editar");
   try {
     const clientId = String(formData.get("clientId") ?? "");
     const refMonth = parseInt(String(formData.get("refMonth") ?? ""), 10);
@@ -308,7 +308,7 @@ export async function addPastDelinquency(formData: FormData): Promise<ActionResu
  * fechamento e conciliação de caixa) — a cobrança volta a Em aberto/Vencida.
  */
 export async function deleteBillingPayments(billingId: string): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     const b = await prisma.billing.findUnique({ where: { id: billingId } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -350,7 +350,7 @@ export async function bulkSetMonthStatus(
   billingIds: string[],
   status: Exclude<MonthChargeStatus, "PAID">
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("recebimentos.editar");
   try {
     if (billingIds.length === 0)
       return { ok: false, error: "Nenhuma cobrança selecionada." };
@@ -386,7 +386,7 @@ export async function bulkRemoveClientsFromList(
   year: number,
   reason: string | null
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year))
       return { ok: false, error: "Competência inválida." };
@@ -490,7 +490,7 @@ export async function bulkRemoveFromMonth(
   billingIds: string[],
   reason: string | null
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("recebimentos.excluir");
   try {
     const cleanReason = (reason ?? "").trim() || null;
     const bills = await prisma.billing.findMany({

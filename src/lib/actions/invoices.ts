@@ -2,10 +2,10 @@
 import { prisma } from "@/lib/prisma";
 import { revalidateFinance } from "@/lib/revalidate";
 import { parseBRL } from "@/lib/format";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 
 export async function payInvoice(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("despesas.marcar_como_paga");
   const id = String(formData.get("id"));
   const amount = parseBRL(String(formData.get("amount") || "0"));
   const inv = await prisma.creditCardInvoice.findUnique({ where: { id } });
@@ -22,7 +22,7 @@ export async function payInvoice(formData: FormData) {
 }
 
 export async function setInvoiceStatus(id: string, status: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("despesas.marcar_como_paga");
   await prisma.creditCardInvoice.update({ where: { id }, data: { status } });
   revalidateFinance();
 }
@@ -32,7 +32,7 @@ export async function setInvoiceStatus(id: string, status: string) {
  * Usado para desfazer uma importação de fatura inteira.
  */
 export async function deleteInvoice(id: string) {
-  await getViewer();
+  await requirePermission("despesas.excluir");
   const inv = await prisma.creditCardInvoice.findUnique({
     where: { id },
     select: { id: true, cardId: true },

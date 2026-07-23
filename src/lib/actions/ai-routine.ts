@@ -1,5 +1,5 @@
 "use server";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 
 /**
  * Sugestões inteligentes da ROTINA (PARTE 12): a IA analisa APENAS o retrato
@@ -19,7 +19,7 @@ export type RoutineAIResult =
   | { ok: false; error: string };
 
 export async function generateRoutineSuggestions(): Promise<RoutineAIResult> {
-  await requireAdmin();
+  await requirePermission("rotina.visualizar");
   try {
     const { getAISettings, isConfigured, chatComplete } = await import("@/lib/ai/provider");
     const settings = await getAISettings();

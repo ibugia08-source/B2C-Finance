@@ -6,7 +6,7 @@ import {
 } from "@/lib/revalidate";
 import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, parseMonthParam, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
@@ -31,7 +31,7 @@ const EmployeeSchema = z.object({
 });
 
 export async function saveEmployee(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const parsed = EmployeeSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -65,7 +65,7 @@ export async function saveEmployee(formData: FormData): Promise<ActionResult> {
 }
 
 export async function deleteEmployee(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const inUse = await prisma.payrollItem.count({ where: { employeeId: id } });
     if (inUse > 0) {
@@ -92,7 +92,7 @@ export async function ensurePayroll(
   month: number,
   year: number
 ): Promise<ActionResult & { runId?: string }> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     let run = await prisma.payroll.findFirst({ where: { month, year } });
     if (!run) {
@@ -176,7 +176,7 @@ const CommissionSchema = z.object({
  * Entra na folha automaticamente ao gerar/atualizar a folha do mês.
  */
 export async function saveCommission(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const comp = parseMonthParam(String(formData.get("competencia") ?? "")); // "YYYY-MM"
     if (!comp) return { ok: false, error: "Competência inválida — confira o mês/ano." };
@@ -214,7 +214,7 @@ export async function saveCommission(formData: FormData): Promise<ActionResult> 
 
 /** Exclui comissão ainda não incluída na folha (PENDING). */
 export async function deleteCommission(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const c = await prisma.commission.findUnique({ where: { id } });
     if (!c) return { ok: false, error: "Comissão não encontrada." };
@@ -240,7 +240,7 @@ const ItemSchema = z.object({
 });
 
 export async function addPayrollItem(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const parsed = ItemSchema.parse({
       payrollId: String(formData.get("payrollId") ?? ""),
@@ -262,7 +262,7 @@ export async function addPayrollItem(formData: FormData): Promise<ActionResult> 
 }
 
 export async function deletePayrollItem(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const item = await prisma.payrollItem.findUnique({
       where: { id },
@@ -288,7 +288,7 @@ export async function setPayrollStatus(
   runId: string,
   status: string
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("folha.editar");
   try {
     const s = z.nativeEnum(PayrollStatus).parse(status);
     const run = await prisma.payroll.findUnique({

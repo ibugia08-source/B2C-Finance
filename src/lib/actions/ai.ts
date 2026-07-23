@@ -1,7 +1,7 @@
 "use server";
 import { prisma } from "@/lib/prisma";
 import { revalidateAssistant } from "@/lib/revalidate";
-import { requireAdmin, getViewer } from "@/lib/auth/viewer";
+import { requireAdmin, requirePermission } from "@/lib/auth/viewer";
 import {
   getAISettings,
   isConfigured,
@@ -151,7 +151,7 @@ export type AISettingsView = {
 export async function getAISettingsView(): Promise<AISettingsView> {
   // Qualquer usuário logado pode LER o status (para saber se a IA está ativa e
   // qual modelo). A chave nunca é retornada — só o booleano `hasKey`.
-  await getViewer();
+  await requirePermission("assistente.visualizar");
   const s = await prisma.aISetting.findUnique({ where: { id: SINGLETON_ID } });
   return {
     provider: s?.provider ?? "openai",
@@ -202,7 +202,7 @@ export async function sendChatMessage(
   conversationId: string | null,
   content: string
 ): Promise<ChatSendResult> {
-  const viewer = await getViewer();
+  const viewer = await requirePermission("assistente.visualizar");
   const text = content.trim();
   if (!text) return { ok: false, error: "Mensagem vazia." };
 
@@ -277,7 +277,7 @@ export async function sendChatMessage(
 }
 
 export async function clearConversation(conversationId: string) {
-  await getViewer();
+  await requirePermission("assistente.visualizar");
   // deleteMany é escopado por dono → só apaga se a conversa for do próprio usuário.
   await prisma.aIConversation.deleteMany({ where: { id: conversationId } });
   revalidateAssistant();
@@ -288,7 +288,7 @@ export async function clearConversation(conversationId: string) {
 export type InsightsResult = { ok: true; report: string; tokens: number } | { ok: false; error: string };
 
 export async function generateInsights(): Promise<InsightsResult> {
-  const viewer = await getViewer();
+  const viewer = await requirePermission("assistente.visualizar");
   let settings: AISettings;
   try {
     settings = await requireConfigured();
@@ -386,7 +386,7 @@ export type AIReportResult =
   | { ok: false; error: string };
 
 export async function generateAIReport(kind: string): Promise<AIReportResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("relatorios.visualizar");
   const prompt = REPORT_PROMPTS[kind];
   if (!prompt) return { ok: false, error: "Tipo de relatório inválido." };
 
@@ -425,7 +425,7 @@ export async function generateAIReport(kind: string): Promise<AIReportResult> {
 // ---------- Memória / base de conhecimento ----------
 
 export async function addMemory(formData: FormData) {
-  await getViewer();
+  await requirePermission("assistente.visualizar");
   const content = String(formData.get("content") || "").trim();
   const kind = String(formData.get("kind") || "note");
   if (!content) return;
@@ -434,14 +434,14 @@ export async function addMemory(formData: FormData) {
 }
 
 export async function deleteMemory(id: string) {
-  await getViewer();
+  await requirePermission("assistente.visualizar");
   // deleteMany é escopado por dono → só apaga memória do próprio usuário.
   await prisma.aIMemory.deleteMany({ where: { id } });
   revalidateAssistant();
 }
 
 export async function toggleMemoryPin(id: string) {
-  await getViewer();
+  await requirePermission("assistente.visualizar");
   // findUnique é pós-filtrado por dono → memória de outro usuário volta null.
   const m = await prisma.aIMemory.findUnique({ where: { id } });
   if (!m) return;

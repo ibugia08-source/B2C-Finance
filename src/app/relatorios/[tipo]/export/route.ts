@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { hasPermission } from "@/lib/permissions";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getReport } from "@/lib/reports/registry";
 import {
@@ -21,7 +22,7 @@ export async function GET(
   { params }: { params: { tipo: string } }
 ) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "ADMIN") {
+  if (!user || !hasPermission(user, "relatorios.exportar")) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
   const def = getReport(params.tipo);

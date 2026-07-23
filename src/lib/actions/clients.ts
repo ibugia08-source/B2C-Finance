@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
@@ -121,7 +121,7 @@ async function recordLosses(
 }
 
 export async function saveClient(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const parsed = ClientSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -346,7 +346,7 @@ export type ClientEditData = {
 };
 
 export async function getClientForEdit(id: string): Promise<ClientEditData | null> {
-  await requireAdmin();
+  await requirePermission("clientes.visualizar");
   const c = await prisma.client.findUnique({ where: { id } });
   if (!c) return null;
   return {
@@ -390,7 +390,7 @@ export type ContractExtraction = {
  * o usuário completa apenas o que faltar.
  */
 export async function extractClientFromContract(formData: FormData): Promise<ContractExtraction> {
-  await requireAdmin();
+  await requirePermission("clientes.criar");
   try {
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0)
@@ -448,7 +448,7 @@ Regras: "name" é o nome do CONTRATANTE (cliente), nunca da agência/contratada 
 }
 
 export async function deleteClient(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.excluir");
   try {
     // Exclusão profunda: remove cobranças/pagamentos/contratos do cliente
     // na ordem certa (Billing/Contract não têm cascade no banco).
@@ -467,7 +467,7 @@ export async function setClientStatus(
   status: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.alterar_status");
   try {
     const s = z.nativeEnum(ClientStatus).parse(status);
     const existing = await prisma.client.findUnique({ where: { id } });
@@ -502,7 +502,7 @@ export async function markClientLost(
   lostAtRaw: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.alterar_status");
   try {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(lostAtRaw ?? "").trim());
     if (!m) return { ok: false, error: "Informe a data da saída." };
@@ -554,7 +554,7 @@ export async function setClientLossReason(
   clientId: string,
   reason: string
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.alterar_status");
   try {
     const text = reason.trim();
     if (!text) return { ok: true };
@@ -580,7 +580,7 @@ export async function setClientModality(
   id: string,
   modality: string | null
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const value =
       modality == null || modality === ""
@@ -602,7 +602,7 @@ export async function setClientMonthlyValue(
   id: string,
   raw: string
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const value = raw && raw.trim() ? parseBRL(raw) : null;
     if (value != null && value < 0)
@@ -622,7 +622,7 @@ export async function setClientRenewalMonth(
   id: string,
   month: number | null
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const value =
       month == null
@@ -651,7 +651,7 @@ export async function setClientDelinquency(
   refMonth?: number,
   refYear?: number
 ): Promise<ActionResult> {
-  const viewer = await requireAdmin();
+  const viewer = await requirePermission("clientes.alterar_status");
   try {
     const value =
       status == null || status === ""
@@ -716,7 +716,7 @@ export async function bulkUpdateClients(input: {
   modality?: string | null;
   paymentDay?: number | null;
 }): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const parsed = BulkSchema.parse({
       ids: input.ids,
@@ -765,7 +765,7 @@ export async function bulkUpdateClients(input: {
 
 /** Exclusão em massa (deleteMany é escopado por dono). */
 export async function bulkDeleteClients(ids: string[]): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.excluir");
   try {
     if (!ids.length) return { ok: false, error: "Selecione ao menos um cliente." };
     const { deleteClientsDeep } = await import("@/lib/services/client-purge");
@@ -793,7 +793,7 @@ const ContactSchema = z.object({
 });
 
 export async function saveClientContact(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const parsed = ContactSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -850,7 +850,7 @@ export async function saveClientContact(formData: FormData): Promise<ActionResul
 }
 
 export async function deleteClientContact(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const existing = await prisma.clientContact.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contato não encontrado." };

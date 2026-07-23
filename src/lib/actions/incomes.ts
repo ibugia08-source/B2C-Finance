@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -43,7 +43,7 @@ const Schema = z.object({
 });
 
 export async function saveIncome(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("receitas.editar");
   const receivedAt =
     parseDateBR(String(formData.get("receivedAt") || "")) ?? new Date();
 
@@ -104,7 +104,7 @@ export async function saveIncome(formData: FormData) {
 }
 
 export async function deleteIncome(id: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("receitas.excluir");
   await prisma.income.delete({ where: { id } });
   revalidateFinance();
 }
@@ -113,7 +113,7 @@ export async function setIncomeStatus(
   id: string,
   status: (typeof STATUS)[number]
 ) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("receitas.editar");
   await prisma.income.update({ where: { id }, data: { status } });
   revalidateFinance();
 }

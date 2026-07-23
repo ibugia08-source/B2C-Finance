@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateCatalog, revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { UpsellStatus } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
@@ -22,7 +22,7 @@ const UpsellSchema = z.object({
 
 
 export async function saveUpsell(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("upsell.editar");
   try {
     const parsed = UpsellSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -100,7 +100,7 @@ export async function setUpsellStatus(
   status: string,
   opts?: { generateIncome?: boolean }
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("upsell.marcar_vendido");
   try {
     const s = z.nativeEnum(UpsellStatus).parse(status);
     const existing = await prisma.upsell.findUnique({ where: { id } });
@@ -146,7 +146,7 @@ export async function setUpsellStatus(
 }
 
 export async function deleteUpsell(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("upsell.excluir");
   try {
     await prisma.upsell.deleteMany({ where: { id } });
     revalidateCatalog();

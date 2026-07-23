@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ContractStatus, ContractType, RecurrenceType } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, formatBRL, clean } from "@/lib/format";
 import {
   generateBillingsForContract,
@@ -49,7 +49,7 @@ const ContractSchema = z.object({
 });
 
 export async function saveContract(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     // Serviços selecionados: inputs services=<id> + price_<id>=valor
     const services = formData
@@ -169,7 +169,7 @@ export async function saveContract(formData: FormData): Promise<ActionResult> {
 
 /** Encerra o contrato (fim natural da vigência). */
 export async function endContract(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const c = await prisma.contract.findUnique({ where: { id } });
     if (!c) return { ok: false, error: "Contrato não encontrado." };
@@ -186,7 +186,7 @@ export async function endContract(id: string): Promise<ActionResult> {
 
 /** Cancela o contrato (interrupção antes do fim). */
 export async function cancelContract(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const c = await prisma.contract.findUnique({ where: { id } });
     if (!c) return { ok: false, error: "Contrato não encontrado." };
@@ -210,7 +210,7 @@ export async function renewContract(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
     const c = await prisma.contract.findUnique({ where: { id } });
@@ -244,7 +244,7 @@ export async function renewContract(
  * gerando as cobranças mensais do novo período. Cliente volta a ATIVO.
  */
 export async function renewClientContract(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const id = String(formData.get("contractId") ?? "");
     const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
@@ -324,7 +324,7 @@ export async function renewClientContract(formData: FormData): Promise<ActionRes
 }
 
 export async function deleteContract(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.excluir");
   try {
     const billings = await prisma.billing.count({ where: { contractId: id } });
     if (billings > 0) {
@@ -346,7 +346,7 @@ export async function deleteContract(id: string): Promise<ActionResult> {
 
 /** Gera as cobranças pendentes de UM contrato. */
 export async function generateContractBillings(id: string): Promise<ActionResult & { created?: number }> {
-  await requireAdmin();
+  await requirePermission("recebimentos.gerar_cobranca");
   try {
     const r = await generateBillingsForContract(id);
     revalidateContracts();
@@ -358,7 +358,7 @@ export async function generateContractBillings(id: string): Promise<ActionResult
 
 /** Gera as cobranças do mês para todos os contratos vigentes. */
 export async function generateAllBillings(): Promise<ActionResult & { created?: number }> {
-  await requireAdmin();
+  await requirePermission("recebimentos.gerar_cobranca");
   try {
     const r = await generateBillingsForAllActive();
     revalidateContracts();

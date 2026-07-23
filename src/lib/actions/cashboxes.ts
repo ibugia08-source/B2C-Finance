@@ -1,7 +1,7 @@
 "use server";
 import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
@@ -26,7 +26,7 @@ const Schema = z.object({
 });
 
 export async function saveCashBox(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("caixa.editar");
   const targetRaw = String(formData.get("targetAmount") || "").trim();
   const parsed = Schema.parse({
     id: formData.get("id") || undefined,
@@ -57,7 +57,7 @@ export async function saveCashBox(formData: FormData) {
 }
 
 export async function deleteCashBox(id: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("caixa.excluir");
   await prisma.cashBox.delete({ where: { id } });
   revalidateFinance();
 }
@@ -71,7 +71,7 @@ const MoveSchema = z.object({
 });
 
 export async function registerCashMovement(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("caixa.lancar");
   const date =
     parseDateBR(String(formData.get("date") || "")) ?? new Date();
 
@@ -125,7 +125,7 @@ export async function launchResultToCash(input: {
   amount: number;
   cashBoxId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  await getViewer(); // sessão obrigatória
+  await requirePermission("caixa.lancar");
   try {
     const { resultLaunchTag, getResultLaunchedForMonth } = await import(
       "@/lib/services/dashboard-main"
@@ -204,7 +204,7 @@ export async function launchResultToCash(input: {
 }
 
 export async function deleteCashMovement(id: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("caixa.excluir");
   const mov = await prisma.cashBoxMovement.findUnique({ where: { id } });
   if (!mov) return;
   const delta = mov.type === "IN" ? -mov.amount : mov.amount;

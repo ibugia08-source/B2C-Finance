@@ -11,7 +11,7 @@ import {
   ClientDocumentType,
   GeneratedContractStatus,
 } from "@prisma/client";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import {
   extractTemplateVariables,
@@ -63,7 +63,7 @@ export type TemplateInspection =
 export async function inspectContractTemplateFile(
   formData: FormData
 ): Promise<TemplateInspection> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const { buffer } = await readUpload(formData.get("file"), { docxOnly: true });
     const { variables, warnings } = extractTemplateVariables(buffer);
@@ -125,7 +125,7 @@ function parseTemplateMeta(formData: FormData) {
 
 /** Cadastra o modelo: guarda o DOCX no storage e as variáveis no banco. */
 export async function createContractTemplate(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const upload = await readUpload(formData.get("file"), { docxOnly: true });
     const meta = parseTemplateMeta(formData);
@@ -166,7 +166,7 @@ export async function createContractTemplate(formData: FormData): Promise<Action
 
 /** Edita nome/descrição/metadados/status (o arquivo original não muda). */
 export async function updateContractTemplate(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const id = String(formData.get("id") ?? "");
     const existing = await prisma.contractTemplate.findUnique({ where: { id } });
@@ -182,7 +182,7 @@ export async function updateContractTemplate(formData: FormData): Promise<Action
 
 /** Atualiza o mapeamento das variáveis (label, obrigatório, campo do cliente). */
 export async function updateTemplateVariables(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const id = String(formData.get("id") ?? "");
     const existing = await prisma.contractTemplate.findUnique({ where: { id } });
@@ -210,7 +210,7 @@ export async function setContractTemplateStatus(
   id: string,
   status: ContractTemplateStatus
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const existing = await prisma.contractTemplate.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Modelo não encontrado." };
@@ -224,7 +224,7 @@ export async function setContractTemplateStatus(
 
 /** Exclui o modelo (apenas sem contratos gerados — senão, arquive). */
 export async function deleteContractTemplate(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.excluir");
   try {
     const existing = await prisma.contractTemplate.findUnique({
       where: { id },
@@ -259,7 +259,7 @@ const GenerateSchema = z.object({
 
 /** Preenche o modelo e salva o contrato gerado (DOCX novo; o modelo fica intacto). */
 export async function generateContractFromTemplate(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.gerar_contrato");
   try {
     const parsed = GenerateSchema.parse({
       templateId: String(formData.get("templateId") ?? ""),
@@ -328,7 +328,7 @@ export async function setGeneratedContractStatus(
   id: string,
   status: GeneratedContractStatus
 ): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.editar");
   try {
     const existing = await prisma.generatedContract.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contrato não encontrado." };
@@ -341,7 +341,7 @@ export async function setGeneratedContractStatus(
 }
 
 export async function deleteGeneratedContract(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("contratos.excluir");
   try {
     const existing = await prisma.generatedContract.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contrato não encontrado." };
@@ -369,7 +369,7 @@ const DOCUMENT_MIMES = new Set([
 ]);
 
 export async function saveClientDocument(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.anexar_documentos");
   try {
     const clientId = String(formData.get("clientId") ?? "");
     const owned = await prisma.client.findUnique({ where: { id: clientId } });
@@ -406,7 +406,7 @@ export async function saveClientDocument(formData: FormData): Promise<ActionResu
 }
 
 export async function deleteClientDocument(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.anexar_documentos");
   try {
     const existing = await prisma.clientDocument.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Documento não encontrado." };
@@ -430,7 +430,7 @@ const NoteSchema = z.object({
 });
 
 export async function saveClientNote(formData: FormData): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const parsed = NoteSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -467,7 +467,7 @@ export async function saveClientNote(formData: FormData): Promise<ActionResult> 
 }
 
 export async function deleteClientNote(id: string): Promise<ActionResult> {
-  await requireAdmin();
+  await requirePermission("clientes.editar");
   try {
     const existing = await prisma.clientNote.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Observação não encontrada." };

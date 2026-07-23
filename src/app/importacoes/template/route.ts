@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { hasPermission } from "@/lib/permissions";
 import { getImportDef } from "@/lib/imports/definitions";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "ADMIN") {
+  if (!user || !hasPermission(user, "importacoes.visualizar")) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
   const tipo = req.nextUrl.searchParams.get("tipo") ?? "";

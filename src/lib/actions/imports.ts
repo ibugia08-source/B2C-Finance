@@ -2,7 +2,7 @@
 
 import { revalidateFinance } from "@/lib/revalidate";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { readSheet, validateRows, type RowError } from "@/lib/imports/engine";
 import { getImportDef, loadRefs } from "@/lib/imports/definitions";
 import { formatCell } from "@/lib/reports/present";
@@ -33,7 +33,7 @@ export type ImportResult = ImportSummary | { ok: false; error: string };
 
 export async function runImport(fd: FormData): Promise<ImportResult> {
   try {
-    await requireAdmin();
+    await requirePermission("importacoes.importar");
 
     const tipo = String(fd.get("tipo") ?? "");
     const def = getImportDef(tipo);
