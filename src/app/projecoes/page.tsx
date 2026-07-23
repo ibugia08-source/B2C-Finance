@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, monthRange, monthLabel } from "@/lib/format";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { getPeriodRevenue } from "@/lib/services/revenue-metrics";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getUpsellKpis } from "@/lib/services/upsell-metrics";
@@ -19,7 +19,7 @@ const n = (v: unknown): number => (v == null ? 0 : Number(v));
  * funções puras de lib/financial/projections.
  */
 export default async function ProjecoesPage() {
-  await requireAdmin();
+  await requirePagePermission("projecoes.visualizar");
 
   const { start, end } = monthRange();
   const period = resolvePeriod({ periodo: "mes" });

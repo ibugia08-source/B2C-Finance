@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, HandCoins } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { BillingDialog } from "./billing-dialog";
 import { MonthNav } from "./month-nav";
 import { CycleFilters } from "./cycle-filters";
@@ -83,7 +83,7 @@ export default async function RecebimentosPage({
 }: {
   searchParams: Search;
 }) {
-  await requireAdmin();
+  await requirePagePermission("recebimentos.visualizar");
 
   const now = new Date();
   const mes = parseMonthParam(searchParams.mes) ?? {

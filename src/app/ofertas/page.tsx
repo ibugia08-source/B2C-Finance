@@ -20,7 +20,7 @@ import {
   Field,
   MobileEmpty,
 } from "@/components/ui/record-card";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { OfferDialog } from "./offer-dialog";
 import { OfferActions } from "./row-actions";
 
@@ -31,7 +31,7 @@ const MODALITY_LABEL: Record<string, string> = {
 };
 
 export default async function OfertasPage() {
-  await requireAdmin();
+  await requirePagePermission("ofertas.visualizar");
 
   const [offersRaw, services] = await Promise.all([
     prisma.offer.findMany({

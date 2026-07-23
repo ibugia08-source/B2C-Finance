@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { TemplateUploadDialog } from "./template-upload-dialog";
 import { TemplateActions, type TemplateLite } from "./template-actions";
 import { GeneratedContractActions } from "./generated-actions";
@@ -30,7 +30,7 @@ type Search = { status?: string; tipo?: string; para?: string };
  * cobranças, renovação) vive em /acordos.
  */
 export default async function ContratosPage({ searchParams }: { searchParams: Search }) {
-  await requireAdmin();
+  await requirePagePermission("contratos.visualizar");
 
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;

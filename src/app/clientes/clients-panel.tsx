@@ -50,9 +50,11 @@ const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.labe
 export function ClientsPanel({
   clients,
   allFilteredIds,
+  canDelete,
 }: {
   clients: ClientRow[];
   allFilteredIds: string[];
+  canDelete: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lossClient, setLossClient] = useState<{ id: string; name: string } | null>(null);
@@ -283,6 +285,7 @@ export function ClientsPanel({
 
       {selectedIds.length > 0 && (
         <BulkActionBar
+          canDelete={canDelete}
           ids={selectedIds}
           count={selectedIds.length}
           onClear={clearSelection}

@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/auth/current-user";
+import { effectivePermissions } from "@/lib/permissions";
 
 // Fontes auto-hospedadas via next/font: sem @import bloqueante, sem FOUT.
 // Inter para display/corpo (institucional, pesos calmos); JetBrains Mono
@@ -39,7 +40,17 @@ export const viewport: Viewport = {
 const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t?(t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)):false;document.documentElement.classList.toggle('dark',d);}catch(e){document.documentElement.classList.remove('dark');}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const user = await getCurrentUser();
+  const cu = await getCurrentUser();
+  // Conjunto efetivo de permissões calculado no servidor → sidebar e menus
+  // só exibem o que o usuário pode ver.
+  const user = cu
+    ? {
+        name: cu.name,
+        email: cu.email,
+        role: cu.role,
+        permissions: Array.from(effectivePermissions(cu)),
+      }
+    : null;
   return (
     <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable} ${mono.variable}`}>
       <head>

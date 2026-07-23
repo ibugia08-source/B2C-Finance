@@ -5,7 +5,7 @@ import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getCashSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
@@ -52,7 +52,7 @@ const ROW_OVERDUE = "bg-red-50/70 dark:bg-red-500/[0.07]";
 const ROW_SOON = "bg-warning-soft/60";
 
 export default async function RotinaPage() {
-  await requireAdmin();
+  await requirePagePermission("rotina.visualizar");
   await markOverdueBillings();
 
   const today = new Date();

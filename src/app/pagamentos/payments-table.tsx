@@ -38,7 +38,14 @@ export type PaymentRow = {
   accountName: string | null;
 };
 
-export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
+export function PaymentsTable({
+  rows,
+  canDelete = true,
+}: {
+  rows: PaymentRow[];
+  /** Sem recebimentos.excluir → some a seleção e a exclusão em massa. */
+  canDelete?: boolean;
+}) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
 
@@ -96,15 +103,17 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">
-                <Checkbox
-                  aria-label="Selecionar todos os pagamentos"
-                  checked={allChecked}
-                  indeterminate={someChecked}
-                  onChange={toggleAll}
-                  disabled={rows.length === 0}
-                />
-              </TableHead>
+              {canDelete && (
+                <TableHead className="w-10">
+                  <Checkbox
+                    aria-label="Selecionar todos os pagamentos"
+                    checked={allChecked}
+                    indeterminate={someChecked}
+                    onChange={toggleAll}
+                    disabled={rows.length === 0}
+                  />
+                </TableHead>
+              )}
               <TableHead>Data</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Referente a</TableHead>
@@ -117,7 +126,7 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
             {rows.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={canDelete ? 7 : 6}
                   className="text-center text-muted-foreground py-12"
                 >
                   Nenhum pagamento neste período.
@@ -131,13 +140,15 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
                   key={p.id}
                   data-state={checked ? "selected" : undefined}
                 >
-                  <TableCell>
-                    <Checkbox
-                      aria-label={`Selecionar pagamento de ${p.clientName}`}
-                      checked={checked}
-                      onChange={() => toggle(p.id)}
-                    />
-                  </TableCell>
+                  {canDelete && (
+                    <TableCell>
+                      <Checkbox
+                        aria-label={`Selecionar pagamento de ${p.clientName}`}
+                        checked={checked}
+                        onChange={() => toggle(p.id)}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>{formatDateBR(p.paidAt)}</TableCell>
                   <TableCell>
                     <Link
@@ -178,11 +189,13 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
                 <MobileCardHeader
                   title={
                     <span className="flex items-center gap-2">
-                      <Checkbox
-                        aria-label={`Selecionar pagamento de ${p.clientName}`}
-                        checked={checked}
-                        onChange={() => toggle(p.id)}
-                      />
+                      {canDelete && (
+                        <Checkbox
+                          aria-label={`Selecionar pagamento de ${p.clientName}`}
+                          checked={checked}
+                          onChange={() => toggle(p.id)}
+                        />
+                      )}
                       {p.clientName}
                     </span>
                   }
@@ -205,7 +218,7 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
         )}
       </MobileCards>
 
-      {selectedRows.length > 0 && (
+      {canDelete && selectedRows.length > 0 && (
         <FloatingActionBar>
           <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
             <span className="text-sm font-medium">

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { ClientHeader } from "./client-header";
 import { TabsNavigation, type TabsCount } from "./tabs-navigation";
 import { getClientSummaries, getClientRiskProfile } from "@/lib/services/client-metrics";
@@ -15,7 +15,7 @@ export default async function ClientDetailLayout({
   params: { id: string };
   children: React.ReactNode;
 }) {
-  await requireAdmin();
+  await requirePagePermission("clientes.visualizar");
 
   const [client, contracts, billings, payments, generatedContracts, documents, notes, history, summaries] =
     await Promise.all([

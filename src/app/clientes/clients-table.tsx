@@ -32,14 +32,17 @@ export type ClientRow = {
 export function ClientsTable({
   clients,
   allFilteredIds,
+  canDelete,
 }: {
   clients: ClientRow[];
   allFilteredIds: string[];
+  canDelete: boolean;
 }) {
   return (
     <ClientsPanel
       clients={clients}
       allFilteredIds={allFilteredIds}
+      canDelete={canDelete}
     />
   );
 }

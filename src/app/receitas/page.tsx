@@ -24,7 +24,7 @@ import {
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
 import { IncomeFilters } from "./filters";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 
 type Search = {
   mes?: string;
@@ -67,7 +67,7 @@ function statusVariant(s: string): any {
 }
 
 export default async function ReceitasPage({ searchParams }: { searchParams: Search }) {
-  await getViewer();
+  await requirePagePermission("receitas.visualizar");
   const where: any = {};
   const mesParam = parseMonthParam(searchParams.mes);
   if (mesParam) {

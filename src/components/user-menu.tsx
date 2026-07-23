@@ -3,12 +3,13 @@ import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { logoutAction } from "@/lib/actions/auth";
 import { LogOut } from "lucide-react";
+import { ROLE_LABEL, type Role } from "@/lib/permissions";
 
 export function UserMenu({
   user,
   compact = false,
 }: {
-  user: { name: string; email: string; role: "ADMIN" | "USER" };
+  user: { name: string; email: string; role: string };
   /** Sidebar recolhida (80px): só avatar + botão sair, empilhados. */
   compact?: boolean;
 }) {
@@ -52,7 +53,7 @@ export function UserMenu({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{user.name}</p>
         <p className="text-[11px] text-muted-foreground truncate">
-          {user.role === "ADMIN" ? "Administrador" : "Usuário"} · {user.email}
+          {ROLE_LABEL[user.role as Role] ?? "Usuário"} · {user.email}
         </p>
       </div>
       <Button

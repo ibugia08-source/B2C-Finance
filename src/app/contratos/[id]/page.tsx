@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import type { TemplateVariable } from "@/lib/docx/template";
 import { TemplateEditDialog, type TemplateLite } from "../template-actions";
 import { GeneratedContractActions } from "../generated-actions";
@@ -27,7 +27,7 @@ import { ArrowLeft, Download, FileSignature, AlertTriangle } from "lucide-react"
 
 /** Detalhe do modelo: metadados, variáveis mapeadas e contratos gerados. */
 export default async function TemplateDetailPage({ params }: { params: { id: string } }) {
-  await requireAdmin();
+  await requirePagePermission("contratos.visualizar");
 
   const template = await prisma.contractTemplate.findUnique({
     where: { id: params.id },

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { REPORTS } from "@/lib/reports/registry";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileBarChart2, ArrowRight } from "lucide-react";
 
 export default async function RelatoriosPage() {
-  await requireAdmin();
+  await requirePagePermission("relatorios.visualizar");
   return (
     <div>
       <PageHeader

@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import {
   EmployeeDialog, EmployeeActions, GeneratePayrollButton,
   PayrollItemDialog, DeleteItemButton, PayrollStatusButtons,
@@ -28,7 +28,7 @@ const RUN_STATUS: Record<string, { label: string; variant: any }> = {
 type Search = { mes?: string };
 
 export default async function FolhaPage({ searchParams }: { searchParams: Search }) {
-  await requireAdmin();
+  await requirePagePermission("folha.visualizar");
 
   const now = new Date();
   let month = now.getMonth() + 1;

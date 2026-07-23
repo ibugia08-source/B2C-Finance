@@ -3,13 +3,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, type UserLike } from "./nav-items";
+import { visibleNavItems, type UserLike } from "./nav-items";
 import { MobileMenu } from "./mobile-menu";
-
-const primary = NAV_ITEMS.filter((it) => it.primary);
 
 export function MobileNav({ user }: { user: UserLike }) {
   const path = usePathname();
+  // Atalhos da barra inferior também respeitam as permissões do usuário.
+  const primary = visibleNavItems(user).filter((it) => it.primary);
 
   const itemClasses = (active: boolean) =>
     cn(

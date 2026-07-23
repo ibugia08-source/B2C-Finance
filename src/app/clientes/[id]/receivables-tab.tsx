@@ -46,12 +46,18 @@ export function ReceivablesTab({
   rows,
   contracts,
   services,
+  canEdit = true,
+  canDelete = true,
 }: {
   clientId: string;
   clientName: string;
   rows: ReceivableTabRow[];
   contracts: { id: string; title: string; clientId: string }[];
   services: { id: string; name: string }[];
+  /** Sem recebimentos.editar → some o Editar da barra de seleção. */
+  canEdit?: boolean;
+  /** Sem recebimentos.excluir → some o Excluir da barra de seleção. */
+  canDelete?: boolean;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, start] = useTransition();
@@ -122,6 +128,7 @@ export function ReceivablesTab({
     );
   }
 
+  const selectable = canEdit || canDelete;
   const allChecked = selected.size === rows.length && rows.length > 0;
   const someChecked = selected.size > 0 && selected.size < rows.length;
 
@@ -132,14 +139,16 @@ export function ReceivablesTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    aria-label="Selecionar todas as cobranças"
-                    checked={allChecked}
-                    indeterminate={someChecked}
-                    onChange={toggleAll}
-                  />
-                </TableHead>
+                {selectable && (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      aria-label="Selecionar todas as cobranças"
+                      checked={allChecked}
+                      indeterminate={someChecked}
+                      onChange={toggleAll}
+                    />
+                  </TableHead>
+                )}
                 <TableHead>Descrição</TableHead>
                 <TableHead>Competência</TableHead>
                 <TableHead>Vencimento</TableHead>
@@ -154,13 +163,15 @@ export function ReceivablesTab({
                 const checked = selected.has(b.id);
                 return (
                   <TableRow key={b.id} data-state={checked ? "selected" : undefined}>
-                    <TableCell>
-                      <Checkbox
-                        aria-label={`Selecionar cobrança ${b.description}`}
-                        checked={checked}
-                        onChange={() => toggle(b.id)}
-                      />
-                    </TableCell>
+                    {selectable && (
+                      <TableCell>
+                        <Checkbox
+                          aria-label={`Selecionar cobrança ${b.description}`}
+                          checked={checked}
+                          onChange={() => toggle(b.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium max-w-xs truncate">
                       {b.description}
                     </TableCell>
@@ -186,14 +197,14 @@ export function ReceivablesTab({
         </CardContent>
       </Card>
 
-      {selectedRows.length > 0 && (
+      {selectable && selectedRows.length > 0 && (
         <FloatingActionBar>
           <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
             <span className="text-sm font-medium">
               {selectedRows.length} selecionado{selectedRows.length === 1 ? "" : "s"}
             </span>
             <div className="ml-auto flex flex-wrap gap-2">
-              {single && (
+              {canEdit && single && (
                 <BillingDialog
                   clients={clients}
                   contracts={contracts}
@@ -206,16 +217,18 @@ export function ReceivablesTab({
                   }
                 />
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-destructive"
-                disabled={pending}
-                onClick={deleteSelected}
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                {selectedRows.length === 1 ? "Excluir" : "Excluir selecionados"}
-              </Button>
+              {canDelete && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive"
+                  disabled={pending}
+                  onClick={deleteSelected}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  {selectedRows.length === 1 ? "Excluir" : "Excluir selecionados"}
+                </Button>
+              )}
               <Button size="sm" variant="ghost" onClick={clearSelection}>
                 Cancelar
               </Button>

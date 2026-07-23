@@ -136,10 +136,13 @@ export function BulkActionBar({
   ids,
   count,
   onClear,
+  canDelete = true,
 }: {
   ids: string[];
   count: number;
   onClear: () => void;
+  /** Sem clientes.excluir → botão Excluir não aparece (backend também bloqueia). */
+  canDelete?: boolean;
 }) {
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [pending, start] = useTransition();
@@ -171,15 +174,17 @@ export function BulkActionBar({
             <Button size="sm" variant="outline" onClick={() => setDialog("renewal")}>
               Alterar renovação
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-destructive"
-              disabled={pending}
-              onClick={runDelete}
-            >
-              <Trash2 className="h-4 w-4 mr-1" /> Excluir
-            </Button>
+            {canDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive"
+                disabled={pending}
+                onClick={runDelete}
+              >
+                <Trash2 className="h-4 w-4 mr-1" /> Excluir
+              </Button>
+            )}
             <Button size="sm" variant="ghost" onClick={onClear}>
               Cancelar
             </Button>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getReport } from "@/lib/reports/registry";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
@@ -22,7 +22,7 @@ export default async function RelatorioPage({
   params: { tipo: string };
   searchParams?: SearchParams;
 }) {
-  await requireAdmin();
+  await requirePagePermission("relatorios.visualizar");
   const def = getReport(params.tipo);
   if (!def) notFound();
 

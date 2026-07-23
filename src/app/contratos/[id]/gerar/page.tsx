@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import type { TemplateVariable } from "@/lib/docx/template";
 import { GenerateWizard, type WizardTemplate } from "./generate-wizard";
 import { COMMERCIAL_TYPE_LABEL } from "../../_meta";
@@ -16,7 +16,7 @@ export default async function GerarContratoPage({
   params: { id: string };
   searchParams: { cliente?: string };
 }) {
-  await requireAdmin();
+  await requirePagePermission("contratos.gerar_contrato");
 
   const [template, clients] = await Promise.all([
     prisma.contractTemplate.findUnique({ where: { id: params.id } }),

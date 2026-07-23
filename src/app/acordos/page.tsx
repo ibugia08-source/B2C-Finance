@@ -28,7 +28,7 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { ContractDialog } from "./contract-dialog";
 import { ContractActions } from "./row-actions";
 import { ContractFilters } from "./filters";
@@ -71,7 +71,7 @@ export default async function ContratosPage({
 }: {
   searchParams: Search;
 }) {
-  await requireAdmin();
+  await requirePagePermission("recebimentos.visualizar");
 
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;

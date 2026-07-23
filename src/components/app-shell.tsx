@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { SidebarWithToggle } from "./sidebar-with-toggle";
 import { MobileHeader } from "./mobile-header";
 import { MobileNav } from "./mobile-nav";
+import type { UserLike } from "./nav-items";
 
 const NO_SHELL = ["/login"];
 
@@ -12,7 +13,7 @@ export function AppShell({
   user,
 }: {
   children: React.ReactNode;
-  user: { name: string; email: string; role: "ADMIN" | "USER" } | null;
+  user: UserLike;
 }) {
   const path = usePathname() ?? "";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

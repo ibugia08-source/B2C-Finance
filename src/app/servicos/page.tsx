@@ -19,12 +19,12 @@ import {
   Field,
   MobileEmpty,
 } from "@/components/ui/record-card";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { ServiceDialog } from "./service-dialog";
 import { ServiceActions } from "./row-actions";
 
 export default async function ServicosPage() {
-  await requireAdmin();
+  await requirePagePermission("servicos.visualizar");
 
   const [servicesRaw, contractCounts] = await Promise.all([
     prisma.service.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),

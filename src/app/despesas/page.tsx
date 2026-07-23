@@ -36,7 +36,7 @@ import { CardDialog } from "@/app/cartoes/card-dialog";
 import { CardRowActions } from "@/app/cartoes/row-actions";
 import { QuickRenameCard } from "@/app/cartoes/quick-rename";
 import { Repeat2 } from "lucide-react";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 
 type Search = {
   aba?: string; // despesas | cartoes | resumo
@@ -69,7 +69,7 @@ const TABS = [
 ] as const;
 
 export default async function DespesasPage({ searchParams }: { searchParams: Search }) {
-  await getViewer();
+  await requirePagePermission("despesas.visualizar");
 
   const aba = TABS.some((t) => t.key === searchParams.aba) ? searchParams.aba! : "despesas";
   const ref = parseMonthRef(searchParams.mes);

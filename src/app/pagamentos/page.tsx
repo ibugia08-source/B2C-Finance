@@ -7,7 +7,7 @@ import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { PaymentsTable, type PaymentRow } from "./payments-table";
 import { PAYMENT_METHOD_LABEL } from "@/app/cobrancas/_meta";
 
@@ -18,7 +18,8 @@ export default async function PagamentosPage({
 }: {
   searchParams: Search;
 }) {
-  await requireAdmin();
+  const viewer = await requirePagePermission("recebimentos.visualizar");
+  const canDeletePayments = can(viewer, "recebimentos.excluir");
   await markOverdueBillings();
 
   let ref = new Date();
@@ -141,7 +142,7 @@ export default async function PagamentosPage({
 
       <Card>
         <CardContent className="p-0">
-          <PaymentsTable rows={paymentRows} />
+          <PaymentsTable rows={paymentRows} canDelete={canDeletePayments} />
         </CardContent>
       </Card>
     </div>

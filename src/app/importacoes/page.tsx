@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { IMPORT_DEFS } from "@/lib/imports/definitions";
 import { formatDateBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import {
 import { ImportClient } from "./import-client";
 
 export default async function ImportacoesPage() {
-  await requireAdmin();
+  await requirePagePermission("importacoes.visualizar");
 
   const history = await prisma.importBatch.findMany({
     where: { module: { not: null } },

@@ -3,7 +3,7 @@ import { SavedViews } from "@/components/saved-views";
 import { PageHeader } from "@/components/page-header";
 import { formatBRL } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import {
   getExecutiveDashboard,
@@ -75,10 +75,12 @@ const SEVERITY_DOT: Record<DashAlert["severity"], string> = {
 };
 
 export default async function DashboardPage({ searchParams }: { searchParams?: Search }) {
-  const viewer = await getViewer("/dashboard");
+  const viewer = await requirePagePermission("dashboard.visualizar", "/dashboard");
 
-  // USER comum: recepção simples (os módulos financeiros são da agência).
-  if (viewer.role !== "ADMIN") {
+  // Sem permissão de ver os números financeiros (resultado, margem, caixa):
+  // recepção simples com atalho para o Assistente. Papéis GESTOR/FINANCEIRO
+  // têm dashboard.ver_financeiro por padrão e veem o dashboard completo.
+  if (!can(viewer, "dashboard.ver_financeiro")) {
     return <PersonalDashboard />;
   }
 

@@ -10,6 +10,7 @@ import { visibleNavItems, type UserLike } from "./nav-items";
 import { B2CLogo } from "./mascot";
 import { ThemeToggle } from "./theme-toggle";
 import { logoutAction } from "@/lib/actions/auth";
+import { ROLE_LABEL, type Role } from "@/lib/permissions";
 
 /**
  * Gaveta "Mais" do mobile: dá acesso a TODAS as seções (inclusive as que não cabem
@@ -108,7 +109,7 @@ export function MobileMenu({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{user.name}</p>
                   <p className="truncate text-[11px] text-muted-foreground">
-                    {user.role === "ADMIN" ? "Administrador" : "Usuário"} · {user.email}
+                    {ROLE_LABEL[user.role as Role] ?? "Usuário"} · {user.email}
                   </p>
                 </div>
                 <button

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,7 +67,9 @@ export default async function ClientDetailPage({
   params: { id: string };
   searchParams?: { tab?: string };
 }) {
-  await requireAdmin();
+  const viewer = await requirePagePermission("clientes.visualizar");
+  const canEditBillings = can(viewer, "recebimentos.editar");
+  const canDeleteBillings = can(viewer, "recebimentos.excluir");
 
   const client = await prisma.client.findUnique({
     where: { id: params.id },
@@ -428,6 +430,8 @@ export default async function ClientDetailPage({
             rows={receivableRows}
             contracts={contractOptions}
             services={services}
+            canEdit={canEditBillings}
+            canDelete={canDeleteBillings}
           />
         </TabsContent>
 

@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { getAISettingsView } from "@/lib/actions/ai";
 import { AISettingsDialog } from "./settings-dialog";
 import { Chat } from "./chat";
@@ -14,7 +14,7 @@ import { Sparkles, Bot, FileBarChart2 } from "lucide-react";
 export default async function AssistentePage() {
   // Aberto a qualquer usuário logado. Cada um vê o próprio histórico e memórias
   // (AIConversation/AIMemory são escopados por dono). Só o admin configura a chave.
-  const viewer = await getViewer("/assistente");
+  const viewer = await requirePagePermission("assistente.visualizar", "/assistente");
   const isAdmin = viewer.role === "ADMIN";
 
   const [settings, conversation, memories] = await Promise.all([

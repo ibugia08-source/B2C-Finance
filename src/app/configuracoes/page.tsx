@@ -3,10 +3,10 @@ import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { CategoryDialog } from "./category-dialog";
 import { CategoriesList, type CategoryRow } from "./categories-list";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 
 export default async function ConfiguracoesPage() {
-  await requireAdmin();
+  await requirePagePermission("configuracoes.visualizar");
   const [categories, usageByCat] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
     prisma.transaction.groupBy({

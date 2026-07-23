@@ -8,7 +8,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
 import { KpiCard } from "./kpi-card";
@@ -42,7 +42,9 @@ export default async function ClientesPage({
 }: {
   searchParams: Search;
 }) {
-  await requireAdmin();
+  const viewer = await requirePagePermission("clientes.visualizar");
+  const canCreateClient = can(viewer, "clientes.criar");
+  const canDeleteClients = can(viewer, "clientes.excluir");
 
   // ===== COMPETÊNCIA SELECIONADA (?mes=YYYY-MM) — todo o módulo gira em
   // torno dela: inadimplência, vencimentos, KPIs e ajustes gravados no mês.
@@ -323,7 +325,7 @@ export default async function ClientesPage({
             {/* Seletor da competência: ◀ [Mês][Ano] ▶ — tudo na página (lista,
                 inadimplência, vencimentos, KPIs e ajustes) pertence a este mês. */}
             <MonthNav month={selMonth} year={selYear} />
-            <ClientDialog />
+            {canCreateClient && <ClientDialog />}
           </div>
         }
       />
@@ -385,7 +387,7 @@ export default async function ClientesPage({
 
       <Card>
         <CardContent className="p-0">
-          <ClientsTable clients={clients} allFilteredIds={allFilteredIds} />
+          <ClientsTable clients={clients} allFilteredIds={allFilteredIds} canDelete={canDeleteClients} />
         </CardContent>
       </Card>
 

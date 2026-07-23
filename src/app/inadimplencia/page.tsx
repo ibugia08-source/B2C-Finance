@@ -28,7 +28,7 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { MessageDialog } from "@/app/cobrancas/message-dialog";
 import { COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
 import { MessageSquareText } from "lucide-react";
@@ -41,7 +41,7 @@ const BUCKET_META: Record<AgingBucket, { label: string; variant: any }> = {
 };
 
 export default async function InadimplenciaPage() {
-  await requireAdmin();
+  await requirePagePermission("recebimentos.ver_inadimplencia");
   await markOverdueBillings();
 
   const { start, end } = monthRange();

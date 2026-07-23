@@ -22,7 +22,7 @@ import {
   Field,
   MobileEmpty,
 } from "@/components/ui/record-card";
-import { requireAdmin } from "@/lib/auth/viewer";
+import { requirePagePermission } from "@/lib/auth/viewer";
 import { UpsellDialog } from "./upsell-dialog";
 import { UpsellActions } from "./row-actions";
 import { UPSELL_STATUSES, UPSELL_STATUS_LABEL, upsellStatusVariant } from "./_meta";
@@ -30,7 +30,7 @@ import { UPSELL_STATUSES, UPSELL_STATUS_LABEL, upsellStatusVariant } from "./_me
 type Search = { status?: string; responsavel?: string };
 
 export default async function UpsellPage({ searchParams }: { searchParams: Search }) {
-  await requireAdmin();
+  await requirePagePermission("upsell.visualizar");
 
   const where: any = {};
   if (searchParams.status) where.status = searchParams.status;
