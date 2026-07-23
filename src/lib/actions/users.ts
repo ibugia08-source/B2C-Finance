@@ -51,23 +51,6 @@ function parseOverrides(formData: FormData): { permission: string; enabled: bool
   }
 }
 
-/** Substitui os ajustes finos do usuário pelas diferenças recebidas. */
-async function replaceOverrides(
-  userId: string,
-  overrides: { permission: string; enabled: boolean }[]
-) {
-  await prisma.$transaction([
-    prisma.userPermission.deleteMany({ where: { userId } }),
-    prisma.userPermission.createMany({
-      data: overrides.map((o) => ({
-        userId,
-        permission: o.permission,
-        enabled: o.enabled,
-      })),
-    }),
-  ]);
-}
-
 /**
  * Garante que não estamos rebaixando/desativando/excluindo o ÚLTIMO
  * administrador ativo — regra que impede a conta de ficar sem admin.
@@ -104,9 +87,8 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
       return { ok: false, error: "Você não tem permissão para ajustar permissões." };
     }
 
-    const exists = await prisma.user.findUnique({ where: { email: parsed.email } });
-    if (exists) return { ok: false, error: "Já existe um usuário com este e-mail." };
-
+    // Sem pré-checagem de e-mail: a constraint única do banco decide (P2002)
+    // — economiza um roundtrip no caminho feliz.
     const passwordHash = await bcrypt.hash(parsed.password, 10);
 
     const user = await prisma.user.create({
@@ -121,22 +103,37 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
       },
     });
 
+    // Ajustes finos + vínculo de Pessoa num único batch (uma ida ao banco).
+    const followUps: any[] = [];
     if (parsed.role !== "ADMIN" && overrides.length > 0) {
-      await replaceOverrides(user.id, overrides);
+      followUps.push(
+        prisma.userPermission.createMany({
+          data: overrides.map((o) => ({
+            userId: user.id,
+            permission: o.permission,
+            enabled: o.enabled,
+          })),
+        })
+      );
     }
-
     if (parsed.personId) {
       // Garante 1:1 — desfaz vínculo anterior dessa Person
-      await prisma.person.update({
-        where: { id: parsed.personId },
-        data: { userId: user.id },
-      });
+      followUps.push(
+        prisma.person.update({
+          where: { id: parsed.personId },
+          data: { userId: user.id },
+        })
+      );
     }
+    if (followUps.length > 0) await prisma.$transaction(followUps);
 
     revalidateAdmin();
     revalidateFinance();
     return { ok: true, id: user.id };
   } catch (e: any) {
+    if (e?.code === "P2002") {
+      return { ok: false, error: "Já existe um usuário com este e-mail." };
+    }
     return { ok: false, error: e?.message ?? "Falha ao criar o usuário." };
   }
 }
@@ -157,7 +154,10 @@ export async function updateUser(formData: FormData): Promise<ActionResult> {
 
     const target = await prisma.user.findUnique({
       where: { id: parsed.id },
-      include: { permissions: { select: { permission: true, enabled: true } } },
+      include: {
+        permissions: { select: { permission: true, enabled: true } },
+        person: { select: { id: true } },
+      },
     });
     if (!target) return { ok: false, error: "Usuário não encontrado." };
 
@@ -197,31 +197,57 @@ export async function updateUser(formData: FormData): Promise<ActionResult> {
       data.passwordHash = await bcrypt.hash(parsed.password, 10);
     }
 
-    await prisma.user.update({ where: { id: parsed.id }, data });
+    // Um único batch com SÓ o que mudou (edições típicas: 1 ida ao banco).
+    const ops: any[] = [prisma.user.update({ where: { id: parsed.id }, data })];
 
-    if (canManagePerms) {
-      // ADMIN tem tudo — ajustes finos não se aplicam.
-      await replaceOverrides(parsed.id, parsed.role === "ADMIN" ? [] : overrides);
+    const wantedOverrides = parsed.role === "ADMIN" ? [] : overrides;
+    const mustRewriteOverrides =
+      canManagePerms && (overridesChanged || (roleChanged && target.permissions.length > 0));
+    if (mustRewriteOverrides) {
+      ops.push(prisma.userPermission.deleteMany({ where: { userId: parsed.id } }));
+      if (wantedOverrides.length > 0) {
+        ops.push(
+          prisma.userPermission.createMany({
+            data: wantedOverrides.map((o) => ({
+              userId: parsed.id,
+              permission: o.permission,
+              enabled: o.enabled,
+            })),
+          })
+        );
+      }
     }
 
-    // Sincroniza vínculo com Person:
-    // 1. desvincula qualquer Person que apontava para esse user mas não é a selecionada
-    await prisma.person.updateMany({
-      where: { userId: parsed.id, NOT: parsed.personId ? { id: parsed.personId } : undefined },
-      data: { userId: null },
-    });
-    // 2. vincula a Person selecionada
-    if (parsed.personId) {
-      await prisma.person.update({
-        where: { id: parsed.personId },
-        data: { userId: parsed.id },
-      });
+    // Vínculo com Person: só sincroniza se de fato mudou.
+    const currentPersonId = target.person?.id ?? null;
+    if (parsed.personId !== currentPersonId) {
+      // 1. desvincula qualquer Person que apontava para esse user mas não é a selecionada
+      ops.push(
+        prisma.person.updateMany({
+          where: { userId: parsed.id, NOT: parsed.personId ? { id: parsed.personId } : undefined },
+          data: { userId: null },
+        })
+      );
+      // 2. vincula a Person selecionada
+      if (parsed.personId) {
+        ops.push(
+          prisma.person.update({
+            where: { id: parsed.personId },
+            data: { userId: parsed.id },
+          })
+        );
+      }
     }
+
+    await prisma.$transaction(ops);
 
     revalidateAdmin();
     revalidateFinance();
     return { ok: true };
   } catch (e: any) {
+    if (e?.code === "P2002") {
+      return { ok: false, error: "Já existe um usuário com este e-mail." };
+    }
     return { ok: false, error: e?.message ?? "Falha ao salvar o usuário." };
   }
 }
