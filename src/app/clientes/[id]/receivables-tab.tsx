@@ -105,6 +105,7 @@ export function ReceivablesTab({
         alert(res.error);
         return;
       }
+      if (res.warning) alert(res.warning);
       clearSelection();
     });
   }

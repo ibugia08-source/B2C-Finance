@@ -82,6 +82,7 @@ export function PaymentsTable({ rows }: { rows: PaymentRow[] }) {
         alert(res.error);
         return;
       }
+      if (res.warning) alert(res.warning);
       clearSelection();
     });
   }

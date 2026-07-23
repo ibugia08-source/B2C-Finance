@@ -12,7 +12,9 @@ import { getValidDueDateForMonth } from "@/lib/financial/due-date";
  * discriminável para a UI tratar sucesso/erro sem depender de exceptions
  * atravessando o boundary de Server Action.
  */
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+export type ActionResult =
+  | { ok: true; id?: string; warning?: string }
+  | { ok: false; error: string };
 
 const ClientSchema = z
   .object({

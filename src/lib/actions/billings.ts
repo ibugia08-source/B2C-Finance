@@ -162,10 +162,11 @@ export async function deleteBillingPayment(id: string): Promise<ActionResult> {
 
 /**
  * Exclui vários pagamentos de uma vez. Reusa o mesmo núcleo contábil
- * (revertBillingPayment) por pagamento — cada reversão recalcula saldo,
- * status/flags da cobrança e reverte a Receita Extra automática. Ao final,
- * revalida uma única vez cada cliente afetado + as finanças, mantendo
- * Dashboard, Rotina, Relatórios, Recebimentos e Caixa coerentes.
+ * (revertBillingPayment) por pagamento — cada reversão é ATÔMICA (saldo,
+ * status/flags da cobrança, Income e Receita Extra numa transação só), então
+ * uma falha no meio da lista nunca deixa um pagamento meio-revertido; os já
+ * processados permanecem revertidos e os demais são reportados no `warning`.
+ * Ao final, revalida uma única vez cada cliente afetado + as finanças.
  */
 export async function deleteBillingPaymentsBulk(
   ids: string[]
@@ -182,13 +183,18 @@ export async function deleteBillingPaymentsBulk(
 
     const affectedClients = new Set<string>();
     const failures: string[] = [];
+    let reverted = 0;
     for (const id of unique) {
       const result = await revertBillingPayment(id);
-      if (result.ok) affectedClients.add(result.clientId);
-      else failures.push(result.error);
+      if (result.ok) {
+        affectedClients.add(result.clientId);
+        reverted += 1;
+      } else {
+        failures.push(result.error);
+      }
     }
 
-    if (affectedClients.size === 0) {
+    if (reverted === 0) {
       return {
         ok: false,
         error: failures[0] ?? "Falha ao excluir os pagamentos.",
@@ -197,6 +203,13 @@ export async function deleteBillingPaymentsBulk(
 
     for (const clientId of affectedClients) revalidateBilling(clientId);
     revalidateFinance(); // reverte as Receitas Extra (Income) correspondentes
+
+    if (failures.length > 0) {
+      return {
+        ok: true,
+        warning: `${reverted} pagamento${reverted === 1 ? "" : "s"} excluído${reverted === 1 ? "" : "s"}; ${failures.length} não ${failures.length === 1 ? "pôde" : "puderam"} ser excluído${failures.length === 1 ? "" : "s"} (${failures[0]}).`,
+      };
+    }
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir os pagamentos." };
@@ -249,7 +262,9 @@ export async function cancelBilling(
  * Exclusão em massa (soft-delete auditado) das cobranças selecionadas na aba
  * Recebimentos do cliente. Mesma semântica de `cancelBilling`: status CANCELED
  * + auditoria, sem apagar cliente/contrato/pagamento. Cobranças quitadas (PAID)
- * são ignoradas — o dinheiro já entrou. Sem query em loop (updateMany/createMany).
+ * são ignoradas — o dinheiro já entrou — e as já canceladas também (não
+ * sobrescreve auditoria nem duplica histórico); os pulos são reportados no
+ * `warning`. Sem query em loop (updateMany/createMany numa transação).
  */
 export async function cancelBillingsBulk(
   ids: string[],
@@ -271,35 +286,57 @@ export async function cancelBillingsBulk(
         competenceYear: true,
       },
     });
-    const removable = billings.filter((b) => b.status !== "PAID");
+    const removable = billings.filter(
+      (b) => b.status !== "PAID" && b.status !== "CANCELED"
+    );
     if (removable.length === 0) {
-      return { ok: false, error: "As cobranças selecionadas já estão quitadas e não podem ser excluídas." };
+      return {
+        ok: false,
+        error:
+          "Nenhuma das cobranças selecionadas pode ser excluída (já estão quitadas ou canceladas).",
+      };
     }
+    const skippedPaid = billings.filter((b) => b.status === "PAID").length;
+    const skippedCanceled = billings.filter((b) => b.status === "CANCELED").length;
 
     const cleanReason = (reason ?? "").trim() || null;
     const now = new Date();
-    await prisma.billing.updateMany({
-      where: { id: { in: removable.map((b) => b.id) } },
-      data: {
-        status: "CANCELED",
-        canceledAt: now,
-        canceledBy: viewer.email,
-        cancelReason: cleanReason,
-      },
-    });
-    await prisma.collectionHistory.createMany({
-      data: removable.map((b) => ({
-        billingId: b.id,
-        clientId: b.clientId,
-        status: b.collectionStatus,
-        actionType: "DELETED",
-        createdBy: viewer.email,
-        message: `Excluída (em massa) do ciclo de ${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear} por ${viewer.email}.${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
-      })),
-    });
+    await prisma.$transaction([
+      prisma.billing.updateMany({
+        where: { id: { in: removable.map((b) => b.id) } },
+        data: {
+          status: "CANCELED",
+          canceledAt: now,
+          canceledBy: viewer.email,
+          cancelReason: cleanReason,
+        },
+      }),
+      prisma.collectionHistory.createMany({
+        data: removable.map((b) => ({
+          billingId: b.id,
+          clientId: b.clientId,
+          status: b.collectionStatus,
+          actionType: "DELETED",
+          createdBy: viewer.email,
+          message: `Excluída (em massa) do ciclo de ${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear} por ${viewer.email}.${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
+        })),
+      }),
+    ]);
 
     const affectedClients = Array.from(new Set(removable.map((b) => b.clientId)));
     for (const clientId of affectedClients) revalidateBilling(clientId);
+
+    const skips: string[] = [];
+    if (skippedPaid > 0)
+      skips.push(`${skippedPaid} quitada${skippedPaid === 1 ? "" : "s"} (o dinheiro já entrou)`);
+    if (skippedCanceled > 0)
+      skips.push(`${skippedCanceled} já cancelada${skippedCanceled === 1 ? "" : "s"}`);
+    if (skips.length > 0) {
+      return {
+        ok: true,
+        warning: `${removable.length} cobrança${removable.length === 1 ? "" : "s"} excluída${removable.length === 1 ? "" : "s"}; ignorada${skippedPaid + skippedCanceled === 1 ? "" : "s"}: ${skips.join(" e ")}.`,
+      };
+    }
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir as cobranças." };
