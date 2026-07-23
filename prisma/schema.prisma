@@ -21,6 +21,10 @@ model User {
   // COMERCIAL | COBRANCA | USER (legado). Catálogo em src/lib/permissions.ts.
   role         String   @default("USER")
   active       Boolean  @default(true)
+  // Proteção contra força bruta no login: contador de falhas seguidas e
+  // bloqueio temporário (ver loginAction em lib/actions/auth.ts).
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
