@@ -18,6 +18,7 @@ import { MessageDialog } from "./message-dialog";
 import { RescheduleDialog } from "./note-dialog";
 import { DollarSign, MessageSquareText, CalendarClock } from "lucide-react";
 import { setClientContractMonths, bulkSetMonthStatus, bulkRemoveClientsFromList } from "@/lib/actions/receivables-inline";
+import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 import { bulkUpdateClients } from "@/lib/actions/clients";
 import { restoreBilling } from "@/lib/actions/billings";
 import type { ActionResult } from "@/lib/actions/clients";
@@ -401,7 +402,7 @@ export function BulkBar({
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4 print:hidden pointer-events-none">
+      <FloatingActionBar>
         <div className="pointer-events-auto mx-auto flex max-w-4xl flex-wrap items-center gap-2 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
           <span className="text-sm font-medium">
             {count} selecionado{count === 1 ? "" : "s"}
@@ -433,7 +434,7 @@ export function BulkBar({
             </Button>
           </div>
         </div>
-      </div>
+      </FloatingActionBar>
 
       {dialog === "status" && (
         <BulkValueDialog

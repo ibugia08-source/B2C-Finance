@@ -26,7 +26,7 @@ export default async function ClientDetailLayout({
         where: { clientId: params.id },
       }),
       prisma.billing.count({
-        where: { clientId: params.id },
+        where: { clientId: params.id, status: { not: "CANCELED" } },
       }),
       prisma.payment.count({
         where: { billing: { clientId: params.id } },

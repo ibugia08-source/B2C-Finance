@@ -2,29 +2,13 @@ import { PageHeader } from "@/components/page-header";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange, parseMonthParam } from "@/lib/format";
+import { formatBRL, monthRange, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  MobileCards,
-  MobileCard,
-  MobileCardHeader,
-  MobileCardActions,
-  Field,
-  MobileEmpty,
-} from "@/components/ui/record-card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/auth/viewer";
-import { PaymentRowActions } from "./row-actions";
+import { PaymentsTable, type PaymentRow } from "./payments-table";
 import { PAYMENT_METHOD_LABEL } from "@/app/cobrancas/_meta";
 
 type Search = { mes?: string; metodo?: string; cliente?: string };
@@ -71,6 +55,17 @@ export default async function PagamentosPage({
 
   const payments = paymentsRaw.map((p) => ({ ...p, amount: Number(p.amount) }));
   const total = payments.reduce((s, p) => s + p.amount, 0);
+
+  const paymentRows: PaymentRow[] = payments.map((p) => ({
+    id: p.id,
+    paidAt: p.paidAt.toISOString(),
+    amount: p.amount,
+    method: p.method,
+    clientId: p.billing.client.id,
+    clientName: p.billing.client.name,
+    description: p.billing.description,
+    accountName: p.account?.name ?? null,
+  }));
   const topMethod = byMethod.sort(
     (a, b) => Number(b._sum.amount ?? 0) - Number(a._sum.amount ?? 0)
   )[0];
@@ -146,76 +141,7 @@ export default async function PagamentosPage({
 
       <Card>
         <CardContent className="p-0">
-          <div className="hidden md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Referente a</TableHead>
-                  <TableHead>Forma</TableHead>
-                  <TableHead>Conta</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                      Nenhum pagamento neste período.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {payments.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell>{formatDateBR(p.paidAt)}</TableCell>
-                    <TableCell>
-                      <Link href={`/clientes/${p.billing.client.id}`} className="hover:underline">
-                        {p.billing.client.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">{p.billing.description}</TableCell>
-                    <TableCell>{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</TableCell>
-                    <TableCell>{p.account?.name ?? "—"}</TableCell>
-                    <TableCell className="text-right font-medium text-emerald-600">
-                      +{formatBRL(p.amount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <PaymentRowActions payment={p} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <MobileCards>
-            {payments.length === 0 ? (
-              <MobileEmpty>Nenhum pagamento neste período.</MobileEmpty>
-            ) : (
-              payments.map((p) => (
-                <MobileCard key={p.id}>
-                  <MobileCardHeader
-                    title={p.billing.client.name}
-                    aside={
-                      <span className="font-semibold text-emerald-600">
-                        +{formatBRL(p.amount)}
-                      </span>
-                    }
-                  />
-                  <div className="space-y-1.5">
-                    <Field label="Data">{formatDateBR(p.paidAt)}</Field>
-                    <Field label="Referente a">{p.billing.description}</Field>
-                    <Field label="Forma">{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</Field>
-                  </div>
-                  <MobileCardActions>
-                    <PaymentRowActions payment={p} />
-                  </MobileCardActions>
-                </MobileCard>
-              ))
-            )}
-          </MobileCards>
+          <PaymentsTable rows={paymentRows} />
         </CardContent>
       </Card>
     </div>

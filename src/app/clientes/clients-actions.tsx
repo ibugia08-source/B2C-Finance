@@ -30,6 +30,7 @@ import {
   bulkDeleteClients,
 } from "@/lib/actions/clients";
 import type { ClientRow } from "./clients-table";
+import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 
 const STATUS_OPTIONS = CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => ({
   value: s,
@@ -155,7 +156,7 @@ export function BulkActionBar({
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 px-4 pb-4 print:hidden pointer-events-none">
+      <FloatingActionBar>
         <div className="pointer-events-auto mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border bg-background/95 px-4 py-3 shadow-lg backdrop-blur">
           <span className="text-sm font-medium">
             {count} cliente{count === 1 ? "" : "s"} selecionado{count === 1 ? "" : "s"}
@@ -184,7 +185,7 @@ export function BulkActionBar({
             </Button>
           </div>
         </div>
-      </div>
+      </FloatingActionBar>
 
       {dialog === "status" && (
         <BulkFieldDialog

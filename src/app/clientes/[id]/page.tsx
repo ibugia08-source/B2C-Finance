@@ -27,6 +27,7 @@ import {
   NoteActions,
 } from "./dossier-dialogs";
 import { GeneratedContractActions } from "@/app/contratos/generated-actions";
+import { ReceivablesTab, type ReceivableTabRow } from "./receivables-tab";
 import {
   GENERATED_STATUS_LABEL,
   generatedStatusVariant,
@@ -34,13 +35,6 @@ import {
   NOTE_TYPE_LABEL,
 } from "@/app/contratos/_meta";
 
-const BILLING_STATUS: Record<string, { label: string; variant: any }> = {
-  PENDING: { label: "Em aberto", variant: "warning" },
-  PARTIAL: { label: "Parcial", variant: "warning" },
-  PAID: { label: "Paga", variant: "success" },
-  OVERDUE: { label: "Vencida", variant: "destructive" },
-  CANCELED: { label: "Cancelada", variant: "secondary" },
-};
 const CONTRACT_STATUS: Record<string, { label: string; variant: any }> = {
   PENDING: { label: "Pendente", variant: "secondary" },
   ACTIVE: { label: "Ativo", variant: "success" },
@@ -93,6 +87,7 @@ export default async function ClientDetailPage({
     generatedContracts,
     documents,
     contextNotes,
+    services,
   ] =
     await Promise.all([
       prisma.contract.findMany({
@@ -100,8 +95,9 @@ export default async function ClientDetailPage({
         orderBy: [{ status: "asc" }, { startDate: "desc" }],
         include: { services: { include: { service: true } } },
       }),
+      // Cobranças excluídas (CANCELED) somem da aba — soft-delete auditado.
       prisma.billing.findMany({
-        where: { clientId: client.id },
+        where: { clientId: client.id, status: { not: "CANCELED" } },
         orderBy: { dueDate: "desc" },
         take: 60,
       }),
@@ -135,6 +131,11 @@ export default async function ClientDetailPage({
         where: { clientId: params.id },
         orderBy: { updatedAt: "desc" },
       }),
+      prisma.service.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
     ]);
 
   const summary = summaryMap.get(client.id)!;
@@ -143,6 +144,29 @@ export default async function ClientDetailPage({
     ...client,
     monthlyValue: client.monthlyValue != null ? Number(client.monthlyValue) : null,
   };
+
+  // Linhas da aba Recebimentos (Decimal→number, Date→string p/ o client component).
+  const receivableRows: ReceivableTabRow[] = billings.map((b) => ({
+    id: b.id,
+    description: b.description,
+    competenceMonth: b.competenceMonth,
+    competenceYear: b.competenceYear,
+    dueDate: b.dueDate.toISOString(),
+    amount: Number(b.amount),
+    paidTotal: Number(b.paidTotal),
+    status: b.status,
+    collectionStatus: b.collectionStatus,
+    revenueType: b.revenueType,
+    contractId: b.contractId,
+    serviceId: b.serviceId,
+    collector: b.collector,
+    notes: b.notes,
+  }));
+  const contractOptions = contracts.map((c) => ({
+    id: c.id,
+    title: c.title,
+    clientId: client.id,
+  }));
 
   const activeServiceNames =
     summary.activeServices.length > 0 ? summary.activeServices : [];
@@ -396,59 +420,15 @@ export default async function ClientDetailPage({
           </div>
         </TabsContent>
 
-        {/* ---------- Cobranças ---------- */}
+        {/* ---------- Cobranças (Recebimentos) ---------- */}
         <TabsContent value="cobrancas">
-          <Card>
-            <CardContent className="p-0">
-              {billings.length === 0 ? (
-                <Empty>
-                  Nenhuma cobrança registrada. O módulo de cobranças (geração e
-                  acompanhamento) chega na Etapa 4.
-                </Empty>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Competência</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right">Pago</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Cobrança</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {billings.map((b) => (
-                      <TableRow key={b.id}>
-                        <TableCell className="font-medium max-w-xs truncate">
-                          {b.description}
-                        </TableCell>
-                        <TableCell>
-                          {String(b.competenceMonth).padStart(2, "0")}/{b.competenceYear}
-                        </TableCell>
-                        <TableCell>{formatDateBR(b.dueDate)}</TableCell>
-                        <TableCell className="text-right">
-                          {formatBRL(Number(b.amount))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatBRL(Number(b.paidTotal))}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={BILLING_STATUS[b.status]?.variant ?? "secondary"}>
-                            {BILLING_STATUS[b.status]?.label ?? b.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {COLLECTION_STATUS[b.collectionStatus] ?? b.collectionStatus}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+          <ReceivablesTab
+            clientId={client.id}
+            clientName={client.name}
+            rows={receivableRows}
+            contracts={contractOptions}
+            services={services}
+          />
         </TabsContent>
 
         {/* ---------- Pagamentos ---------- */}

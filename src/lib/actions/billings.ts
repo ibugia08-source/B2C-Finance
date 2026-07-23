@@ -160,6 +160,49 @@ export async function deleteBillingPayment(id: string): Promise<ActionResult> {
   }
 }
 
+/**
+ * Exclui vários pagamentos de uma vez. Reusa o mesmo núcleo contábil
+ * (revertBillingPayment) por pagamento — cada reversão recalcula saldo,
+ * status/flags da cobrança e reverte a Receita Extra automática. Ao final,
+ * revalida uma única vez cada cliente afetado + as finanças, mantendo
+ * Dashboard, Rotina, Relatórios, Recebimentos e Caixa coerentes.
+ */
+export async function deleteBillingPaymentsBulk(
+  ids: string[]
+): Promise<ActionResult> {
+  await requireAdmin();
+  try {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0)
+      return { ok: false, error: "Nenhum pagamento selecionado." };
+
+    const { revertBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+
+    const affectedClients = new Set<string>();
+    const failures: string[] = [];
+    for (const id of unique) {
+      const result = await revertBillingPayment(id);
+      if (result.ok) affectedClients.add(result.clientId);
+      else failures.push(result.error);
+    }
+
+    if (affectedClients.size === 0) {
+      return {
+        ok: false,
+        error: failures[0] ?? "Falha ao excluir os pagamentos.",
+      };
+    }
+
+    for (const clientId of affectedClients) revalidateBilling(clientId);
+    revalidateFinance(); // reverte as Receitas Extra (Income) correspondentes
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao excluir os pagamentos." };
+  }
+}
+
 // ---------- Ciclo de vida ----------
 
 /**
@@ -199,6 +242,67 @@ export async function cancelBilling(
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao remover a cobrança do mês." };
+  }
+}
+
+/**
+ * Exclusão em massa (soft-delete auditado) das cobranças selecionadas na aba
+ * Recebimentos do cliente. Mesma semântica de `cancelBilling`: status CANCELED
+ * + auditoria, sem apagar cliente/contrato/pagamento. Cobranças quitadas (PAID)
+ * são ignoradas — o dinheiro já entrou. Sem query em loop (updateMany/createMany).
+ */
+export async function cancelBillingsBulk(
+  ids: string[],
+  reason?: string | null
+): Promise<ActionResult> {
+  const viewer = await requireAdmin();
+  try {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0) return { ok: false, error: "Nenhuma cobrança selecionada." };
+
+    const billings = await prisma.billing.findMany({
+      where: { id: { in: unique } },
+      select: {
+        id: true,
+        clientId: true,
+        status: true,
+        collectionStatus: true,
+        competenceMonth: true,
+        competenceYear: true,
+      },
+    });
+    const removable = billings.filter((b) => b.status !== "PAID");
+    if (removable.length === 0) {
+      return { ok: false, error: "As cobranças selecionadas já estão quitadas e não podem ser excluídas." };
+    }
+
+    const cleanReason = (reason ?? "").trim() || null;
+    const now = new Date();
+    await prisma.billing.updateMany({
+      where: { id: { in: removable.map((b) => b.id) } },
+      data: {
+        status: "CANCELED",
+        canceledAt: now,
+        canceledBy: viewer.email,
+        cancelReason: cleanReason,
+      },
+    });
+    await prisma.collectionHistory.createMany({
+      data: removable.map((b) => ({
+        billingId: b.id,
+        clientId: b.clientId,
+        status: b.collectionStatus,
+        actionType: "DELETED",
+        createdBy: viewer.email,
+        message: `Excluída (em massa) do ciclo de ${String(b.competenceMonth).padStart(2, "0")}/${b.competenceYear} por ${viewer.email}.${cleanReason ? ` Motivo: ${cleanReason}` : ""}`,
+      })),
+    });
+
+    const affectedClients = Array.from(new Set(removable.map((b) => b.clientId)));
+    for (const clientId of affectedClients) revalidateBilling(clientId);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao excluir as cobranças." };
   }
 }
 

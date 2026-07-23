@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   CalendarCheck2,
   Receipt,
-  Users,
   Settings2,
   Wand2,
   ArrowDownToLine,
@@ -36,29 +35,32 @@ export type NavItem = {
 };
 
 // Fonte única de navegação — usada pela sidebar (desktop), pela barra inferior e pela gaveta "Mais" (mobile).
+// Ordem: Assistente IA em primeiro (destaque). Movimentações (/transacoes) e
+// Pessoas & reembolsos (/pessoas) foram retirados da navegação — as rotas e a
+// lógica compartilhada (models, actions, importações) permanecem no sistema.
 export const NAV_ITEMS: NavItem[] = [
+  { href: "/assistente", label: "Assistente IA", short: "IA", icon: Sparkles },
   { href: "/dashboard", label: "Dashboard", short: "Início", icon: LayoutDashboard, primary: true },
-  { href: "/rotina", label: "Rotina diária", short: "Rotina", icon: CalendarCheck2, adminOnly: true },
 
   { section: "Agência", href: "/clientes", label: "Clientes", short: "Clientes", icon: Building2, adminOnly: true, primary: true },
+  { section: "Agência", href: "/cobrancas", label: "Recebimentos", short: "Receb.", icon: Receipt, adminOnly: true, primary: true },
   { section: "Agência", href: "/contratos", label: "Contratos", icon: FileSignature, adminOnly: true },
+  { section: "Agência", href: "/upsell", label: "Upsell", icon: TrendingUp, adminOnly: true },
   { section: "Agência", href: "/folha", label: "Folha", icon: UsersRound, adminOnly: true },
   { section: "Agência", href: "/servicos", label: "Serviços", icon: Package, adminOnly: true },
   { section: "Agência", href: "/ofertas", label: "Planos (Ofertas)", icon: Layers, adminOnly: true },
-  { section: "Agência", href: "/upsell", label: "Upsell", icon: TrendingUp, adminOnly: true },
 
   // Financeiro da agência (contas/cartões vivem DENTRO de Despesas)
-  { section: "Financeiro", href: "/receitas", label: "Receitas extras", short: "Receitas", icon: ArrowDownToLine, adminOnly: true, primary: true },
   { section: "Financeiro", href: "/despesas", label: "Despesas", icon: ArrowUpFromLine, adminOnly: true },
-  { section: "Financeiro", href: "/transacoes", label: "Movimentações", short: "Mov.", icon: Receipt, adminOnly: true, primary: true },
+  { section: "Financeiro", href: "/receitas", label: "Receita Extra", short: "Receitas", icon: ArrowDownToLine, adminOnly: true, primary: true },
   { section: "Financeiro", href: "/caixa", label: "Reservas (caixa)", short: "Reservas", icon: PiggyBank, adminOnly: true },
-  { section: "Financeiro", href: "/pessoas", label: "Pessoas & reembolsos", short: "Pessoas", icon: Users, adminOnly: true },
   { section: "Financeiro", href: "/regras", label: "Regras de categoria", short: "Regras", icon: Wand2, adminOnly: true },
+
+  { section: "Operação", href: "/rotina", label: "Rotina diária", short: "Rotina", icon: CalendarCheck2, adminOnly: true },
 
   { section: "Análises", href: "/relatorios", label: "Relatórios", icon: FileBarChart2, adminOnly: true },
   { section: "Análises", href: "/projecoes", label: "Projeções", icon: LineChart, adminOnly: true },
   { section: "Análises", href: "/importacoes", label: "Importar dados", icon: FileUp, adminOnly: true },
-  { section: "Análises", href: "/assistente", label: "Assistente IA", icon: Sparkles },
 
   { section: "Sistema", href: "/usuarios", label: "Usuários", icon: ShieldCheck, adminOnly: true },
   { section: "Sistema", href: "/configuracoes", label: "Configurações", icon: Settings2, adminOnly: true },

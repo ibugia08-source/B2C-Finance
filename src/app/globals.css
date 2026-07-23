@@ -190,6 +190,11 @@
   .page-enter {
     animation: page-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
+  /* Nota: o keyframe final NÃO declara `transform`. Um `transform: translateY(0)`
+     retido (animation-fill-mode: both) computa como matriz — ou seja, ≠ none — e
+     transforma o <main> em bloco de contenção para descendentes `position: fixed`,
+     fazendo a barra de ação (fixed bottom-0) grudar no rodapé do conteúdo em vez do
+     viewport. Omitindo o transform no final, ele volta a `none` após a entrada. */
   @keyframes page-enter {
     from {
       opacity: 0;
@@ -197,7 +202,6 @@
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 
