@@ -59,7 +59,11 @@ export async function resolveOwnerId(): Promise<string | null> {
     const { SESSION_COOKIE, verifySessionToken } = await import("./session");
     const token = cookies().get(SESSION_COOKIE)?.value;
     const payload = verifySessionToken(token);
-    return payload?.uid ?? null;
+    if (!payload) return null;
+    // Equipe/workspace: o claim `own` aponta para o dono dos dados que o
+    // usuário enxerga (fixado no login). Tokens antigos não têm o claim →
+    // cai no próprio uid, preservando o comportamento pré-equipe.
+    return payload.own ?? payload.uid;
   } catch {
     return null;
   }

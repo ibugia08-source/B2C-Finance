@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, type CurrentUser } from "./current-user";
+import { hasPermission } from "@/lib/permissions";
 
 export type Viewer = CurrentUser & { personId: string | null };
 
@@ -33,6 +34,35 @@ export async function getViewer(from?: string): Promise<Viewer> {
 export async function requireAdmin(): Promise<Viewer> {
   const v = await getViewer();
   if (v.role !== "ADMIN") redirect("/dashboard?denied=admin");
+  return v;
+}
+
+/** Checagem síncrona de permissão sobre um viewer já carregado. */
+export function can(v: Viewer | CurrentUser | null, permission: string): boolean {
+  return hasPermission(v, permission);
+}
+
+/**
+ * Guarda de SERVER ACTION: sessão obrigatória + permissão obrigatória.
+ * Sem permissão → redireciona para a tela de acesso restrito (mesmo padrão do
+ * requireAdmin, que redirecionava; um Error lançado aqui seria mascarado pelo
+ * Next em produção, pois o guard fica FORA do try/catch das actions — de
+ * propósito, para o redirect de sessão expirada não ser engolido).
+ */
+export async function requirePermission(permission: string): Promise<Viewer> {
+  const v = await getViewer();
+  if (!hasPermission(v, permission)) redirect("/acesso-restrito");
+  return v;
+}
+
+/**
+ * Guarda de PÁGINA: sessão obrigatória + permissão de visualização.
+ * Sem permissão → redireciona para a tela de acesso restrito (sem loop:
+ * /acesso-restrito não exige permissão nenhuma, só sessão).
+ */
+export async function requirePagePermission(permission: string, from?: string): Promise<Viewer> {
+  const v = await getViewer(from);
+  if (!hasPermission(v, permission)) redirect("/acesso-restrito");
   return v;
 }
 

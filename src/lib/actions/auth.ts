@@ -35,7 +35,10 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 
   const token = createSessionToken({
     uid: user.id,
-    role: (user.role as "ADMIN" | "USER") ?? "USER",
+    role: user.role ?? "USER",
+    // Workspace: membro da equipe enxerga os dados do dono da conta.
+    // Sem vínculo → o próprio usuário é o dono (comportamento original).
+    own: user.workspaceOwnerId ?? user.id,
   });
 
   cookies().set(SESSION_COOKIE, token, {

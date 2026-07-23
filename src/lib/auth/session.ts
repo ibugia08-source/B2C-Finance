@@ -24,7 +24,13 @@ export const SESSION_COOKIE = "b2c_session";
 
 export type SessionPayload = {
   uid: string;
-  role: "ADMIN" | "USER";
+  /** Papel no momento do login (fonte da verdade é o banco; ver current-user). */
+  role: string;
+  /**
+   * Dono do workspace cujos dados o usuário enxerga (multiusuário/equipe).
+   * Ausente em tokens antigos → o próprio uid (comportamento pré-equipe).
+   */
+  own?: string;
   exp: number; // epoch seconds
 };
 

@@ -16,12 +16,24 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  role         String   @default("USER") // ADMIN | USER
+  // Papel/função na equipe. String (não enum) de propósito: novos papéis não
+  // exigem migration. Valores: ADMIN | GESTOR | FINANCEIRO | ADMINISTRATIVO |
+  // COMERCIAL | COBRANCA | USER (legado). Catálogo em src/lib/permissions.ts.
+  role         String   @default("USER")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   person Person?
+
+  // ===== Equipe (workspace): membro enxerga os dados do dono da conta =====
+  // null → o próprio usuário é o dono do workspace (comportamento atual).
+  workspaceOwnerId String?
+  workspaceOwner   User?   @relation("WorkspaceMembers", fields: [workspaceOwnerId], references: [id], onDelete: SetNull)
+  workspaceMembers User[]  @relation("WorkspaceMembers")
+
+  // Ajustes finos de permissão por usuário (diferenças vs. o padrão do papel).
+  permissions UserPermission[]
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
   ownedAccounts      Account[]            @relation("OwnerAccount")
@@ -76,6 +88,24 @@ model User {
   ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
   ownedRoutineItemStates RoutineItemState[] @relation("OwnerRoutineItemState")
   ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
+}
+
+// Diferenças de permissão de UM usuário vs. o padrão do papel dele.
+// enabled=true → concede além do papel; enabled=false → revoga algo do papel.
+// Só as DIFERENÇAS são gravadas (restaurar padrão = apagar as linhas).
+// Modelo GLOBAL (sem ownerId): gerenciado apenas por quem tem
+// usuarios.alterar_permissoes. Catálogo de ids em src/lib/permissions.ts.
+model UserPermission {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission String
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, permission])
+  @@index([userId])
 }
 
 model Person {
