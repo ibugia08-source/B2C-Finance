@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   inspectContractTemplateFile,
   createContractTemplate,
+  extractTemplateMeta,
 } from "@/lib/actions/contract-templates";
 import type { TemplateVariable } from "@/lib/docx/template";
 import {
@@ -36,11 +37,39 @@ export function TemplateUploadDialog() {
   } | null>(null);
   const [pending, start] = useTransition();
   const [saving, startSaving] = useTransition();
+  const [aiPending, startAI] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
+  // Metadados sugeridos pela IA (o usuário confere; aiKey remonta o form).
+  const [ai, setAi] = useState<any | null>(null);
+  const [aiKey, setAiKey] = useState(0);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [commercialType, setCommercialType] = useState("");
 
   function reset() {
     setError(null);
     setAnalysis(null);
+    setAi(null);
+    setAiNote(null);
+    setCommercialType("");
+  }
+
+  function analyzeMeta() {
+    const file = fileRef.current?.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.set("file", file);
+    startAI(async () => {
+      setAiNote(null);
+      const res = await extractTemplateMeta(fd);
+      if (res.ok) {
+        setAi(res.data);
+        setCommercialType(res.data.commercialType ?? "");
+        setAiKey((k) => k + 1);
+        setAiNote("Campos preenchidos pela IA — confira antes de salvar.");
+      } else {
+        setAiNote(res.error);
+      }
+    });
   }
 
   function analyze() {
@@ -138,7 +167,29 @@ export function TemplateUploadDialog() {
           )}
 
           {analysis && (
-            <form action={save} className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={analyzeMeta}
+                disabled={aiPending}
+              >
+                {aiPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-1" />
+                )}
+                {aiPending
+                  ? "Lendo o contrato com IA…"
+                  : "Preencher dados com IA (tipo, prazo, valores, serviços)"}
+              </Button>
+              {aiNote && <p className="text-xs text-muted-foreground">{aiNote}</p>}
+            </div>
+          )}
+
+          {analysis && (
+            <form key={aiKey} action={save} className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <Label>Nome do modelo *</Label>
                 <Input name="name" required placeholder="ex.: MRR R$ 1.200 semestral" />
@@ -149,7 +200,11 @@ export function TemplateUploadDialog() {
               </div>
               <div>
                 <Label>Tipo comercial</Label>
-                <Select name="commercialType" defaultValue="">
+                <Select
+                  name="commercialType"
+                  value={commercialType}
+                  onChange={(e) => setCommercialType(e.target.value)}
+                >
                   <option value="">—</option>
                   {Object.entries(COMMERCIAL_TYPE_LABEL).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
@@ -158,32 +213,62 @@ export function TemplateUploadDialog() {
               </div>
               <div>
                 <Label>Prazo</Label>
-                <Select name="durationType" defaultValue="">
+                <Select name="durationType" defaultValue={ai?.durationType ?? ""}>
                   <option value="">—</option>
                   {Object.entries(DURATION_TYPE_LABEL).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
                   ))}
                 </Select>
               </div>
-              <div>
-                <Label>Valor mensal (R$)</Label>
-                <Input name="monthlyAmount" inputMode="decimal" placeholder="1.200,00" />
-              </div>
-              <div>
-                <Label>Valor total (R$)</Label>
-                <Input name="totalAmount" inputMode="decimal" placeholder="5.700,00" />
-              </div>
+              {/* TCV: valor fechado — sem mensalidade nem vencimento padrão. */}
+              {commercialType !== "TCV" && (
+                <div>
+                  <Label>Valor mensal (R$)</Label>
+                  <Input
+                    name="monthlyAmount"
+                    inputMode="decimal"
+                    placeholder="1.200,00"
+                    defaultValue={ai?.monthlyAmount != null ? Number(ai.monthlyAmount).toFixed(2).replace(".", ",") : ""}
+                  />
+                </div>
+              )}
+              {commercialType !== "MRR" && (
+                <div>
+                  <Label>Valor total (R$)</Label>
+                  <Input
+                    name="totalAmount"
+                    inputMode="decimal"
+                    placeholder="5.700,00"
+                    defaultValue={ai?.totalAmount != null ? Number(ai.totalAmount).toFixed(2).replace(".", ",") : ""}
+                  />
+                </div>
+              )}
               <div>
                 <Label>Duração (meses)</Label>
-                <Input name="durationMonths" type="number" min={1} max={120} />
+                <Input
+                  name="durationMonths"
+                  type="number"
+                  min={1}
+                  max={120}
+                  defaultValue={ai?.durationMonths ?? ""}
+                />
               </div>
-              <div>
-                <Label>Dia padrão de vencimento</Label>
-                <Input name="defaultDueDay" type="number" min={1} max={28} placeholder="15" />
-              </div>
+              {commercialType !== "TCV" && (
+                <div>
+                  <Label>Dia padrão de vencimento</Label>
+                  <Input
+                    name="defaultDueDay"
+                    type="number"
+                    min={1}
+                    max={28}
+                    placeholder="15"
+                    defaultValue={ai?.defaultDueDay ?? ""}
+                  />
+                </div>
+              )}
               <div>
                 <Label>Forma de pagamento</Label>
-                <Select name="billingModel" defaultValue="">
+                <Select name="billingModel" defaultValue={ai?.billingModel ?? ""}>
                   <option value="">—</option>
                   {Object.entries(BILLING_MODEL_LABEL).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
@@ -199,7 +284,11 @@ export function TemplateUploadDialog() {
               </div>
               <div className="col-span-2">
                 <Label>Serviços incluídos (separe por vírgula)</Label>
-                <Input name="includedServices" placeholder="Tráfego pago, Social media, CRM" />
+                <Input
+                  name="includedServices"
+                  placeholder="Tráfego pago, Social media, CRM"
+                  defaultValue={ai?.includedServices?.join(", ") ?? ""}
+                />
               </div>
               <div className="col-span-2">
                 <Label>Observações internas</Label>

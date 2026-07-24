@@ -42,6 +42,8 @@ export function TemplateEditDialog({ template }: { template: TemplateLite }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // TCV esconde mensalidade/vencimento padrão; MRR esconde valor total.
+  const [commercialType, setCommercialType] = useState(template.commercialType ?? "");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -73,7 +75,11 @@ export function TemplateEditDialog({ template }: { template: TemplateLite }) {
           </div>
           <div>
             <Label>Tipo comercial</Label>
-            <Select name="commercialType" defaultValue={template.commercialType ?? ""}>
+            <Select
+              name="commercialType"
+              value={commercialType}
+              onChange={(e) => setCommercialType(e.target.value)}
+            >
               <option value="">—</option>
               {Object.entries(COMMERCIAL_TYPE_LABEL).map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
@@ -89,30 +95,36 @@ export function TemplateEditDialog({ template }: { template: TemplateLite }) {
               ))}
             </Select>
           </div>
-          <div>
-            <Label>Valor mensal (R$)</Label>
-            <Input
-              name="monthlyAmount"
-              inputMode="decimal"
-              defaultValue={template.monthlyAmount != null ? template.monthlyAmount.toFixed(2).replace(".", ",") : ""}
-            />
-          </div>
-          <div>
-            <Label>Valor total (R$)</Label>
-            <Input
-              name="totalAmount"
-              inputMode="decimal"
-              defaultValue={template.totalAmount != null ? template.totalAmount.toFixed(2).replace(".", ",") : ""}
-            />
-          </div>
+          {commercialType !== "TCV" && (
+            <div>
+              <Label>Valor mensal (R$)</Label>
+              <Input
+                name="monthlyAmount"
+                inputMode="decimal"
+                defaultValue={template.monthlyAmount != null ? template.monthlyAmount.toFixed(2).replace(".", ",") : ""}
+              />
+            </div>
+          )}
+          {commercialType !== "MRR" && (
+            <div>
+              <Label>Valor total (R$)</Label>
+              <Input
+                name="totalAmount"
+                inputMode="decimal"
+                defaultValue={template.totalAmount != null ? template.totalAmount.toFixed(2).replace(".", ",") : ""}
+              />
+            </div>
+          )}
           <div>
             <Label>Duração (meses)</Label>
             <Input name="durationMonths" type="number" min={1} max={120} defaultValue={template.durationMonths ?? ""} />
           </div>
-          <div>
-            <Label>Dia padrão de vencimento</Label>
-            <Input name="defaultDueDay" type="number" min={1} max={28} defaultValue={template.defaultDueDay ?? ""} />
-          </div>
+          {commercialType !== "TCV" && (
+            <div>
+              <Label>Dia padrão de vencimento</Label>
+              <Input name="defaultDueDay" type="number" min={1} max={28} defaultValue={template.defaultDueDay ?? ""} />
+            </div>
+          )}
           <div>
             <Label>Forma de pagamento</Label>
             <Select name="billingModel" defaultValue={template.billingModel ?? ""}>
