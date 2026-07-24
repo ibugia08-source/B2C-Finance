@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/record-card";
 import { cn } from "@/lib/utils";
 import { ExpenseDialog } from "./expense-dialog";
+import { MonthNav } from "@/app/cobrancas/month-nav";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
@@ -110,6 +111,12 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
         ))}
       </div>
 
+      {aba !== "cartoes" && (
+        <div className="mb-4 print:hidden">
+          <MonthNav month={ref.getMonth() + 1} year={ref.getFullYear()} />
+        </div>
+      )}
+
       {aba === "despesas" && <ExpensesTab searchParams={searchParams} refDate={ref} />}
       {aba === "cartoes" && <CardsTab />}
       {aba === "resumo" && <ResumoTab refDate={ref} />}
@@ -119,12 +126,19 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
 
 /** Botão "Nova despesa" com a lista de cartões (para o tipo Cartão). */
 async function NewExpenseButton() {
-  const cards = await prisma.creditCard.findMany({
-    where: { active: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
-  return <ExpenseDialog cards={cards} />;
+  const [cards, categories] = await Promise.all([
+    prisma.creditCard.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.category.findMany({
+      where: { kind: { in: ["despesa", "mista"] } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
+  return <ExpenseDialog cards={cards} categories={categories} />;
 }
 
 // ===================================================================
@@ -159,7 +173,7 @@ async function ExpensesTab({
     where.status = searchParams.status;
   }
 
-  const [expenses, cards, monthAgg] = await Promise.all([
+  const [expenses, cards, categories, monthAgg] = await Promise.all([
     prisma.transaction.findMany({
       where,
       orderBy: [{ dueDate: "asc" }, { date: "desc" }],
@@ -167,6 +181,11 @@ async function ExpensesTab({
     }),
     prisma.creditCard.findMany({
       where: { active: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.category.findMany({
+      where: { kind: { in: ["despesa", "mista"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
@@ -264,7 +283,7 @@ async function ExpensesTab({
                         -{formatBRL(e.amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <ExpenseActions expense={e} cards={cards} />
+                        <ExpenseActions expense={e} cards={cards} categories={categories} />
                       </TableCell>
                     </TableRow>
                   );
@@ -308,7 +327,7 @@ async function ExpensesTab({
                       </Field>
                     </div>
                     <MobileCardActions>
-                      <ExpenseActions expense={e} cards={cards} />
+                      <ExpenseActions expense={e} cards={cards} categories={categories} />
                     </MobileCardActions>
                   </MobileCard>
                 );

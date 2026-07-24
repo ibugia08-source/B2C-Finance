@@ -6,13 +6,16 @@ import { deleteExpense, setExpenseStatus, endRecurrence } from "@/lib/actions/ex
 import { useTransition } from "react";
 
 type CardOpt = { id: string; name: string };
+type CategoryOpt = { id: string; name: string };
 
 export function ExpenseActions({
   expense,
   cards = [],
+  categories = [],
 }: {
   expense: any;
   cards?: CardOpt[];
+  categories?: CategoryOpt[];
 }) {
   const [pending, start] = useTransition();
   const isRecurring = Boolean(expense.recurrenceGroupId);
@@ -38,6 +41,7 @@ export function ExpenseActions({
       <ExpenseDialog
         initial={expense}
         cards={cards}
+        categories={categories}
         trigger={
           <Button variant="ghost" size="icon" title="Editar">
             <Pencil className="h-4 w-4" />

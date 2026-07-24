@@ -19,6 +19,7 @@ import { formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 
 type CardOpt = { id: string; name: string };
+type CategoryOpt = { id: string; name: string };
 
 /**
  * Cadastro SIMPLES de despesa: nome, descrição, valor, vencimento,
@@ -27,10 +28,12 @@ type CardOpt = { id: string; name: string };
  */
 export function ExpenseDialog({
   cards = [],
+  categories = [],
   initial,
   trigger,
 }: {
   cards?: CardOpt[];
+  categories?: CategoryOpt[];
   initial?: any;
   trigger?: React.ReactNode;
 }) {
@@ -116,6 +119,19 @@ export function ExpenseDialog({
               ))}
             </Select>
           </div>
+          {categories.length > 0 && (
+            <div>
+              <Label>Categoria</Label>
+              <Select name="categoryId" defaultValue={initial?.categoryId ?? ""}>
+                <option value="">Sem categoria</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div>
             <Label>Status</Label>
             <Select name="status" defaultValue={initial?.status ?? "pendente"}>

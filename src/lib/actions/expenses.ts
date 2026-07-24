@@ -35,6 +35,7 @@ const Schema = z.object({
   recurrenceInterval: z.number().int().min(1).max(24).nullable(), // CUSTOM (meses)
   status: z.enum(STATUS).default("pendente"),
   expenseType: z.enum(EXPENSE_TYPES).default("OTHER"),
+  categoryId: z.string().nullable(),
   // Tipo CARTÃO
   cardId: z.string().nullable(),
   cardInvoiceMonth: z.number().int().min(1).max(12).nullable(),
@@ -82,6 +83,7 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
       })(),
       status: (clean(formData.get("status")) ?? "pendente") as any,
       expenseType: (clean(formData.get("expenseType")) ?? "OTHER") as any,
+      categoryId: clean(formData.get("categoryId")),
       cardId: clean(formData.get("cardId")),
       cardInvoiceMonth: invoiceRef?.month ?? null,
       cardInvoiceYear: invoiceRef?.year ?? null,
@@ -99,6 +101,7 @@ export async function saveExpense(formData: FormData): Promise<ActionResult> {
       date: parsed.dueDate, // data de referência acompanha o vencimento
       dueDate: parsed.dueDate,
       expenseType: parsed.expenseType,
+      categoryId: parsed.categoryId,
       recurrence: parsed.recurrence === "NONE" ? null : parsed.recurrence,
       recurrenceInterval:
         parsed.recurrence === "CUSTOM" ? parsed.recurrenceInterval ?? 1 : null,
