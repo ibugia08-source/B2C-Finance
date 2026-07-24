@@ -3,6 +3,7 @@ import { useTransition, useState } from "react";
 import { Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -20,7 +21,9 @@ import { DollarSign, MessageSquareText, CalendarClock } from "lucide-react";
 import { setClientContractMonths, bulkSetMonthStatus, bulkRemoveClientsFromList } from "@/lib/actions/receivables-inline";
 import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 import { bulkUpdateClients } from "@/lib/actions/clients";
-import { restoreBilling } from "@/lib/actions/billings";
+import { restoreBilling, registerBillingPaymentsBulk } from "@/lib/actions/billings";
+import { formatDateInput } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL } from "./_meta";
 import type { ActionResult } from "@/lib/actions/clients";
 import type { ReceivableRow } from "./receivables-table";
 
@@ -363,15 +366,17 @@ export function RowActions({
 
 // ===== Barra de ações em massa =====
 
-type BulkDialogKind = null | "status" | "modality" | "day" | "owner";
+type BulkDialogKind = null | "status" | "modality" | "day" | "owner" | "pay";
 
 export function BulkBar({
   rows,
+  accounts,
   month,
   year,
   onClear,
 }: {
   rows: ReceivableRow[];
+  accounts: { id: string; name: string }[];
   month: number;
   year: number;
   onClear: () => void;
@@ -381,6 +386,15 @@ export function BulkBar({
 
   const clientIds = Array.from(new Set(rows.map((r) => r.clientId)));
   const billingIds = rows.filter((r) => r.billingId).map((r) => r.billingId!);
+  // Cobranças em aberto (têm billing e não estão pagas/removidas) — alvo do
+  // "Registrar pagamentos" em massa, o acelerador do backfill de histórico.
+  const payableIds = rows
+    .filter(
+      (r) =>
+        r.billingId &&
+        !["PAID", "PAID_LATE", "PAID_OTHER_MONTH", "REMOVED", "NO_CHARGE"].includes(r.cycleStatus)
+    )
+    .map((r) => r.billingId!);
   const count = rows.length;
 
   function removeFromMonth() {
@@ -408,6 +422,11 @@ export function BulkBar({
             {count} selecionado{count === 1 ? "" : "s"}
           </span>
           <div className="ml-auto flex flex-wrap gap-2">
+            {payableIds.length > 0 && (
+              <Button size="sm" onClick={() => setDialog("pay")}>
+                Registrar pagamentos
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => setDialog("status")}>
               Status do mês
             </Button>
@@ -436,6 +455,15 @@ export function BulkBar({
         </div>
       </FloatingActionBar>
 
+      {dialog === "pay" && (
+        <BulkPayDialog
+          count={payableIds.length}
+          accounts={accounts}
+          onClose={() => setDialog(null)}
+          onConfirm={(opts) => registerBillingPaymentsBulk(payableIds, opts)}
+          onDone={onClear}
+        />
+      )}
       {dialog === "status" && (
         <BulkValueDialog
           title="Status do mês em massa"
@@ -626,4 +654,127 @@ function BulkTextDialog({
 async function deleteBillingPayments(billingId: string) {
   const { deleteBillingPayments: dbp } = await import("@/lib/actions/receivables-inline");
   return dbp(billingId);
+}
+
+/**
+ * Pagamento em massa: quita o saldo em aberto das cobranças selecionadas.
+ * "No vencimento de cada uma" é o modo do backfill de histórico ("todos
+ * pagaram em dia"); data única cobre mutirões de conciliação.
+ */
+function BulkPayDialog({
+  count,
+  accounts,
+  onConfirm,
+  onClose,
+  onDone,
+}: {
+  count: number;
+  accounts: { id: string; name: string }[];
+  onConfirm: (opts: {
+    mode: "due" | "single";
+    paidAt?: string;
+    method: string;
+    accountId?: string | null;
+  }) => Promise<{ ok: boolean; error?: string; warning?: string }>;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [mode, setMode] = useState<"due" | "single">("due");
+  const [paidAt, setPaidAt] = useState(formatDateInput(new Date()));
+  const [method, setMethod] = useState("PIX");
+  const [accountId, setAccountId] = useState("");
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Registrar pagamentos em massa</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Quita o saldo em aberto de {count} cobrança{count === 1 ? "" : "s"}{" "}
+          selecionada{count === 1 ? "" : "s"}.
+        </p>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="bulk-pay-mode"
+                checked={mode === "due"}
+                onChange={() => setMode("due")}
+              />
+              No vencimento de cada cobrança (pagaram em dia)
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="bulk-pay-mode"
+                checked={mode === "single"}
+                onChange={() => setMode("single")}
+              />
+              Numa data única:
+            </label>
+            {mode === "single" && (
+              <Input
+                type="date"
+                value={paidAt}
+                onChange={(e) => setPaidAt(e.target.value)}
+                className="ml-6 w-auto"
+              />
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Forma</Label>
+              <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+                {Object.entries(PAYMENT_METHOD_LABEL).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Conta de destino</Label>
+              <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">—</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                const res = await onConfirm({
+                  mode,
+                  paidAt: mode === "single" ? paidAt : undefined,
+                  method,
+                  accountId: accountId || null,
+                });
+                if (!res.ok) {
+                  setError(res.error ?? "Falha ao registrar os pagamentos.");
+                  return;
+                }
+                if (res.warning) alert(res.warning);
+                onClose();
+                onDone();
+              })
+            }
+          >
+            {pending ? "Registrando…" : "Registrar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

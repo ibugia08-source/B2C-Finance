@@ -15,10 +15,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Plus, HandCoins } from "lucide-react";
+import { HandCoins } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { BillingDialog } from "./billing-dialog";
+import { IncludeClientDialog, type IncludeClientOption } from "./include-client-dialog";
 import { MonthNav } from "./month-nav";
 import { CycleFilters } from "./cycle-filters";
 import { ClientSearch } from "./search-client";
@@ -129,7 +130,10 @@ export default async function RecebimentosPage({
       }),
       prisma.client.findMany({
         orderBy: { name: "asc" },
-        select: { id: true, name: true },
+        select: {
+          id: true, name: true, status: true, modality: true,
+          monthlyValue: true, totalContractValue: true, paymentDay: true,
+        },
         take: 2000,
       }),
       prisma.contract.findMany({
@@ -376,6 +380,16 @@ export default async function RecebimentosPage({
                 : "Nenhum cliente encontrado no ciclo de recebimentos deste mês. Você pode adicionar clientes manualmente ou revisar a Gestão de Carteira.";
 
   // Serializa para o client component (sem Date/Decimal).
+  const allClientsBasic = allClients.map((c) => ({ id: c.id, name: c.name }));
+  const includeOptions: IncludeClientOption[] = allClients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    modality: c.modality,
+    monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
+    totalContractValue: c.totalContractValue != null ? Number(c.totalContractValue) : null,
+    paymentDay: c.paymentDay,
+    active: ["ACTIVE", "RENEWAL", "DELINQUENT"].includes(c.status),
+  }));
   const tableRows: ReceivableRow[] = visible.map(
     ({ _sort, ...r }) => ({ ...(r as any), _dueDate: undefined, _amount: undefined })
   );
@@ -387,17 +401,27 @@ export default async function RecebimentosPage({
         description={`Gerencie o ciclo mensal de pagamentos dos clientes · ${monthLabelStr}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <PastDelinquencyDialog clients={allClients} />
+            <PastDelinquencyDialog clients={allClientsBasic} />
             <BillingDialog
-              clients={allClients}
+              clients={allClientsBasic}
               contracts={contractsRaw}
               services={services}
               defaultCompetence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
               trigger={
-                <Button title="Adiciona um cliente já cadastrado à lista deste mês (valor, vencimento, modalidade e observação)">
-                  <Plus className="h-4 w-4 mr-1" /> Incluir cliente no mês
+                <Button
+                  variant="outline"
+                  title="Cobrança avulsa com todos os campos livres (setup, pontual, valor fora do padrão)"
+                >
+                  Cobrança avulsa
                 </Button>
               }
+            />
+            <IncludeClientDialog
+              clients={includeOptions}
+              contracts={contractsRaw}
+              accounts={accounts}
+              month={mes.month}
+              year={mes.year}
             />
           </div>
         }
@@ -452,7 +476,7 @@ export default async function RecebimentosPage({
           </Link>
         ))}
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-        <CycleFilters clients={allClients} />
+        <CycleFilters clients={allClientsBasic} />
         <Link
           href="/relatorios/recebimentos"
           className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:underline"

@@ -169,6 +169,7 @@ export function ReceivablesPanel({
       {selectedRows.length > 0 && (
         <BulkBar
           rows={selectedRows}
+          accounts={accounts}
           month={month}
           year={year}
           onClear={() => setSelected(new Set())}

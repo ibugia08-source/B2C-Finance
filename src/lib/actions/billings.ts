@@ -143,6 +143,278 @@ export async function registerBillingPayment(
   }
 }
 
+// ---------- Incluir cliente no mês (histórico e ciclo) ----------
+
+const IncludeClientSchema = z.object({
+  clientId: z.string().min(1, "Selecione o cliente."),
+  contractId: z.string().nullable(),
+  competenceMonth: z.number().int().min(1).max(12),
+  competenceYear: z.number().int().min(2000).max(2100),
+  amount: z.number().positive("Valor deve ser maior que zero."),
+  dueDate: z.date({ invalid_type_error: "Informe o vencimento." }),
+  description: z.string().trim().min(1),
+  paid: z.boolean(),
+  paidAt: z.date().nullable(),
+  paidAmount: z.number().positive().nullable(),
+  method: z.nativeEnum(PaymentMethod),
+  accountId: z.string().nullable(),
+});
+
+/**
+ * Inclui um cliente da base no ciclo de um mês (qualquer competência,
+ * inclusive PASSADA — é o caminho oficial de preenchimento de histórico).
+ * Diferente da cobrança manual, os dados vêm do CADASTRO do cliente:
+ * valor (mensalidade MRR ou total TCV), vencimento (paymentDay) e descrição
+ * são recalculados no servidor quando não informados. Opcionalmente já
+ * registra o pagamento (data retroativa) no mesmo passo, via núcleo contábil.
+ * Se o cliente foi "removido do mês" (marcador CANCELED), restaura o marcador
+ * em vez de duplicar — consistente com ensureMonthlyBillings.
+ */
+export async function includeClientInMonth(formData: FormData): Promise<ActionResult> {
+  const viewer = await requirePermission("recebimentos.editar");
+  try {
+    const comp = clean(formData.get("competence")) ?? ""; // "YYYY-MM"
+    const [cy, cm] = comp.split("-").map(Number);
+    const paid = formData.get("paid") === "true";
+    if (paid) await requirePermission("recebimentos.registrar_pagamento");
+
+    const client = await prisma.client.findFirst({
+      where: { id: String(formData.get("clientId") ?? "") },
+      select: {
+        id: true,
+        name: true,
+        modality: true,
+        monthlyValue: true,
+        totalContractValue: true,
+        paymentDay: true,
+      },
+    });
+    if (!client) return { ok: false, error: "Cliente não encontrado." };
+
+    const revenueType: RevenueType = client.modality === "TCV" ? "TCV" : "MRR";
+    const registeredValue =
+      revenueType === "TCV" ? n(client.totalContractValue) : n(client.monthlyValue);
+
+    const { getValidDueDateForMonth } = await import("@/lib/financial/due-date");
+    const fallbackDue =
+      cy && cm ? getValidDueDateForMonth(cy, cm, client.paymentDay) : new Date();
+    const compLabel = `${String(cm).padStart(2, "0")}/${cy}`;
+
+    const parsed = IncludeClientSchema.parse({
+      clientId: client.id,
+      contractId: clean(formData.get("contractId")),
+      competenceMonth: cm,
+      competenceYear: cy,
+      amount: parseBRL(String(formData.get("amount") ?? "0")) || registeredValue,
+      dueDate: parseDateBR(String(formData.get("dueDate") ?? "")) ?? fallbackDue,
+      description:
+        clean(formData.get("description")) ??
+        (revenueType === "TCV" ? `Contrato — ${compLabel}` : `Mensalidade — ${compLabel}`),
+      paid,
+      paidAt: paid ? parseDateBR(String(formData.get("paidAt") ?? "")) : null,
+      paidAmount: paid ? parseBRL(String(formData.get("paidAmount") ?? "0")) || null : null,
+      method: (clean(formData.get("method")) ?? "PIX") as PaymentMethod,
+      accountId: clean(formData.get("accountId")),
+    });
+
+    // Já incluído neste mês? (cobrança viva com o mesmo tipo de receita)
+    const existing = await prisma.billing.findFirst({
+      where: {
+        clientId: client.id,
+        competenceMonth: parsed.competenceMonth,
+        competenceYear: parsed.competenceYear,
+        revenueType,
+        status: { not: "CANCELED" },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      return {
+        ok: false,
+        error: `${client.name} já está incluído em ${compLabel}. Use a ação $ da linha para registrar o pagamento.`,
+      };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const openStatus: BillingStatus = parsed.dueDate < today ? "OVERDUE" : "PENDING";
+
+    // Removido do mês? Restaura o marcador CANCELED em vez de duplicar.
+    const canceledMarker = await prisma.billing.findFirst({
+      where: {
+        clientId: client.id,
+        competenceMonth: parsed.competenceMonth,
+        competenceYear: parsed.competenceYear,
+        revenueType,
+        status: "CANCELED",
+      },
+      select: { id: true },
+    });
+
+    let billingId: string;
+    if (canceledMarker) {
+      await prisma.billing.update({
+        where: { id: canceledMarker.id },
+        data: {
+          amount: parsed.amount,
+          dueDate: parsed.dueDate,
+          description: parsed.description,
+          contractId: parsed.contractId,
+          status: openStatus,
+          canceledAt: null,
+          canceledBy: null,
+          cancelReason: null,
+        },
+      });
+      billingId = canceledMarker.id;
+    } else {
+      const created = await prisma.billing.create({
+        data: {
+          clientId: client.id,
+          contractId: parsed.contractId,
+          description: parsed.description,
+          competenceMonth: parsed.competenceMonth,
+          competenceYear: parsed.competenceYear,
+          amount: parsed.amount,
+          dueDate: parsed.dueDate,
+          revenueType,
+          status: openStatus,
+        },
+      });
+      billingId = created.id;
+    }
+    await prisma.collectionHistory.create({
+      data: {
+        billingId,
+        clientId: client.id,
+        status: "NOT_CONTACTED",
+        message: `${canceledMarker ? "Recolocado" : "Incluído"} no mês ${compLabel} por ${viewer.email}.`,
+      },
+    });
+
+    // Pagamento no mesmo passo (histórico): data livre, núcleo contábil cuida
+    // de atraso/mês diferente e do Income de conciliação.
+    if (parsed.paid) {
+      const { settleBillingPayment } = await import("@/lib/services/payment-accounting");
+      const result = await settleBillingPayment({
+        billingId,
+        amount: parsed.paidAmount ?? parsed.amount,
+        paidAt: parsed.paidAt ?? parsed.dueDate,
+        method: parsed.method,
+        accountId: parsed.accountId,
+        notes: null,
+      });
+      revalidateBilling(client.id);
+      if (!result.ok) {
+        return {
+          ok: true,
+          id: billingId,
+          warning: `Cobrança incluída em ${compLabel}, mas o pagamento não foi registrado: ${result.error}`,
+        };
+      }
+      revalidateFinance();
+      return { ok: true, id: billingId };
+    }
+
+    revalidateBilling(client.id);
+    return { ok: true, id: billingId };
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao incluir o cliente no mês.",
+    };
+  }
+}
+
+/**
+ * Registra o pagamento de VÁRIAS cobranças de uma vez (backfill de meses
+ * passados): quita o saldo em aberto de cada uma, com data única ou o
+ * vencimento de cada cobrança ("pagaram em dia"). Cada quitação usa o núcleo
+ * contábil (atômica por item); pulos e falhas viram warning — nunca sucesso
+ * silencioso.
+ */
+export async function registerBillingPaymentsBulk(
+  ids: string[],
+  opts: { mode: "due" | "single"; paidAt?: string; method: string; accountId?: string | null }
+): Promise<ActionResult> {
+  await requirePermission("recebimentos.registrar_pagamento");
+  try {
+    const unique = Array.from(new Set(ids.filter(Boolean)));
+    if (unique.length === 0) return { ok: false, error: "Nenhuma cobrança selecionada." };
+
+    const method = (
+      Object.values(PaymentMethod).includes(opts.method as PaymentMethod)
+        ? opts.method
+        : "PIX"
+    ) as PaymentMethod;
+    const singleDate = opts.mode === "single" ? parseDateBR(opts.paidAt ?? "") : null;
+    if (opts.mode === "single" && !singleDate) {
+      return { ok: false, error: "Informe a data do pagamento." };
+    }
+
+    const billings = await prisma.billing.findMany({
+      where: { id: { in: unique } },
+      select: {
+        id: true,
+        clientId: true,
+        status: true,
+        amount: true,
+        paidTotal: true,
+        dueDate: true,
+      },
+    });
+    const payable = billings.filter(
+      (b) =>
+        b.status !== "CANCELED" &&
+        b.status !== "PAID" &&
+        n(b.amount) - n(b.paidTotal) > 0
+    );
+    if (payable.length === 0) {
+      return {
+        ok: false,
+        error: "As cobranças selecionadas já estão quitadas ou removidas do mês.",
+      };
+    }
+    const skipped = billings.length - payable.length;
+
+    const { settleBillingPayment } = await import("@/lib/services/payment-accounting");
+    const affectedClients = new Set<string>();
+    const failures: string[] = [];
+    for (const b of payable) {
+      const result = await settleBillingPayment({
+        billingId: b.id,
+        amount: n(b.amount) - n(b.paidTotal),
+        paidAt: opts.mode === "due" ? b.dueDate : singleDate!,
+        method,
+        accountId: opts.accountId ?? null,
+        notes: null,
+      });
+      if (result.ok) affectedClients.add(result.clientId);
+      else failures.push(result.error);
+    }
+
+    if (affectedClients.size === 0) {
+      return { ok: false, error: failures[0] ?? "Falha ao registrar os pagamentos." };
+    }
+    for (const clientId of affectedClients) revalidateBilling(clientId);
+    revalidateFinance();
+
+    const paidCount = payable.length - failures.length;
+    const notes: string[] = [];
+    if (skipped > 0) notes.push(`${skipped} ignorada${skipped === 1 ? "" : "s"} (quitada ou removida)`);
+    if (failures.length > 0) notes.push(`${failures.length} ${failures.length === 1 ? "falhou" : "falharam"} (${failures[0]})`);
+    if (notes.length > 0) {
+      return {
+        ok: true,
+        warning: `${paidCount} pagamento${paidCount === 1 ? "" : "s"} registrado${paidCount === 1 ? "" : "s"}; ${notes.join("; ")}.`,
+      };
+    }
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao registrar os pagamentos." };
+  }
+}
+
 /** Exclui um pagamento e reverte saldo/status/flags e Receita Extra. */
 export async function deleteBillingPayment(id: string): Promise<ActionResult> {
   await requirePermission("recebimentos.excluir");
