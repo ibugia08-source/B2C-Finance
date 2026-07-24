@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import type { TemplateVariable } from "@/lib/docx/template";
 import { TemplateEditDialog, type TemplateLite } from "../template-actions";
 import { GeneratedContractActions } from "../generated-actions";
 import { VariablesEditor } from "./variables-editor";
+import { FormLinkCard, type FormLinkRow } from "./form-link-card";
 import {
   COMMERCIAL_TYPE_LABEL,
   BILLING_MODEL_LABEL,
@@ -27,7 +28,9 @@ import { ArrowLeft, Download, FileSignature, AlertTriangle } from "lucide-react"
 
 /** Detalhe do modelo: metadados, variáveis mapeadas e contratos gerados. */
 export default async function TemplateDetailPage({ params }: { params: { id: string } }) {
-  await requirePagePermission("contratos.visualizar");
+  const viewer = await requirePagePermission("contratos.visualizar");
+  const canManageLinks = can(viewer, "contratos.gerar_contrato");
+  const workspaceRoot = viewer.workspaceOwnerId ?? viewer.id;
 
   const template = await prisma.contractTemplate.findUnique({
     where: { id: params.id },
@@ -39,6 +42,27 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
     },
   });
   if (!template) notFound();
+
+  const [formLinksRaw, clientOptions] = await Promise.all([
+    prisma.contractFormLink.findMany({
+      where: { templateId: template.id, ownerId: workspaceRoot },
+      orderBy: { createdAt: "desc" },
+      include: { client: { select: { name: true } } },
+    }),
+    prisma.client.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+      take: 2000,
+    }),
+  ]);
+  const formLinks: FormLinkRow[] = formLinksRaw.map((l) => ({
+    id: l.id,
+    token: l.token,
+    active: l.active,
+    submissions: l.submissions,
+    clientName: l.client?.name ?? null,
+    createdAtBR: formatDateBR(l.createdAt),
+  }));
 
   const variables = (template.variables as unknown as TemplateVariable[]) ?? [];
   const warnings = (template.warnings as unknown as string[]) ?? [];
@@ -166,6 +190,13 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
         </Card>
       </div>
 
+      <FormLinkCard
+        templateId={template.id}
+        links={formLinks}
+        clients={clientOptions}
+        canManage={canManageLinks}
+      />
+
       <h2 className="text-lg font-semibold mb-3">Contratos gerados com este modelo</h2>
       <Card>
         <CardContent className="p-0">
@@ -187,7 +218,14 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
               <TableBody>
                 {template.generated.map((g) => (
                   <TableRow key={g.id}>
-                    <TableCell className="font-medium max-w-xs truncate">{g.name}</TableCell>
+                    <TableCell className="font-medium max-w-xs">
+                      <span className="block truncate">{g.name}</span>
+                      {g.formLinkId && (
+                        <Badge variant="outline" className="mt-0.5 text-[10px]">
+                          via formulário
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {g.client ? (
                         <Link href={`/clientes/${g.client.id}`} className="hover:underline">

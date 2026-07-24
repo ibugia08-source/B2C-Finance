@@ -237,6 +237,29 @@ export function extractTemplateVariables(buffer: Buffer): ExtractionResult {
 }
 
 /**
+ * Texto visível do DOCX (corpo, tabelas, cabeçalho, rodapé), parágrafo por
+ * linha — usado pela análise de metadados com IA no upload do modelo.
+ */
+export function getDocxText(buffer: Buffer): string {
+  let zip: PizZip;
+  try {
+    zip = new PizZip(buffer);
+  } catch {
+    throw new Error("Arquivo inválido — envie um .docx (Word) válido.");
+  }
+  const chunks: string[] = [];
+  for (const name of Object.keys(zip.files)) {
+    if (!DOC_PARTS_RE.test(name)) continue;
+    const xml = zip.file(name)!.asText();
+    for (const para of paragraphTexts(xml)) {
+      const text = decodeXmlEntities(para).trim();
+      if (text) chunks.push(text);
+    }
+  }
+  return chunks.join("\n");
+}
+
+/**
  * Gera um novo DOCX preenchendo as variáveis, sem tocar no modelo
  * original. `values` é indexado pelo rawName exato da variável.
  */

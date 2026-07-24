@@ -102,6 +102,23 @@ async function isSessionValid(token: string | undefined): Promise<boolean> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Formulário público de contratos (/f/{token}): acessível SEM sessão.
+  // O token opaco na URL é a credencial; POSTs (respostas) passam pelo mesmo
+  // rate limit por IP do login.
+  if (pathname === "/f" || pathname.startsWith("/f/")) {
+    if (req.method === "POST") {
+      const ip =
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+      if (isLoginRateLimited(ip)) {
+        return new NextResponse("Muitas tentativas. Aguarde um minuto.", {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        });
+      }
+    }
+    return NextResponse.next();
+  }
+
   // Tentativas de login (POST) limitadas por IP.
   if (pathname === "/login" && req.method === "POST") {
     const ip =

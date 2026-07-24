@@ -6,7 +6,8 @@ import { MobileHeader } from "./mobile-header";
 import { MobileNav } from "./mobile-nav";
 import type { UserLike } from "./nav-items";
 
-const NO_SHELL = ["/login"];
+// /f = formulário público de contratos (sem sidebar/menus, como o login).
+const NO_SHELL = ["/login", "/f"];
 
 export function AppShell({
   children,

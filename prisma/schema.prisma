@@ -729,6 +729,7 @@ model Client {
 
   // ===== Dossiê documental =====
   generatedContracts GeneratedContract[]
+  contractFormLinks  ContractFormLink[]
   documents          ClientDocument[]
   contextNotes       ClientNote[]
 
@@ -1611,6 +1612,7 @@ model ContractTemplate {
   updatedAt DateTime @updatedAt
 
   generated GeneratedContract[]
+  formLinks ContractFormLink[]
 
   @@index([ownerId])
   @@index([status])
@@ -1637,6 +1639,10 @@ model GeneratedContract {
   status      GeneratedContractStatus @default(GENERATED)
   generatedAt DateTime                @default(now())
 
+  // Origem: preenchido via link público de formulário (null = wizard interno).
+  formLinkId String?
+  formLink   ContractFormLink? @relation(fields: [formLinkId], references: [id], onDelete: SetNull)
+
   ownerId String?
   owner   User?   @relation("OwnerGeneratedContract", fields: [ownerId], references: [id])
 
@@ -1647,6 +1653,34 @@ model GeneratedContract {
   @@index([clientId])
   @@index([ownerId])
   @@index([status])
+}
+
+// Link PÚBLICO de formulário de um modelo de contrato (substitui o ZapSign):
+// quem abrir /f/{token} responde as variáveis e o contrato é gerado dentro
+// da plataforma. Modelo GLOBAL de propósito (fora de OWNED_MODELS): o lookup
+// por token acontece SEM sessão; o token é opaco/inadivinhável e o ownerId
+// explícito fixa o dono via runWithOwner no restante do fluxo.
+model ContractFormLink {
+  id         String           @id @default(cuid())
+  token      String           @unique
+  templateId String
+  template   ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Link direcionado: pré-preenche os dados deste cliente no formulário.
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  active      Boolean @default(true)
+  submissions Int     @default(0)
+
+  ownerId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generated GeneratedContract[]
+
+  @@index([templateId])
 }
 
 // Documento anexado ao cliente (contratos assinados, comprovantes...).

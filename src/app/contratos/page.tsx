@@ -213,7 +213,14 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
               <TableBody>
                 {generatedRaw.map((g) => (
                   <TableRow key={g.id}>
-                    <TableCell className="font-medium max-w-xs truncate">{g.name}</TableCell>
+                    <TableCell className="font-medium max-w-xs">
+                      <span className="block truncate">{g.name}</span>
+                      {g.formLinkId && (
+                        <Badge variant="outline" className="mt-0.5 text-[10px]">
+                          via formulário
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       {g.client ? (
                         <Link href={`/clientes/${g.client.id}`} className="hover:underline">

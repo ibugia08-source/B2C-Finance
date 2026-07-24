@@ -15,10 +15,9 @@ import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import {
   extractTemplateVariables,
-  fillTemplate,
   type TemplateVariable,
 } from "@/lib/docx/template";
-import { getFile, putFile, removeFile, safeFileName } from "@/lib/storage";
+import { putFile, removeFile, safeFileName } from "@/lib/storage";
 import type { ActionResult } from "./clients";
 
 const DOCX_MIME =
@@ -75,6 +74,95 @@ export async function inspectContractTemplateFile(
     return { ok: true, variables, warnings };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Não foi possível ler o modelo." };
+  }
+}
+
+// ---------- Análise de metadados com IA (pré-preenche o cadastro) ----------
+
+export type TemplateMetaExtraction =
+  | {
+      ok: true;
+      data: {
+        commercialType: string | null;
+        billingModel: string | null;
+        durationType: string | null;
+        durationMonths: number | null;
+        monthlyAmount: number | null;
+        totalAmount: number | null;
+        defaultDueDay: number | null;
+        includedServices: string[];
+      };
+    }
+  | { ok: false; error: string };
+
+/**
+ * Lê o TEXTO do modelo DOCX e usa a IA configurada para sugerir os metadados
+ * comerciais (tipo, prazo, valores, serviços) — o usuário confere antes de
+ * salvar; nada é gravado aqui. Mesmo padrão do cadastro de cliente por
+ * contrato PDF (extractClientFromContract).
+ */
+export async function extractTemplateMeta(formData: FormData): Promise<TemplateMetaExtraction> {
+  await requirePermission("contratos.editar");
+  try {
+    const { buffer } = await readUpload(formData.get("file"), { docxOnly: true });
+    const { getDocxText } = await import("@/lib/docx/template");
+    const text = getDocxText(buffer);
+    if (text.length < 100) {
+      return { ok: false, error: "O modelo tem pouco texto para análise automática." };
+    }
+
+    const { getAISettings, isConfigured, chatComplete } = await import("@/lib/ai/provider");
+    const settings = await getAISettings();
+    if (!isConfigured(settings)) {
+      return {
+        ok: false,
+        error: "IA não configurada — preencha manualmente ou configure o Assistente IA.",
+      };
+    }
+
+    const system = `Você extrai metadados comerciais de um MODELO de contrato de uma agência de marketing (B2C Gestão). O texto contém variáveis {{assim}} que serão preenchidas depois — ignore-as como valores.
+Responda APENAS um JSON válido com estes campos (null quando o contrato não disser):
+{"commercialType":"MRR|TCV|ONE_TIME|CUSTOM|null","billingModel":"MONTHLY|UPFRONT|INSTALLMENTS|CUSTOM|null","durationType":"MONTHLY|QUARTERLY|SEMIANNUAL|ANNUAL|CUSTOM|null","durationMonths":number|null,"monthlyAmount":number|null,"totalAmount":number|null,"defaultDueDay":number|null,"includedServices":["..."]}
+Regras: MRR = recorrência mensal sem prazo de pagamento único; TCV = valor total fechado do contrato. durationMonths em meses (trimestral=3, semestral=6, anual=12). Valores em número (1200.50), sem R$. includedServices = serviços/entregas listados no objeto do contrato (curtos, ex.: "Tráfego pago"). defaultDueDay entre 1 e 28. Nunca invente valores que não estão no texto.`;
+
+    const result = await chatComplete({
+      settings,
+      system,
+      messages: [{ role: "user", content: `MODELO DE CONTRATO:\n${text.slice(0, 14000)}` }],
+      maxTokens: 400,
+    });
+
+    const raw = result.text.replace(/```json|```/g, "").trim();
+    const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+
+    const num = (v: unknown): number | null =>
+      typeof v === "number" && isFinite(v) && v > 0 ? v : null;
+    const oneOf = <T extends string>(v: unknown, opts: readonly T[]): T | null =>
+      typeof v === "string" && (opts as readonly string[]).includes(v) ? (v as T) : null;
+
+    return {
+      ok: true,
+      data: {
+        commercialType: oneOf(json.commercialType, ["MRR", "TCV", "ONE_TIME", "CUSTOM"]),
+        billingModel: oneOf(json.billingModel, ["MONTHLY", "UPFRONT", "INSTALLMENTS", "CUSTOM"]),
+        durationType: oneOf(json.durationType, ["MONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL", "CUSTOM"]),
+        durationMonths: num(json.durationMonths),
+        monthlyAmount: num(json.monthlyAmount),
+        totalAmount: num(json.totalAmount),
+        defaultDueDay:
+          num(json.defaultDueDay) != null && Number(json.defaultDueDay) <= 28
+            ? Math.trunc(Number(json.defaultDueDay))
+            : null,
+        includedServices: Array.isArray(json.includedServices)
+          ? json.includedServices.filter((s: unknown) => typeof s === "string").slice(0, 12)
+          : [],
+      },
+    };
+  } catch (e: any) {
+    return {
+      ok: false,
+      error: e?.message ?? "Não foi possível analisar o modelo com IA — preencha manualmente.",
+    };
   }
 }
 
@@ -284,43 +372,81 @@ export async function generateContractFromTemplate(formData: FormData): Promise<
       if (!owned) return { ok: false, error: "Cliente não encontrado." };
     }
 
-    // Campos obrigatórios do modelo precisam estar preenchidos.
-    const variables = (template.variables as unknown as TemplateVariable[]) ?? [];
-    const missing = variables.filter(
-      (v) => v.required && !(parsed.values[v.rawName] ?? "").trim()
-    );
-    if (missing.length > 0) {
-      return {
-        ok: false,
-        error: `Preencha os campos obrigatórios: ${missing.map((v) => v.label).join(", ")}.`,
-      };
-    }
-
-    const original = await getFile(template.filePath);
-    const filled = fillTemplate(original, parsed.values);
-
-    const fileName = `${safeFileName(parsed.name) || "contrato"}.docx`;
-    const generatedFilePath = `generated-contracts/${crypto.randomUUID()}/${fileName}`;
-    await putFile(generatedFilePath, filled, DOCX_MIME);
-
-    const created = await prisma.generatedContract.create({
-      data: {
-        templateId: template.id,
-        clientId: parsed.clientId,
-        name: parsed.name,
-        commercialType: template.commercialType,
-        amount: template.totalAmount ?? template.monthlyAmount,
-        startDate: parsed.startDate,
-        dueDay: parsed.dueDay ?? template.defaultDueDay,
-        filledVariables: parsed.values as any,
-        generatedFileName: fileName,
-        generatedFilePath,
-      },
+    // Núcleo compartilhado com o formulário público (valida obrigatórios,
+    // preenche o DOCX e cria o registro).
+    const { generateContractCore } = await import("@/lib/services/contract-generation");
+    const result = await generateContractCore({
+      template,
+      values: parsed.values,
+      name: parsed.name,
+      clientId: parsed.clientId,
+      startDate: parsed.startDate,
+      dueDay: parsed.dueDay,
     });
+    if (!result.ok) return result;
+
     revalidateAgency({ clientId: parsed.clientId });
-    return { ok: true, id: created.id };
+    return { ok: true, id: result.id };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao gerar o contrato." };
+  }
+}
+
+// ---------- Link público de formulário (/f/{token}) ----------
+
+/**
+ * Cria um link público de formulário para o modelo — geral ou direcionado a
+ * um cliente (pré-preenche o cadastro dele). O token é opaco (não listável);
+ * quem tem o link responde as perguntas e o contrato é gerado na plataforma.
+ */
+export async function createFormLink(
+  templateId: string,
+  clientId?: string | null
+): Promise<ActionResult & { url?: string }> {
+  const viewer = await requirePermission("contratos.gerar_contrato");
+  try {
+    const template = await prisma.contractTemplate.findUnique({ where: { id: templateId } });
+    if (!template) return { ok: false, error: "Modelo não encontrado." };
+    if (template.status !== "ACTIVE") {
+      return { ok: false, error: "Ative o modelo antes de criar um link de formulário." };
+    }
+    if (clientId) {
+      const owned = await prisma.client.findUnique({ where: { id: clientId } });
+      if (!owned) return { ok: false, error: "Cliente não encontrado." };
+    }
+
+    const { generateSecret } = await import("@/lib/auth/session");
+    const token = generateSecret(24);
+    const link = await prisma.contractFormLink.create({
+      data: {
+        token,
+        templateId,
+        clientId: clientId ?? null,
+        // Dono explícito (modelo global): o formulário roda no workspace do
+        // criador do link.
+        ownerId: viewer.workspaceOwnerId ?? viewer.id,
+      },
+    });
+    revalidateAgency({ contractId: templateId });
+    return { ok: true, id: link.id, url: `/f/${token}` };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao criar o link." };
+  }
+}
+
+/** Ativa/desativa um link público (desativado → página indisponível). */
+export async function setFormLinkActive(id: string, active: boolean): Promise<ActionResult> {
+  const viewer = await requirePermission("contratos.gerar_contrato");
+  try {
+    const link = await prisma.contractFormLink.findUnique({ where: { id } });
+    // Modelo global → checagem explícita de dono (a extensão não cobre).
+    const root = viewer.workspaceOwnerId ?? viewer.id;
+    if (!link || link.ownerId !== root) return { ok: false, error: "Link não encontrado." };
+    await prisma.contractFormLink.update({ where: { id }, data: { active } });
+    revalidateAgency({ contractId: link.templateId });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao alterar o link." };
   }
 }
 
