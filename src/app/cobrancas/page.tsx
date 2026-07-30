@@ -96,7 +96,7 @@ export default async function RecebimentosPage({
   await markOverdueBillings();
   await ensureMonthlyBillings(mes.month, mes.year);
 
-  const [billingsRaw, activeClients, allClients, contractsRaw, services, accounts, respRows] =
+  const [billingsRaw, activeClients, allClients, contractsRaw, services, accounts] =
     await Promise.all([
       prisma.billing.findMany({
         where: {
@@ -148,12 +148,6 @@ export default async function RecebimentosPage({
       prisma.account.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true },
-      }),
-      prisma.client.findMany({
-        where: { salesOwner: { not: null } },
-        distinct: ["salesOwner"],
-        select: { salesOwner: true },
-        orderBy: { salesOwner: "asc" },
       }),
     ]);
 
@@ -335,8 +329,7 @@ export default async function RecebimentosPage({
     return true;
   });
 
-  const responsibles = respRows.map((r) => r.salesOwner!).filter(Boolean);
-
+  // ?responsavel= segue aceito na URL (bookmarks), mas sem UI de chips.
   const chipHref = (params: Record<string, string>) => {
     const spNew = new URLSearchParams();
     if (searchParams.mes) spNew.set("mes", searchParams.mes);
@@ -429,28 +422,12 @@ export default async function RecebimentosPage({
 
       <CobrancasTabs active="/cobrancas" />
 
-      {/* ===== Barra superior: mês · busca · responsável ===== */}
+      {/* ===== Barra superior: mês · busca ===== */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex flex-wrap items-center gap-2">
           <MonthNav month={mes.month} year={mes.year} />
           <ClientSearch />
         </div>
-        {responsibles.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Responsável:</span>
-            <Link href={chipHref({ st: stFilter })}>
-              <Badge variant={!respFilter ? "default" : "outline"}>Todos</Badge>
-            </Link>
-            {responsibles.map((r) => (
-              <Link
-                key={r}
-                href={chipHref({ st: stFilter, responsavel: respFilter === r ? "" : r })}
-              >
-                <Badge variant={respFilter === r ? "default" : "outline"}>{r}</Badge>
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ===== Painel do mês: só as 5 métricas essenciais (clicáveis) ===== */}

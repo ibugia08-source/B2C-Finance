@@ -78,6 +78,24 @@ Com `--apply`, o script:
 Depois disso, os demais usuários (ex.: Alvaro) começam com a conta vazia e o
 admin mantém o setup preservado — sem vazamento entre contas.
 
+## Backfill do responsável comercial (Client → Employee)
+
+O "Responsável" do cliente deixou de ser texto livre e passou a ser um vínculo
+com o colaborador da Folha (`Client.salesOwnerId`). O texto `salesOwner` é
+mantido sincronizado com o nome do colaborador (filtros e relatórios seguem
+funcionando). Para vincular os dados históricos:
+
+```bash
+npm run db:migrate:deploy                          # aplica a migration do vínculo
+npx tsx scripts/backfill-sales-owner.ts            # DRY-RUN: mostra o que faria
+npx tsx scripts/backfill-sales-owner.ts --apply    # executa
+```
+
+O script casa o nome digitado com colaboradores do mesmo dono (ignorando
+maiúsculas/espaços); nomes sem correspondente criam um colaborador novo
+(PJ, salário 0, ativo). É idempotente — re-rode após importações ou
+bulk-updates que só escrevem o texto.
+
 ## Ordem recomendada (deploy desta versão)
 
 1. `npm run db:baseline` (só na 1ª vez, se ainda não feito)

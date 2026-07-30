@@ -675,7 +675,10 @@ model Client {
   address             String? // endereço completo do contratante
   legalRepresentative String? // nome do representante legal
   origin       String? // origem comercial: indicação | tráfego | orgânico | ...
-  salesOwner   String? // responsável comercial (exibido na carteira como "Responsável")
+  salesOwner   String? // responsável comercial (texto; sincronizado a partir de salesOwnerEmployee.name no save)
+  // Vínculo real com o colaborador (fonte da verdade do responsável comercial).
+  salesOwnerId       String?
+  salesOwnerEmployee Employee? @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
   opsOwner     String? // responsável operacional
   paymentDay   Int? // dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês quando o mês tem menos dias)
   tags         String[]     @default([])
@@ -745,6 +748,7 @@ model Client {
   @@index([status])
   @@index([modality])
   @@index([renewalMonth])
+  @@index([salesOwnerId])
 }
 
 // Override MANUAL de inadimplência POR COMPETÊNCIA (mês/ano) — histórico
@@ -1303,8 +1307,9 @@ model Employee {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  payrollItems PayrollItem[]
-  commissions  Commission[]
+  payrollItems      PayrollItem[]
+  commissions       Commission[]
+  salesOwnedClients Client[]      @relation("ClientSalesOwner")
 
   @@index([active])
   @@index([ownerId])

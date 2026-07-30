@@ -32,7 +32,9 @@ const ClientSchema = z
     address: z.string().trim().nullable(),
     legalRepresentative: z.string().trim().nullable(),
     origin: z.string().trim().nullable(),
-    salesOwner: z.string().trim().nullable(),
+    // Responsável comercial: vínculo com Employee; o texto salesOwner é
+    // derivado do nome do colaborador (denormalização para filtros/relatórios).
+    salesOwnerId: z.string().trim().nullable(),
     opsOwner: z.string().trim().nullable(),
     // Dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês).
     paymentDay: z
@@ -136,7 +138,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       address: clean(formData.get("address")),
       legalRepresentative: clean(formData.get("legalRepresentative")),
       origin: clean(formData.get("origin")),
-      salesOwner: clean(formData.get("salesOwner")),
+      salesOwnerId: clean(formData.get("salesOwnerId")),
       opsOwner: clean(formData.get("opsOwner")),
       paymentDay: (() => {
         const raw = clean(formData.get("paymentDay"));
@@ -200,6 +202,18 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
               contractMonths: parsed.contractMonths,
             };
 
+    // Resolve o colaborador responsável. findUnique é pós-filtrado por dono →
+    // id de outro owner volta null. O texto salesOwner é sincronizado com o
+    // nome do colaborador para manter filtros/relatórios/importação intactos.
+    let salesOwnerEmployee: { id: string; name: string } | null = null;
+    if (parsed.salesOwnerId) {
+      const emp = await prisma.employee.findUnique({
+        where: { id: parsed.salesOwnerId },
+      });
+      if (!emp) return { ok: false, error: "Colaborador responsável não encontrado." };
+      salesOwnerEmployee = { id: emp.id, name: emp.name };
+    }
+
     const base = {
       name: parsed.name,
       legalName: parsed.legalName,
@@ -212,7 +226,8 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       address: parsed.address,
       legalRepresentative: parsed.legalRepresentative,
       origin: parsed.origin,
-      salesOwner: parsed.salesOwner,
+      salesOwnerId: salesOwnerEmployee?.id ?? null,
+      salesOwner: salesOwnerEmployee?.name ?? null,
       opsOwner: parsed.opsOwner,
       tags: parsed.tags,
       status: parsed.status,
@@ -333,6 +348,7 @@ export type ClientEditData = {
   legalRepresentative: string | null;
   origin: string | null;
   salesOwner: string | null;
+  salesOwnerId: string | null;
   opsOwner: string | null;
   status: string;
   modality: string | null;
@@ -363,6 +379,7 @@ export async function getClientForEdit(id: string): Promise<ClientEditData | nul
     legalRepresentative: c.legalRepresentative,
     origin: c.origin,
     salesOwner: c.salesOwner,
+    salesOwnerId: c.salesOwnerId,
     opsOwner: c.opsOwner,
     status: c.status,
     modality: c.modality,
@@ -374,6 +391,21 @@ export async function getClientForEdit(id: string): Promise<ClientEditData | nul
     tags: c.tags,
     notes: c.notes,
   };
+}
+
+/**
+ * Colaboradores ativos para o select de "Responsável" do cliente.
+ * Permissão de clientes (não de folha): quem edita cliente pode não ter
+ * acesso à folha. Escopo por dono é automático (Employee ∈ OWNED_MODELS).
+ */
+export async function listEmployeeOptions(): Promise<{ id: string; name: string }[]> {
+  await requirePermission("clientes.visualizar");
+  const employees = await prisma.employee.findMany({
+    where: { active: true },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  return employees;
 }
 
 // ---------- Cadastro por contrato (PDF + IA) ----------

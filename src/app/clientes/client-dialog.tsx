@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { saveClient, getClientForEdit } from "@/lib/actions/clients";
+import { saveClient, getClientForEdit, listEmployeeOptions } from "@/lib/actions/clients";
 import { Plus } from "lucide-react";
 import { formatDateInput } from "@/lib/format";
 import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
@@ -43,7 +43,7 @@ const FormSchema = z
     address: z.string(),
     legalRepresentative: z.string(),
     origin: z.string(),
-    salesOwner: z.string(),
+    salesOwnerId: z.string(),
     opsOwner: z.string(),
     status: z.string(),
     // Modalidade — decide quais campos são exigidos.
@@ -120,7 +120,7 @@ function toFormValues(src: any): FormValues {
     address: src?.address ?? "",
     legalRepresentative: src?.legalRepresentative ?? "",
     origin: src?.origin ?? "",
-    salesOwner: src?.salesOwner ?? "",
+    salesOwnerId: src?.salesOwnerId ?? "",
     opsOwner: src?.opsOwner ?? "",
     status: src?.status ?? "ACTIVE",
     // Aceita `modality` (cadastro/edição) ou `paymentModel` (pré-fill da IA).
@@ -157,6 +157,20 @@ export function ClientDialog({
   // remount quando o registro completo chega, repopulando os campos.
   const dv = toFormValues(data);
   const [paymentModel, setPaymentModel] = useState<string>(dv.paymentModel);
+
+  // Colaboradores ativos (Folha) para o select de Responsável — fetch ao abrir,
+  // no mesmo padrão do registro completo. `null` = ainda não carregado.
+  const [employees, setEmployees] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => {
+    if (!open || employees) return;
+    let active = true;
+    listEmployeeOptions().then((list) => {
+      if (active) setEmployees(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, employees]);
 
   useEffect(() => {
     if (!open || isNew || loaded) return;
@@ -228,7 +242,7 @@ export function ClientDialog({
           <DialogTitle>{initial?.id ? "Editar cliente" : "Cadastrar novo cliente"}</DialogTitle>
         </DialogHeader>
         <form
-          key={loaded ? "full" : "lite"}
+          key={`${loaded ? "full" : "lite"}-${employees ? "emps" : "sem-emps"}`}
           onSubmit={onSubmit}
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
@@ -261,7 +275,27 @@ export function ClientDialog({
           </div>
           <div>
             <Label>Responsável</Label>
-            <Input name="salesOwner" defaultValue={dv.salesOwner} placeholder="quem cuida deste cliente" />
+            <Select name="salesOwnerId" defaultValue={dv.salesOwnerId}>
+              <option value="">— sem responsável —</option>
+              {/* Vínculo atual com colaborador fora da lista (inativo):
+                  mantém a option para não perder o vínculo ao salvar. */}
+              {dv.salesOwnerId &&
+                !(employees ?? []).some((e) => e.id === dv.salesOwnerId) && (
+                  <option value={dv.salesOwnerId}>
+                    {data?.salesOwner ?? "(colaborador inativo)"}
+                  </option>
+                )}
+              {(employees ?? []).map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </Select>
+            {employees && employees.length === 0 && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Cadastre colaboradores na Folha para escolher aqui.
+              </p>
+            )}
           </div>
 
           {/* ===== Modalidade & cobrança — campos dinâmicos por MRR/TCV ===== */}
