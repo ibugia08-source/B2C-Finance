@@ -1,5 +1,6 @@
 "use server";
 import { requirePermission } from "@/lib/auth/viewer";
+import { hasPermission } from "@/lib/permissions";
 
 /**
  * Sugestões inteligentes da ROTINA (PARTE 12): a IA analisa APENAS o retrato
@@ -19,7 +20,15 @@ export type RoutineAIResult =
   | { ok: false; error: string };
 
 export async function generateRoutineSuggestions(): Promise<RoutineAIResult> {
-  await requirePermission("rotina.visualizar");
+  const viewer = await requirePermission("rotina.visualizar");
+  // O snapshot agrega números de todos os módulos (caixa, despesas, clientes);
+  // sem visão financeira o usuário não pode receber esses agregados.
+  if (!hasPermission(viewer, "dashboard.ver_financeiro")) {
+    return {
+      ok: false,
+      error: "Seu perfil não tem acesso aos dados financeiros usados pelas sugestões da IA.",
+    };
+  }
   try {
     const { getAISettings, isConfigured, chatComplete } = await import("@/lib/ai/provider");
     const settings = await getAISettings();

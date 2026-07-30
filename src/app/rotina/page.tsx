@@ -5,7 +5,7 @@ import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { can, requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getCashSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
@@ -52,8 +52,50 @@ const ROW_OVERDUE = "bg-red-50/70 dark:bg-red-500/[0.07]";
 const ROW_SOON = "bg-warning-soft/60";
 
 export default async function RotinaPage() {
-  await requirePagePermission("rotina.visualizar");
-  await markOverdueBillings();
+  const viewer = await requirePagePermission("rotina.visualizar");
+
+  // Personalização por permissão: cada seção, card e item do checklist só
+  // aparece (e só busca dados) se o usuário tiver acesso ao módulo de origem.
+  // Botões seguem a permissão que a server action correspondente exige.
+  const gates = {
+    cobrancas: can(viewer, "recebimentos.visualizar"),
+    pagamentos: can(viewer, "despesas.visualizar"),
+    caixa: can(viewer, "caixa.visualizar"),
+    renovacoes: can(viewer, "clientes.visualizar"),
+    upsell: can(viewer, "upsell.visualizar"),
+    ia: can(viewer, "dashboard.ver_financeiro"),
+    gerarCobranca: can(viewer, "recebimentos.gerar_cobranca"),
+    registrarPagamento: can(viewer, "recebimentos.registrar_pagamento"),
+    marcarPaga: can(viewer, "despesas.marcar_como_paga"),
+    alterarVencimento: can(viewer, "despesas.editar"),
+    concluirAcao: can(viewer, "rotina.concluir_acao"),
+  };
+  const hasAnyContent =
+    gates.cobrancas || gates.pagamentos || gates.caixa || gates.renovacoes || gates.upsell;
+
+  // Perfil sem acesso a nenhum módulo que alimenta a rotina: nada a buscar.
+  if (!hasAnyContent) {
+    return (
+      <div>
+        <PageHeader
+          title="Rotina diária"
+          description="Acompanhe cobranças, pagamentos e ações financeiras que precisam de atenção hoje."
+        />
+        <Card>
+          <CardContent className="py-14 text-center">
+            <p className="text-sm font-medium">Sua rotina está vazia</p>
+            <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+              Seu perfil ainda não tem acesso aos módulos que alimentam a rotina
+              diária (cobranças, pagamentos, renovações ou upsell). Fale com o
+              administrador para liberar os acessos.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (gates.cobrancas) await markOverdueBillings();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -66,42 +108,51 @@ export default async function RotinaPage() {
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   // ---- Fase 1: fila de vencidos (agregador com várias queries internas) ----
-  const queue = await getCollectionQueue();
+  const queue = gates.cobrancas ? await getCollectionQueue() : [];
 
   // ---- Fase 2: consultas leves do dia (uma leva só) ----
   const [accounts, dueSoonBillings, overdueExpenses, upcomingExpenses, states] =
     await Promise.all([
-      prisma.account.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+      // Contas: usadas apenas pelo diálogo de registrar pagamento
+      gates.cobrancas && gates.registrarPagamento
+        ? prisma.account.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+        : [],
       // Cobranças que vencem hoje ou nos próximos 3 dias (a receber)
-      prisma.billing.findMany({
-        where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today, lt: in4 } },
-        orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
-        select: {
-          id: true, description: true, amount: true, paidTotal: true, dueDate: true,
-          competenceMonth: true, competenceYear: true,
-          client: { select: { id: true, name: true, phone: true } },
-        },
-      }),
+      gates.cobrancas
+        ? prisma.billing.findMany({
+            where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today, lt: in4 } },
+            orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
+            select: {
+              id: true, description: true, amount: true, paidTotal: true, dueDate: true,
+              competenceMonth: true, competenceYear: true,
+              client: { select: { id: true, name: true, phone: true } },
+            },
+          })
+        : [],
       // Pagamentos vencidos (a pagar)
-      prisma.transaction.findMany({
-        where: { type: "despesa", status: { in: ["pendente", "devendo"] }, dueDate: { lt: today } },
-        orderBy: { dueDate: "asc" },
-        take: 25,
-        select: { id: true, description: true, amount: true, dueDate: true, category: { select: { name: true } } },
-      }),
+      gates.pagamentos
+        ? prisma.transaction.findMany({
+            where: { type: "despesa", status: { in: ["pendente", "devendo"] }, dueDate: { lt: today } },
+            orderBy: { dueDate: "asc" },
+            take: 25,
+            select: { id: true, description: true, amount: true, dueDate: true, category: { select: { name: true } } },
+          })
+        : [],
       // Pagamentos que vencem hoje ou nos próximos 3 dias
-      prisma.transaction.findMany({
-        where: {
-          type: "despesa", status: { in: ["pendente", "devendo"] },
-          OR: [
-            { dueDate: { gte: today, lt: in4 } },
-            { dueDate: null, date: { gte: today, lt: tomorrow } },
-          ],
-        },
-        orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
-        take: 25,
-        select: { id: true, description: true, amount: true, dueDate: true, date: true, category: { select: { name: true } } },
-      }),
+      gates.pagamentos
+        ? prisma.transaction.findMany({
+            where: {
+              type: "despesa", status: { in: ["pendente", "devendo"] },
+              OR: [
+                { dueDate: { gte: today, lt: in4 } },
+                { dueDate: null, date: { gte: today, lt: tomorrow } },
+              ],
+            },
+            orderBy: [{ dueDate: "asc" }, { amount: "desc" }],
+            take: 25,
+            select: { id: true, description: true, amount: true, dueDate: true, date: true, category: { select: { name: true } } },
+          })
+        : [],
       // Estado do dia: itens removidos da rotina + ações concluídas
       prisma.routineItemState.findMany({
         where: { routineDate: today },
@@ -111,14 +162,16 @@ export default async function RotinaPage() {
 
   // ---- Fase 3: contexto para o checklist ----
   const [cash, renewalWindows, openUpsells] = await Promise.all([
-    getCashSummary(resolvePeriod({ periodo: "mes" })),
-    getRenewalOutlook([0]),
-    prisma.upsell.findMany({
-      where: { status: { in: ["OPPORTUNITY", "NEGOTIATION"] } },
-      orderBy: { value: "desc" },
-      take: 3,
-      select: { id: true, value: true, responsible: true, client: { select: { name: true } } },
-    }),
+    gates.caixa ? getCashSummary(resolvePeriod({ periodo: "mes" })) : null,
+    gates.renovacoes ? getRenewalOutlook([0]) : [],
+    gates.upsell
+      ? prisma.upsell.findMany({
+          where: { status: { in: ["OPPORTUNITY", "NEGOTIATION"] } },
+          orderBy: { value: "desc" },
+          take: 3,
+          select: { id: true, value: true, responsible: true, client: { select: { name: true } } },
+        })
+      : [],
   ]);
 
   const n = (v: unknown) => (v == null ? 0 : Number(v));
@@ -229,7 +282,7 @@ export default async function RotinaPage() {
       href: "#cobrancas",
     });
   }
-  if (cash.projecao30 < 0) {
+  if (cash && cash.projecao30 < 0) {
     acoes.push({
       key: "caixa-projecao", priority: "alta",
       text: "Antecipar recebíveis ou renegociar prazos — caixa projetado negativo em 30 dias",
@@ -264,6 +317,15 @@ export default async function RotinaPage() {
     daysOverdue >= 15 ? "urgente" : daysOverdue > 0 ? "direto" : "amigavel";
   const ROUTINE_TONES: MessageTone[] = ["amigavel", "direto", "urgente"];
 
+  // Grid de métricas se adapta ao nº de cards visíveis (5, 3 ou 1).
+  const statCount = 1 + (gates.cobrancas ? 2 : 0) + (gates.pagamentos ? 2 : 0);
+  const statGrid =
+    statCount >= 5
+      ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
+      : statCount >= 3
+        ? "grid-cols-2 md:grid-cols-3"
+        : "grid-cols-1 sm:grid-cols-2";
+
   return (
     <div>
       <PageHeader
@@ -276,35 +338,43 @@ export default async function RotinaPage() {
       </div>
 
       {/* ===== Métricas principais (hoje + próximos 3 dias) ===== */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-        <StatCard
-          href="#cobrancas"
-          title="Cobranças vencidas"
-          value={String(vencidosSorted.length)}
-          intent={vencidosSorted.length > 0 ? "negative" : "positive"}
-          hint={formatBRL(cobrVencidasTotal)}
-        />
-        <StatCard
-          href="#cobrancas"
-          title="Cobranças próximas"
-          value={String(proximos.length)}
-          intent={proximos.length > 0 ? "warning" : "default"}
-          hint={`${formatBRL(cobrProximasTotal)} · hoje a 3 dias`}
-        />
-        <StatCard
-          href="#pagamentos"
-          title="Pagamentos vencidos"
-          value={String(payVencidos.length)}
-          intent={payVencidos.length > 0 ? "negative" : "positive"}
-          hint={formatBRL(pagVencidosTotal)}
-        />
-        <StatCard
-          href="#pagamentos"
-          title="Pagamentos próximos"
-          value={String(payProximos.length)}
-          intent={payProximos.length > 0 ? "warning" : "default"}
-          hint={`${formatBRL(pagProximosTotal)} · hoje a 3 dias`}
-        />
+      <div className={`grid ${statGrid} gap-4 mb-6`}>
+        {gates.cobrancas && (
+          <>
+            <StatCard
+              href="#cobrancas"
+              title="Cobranças vencidas"
+              value={String(vencidosSorted.length)}
+              intent={vencidosSorted.length > 0 ? "negative" : "positive"}
+              hint={formatBRL(cobrVencidasTotal)}
+            />
+            <StatCard
+              href="#cobrancas"
+              title="Cobranças próximas"
+              value={String(proximos.length)}
+              intent={proximos.length > 0 ? "warning" : "default"}
+              hint={`${formatBRL(cobrProximasTotal)} · hoje a 3 dias`}
+            />
+          </>
+        )}
+        {gates.pagamentos && (
+          <>
+            <StatCard
+              href="#pagamentos"
+              title="Pagamentos vencidos"
+              value={String(payVencidos.length)}
+              intent={payVencidos.length > 0 ? "negative" : "positive"}
+              hint={formatBRL(pagVencidosTotal)}
+            />
+            <StatCard
+              href="#pagamentos"
+              title="Pagamentos próximos"
+              value={String(payProximos.length)}
+              intent={payProximos.length > 0 ? "warning" : "default"}
+              hint={`${formatBRL(pagProximosTotal)} · hoje a 3 dias`}
+            />
+          </>
+        )}
         <StatCard
           href="#acoes"
           title="Ações pendentes"
@@ -315,236 +385,260 @@ export default async function RotinaPage() {
       </div>
 
       {/* ===== COBRANÇAS ===== */}
-      <h2 id="cobrancas" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
-        Cobranças
-      </h2>
-      <p className="text-xs text-muted-foreground mb-3 -mt-1">
-        Valores a receber dos clientes — vencidos e vencendo até 3 dias.
-      </p>
-      <Card className="mb-6">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead className="text-right">Valor devido</TableHead>
-                <TableHead>Vencimento</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Prioridade</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {vencidosSorted.length === 0 && proximos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    Nenhuma cobrança precisando de atenção. 🎉
-                  </TableCell>
-                </TableRow>
-              )}
-              {vencidosSorted.map((q) => {
-                const pm = PRIORITY_META[q.priority];
-                return (
-                  <TableRow key={q.clientId} className={ROW_OVERDUE}>
-                    <TableCell>
-                      <Link href={`/clientes/${q.clientId}`} className="font-medium hover:underline">
-                        {q.clientName}
-                      </Link>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {q.billingCount} cobrança(s) em aberto
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-medium text-destructive">
-                      {formatBRL(q.totalOverdue)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {formatDateBR(q.anchorBilling.dueDate)}
-                      <span className="block text-[11px] text-destructive">
-                        venceu há {q.daysOverdue} dia(s)
-                      </span>
-                    </TableCell>
-                    <TableCell><Badge variant="destructive">Vencido</Badge></TableCell>
-                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 justify-end">
-                        <MessageDialog
-                          phone={q.phone}
-                          billingId={q.anchorBilling.id}
-                          tones={ROUTINE_TONES}
-                          defaultTone={toneFor(q.daysOverdue)}
-                          input={{
-                            clientName: q.clientName,
-                            openAmount: formatBRL(q.totalOverdue),
-                            dueDate: formatDateBR(q.anchorBilling.dueDate),
-                            daysOverdue: q.daysOverdue,
-                            serviceNames: q.anchorBilling.serviceNames,
-                            hasPromise: !!q.promise,
-                            contactCount: q.attempts,
-                          }}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
-                              <MessageSquareText className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <PaymentDialog
-                          billing={{
-                            id: q.anchorBilling.id,
-                            openAmount: q.anchorBilling.openAmount,
-                            description: q.anchorBilling.description,
-                          }}
-                          accounts={accounts}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Registrar pagamento">
-                              <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                          }
-                        />
-                        <DismissButton itemType="cobranca" itemKey={q.clientId} itemLabel={q.clientName} />
-                      </div>
-                    </TableCell>
+      {gates.cobrancas && (
+        <>
+          <h2 id="cobrancas" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
+            Cobranças
+          </h2>
+          <p className="text-xs text-muted-foreground mb-3 -mt-1">
+            Valores a receber dos clientes — vencidos e vencendo até 3 dias.
+          </p>
+          <Card className="mb-6">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead className="text-right">Valor devido</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Prioridade</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                );
-              })}
-              {proximos.map(({ b, open, dias, priority }) => {
-                const pm = PRIORITY_META[priority];
-                return (
-                  <TableRow key={b.id} className={ROW_SOON}>
-                    <TableCell>
-                      <Link href={`/clientes/${b.client.id}`} className="font-medium hover:underline">
-                        {b.client.name}
-                      </Link>
-                      <span className="block text-[11px] text-muted-foreground max-w-[220px] truncate">
-                        {b.description}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-medium">{formatBRL(open)}</TableCell>
-                    <TableCell className="text-sm">
-                      {formatDateBR(b.dueDate)}
-                      <span className="block text-[11px] text-warning">
-                        {dias === 0 ? "vence hoje" : dias === 1 ? "vence amanhã" : `vence em ${dias} dias`}
-                      </span>
-                    </TableCell>
-                    <TableCell><Badge variant="warning">Em aberto</Badge></TableCell>
-                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 justify-end">
-                        <MessageDialog
-                          phone={b.client.phone}
-                          billingId={b.id}
-                          tones={ROUTINE_TONES}
-                          defaultTone="amigavel"
-                          input={{
-                            clientName: b.client.name,
-                            openAmount: formatBRL(open),
-                            dueDate: formatDateBR(b.dueDate),
-                            daysOverdue: 0,
-                            serviceNames: [],
-                            hasPromise: false,
-                            contactCount: 0,
-                            referenceMonth: mesRef(b.competenceMonth, b.competenceYear),
-                          }}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
-                              <MessageSquareText className="h-4 w-4" />
-                            </Button>
-                          }
-                        />
-                        <PaymentDialog
-                          billing={{ id: b.id, openAmount: open, description: b.description }}
-                          accounts={accounts}
-                          trigger={
-                            <Button variant="ghost" size="icon" title="Registrar pagamento">
-                              <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
-                            </Button>
-                          }
-                        />
-                        <DismissButton itemType="cobranca" itemKey={b.client.id} itemLabel={b.client.name} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {vencidosSorted.length === 0 && proximos.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
+                        Nenhuma cobrança precisando de atenção. 🎉
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {vencidosSorted.map((q) => {
+                    const pm = PRIORITY_META[q.priority];
+                    return (
+                      <TableRow key={q.clientId} className={ROW_OVERDUE}>
+                        <TableCell>
+                          <Link href={`/clientes/${q.clientId}`} className="font-medium hover:underline">
+                            {q.clientName}
+                          </Link>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {q.billingCount} cobrança(s) em aberto
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-destructive">
+                          {formatBRL(q.totalOverdue)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDateBR(q.anchorBilling.dueDate)}
+                          <span className="block text-[11px] text-destructive">
+                            venceu há {q.daysOverdue} dia(s)
+                          </span>
+                        </TableCell>
+                        <TableCell><Badge variant="destructive">Vencido</Badge></TableCell>
+                        <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 justify-end">
+                            {gates.gerarCobranca && (
+                              <MessageDialog
+                                phone={q.phone}
+                                billingId={q.anchorBilling.id}
+                                tones={ROUTINE_TONES}
+                                defaultTone={toneFor(q.daysOverdue)}
+                                input={{
+                                  clientName: q.clientName,
+                                  openAmount: formatBRL(q.totalOverdue),
+                                  dueDate: formatDateBR(q.anchorBilling.dueDate),
+                                  daysOverdue: q.daysOverdue,
+                                  serviceNames: q.anchorBilling.serviceNames,
+                                  hasPromise: !!q.promise,
+                                  contactCount: q.attempts,
+                                }}
+                                trigger={
+                                  <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
+                                    <MessageSquareText className="h-4 w-4" />
+                                  </Button>
+                                }
+                              />
+                            )}
+                            {gates.registrarPagamento && (
+                              <PaymentDialog
+                                billing={{
+                                  id: q.anchorBilling.id,
+                                  openAmount: q.anchorBilling.openAmount,
+                                  description: q.anchorBilling.description,
+                                }}
+                                accounts={accounts}
+                                trigger={
+                                  <Button variant="ghost" size="icon" title="Registrar pagamento">
+                                    <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
+                                  </Button>
+                                }
+                              />
+                            )}
+                            {gates.concluirAcao && (
+                              <DismissButton itemType="cobranca" itemKey={q.clientId} itemLabel={q.clientName} />
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {proximos.map(({ b, open, dias, priority }) => {
+                    const pm = PRIORITY_META[priority];
+                    return (
+                      <TableRow key={b.id} className={ROW_SOON}>
+                        <TableCell>
+                          <Link href={`/clientes/${b.client.id}`} className="font-medium hover:underline">
+                            {b.client.name}
+                          </Link>
+                          <span className="block text-[11px] text-muted-foreground max-w-[220px] truncate">
+                            {b.description}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{formatBRL(open)}</TableCell>
+                        <TableCell className="text-sm">
+                          {formatDateBR(b.dueDate)}
+                          <span className="block text-[11px] text-warning">
+                            {dias === 0 ? "vence hoje" : dias === 1 ? "vence amanhã" : `vence em ${dias} dias`}
+                          </span>
+                        </TableCell>
+                        <TableCell><Badge variant="warning">Em aberto</Badge></TableCell>
+                        <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 justify-end">
+                            {gates.gerarCobranca && (
+                              <MessageDialog
+                                phone={b.client.phone}
+                                billingId={b.id}
+                                tones={ROUTINE_TONES}
+                                defaultTone="amigavel"
+                                input={{
+                                  clientName: b.client.name,
+                                  openAmount: formatBRL(open),
+                                  dueDate: formatDateBR(b.dueDate),
+                                  daysOverdue: 0,
+                                  serviceNames: [],
+                                  hasPromise: false,
+                                  contactCount: 0,
+                                  referenceMonth: mesRef(b.competenceMonth, b.competenceYear),
+                                }}
+                                trigger={
+                                  <Button variant="ghost" size="icon" title="Gerar mensagem de cobrança">
+                                    <MessageSquareText className="h-4 w-4" />
+                                  </Button>
+                                }
+                              />
+                            )}
+                            {gates.registrarPagamento && (
+                              <PaymentDialog
+                                billing={{ id: b.id, openAmount: open, description: b.description }}
+                                accounts={accounts}
+                                trigger={
+                                  <Button variant="ghost" size="icon" title="Registrar pagamento">
+                                    <BadgeDollarSign className="h-4 w-4 text-emerald-600" />
+                                  </Button>
+                                }
+                              />
+                            )}
+                            {gates.concluirAcao && (
+                              <DismissButton itemType="cobranca" itemKey={b.client.id} itemLabel={b.client.name} />
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* ===== PAGAMENTOS ===== */}
-      <h2 id="pagamentos" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
-        Pagamentos
-      </h2>
-      <p className="text-xs text-muted-foreground mb-3 -mt-1">
-        Valores que a agência precisa pagar — despesas vencidas e vencendo até 3 dias.
-      </p>
-      <Card className="mb-6">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Despesa</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
-                <TableHead>Vencimento</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Prioridade</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payVencidos.length === 0 && payProximos.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
-                    Nenhum pagamento precisando de atenção. 🎉
-                  </TableCell>
-                </TableRow>
-              )}
-              {[...payVencidos, ...payProximos].map((p) => {
-                const pm = PRIORITY_META[p.priority];
-                return (
-                  <TableRow key={p.id} className={p.overdue ? ROW_OVERDUE : ROW_SOON}>
-                    <TableCell className="font-medium max-w-[240px] truncate">{p.description}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{p.category ?? "—"}</TableCell>
-                    <TableCell className={`text-right font-medium ${p.overdue ? "text-destructive" : ""}`}>
-                      {formatBRL(p.amount)}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {p.dueDate ? formatDateBR(p.dueDate) : "hoje"}
-                      <span className={`block text-[11px] ${p.overdue ? "text-destructive" : "text-warning"}`}>
-                        {p.overdue
-                          ? `vencido há ${p.dias} dia(s)`
-                          : p.dias === 0 ? "vence hoje" : p.dias === 1 ? "vence amanhã" : `vence em ${p.dias} dias`}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={p.overdue ? "destructive" : "warning"}>
-                        {p.overdue ? "Vencido" : "Pendente"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 justify-end items-center">
-                        <MarkExpensePaid id={p.id} />
-                        <ExpenseDueDateDialog
-                          expenseId={p.id}
-                          description={p.description}
-                          currentDue={p.dueDate ? iso(p.dueDate) : iso(today)}
-                        />
-                        <Button variant="ghost" size="icon" asChild title="Ver despesa">
-                          <Link href="/despesas">
-                            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                          </Link>
-                        </Button>
-                        <DismissButton itemType="pagamento" itemKey={p.id} itemLabel={p.description} />
-                      </div>
-                    </TableCell>
+      {gates.pagamentos && (
+        <>
+          <h2 id="pagamentos" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
+            Pagamentos
+          </h2>
+          <p className="text-xs text-muted-foreground mb-3 -mt-1">
+            Valores que a agência precisa pagar — despesas vencidas e vencendo até 3 dias.
+          </p>
+          <Card className="mb-6">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Despesa</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Prioridade</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {payVencidos.length === 0 && payProximos.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                        Nenhum pagamento precisando de atenção. 🎉
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {[...payVencidos, ...payProximos].map((p) => {
+                    const pm = PRIORITY_META[p.priority];
+                    return (
+                      <TableRow key={p.id} className={p.overdue ? ROW_OVERDUE : ROW_SOON}>
+                        <TableCell className="font-medium max-w-[240px] truncate">{p.description}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.category ?? "—"}</TableCell>
+                        <TableCell className={`text-right font-medium ${p.overdue ? "text-destructive" : ""}`}>
+                          {formatBRL(p.amount)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {p.dueDate ? formatDateBR(p.dueDate) : "hoje"}
+                          <span className={`block text-[11px] ${p.overdue ? "text-destructive" : "text-warning"}`}>
+                            {p.overdue
+                              ? `vencido há ${p.dias} dia(s)`
+                              : p.dias === 0 ? "vence hoje" : p.dias === 1 ? "vence amanhã" : `vence em ${p.dias} dias`}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={p.overdue ? "destructive" : "warning"}>
+                            {p.overdue ? "Vencido" : "Pendente"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell><Badge variant={pm.variant}>{pm.label}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 justify-end items-center">
+                            {gates.marcarPaga && <MarkExpensePaid id={p.id} />}
+                            {gates.alterarVencimento && (
+                              <ExpenseDueDateDialog
+                                expenseId={p.id}
+                                description={p.description}
+                                currentDue={p.dueDate ? iso(p.dueDate) : iso(today)}
+                              />
+                            )}
+                            <Button variant="ghost" size="icon" asChild title="Ver despesa">
+                              <Link href="/despesas">
+                                <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                              </Link>
+                            </Button>
+                            {gates.concluirAcao && (
+                              <DismissButton itemType="pagamento" itemKey={p.id} itemLabel={p.description} />
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* ===== AÇÕES DE HOJE ===== */}
       <h2 id="acoes" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
@@ -561,22 +655,29 @@ export default async function RotinaPage() {
               {acoes.map((a) => {
                 const pm = PRIORITY_META[a.priority];
                 const done = doneActions.has(a.key);
+                const content = (
+                  <span className="inline-flex items-start gap-2">
+                    <Badge variant={done ? "outline" : pm.variant} className="shrink-0 mt-0.5 text-[10px] px-1.5">
+                      {pm.label}
+                    </Badge>
+                    {a.href ? (
+                      <Link href={a.href} className={done ? "" : "hover:underline"}>
+                        {a.text}
+                      </Link>
+                    ) : (
+                      a.text
+                    )}
+                  </span>
+                );
                 return (
                   <li key={a.key} className="flex items-start gap-2">
-                    <ActionCheck itemKey={a.key} done={done}>
-                      <span className="inline-flex items-start gap-2">
-                        <Badge variant={done ? "outline" : pm.variant} className="shrink-0 mt-0.5 text-[10px] px-1.5">
-                          {pm.label}
-                        </Badge>
-                        {a.href ? (
-                          <Link href={a.href} className={done ? "" : "hover:underline"}>
-                            {a.text}
-                          </Link>
-                        ) : (
-                          a.text
-                        )}
-                      </span>
-                    </ActionCheck>
+                    {gates.concluirAcao ? (
+                      <ActionCheck itemKey={a.key} done={done}>
+                        {content}
+                      </ActionCheck>
+                    ) : (
+                      content
+                    )}
                   </li>
                 );
               })}
@@ -592,7 +693,7 @@ export default async function RotinaPage() {
       </Card>
 
       {/* ===== Sugestões inteligentes (IA) — no final ===== */}
-      <AISuggestionsPanel />
+      {gates.ia && <AISuggestionsPanel />}
     </div>
   );
 }
