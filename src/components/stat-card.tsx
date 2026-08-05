@@ -50,12 +50,12 @@ export function StatCard({
         )}
       />
       <CardContent className="relative p-5">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground font-medium">
+        <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground font-medium">
           {title}
         </p>
         {/* NUNCA quebrar no meio do número ("R$ 84.911 / ,00"): nowrap +
             escala contida — a fonte mono é mais larga que a Inter. */}
-        <p className={cn("text-lg xl:text-xl font-semibold mt-1.5 stat-number whitespace-nowrap", color)}>
+        <p className={cn("text-xl xl:text-2xl font-semibold mt-1.5 stat-number whitespace-nowrap", color)}>
           {value}
         </p>
         {hint && (

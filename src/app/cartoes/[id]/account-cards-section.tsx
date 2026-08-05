@@ -27,7 +27,7 @@ export function AccountCardsSection({
   const sumLimits = accountCards.reduce((s, c) => s + (c.limit ?? 0), 0);
 
   return (
-    <Card className="mb-6">
+    <Card className="mb-3">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Cartões da conta</CardTitle>
         <AccountCardDialog cardId={cardId} />

@@ -66,7 +66,7 @@ export default async function OfertasPage() {
         actions={<OfferDialog services={services} />}
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard title="Ofertas ativas" value={String(ativas)} intent="positive" />
         <StatCard title="Total de ofertas" value={String(offers.length)} />
         <StatCard

@@ -431,7 +431,7 @@ export default async function RecebimentosPage({
       </div>
 
       {/* ===== Painel do mês: só as 5 métricas essenciais (clicáveis) ===== */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
         <StatCard title="A receber" value={formatBRL(kAReceber)}
           hint="ainda não pago no mês" href={chipHref({})} />
         <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive"

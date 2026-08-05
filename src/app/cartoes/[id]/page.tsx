@@ -188,7 +188,7 @@ export default async function CardDetailPage({
         actions={<InvoiceImportDialog cardId={card.id} cardName={card.name} />}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Limite total" value={formatBRL(card.limitTotal)} />
         <StatCard title="Limite usado" value={formatBRL(used)} intent="negative" />
         <StatCard title="Limite disponível" value={formatBRL(available)} intent="positive" />
@@ -240,7 +240,7 @@ export default async function CardDetailPage({
 
       <AccountCardsSection cardId={card.id} accountCards={card.accountCards} />
 
-      <Card className="mb-6">
+      <Card className="mb-3">
         <CardHeader>
           <CardTitle>Faturas por mês</CardTitle>
         </CardHeader>
@@ -336,13 +336,13 @@ export default async function CardDetailPage({
         </CardContent>
       </Card>
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <CardDetailFilters people={people} categories={categories} />
         </CardContent>
       </Card>
 
-      <Card className="mb-6">
+      <Card className="mb-3">
         <CardHeader>
           <CardTitle>Resumo por pessoa (mês selecionado)</CardTitle>
         </CardHeader>

@@ -41,7 +41,7 @@ export default async function ConfiguracoesPage() {
         actions={<CategoryDialog />}
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Categorias" value={String(rows.length)} />
         <StatCard title="Despesa" value={String(despesa)} />
         <StatCard title="Receita" value={String(receita)} />

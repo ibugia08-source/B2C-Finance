@@ -206,13 +206,13 @@ async function ExpensesTab({
 
   return (
     <>
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <ExpenseFilters />
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Total do mês" value={formatBRL(totalMes)} intent="negative" />
         <StatCard title="Pagas" value={formatBRL(totalPago)} intent="positive" />
         <StatCard title="Pendentes" value={formatBRL(Math.max(0, totalPendente))} intent="warning" />
@@ -423,7 +423,7 @@ async function ResumoTab({ refDate }: { refDate: Date }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Total do mês" value={formatBRL(s.total)} intent="negative"
           hint={`${s.count} despesa(s)`} />
         <StatCard title="Pagas" value={formatBRL(s.paid)} intent="positive" />

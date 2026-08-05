@@ -83,7 +83,7 @@ export function FormLinkCard({
   }
 
   return (
-    <Card className="mb-4">
+    <Card className="mb-3">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Link2 className="h-4 w-4 text-primary" />

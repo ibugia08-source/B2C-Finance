@@ -100,7 +100,7 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
         actions={<UpsellDialog clients={clients} services={services} offers={offers} />}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <StatCard
           title="Em aberto"
           value={String(kpis.openCount)}

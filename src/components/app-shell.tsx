@@ -44,9 +44,10 @@ export function AppShell({
         />
         <main
           key={path}
-          // Respiro progressivo: 16 → 24 → 32 → 40px (sem salto brusco 16→40).
+          // Aproveitamento máximo da tela: largura TOTAL (sem max-w) e margens
+          // enxutas — o conteúdo ocupa o espaço, não o respiro em volta.
           // pb-24 no mobile abre espaço para a tab bar inferior.
-          className="page-enter flex-1 p-4 sm:p-6 md:p-8 lg:p-10 pb-24 md:pb-10 max-w-7xl mx-auto w-full"
+          className="page-enter flex-1 p-3 sm:p-4 md:p-5 lg:p-6 pb-24 md:pb-6 w-full min-w-0"
         >
           {children}
         </main>

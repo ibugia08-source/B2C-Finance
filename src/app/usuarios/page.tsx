@@ -54,7 +54,7 @@ export default async function UsuariosPage() {
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Usuários" value={String(rows.length)} />
         <StatCard title="Administradores" value={String(admins)} />
         <StatCard title="Ativos" value={String(ativos)} intent="positive" />

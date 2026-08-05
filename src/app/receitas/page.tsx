@@ -151,13 +151,13 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
         <SavedViews module="receitas" />
       </div>
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <IncomeFilters people={people} />
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <StatCard title="Recebido no mês" value={formatBRL(totalRecebido)} intent="positive" />
         <StatCard title="Previsto no mês" value={formatBRL(totalPrevisto)} intent="warning" />
         <StatCard title="Atrasado" value={formatBRL(totalAtrasado)} intent="negative" />

@@ -71,7 +71,7 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
         actions={<TemplateUploadDialog />}
       />
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <form className="flex flex-wrap items-end gap-3">
             <div>

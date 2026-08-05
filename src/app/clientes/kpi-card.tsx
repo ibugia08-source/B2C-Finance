@@ -40,12 +40,12 @@ export function KpiCard({
         href={href}
         className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <CardContent className="p-4 pr-9">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">
+        <CardContent className="p-5 pr-10">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
             {title}
           </p>
-          <p className={cn("text-xl 2xl:text-2xl font-semibold stat-number mt-1.5 whitespace-nowrap", color)}>{value}</p>
-          {hint && <p className="text-[11px] text-muted-foreground mt-1 truncate">{hint}</p>}
+          <p className={cn("text-2xl 2xl:text-3xl font-semibold stat-number mt-1.5 whitespace-nowrap", color)}>{value}</p>
+          {hint && <p className="text-xs text-muted-foreground mt-1 truncate">{hint}</p>}
         </CardContent>
       </Link>
     </Card>

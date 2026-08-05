@@ -113,7 +113,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
         <SavedViews module="folha" />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
         <StatCard title="Total da folha" value={formatBRL(summary.total)} />
         <StatCard
           title="Comissões do mês"
@@ -134,7 +134,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
       </div>
 
       {/* Folha do mês */}
-      <Card className="mb-6">
+      <Card className="mb-3">
         <CardContent className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2">
@@ -231,7 +231,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
       <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
         Comissões {String(month).padStart(2, "0")}/{year}
       </h2>
-      <Card className="mb-6">
+      <Card className="mb-3">
         <CardContent className="p-0">
           <Table>
             <TableHeader>

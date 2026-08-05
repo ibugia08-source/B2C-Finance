@@ -340,7 +340,7 @@ export default async function ClientesPage({
       )}
 
       {/* ===== Métricas da carteira (4) — clicáveis, com tooltip "?" ===== */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <KpiCard
           title={isCurrentMonth ? "Clientes ativos" : `Ativos em ${MONTH_LABEL[selMonth]}`}
           value={String(ativos)}
@@ -379,7 +379,7 @@ export default async function ClientesPage({
         />
       </div>
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <ClientFilters segments={segments} owners={owners} />
         </CardContent>

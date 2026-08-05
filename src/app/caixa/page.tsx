@@ -50,7 +50,7 @@ export default async function CaixaPage() {
         <SavedViews module="caixa" />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard title="Total em caixa" value={formatBRL(totalCaixa)} intent="positive" />
         <StatCard title="Reserva de emergência" value={formatBRL(totalReserva)} />
         <StatCard title="Quantidade de caixas" value={String(boxes.length)} />

@@ -87,7 +87,7 @@ export default async function PagamentosPage({
 
       <CobrancasTabs active="/pagamentos" />
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard title="Recebido no mês" value={formatBRL(total)} intent="positive" />
         <StatCard title="Pagamentos" value={String(payments.length)} />
         <StatCard
@@ -97,7 +97,7 @@ export default async function PagamentosPage({
         />
       </div>
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4 flex flex-wrap items-end gap-3">
           <form className="flex flex-wrap items-end gap-3">
             <div>

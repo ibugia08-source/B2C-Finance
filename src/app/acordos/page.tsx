@@ -187,7 +187,7 @@ export default async function ContratosPage({
         <SavedViews module="acordos" />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard title="MRR ativo" value={formatBRL(mrr)} intent="positive"
           hint="recorrência mensal vigente" />
         <StatCard title={`TCV vendido (${today.getFullYear()})`} value={formatBRL(tcvAno)}
@@ -200,7 +200,7 @@ export default async function ContratosPage({
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
         Contratos a vencer
       </h2>
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <StatCard
           href="/acordos?renovacao=30"
           title="Próximos 30 dias"
@@ -223,7 +223,7 @@ export default async function ContratosPage({
         />
       </div>
 
-      <Card className="mb-4">
+      <Card className="mb-3">
         <CardContent className="p-4">
           <ContractFilters
             clients={clients.map((c) => ({ value: c.id, label: c.name }))}

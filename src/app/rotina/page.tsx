@@ -338,7 +338,7 @@ export default async function RotinaPage() {
       </div>
 
       {/* ===== Métricas principais (hoje + próximos 3 dias) ===== */}
-      <div className={`grid ${statGrid} gap-4 mb-6`}>
+      <div className={`grid ${statGrid} gap-3 mb-3`}>
         {gates.cobrancas && (
           <>
             <StatCard
@@ -393,7 +393,7 @@ export default async function RotinaPage() {
           <p className="text-xs text-muted-foreground mb-3 -mt-1">
             Valores a receber dos clientes — vencidos e vencendo até 3 dias.
           </p>
-          <Card className="mb-6">
+          <Card className="mb-3">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -565,7 +565,7 @@ export default async function RotinaPage() {
           <p className="text-xs text-muted-foreground mb-3 -mt-1">
             Valores que a agência precisa pagar — despesas vencidas e vencendo até 3 dias.
           </p>
-          <Card className="mb-6">
+          <Card className="mb-3">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
@@ -644,7 +644,7 @@ export default async function RotinaPage() {
       <h2 id="acoes" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2 scroll-mt-24">
         Ações de hoje
       </h2>
-      <Card className="mb-6">
+      <Card className="mb-3">
         <CardContent className="p-5">
           {acoes.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">

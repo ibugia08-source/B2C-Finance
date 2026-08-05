@@ -75,7 +75,7 @@ export default async function InadimplenciaPage() {
       {/* Navegação entre as visões do módulo é pelas abas abaixo — sem botão duplicado. */}
       <CobrancasTabs active="/inadimplencia" />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Total vencido" value={formatBRL(totalVencido)}
           intent={totalVencido > 0 ? "negative" : "positive"} />
         <StatCard title="Clientes inadimplentes" value={String(clients.length)}
@@ -90,7 +90,7 @@ export default async function InadimplenciaPage() {
       </div>
 
       {/* Aging */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {(Object.keys(BUCKET_META) as AgingBucket[]).map((b) => (
           <Card key={b}>
             <CardContent className="p-4">

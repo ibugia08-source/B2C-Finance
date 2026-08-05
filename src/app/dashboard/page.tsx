@@ -204,7 +204,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Visão financeira · {period.label}
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
         <MetricCard
           title="Faturamento total"
           value={formatBRL(previsto)}
@@ -265,7 +265,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Evolução em {selectedYear}
       </h2>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
         <MainChart title="Faturamento"
           data={yearly.labels.map((l, i) => ({ label: l, value: yearly.faturamento[i] }))}
           color="hsl(var(--primary))" selectedIndex={selectedMonthIndex} />
@@ -302,7 +302,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       )}
 
       {/* ===== Resumo inteligente do mês + Saúde financeira ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
         <Card className="lg:col-span-2">
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-primary font-medium flex items-center gap-1.5 mb-3">
@@ -403,7 +403,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
 
       {/* Grupo: Eficiência */}
       <p className="text-xs font-medium text-foreground mb-2">Eficiência</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
         <SecondaryStat label="Custo por cliente"
           value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
           help="Total de despesas dividido pela quantidade de clientes ativos no mês."

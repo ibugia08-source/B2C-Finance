@@ -95,7 +95,7 @@ export function ClientHeader({ client, summary, monthly, risk }: ClientHeaderPro
       </div>
 
       {/* Mini-dashboard do cliente */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard
           title="Mensal contratado"
           value={monthly > 0 ? formatBRL(monthly) : "—"}

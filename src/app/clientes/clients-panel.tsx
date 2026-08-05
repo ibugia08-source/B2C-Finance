@@ -155,10 +155,11 @@ export function ClientsPanel({
         </div>
       </div>
 
-      {/* Desktop — rolagem horizontal CONTÍNUA (barra na base da caixa, sempre
-          visível) e cabeçalho fixo ao rolar verticalmente. */}
-      <div className="hidden md:block relative max-h-[70vh] overflow-auto rounded-md border">
-        <Table>
+      {/* Desktop — cabeçalho FIXO ao rolar a lista: a rolagem (vertical e
+          horizontal) vive no wrapper interno da própria Table, que é o
+          scrollport do sticky. Um div externo com overflow quebraria o sticky. */}
+      <div className="hidden md:block rounded-md border overflow-hidden">
+        <Table containerClassName="max-h-[72vh]">
           <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
             <TableRow>
               <TableHead className="w-10">

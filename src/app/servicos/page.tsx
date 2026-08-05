@@ -52,7 +52,7 @@ export default async function ServicosPage() {
         actions={<ServiceDialog />}
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
         <StatCard title="Serviços ativos" value={String(ativos)} intent="positive" />
         <StatCard title="Total no catálogo" value={String(services.length)} />
         <StatCard
