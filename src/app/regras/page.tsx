@@ -26,7 +26,7 @@ export default async function RegrasPage() {
         actions={<RuleDialog categories={categories} cards={cards} />}
       />
 
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <StatCard title="Regras" value={String(rules.length)} />
         <StatCard title="Ativas" value={String(ativas)} intent="positive" />
         <StatCard title="Inativas" value={String(rules.length - ativas)} />

@@ -204,7 +204,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
         Visão financeira · {period.label}
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+      {/* 5 colunas só a partir de xl — em lg os valores monetários grandes
+          (fonte mono, nowrap) não cabem em 5 colunas e estourariam o card. */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-3">
         <MetricCard
           title="Faturamento total"
           value={formatBRL(previsto)}

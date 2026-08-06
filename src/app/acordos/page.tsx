@@ -200,7 +200,7 @@ export default async function ContratosPage({
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-2">
         Contratos a vencer
       </h2>
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
         <StatCard
           href="/acordos?renovacao=30"
           title="Próximos 30 dias"
