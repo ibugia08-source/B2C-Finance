@@ -17,7 +17,11 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { HandCoins } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
+import { getReceiptsSummary } from "@/lib/services/revenue-metrics";
+import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
+import { getExpenseSummary } from "@/lib/services/expense-metrics";
+import { getPayrollSummary } from "@/lib/services/finance-metrics";
 import { BillingDialog } from "./billing-dialog";
 import { IncludeClientDialog, type IncludeClientOption } from "./include-client-dialog";
 import { MonthNav } from "./month-nav";
@@ -25,13 +29,27 @@ import { CycleFilters } from "./cycle-filters";
 import { ClientSearch } from "./search-client";
 import { PastDelinquencyDialog } from "./past-delinquency-dialog";
 import { ReceivablesTable, type ReceivableRow } from "./receivables-table";
+import { GenerateAllButton } from "@/app/acordos/generate-all-button";
+import { EXPENSE_TYPE_LABEL } from "@/app/despesas/_meta";
+import {
+  SectionNav,
+  EntradasSection,
+  ContasSection,
+  FolhaSection,
+  RenovacoesSection,
+  type EntradaRow,
+  type ContaRow,
+  type FolhaRow,
+  type RenovacaoRow,
+} from "./month-sections";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
 /**
- * RECEBIMENTOS — lista mensal simples dos clientes ativos e o status de
- * pagamento de cada um no mês selecionado. Edição rápida inline (sincroniza
- * com a Gestão de Carteira), registro de pagamento, texto de cobrança e
- * ajuste pontual da data do mês. Cadastro de cliente é SÓ na Carteira.
+ * GESTÃO DO MÊS — a "aba mensal" da planilha do dono, numa página só:
+ * resumo do mês, clientes do mês (com pagamento em 1 clique), outras
+ * entradas, contas a pagar, folha e renovações. Cada seção só aparece
+ * (e só consulta o banco) se o usuário tem acesso ao módulo de origem —
+ * mesmo padrão da Rotina Diária. Buscas em FASES sequenciais (pool ≈5).
  */
 
 type Search = {
@@ -84,12 +102,30 @@ export default async function RecebimentosPage({
 }: {
   searchParams: Search;
 }) {
-  await requirePagePermission("recebimentos.visualizar");
+  const viewer = await requirePagePermission("recebimentos.visualizar");
 
   const now = new Date();
   const mes = parseMonthParam(searchParams.mes) ?? {
     month: now.getMonth() + 1,
     year: now.getFullYear(),
+  };
+  const monthStart = new Date(mes.year, mes.month - 1, 1);
+  const monthEnd = new Date(mes.year, mes.month, 1);
+
+  // Gates por módulo de origem (padrão da Rotina): sem permissão, a seção
+  // some E as queries dela são puladas.
+  const gates = {
+    entradas: can(viewer, "receitas.visualizar"),
+    entradasCriar: can(viewer, "receitas.editar"),
+    contas: can(viewer, "despesas.visualizar"),
+    contasCriar: can(viewer, "despesas.editar"),
+    contasPagar: can(viewer, "despesas.marcar_como_paga"),
+    folha: can(viewer, "folha.visualizar"),
+    folhaEditar: can(viewer, "folha.editar"),
+    renovacoes: can(viewer, "clientes.visualizar"),
+    renovar: can(viewer, "contratos.editar"),
+    marcarPerda: can(viewer, "clientes.alterar_status"),
+    gerarCobrancas: can(viewer, "recebimentos.gerar_cobranca"),
   };
 
   // Manutenção do ciclo: marca vencidas + gera as mensalidades MRR que faltam.
@@ -387,11 +423,282 @@ export default async function RecebimentosPage({
     ({ _sort, ...r }) => ({ ...(r as any), _dueDate: undefined, _amount: undefined })
   );
 
+  // ===== FASE B — resumo do mês (fontes oficiais, uma por vez) =====
+  const receipts = await getReceiptsSummary(monthStart, monthEnd);
+  const expenseSummary = gates.contas ? await getExpenseSummary(monthStart) : null;
+  const payrollSummary = gates.folha
+    ? await getPayrollSummary(mes.month, mes.year)
+    : null;
+  const pctRealizacao =
+    receipts.expectedTotal > 0 ? receipts.totalRevenue / receipts.expectedTotal : null;
+  const resultadoMes =
+    expenseSummary != null ? receipts.totalRevenue - expenseSummary.total : null;
+
+  // ===== FASE C — listas das seções (só as permitidas; ≤4 em paralelo) =====
+  const [entradasIncomes, entradasExtras, contasRaw, folhaItems] = await Promise.all([
+    gates.entradas
+      ? prisma.income.findMany({
+          where: {
+            receivedAt: { gte: monthStart, lt: monthEnd },
+            status: { not: "CANCELED" },
+            OR: [{ billingId: null }, { revenueType: "RECOVERY" }],
+          },
+          orderBy: { receivedAt: "desc" },
+          take: 100,
+          select: {
+            id: true,
+            description: true,
+            amount: true,
+            receivedAt: true,
+            status: true,
+            revenueType: true,
+            client: { select: { name: true } },
+            billing: { select: { competenceMonth: true, competenceYear: true } },
+          },
+        })
+      : Promise.resolve([] as any[]),
+    gates.entradas
+      ? prisma.extraRevenue.findMany({
+          where: { receivedAt: { gte: monthStart, lt: monthEnd }, origin: "MANUAL" },
+          orderBy: { receivedAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            description: true,
+            amount: true,
+            receivedAt: true,
+            client: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([] as any[]),
+    gates.contas
+      ? prisma.transaction.findMany({
+          where: {
+            type: "despesa",
+            status: { not: "cancelado" },
+            date: { gte: monthStart, lt: monthEnd },
+          },
+          orderBy: [{ dueDate: "asc" }],
+          take: 200,
+          select: {
+            id: true,
+            description: true,
+            amount: true,
+            dueDate: true,
+            status: true,
+            expenseType: true,
+            category: { select: { name: true } },
+          },
+        })
+      : Promise.resolve([] as any[]),
+    gates.folha && payrollSummary?.runId
+      ? prisma.payrollItem.findMany({
+          where: { payrollId: payrollSummary.runId },
+          select: {
+            employeeId: true,
+            kind: true,
+            amount: true,
+            employee: { select: { id: true, name: true, role: true } },
+          },
+        })
+      : Promise.resolve([] as any[]),
+  ]);
+
+  // ===== FASE D — apoio (prévia da folha, renovações, categorias) =====
+  const [folhaPreviewEmployees, folhaPreviewCommissions, categoriesForQuickAdd] =
+    await Promise.all([
+      gates.folha && !payrollSummary?.runId
+        ? prisma.employee.findMany({
+            where: { active: true },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true, role: true, baseSalary: true },
+          })
+        : Promise.resolve([] as any[]),
+      gates.folha && !payrollSummary?.runId
+        ? prisma.commission.findMany({
+            where: {
+              month: mes.month,
+              year: mes.year,
+              status: { in: ["PENDING", "APPROVED", "PAID"] },
+            },
+            select: { employeeId: true, amount: true },
+          })
+        : Promise.resolve([] as any[]),
+      gates.contasCriar
+        ? prisma.category.findMany({
+            where: { kind: { in: ["despesa", "mista"] } },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([] as any[]),
+    ]);
+
+  let renovacaoRows: RenovacaoRow[] = [];
+  let renovacaoExpected = 0;
+  if (gates.renovacoes) {
+    const nowKey = now.getFullYear() * 12 + now.getMonth();
+    const targetKey = mes.year * 12 + (mes.month - 1);
+    const [win] = await getRenewalOutlook([targetKey - nowKey]);
+    const ids = win.clients.map((c) => c.id);
+    const contracts = ids.length
+      ? await prisma.contract.findMany({
+          where: { clientId: { in: ids }, status: { in: ["ACTIVE", "RENEWAL"] } },
+          orderBy: { endDate: "desc" },
+          select: {
+            id: true,
+            clientId: true,
+            type: true,
+            totalValue: true,
+            monthlyValue: true,
+          },
+        })
+      : [];
+    const contractByClient = new Map<string, (typeof contracts)[number]>();
+    for (const c of contracts)
+      if (!contractByClient.has(c.clientId)) contractByClient.set(c.clientId, c);
+    renovacaoRows = win.clients.map((c) => {
+      const ct = contractByClient.get(c.id);
+      return {
+        clientId: c.id,
+        name: c.name,
+        status: c.status,
+        modality: c.modality,
+        expected: c.expected,
+        salesOwner: c.salesOwner,
+        contract: ct
+          ? {
+              id: ct.id,
+              type: ct.type,
+              totalValue: Number(ct.totalValue ?? 0),
+              monthlyValue: Number(ct.monthlyValue ?? 0),
+            }
+          : null,
+      };
+    });
+    renovacaoExpected = win.expectedTotal;
+  }
+
+  // ===== Montagem dos dados das seções (plain objects) =====
+  const entradaRows: EntradaRow[] = [
+    ...entradasIncomes.map((i: any) => ({
+      id: `inc-${i.id}`,
+      description: i.description,
+      clientName: i.client?.name ?? null,
+      amount: Number(i.amount),
+      dateBR: formatDateBR(i.receivedAt),
+      status: i.status,
+      isRecovery: i.revenueType === "RECOVERY",
+      recoveryOf:
+        i.revenueType === "RECOVERY" && i.billing
+          ? `${String(i.billing.competenceMonth).padStart(2, "0")}/${i.billing.competenceYear}`
+          : null,
+    })),
+    ...entradasExtras.map((e: any) => ({
+      id: `ext-${e.id}`,
+      description: e.description,
+      clientName: e.client?.name ?? null,
+      amount: Number(e.amount),
+      dateBR: formatDateBR(e.receivedAt),
+      status: "RECEIVED",
+      isRecovery: false,
+      recoveryOf: null,
+    })),
+  ].sort((a, b) => (a.dateBR < b.dateBR ? 1 : -1));
+  const entradasTotal =
+    entradasIncomes
+      .filter((i: any) => i.status === "RECEIVED")
+      .reduce((s: number, i: any) => s + Number(i.amount), 0) +
+    entradasExtras.reduce((s: number, e: any) => s + Number(e.amount), 0);
+
+  const contaRows: ContaRow[] = contasRaw.map((t: any) => ({
+    id: t.id,
+    description: t.description,
+    categoryName: t.category?.name ?? null,
+    typeLabel: t.expenseType ? EXPENSE_TYPE_LABEL[t.expenseType] ?? null : null,
+    amount: Number(t.amount),
+    dueBR: t.dueDate ? formatDateBR(t.dueDate) : null,
+    dueDate: t.dueDate,
+    status: t.status,
+  }));
+  const contasTotal = contaRows.reduce((s, r) => s + r.amount, 0);
+  const contasPagas = contasRaw
+    .filter((t: any) => t.status === "pago")
+    .reduce((s: number, t: any) => s + Number(t.amount), 0);
+
+  let folhaRows: FolhaRow[] = [];
+  if (gates.folha && payrollSummary?.runId) {
+    const byEmp = new Map<string, FolhaRow>();
+    for (const it of folhaItems as any[]) {
+      const cur = byEmp.get(it.employeeId) ?? {
+        employeeId: it.employeeId,
+        name: it.employee?.name ?? "—",
+        role: it.employee?.role ?? null,
+        salary: 0,
+        commission: 0,
+        others: 0,
+        total: 0,
+      };
+      const val = Number(it.amount);
+      if (it.kind === "SALARY") cur.salary += val;
+      else if (it.kind === "COMMISSION") cur.commission += val;
+      else if (it.kind === "DEDUCTION") cur.others -= val;
+      else cur.others += val;
+      cur.total = cur.salary + cur.commission + cur.others;
+      byEmp.set(it.employeeId, cur);
+    }
+    folhaRows = Array.from(byEmp.values()).sort((a, b) => b.total - a.total);
+  } else if (gates.folha) {
+    const commByEmp = new Map<string, number>();
+    for (const c of folhaPreviewCommissions as any[]) {
+      commByEmp.set(c.employeeId, (commByEmp.get(c.employeeId) ?? 0) + Number(c.amount));
+    }
+    folhaRows = (folhaPreviewEmployees as any[])
+      .map((e) => {
+        const salary = Number(e.baseSalary ?? 0);
+        const commission = commByEmp.get(e.id) ?? 0;
+        return {
+          employeeId: e.id,
+          name: e.name,
+          role: e.role ?? null,
+          salary,
+          commission,
+          others: 0,
+          total: salary + commission,
+        };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }
+  const folhaTotal = payrollSummary?.runId
+    ? payrollSummary.total
+    : folhaRows.reduce((s, r) => s + r.total, 0);
+  const folhaPct = payrollSummary?.runId
+    ? payrollSummary.folhaSobreReceita
+    : receipts.totalRevenue > 0
+      ? folhaTotal / receipts.totalRevenue
+      : 0;
+
+  const sectionNavItems = [
+    { href: "#clientes", label: "Clientes do mês", count: tableRows.length },
+    ...(gates.entradas
+      ? [{ href: "#entradas", label: "Outras entradas", count: entradaRows.length }]
+      : []),
+    ...(gates.contas
+      ? [{ href: "#contas", label: "Contas a pagar", count: contaRows.length }]
+      : []),
+    ...(gates.folha
+      ? [{ href: "#folha", label: "Folha", count: folhaRows.length }]
+      : []),
+    ...(gates.renovacoes
+      ? [{ href: "#renovacoes", label: "Renovações", count: renovacaoRows.length }]
+      : []),
+  ];
+
   return (
     <div>
       <PageHeader
-        title="Recebimentos"
-        description={`Gerencie o ciclo mensal de pagamentos dos clientes · ${monthLabelStr}`}
+        title="Gestão do Mês"
+        description={`A aba de ${monthLabelStr}: clientes, entradas, contas e folha num lugar só`}
         actions={
           <div className="flex flex-wrap gap-2">
             <PastDelinquencyDialog clients={allClientsBasic} />
@@ -428,6 +735,73 @@ export default async function RecebimentosPage({
           <MonthNav month={mes.month} year={mes.year} />
           <ClientSearch />
         </div>
+      </div>
+
+      {/* ===== Resumo do mês (Ativo · Passivo · Resultado da planilha) ===== */}
+      <div
+        className={`grid grid-cols-2 md:grid-cols-3 ${expenseSummary ? "xl:grid-cols-6" : "xl:grid-cols-4"} gap-3 mb-3`}
+      >
+        <StatCard
+          title="Faturamento esperado"
+          value={formatBRL(receipts.expectedTotal)}
+          hint="cobranças da competência"
+        />
+        <StatCard
+          title="Recebido no mês"
+          value={formatBRL(receipts.totalRevenue)}
+          intent="positive"
+          hint="mensalidades + entradas"
+        />
+        <StatCard
+          title="% Realização"
+          value={pctRealizacao != null ? `${Math.round(pctRealizacao * 100)}%` : "—"}
+          intent={
+            pctRealizacao == null
+              ? "default"
+              : pctRealizacao >= 0.9
+                ? "positive"
+                : pctRealizacao >= 0.6
+                  ? "warning"
+                  : "negative"
+          }
+          hint="recebido ÷ esperado"
+        />
+        <StatCard
+          title="Falta receber"
+          value={formatBRL(receipts.openMonth)}
+          intent={receipts.openMonth > 0 ? "warning" : "positive"}
+          hint="em aberto na competência"
+        />
+        {expenseSummary && (
+          <StatCard
+            title="Despesas do mês"
+            value={formatBRL(expenseSummary.total)}
+            intent="negative"
+            hint="contas + cartões + folha paga"
+          />
+        )}
+        {resultadoMes != null && (
+          <StatCard
+            title="Resultado do mês"
+            value={formatBRL(resultadoMes)}
+            intent={resultadoMes >= 0 ? "positive" : "negative"}
+            hint="recebido − despesas"
+          />
+        )}
+      </div>
+
+      <SectionNav items={sectionNavItems} />
+
+      {/* ================= CLIENTES DO MÊS ================= */}
+      <section id="clientes" className="scroll-mt-20">
+      <div className="mb-2">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.01em]">
+          Clientes do Mês
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Um cliente por linha, como na planilha — o status colorido registra o
+          pagamento de verdade (com Desfazer)
+        </p>
       </div>
 
       {/* ===== Painel do mês: só as 5 métricas essenciais (clicáveis) ===== */}
@@ -504,6 +878,74 @@ export default async function RecebimentosPage({
         cadastrar um novo cliente, acesse a{" "}
         <Link href="/clientes" className="underline">Gestão de Carteira</Link>.
       </p>
+      </section>
+
+      {/* ================= OUTRAS ENTRADAS ================= */}
+      {gates.entradas && (
+        <EntradasSection
+          rows={entradaRows}
+          total={entradasTotal}
+          canCreate={gates.entradasCriar}
+          month={mes.month}
+          year={mes.year}
+        />
+      )}
+
+      {/* ================= CONTAS A PAGAR ================= */}
+      {gates.contas && (
+        <ContasSection
+          rows={contaRows}
+          total={contasTotal}
+          paidTotal={contasPagas}
+          canPay={gates.contasPagar}
+          canCreate={gates.contasCriar}
+          categories={categoriesForQuickAdd as { id: string; name: string }[]}
+          month={mes.month}
+          year={mes.year}
+        />
+      )}
+
+      {/* ================= FOLHA DO MÊS ================= */}
+      {gates.folha && (
+        <FolhaSection
+          rows={folhaRows}
+          total={folhaTotal}
+          runStatus={payrollSummary?.status ?? null}
+          pctOfRevenue={folhaPct}
+          canEdit={gates.folhaEditar}
+          month={mes.month}
+          year={mes.year}
+        />
+      )}
+
+      {/* ================= RENOVAÇÕES DO MÊS ================= */}
+      {gates.renovacoes && (
+        <RenovacoesSection
+          rows={renovacaoRows}
+          expectedTotal={renovacaoExpected}
+          canRenew={gates.renovar}
+          canMarkLost={gates.marcarPerda}
+          monthLabel={referenceMonth}
+        />
+      )}
+
+      {/* ================= Utilitários do mês ================= */}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card/60 p-4 print:hidden">
+        <p className="text-xs text-muted-foreground max-w-md">
+          As mensalidades MRR do mês são geradas automaticamente. Cobranças de
+          acordos TCV/contratos podem ser geradas em lote aqui — útil após
+          importar contratos.
+        </p>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/acordos"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Acordos comerciais
+          </Link>
+          {gates.gerarCobrancas && <GenerateAllButton />}
+        </div>
+      </div>
     </div>
   );
 }

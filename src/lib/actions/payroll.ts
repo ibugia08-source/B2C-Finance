@@ -336,3 +336,35 @@ export async function setPayrollStatus(
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a folha." };
   }
 }
+
+/**
+ * Fluxo combinado da GESTÃO DO MÊS: gera a folha da competência (se ainda
+ * não existir), aprova e marca como PAGA num gesto só — o clique "pagar
+ * folha" da planilha. Reusa ensurePayroll e setPayrollStatus (que cria a
+ * despesa PAYROLL e quita as comissões), sem regra nova.
+ */
+export async function generateApproveAndPayPayroll(
+  month: number,
+  year: number
+): Promise<ActionResult> {
+  await requirePermission("folha.editar");
+  try {
+    const ensured = await ensurePayroll(month, year);
+    if (!ensured.ok) return ensured;
+    const run = await prisma.payroll.findFirst({ where: { month, year } });
+    if (!run) return { ok: false, error: "Folha não encontrada após gerar." };
+    if (run.status === "PAID") return { ok: true, warning: "Folha já estava paga." };
+
+    if (run.status === "DRAFT") {
+      const approved = await setPayrollStatus(run.id, "APPROVED");
+      if (!approved.ok) return approved;
+    }
+    const paid = await setPayrollStatus(run.id, "PAID");
+    if (!paid.ok) return paid;
+
+    revalidatePayroll();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao pagar a folha do mês." };
+  }
+}
