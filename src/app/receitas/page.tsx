@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/record-card";
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
-import { IncomeFilters } from "./filters";
+import { MonthNav } from "@/components/month-nav";
 import { requirePagePermission } from "@/lib/auth/viewer";
 
 type Search = {
@@ -68,9 +68,14 @@ function statusVariant(s: string): any {
 
 export default async function ReceitasPage({ searchParams }: { searchParams: Search }) {
   await requirePagePermission("receitas.visualizar");
+  // Padrão planilha: a tela sempre olha UMA competência (default = mês atual).
+  const now = new Date();
+  const mesParam = parseMonthParam(searchParams.mes) ?? {
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  };
   const where: any = {};
-  const mesParam = parseMonthParam(searchParams.mes);
-  if (mesParam) {
+  {
     const ref = new Date(mesParam.year, mesParam.month - 1, 1);
     const { start, end } = monthRange(ref);
     where.receivedAt = { gte: start, lt: end };
@@ -103,9 +108,8 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
       }),
     ]);
 
-  // Totais dos cards seguem o período selecionado no filtro (ou mês atual)
-  let ref = new Date();
-  if (mesParam) ref = new Date(mesParam.year, mesParam.month - 1, 1);
+  // Totais dos cards seguem a competência selecionada
+  const ref = new Date(mesParam.year, mesParam.month - 1, 1);
   const { start, end } = monthRange(ref);
   const [monthIncomes, extraRevenues] = await Promise.all([
     prisma.income.findMany({
@@ -147,15 +151,10 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
         }
       />
 
-      <div className="mb-3 print:hidden">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <MonthNav month={mesParam.month} year={mesParam.year} />
         <SavedViews module="receitas" />
       </div>
-
-      <Card className="mb-3">
-        <CardContent className="p-4">
-          <IncomeFilters people={people} />
-        </CardContent>
-      </Card>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <StatCard title="Recebido no mês" value={formatBRL(totalRecebido)} intent="positive" />

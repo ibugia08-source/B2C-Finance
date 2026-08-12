@@ -2,13 +2,13 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 /**
- * Abas do módulo CLIENTES (unificado): a carteira de clientes, a visão
- * mensal de recebimentos e a inadimplência — tudo sob o mesmo módulo.
+ * Abas do módulo (unificado): a Gestão do Mês (planilha mensal), a carteira
+ * de clientes e a inadimplência — tudo sob o mesmo módulo.
  * Cadastro de cliente é só na aba Clientes. Acordos/contratos ficam FORA.
  */
 const TABS = [
+  { href: "/cobrancas", label: "Gestão do Mês" },
   { href: "/clientes", label: "Clientes" },
-  { href: "/cobrancas", label: "Recebimentos" },
   { href: "/inadimplencia", label: "Inadimplência" },
 ];
 

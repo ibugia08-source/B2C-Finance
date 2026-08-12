@@ -1,5 +1,4 @@
 "use client";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -18,16 +17,10 @@ export function ExpenseFilters() {
     router.push(qs ? `/despesas?${qs}` : "/despesas");
   }
 
+  // O mês é controlado pelo MonthNav no topo da página (padrão do sistema);
+  // aqui ficam só os filtros de conteúdo.
   return (
     <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
-      <div>
-        <Label className="text-xs">Mês</Label>
-        <Input
-          type="month"
-          defaultValue={sp.get("mes") ?? ""}
-          onChange={(e) => update("mes", e.target.value)}
-        />
-      </div>
       <div className="w-full sm:w-40">
         <Label className="text-xs">Status</Label>
         <Select

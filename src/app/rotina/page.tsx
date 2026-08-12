@@ -46,10 +46,8 @@ const PRIORITY_META: Record<string, { label: string; variant: any }> = {
   baixa: { label: "Baixa", variant: "secondary" },
 };
 
-// Cores suaves das linhas (design system): vencido = vermelho discreto;
-// vence hoje/3 dias = amarelo discreto.
-const ROW_OVERDUE = "bg-red-50/70 dark:bg-red-500/[0.07]";
-const ROW_SOON = "bg-warning-soft/60";
+// Cores suaves das linhas: fonte única em lib/status-meta (língua da planilha).
+import { ROW_OVERDUE, ROW_SOON } from "@/lib/status-meta";
 
 export default async function RotinaPage() {
   const viewer = await requirePagePermission("rotina.visualizar");

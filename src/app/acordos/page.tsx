@@ -34,7 +34,6 @@ import { ContractActions } from "./row-actions";
 import { ContractFilters } from "./filters";
 import { GenerateAllButton } from "./generate-all-button";
 import { GenerateClientBillingsButton } from "./generate-client-billings";
-import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import {
   CONTRACT_STATUS_LABEL,
   CONTRACT_TYPE_LABEL,
@@ -170,6 +169,14 @@ export default async function ContratosPage({
 
   return (
     <div>
+      <div className="mb-2 print:hidden">
+        <Link
+          href="/cobrancas"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          ← Gestão do Mês
+        </Link>
+      </div>
       <PageHeader
         title="Acordos comerciais"
         description="Contratos MRR/TCV que alimentam as cobranças — tudo no mesmo hub de receita"
@@ -180,8 +187,6 @@ export default async function ContratosPage({
           </div>
         }
       />
-
-      <CobrancasTabs active="/acordos" />
 
       <div className="mb-3 print:hidden">
         <SavedViews module="acordos" />

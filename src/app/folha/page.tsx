@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
+import { MonthNav } from "@/components/month-nav";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
@@ -87,15 +88,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
         description={`Competência ${String(month).padStart(2, "0")}/${year}`}
         actions={
           <div className="flex flex-wrap items-end gap-2">
-            <form>
-              <input
-                type="month"
-                name="mes"
-                defaultValue={monthValue}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              />
-              <button type="submit" className="sr-only">Ir</button>
-            </form>
+            <MonthNav month={month} year={year} />
             <EmployeeDialog />
             <CommissionDialog
               employees={activeEmployees.map((e) => ({ id: e.id, name: e.name }))}
