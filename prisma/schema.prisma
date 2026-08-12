@@ -77,6 +77,7 @@ model User {
   ownedCollectionHistories CollectionHistory[] @relation("OwnerCollectionHistory")
   ownedFinancialAlerts     FinancialAlert[]    @relation("OwnerFinancialAlert")
   ownedSavedViews          SavedView[]         @relation("OwnerSavedView")
+  ownedAnnualTargets       AnnualTarget[]      @relation("OwnerAnnualTarget")
 
   // ===== Contratos documentais (modelos DOCX) e dossiê do cliente =====
   ownedContractTemplates  ContractTemplate[]  @relation("OwnerContractTemplate")
@@ -1524,6 +1525,20 @@ model SavedView {
 enum ViewVisibility {
   PRIVATE // só o criador vê
   GLOBAL // todos os usuários da agência veem
+}
+
+// Meta anual de faturamento (bloco META ANUAL do Painel Anual — planilha).
+model AnnualTarget {
+  id            String  @id @default(cuid())
+  year          Int
+  revenueTarget Decimal @db.Decimal(14, 2)
+  ownerId       String?
+  owner         User?   @relation("OwnerAnnualTarget", fields: [ownerId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([ownerId, year])
+  @@index([ownerId])
 }
 
 // ===================================================================

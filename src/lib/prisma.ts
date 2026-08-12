@@ -45,6 +45,7 @@ const OWNED_MODELS = new Set<string>([
   "ExportReport",
   "FinancialAlert",
   "SavedView",
+  "AnnualTarget",
   // Contratos documentais + dossiê do cliente
   "ContractTemplate",
   "GeneratedContract",
