@@ -110,12 +110,16 @@ export type DelinquentClient = {
   bucket: AgingBucket;
   lastContactAt: Date | null;
   lastContactStatus: string | null;
+  /** Cobrança vencida mais antiga — alvo do "Registrar recebimento" da tela. */
+  oldestBillingId: string;
+  oldestOpenAmount: number;
 };
 
 export async function getDelinquentClients(): Promise<DelinquentClient[]> {
   const billings = await prisma.billing.findMany({
     where: { status: "OVERDUE" },
     select: {
+      id: true,
       clientId: true,
       amount: true,
       paidTotal: true,
@@ -143,11 +147,17 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
         bucket: "1-15",
         lastContactAt: null,
         lastContactStatus: null,
+        oldestBillingId: b.id,
+        oldestOpenAmount: openAmount,
       });
     } else {
       cur.totalOverdue += openAmount;
       cur.billingCount += 1;
-      if (b.dueDate < cur.oldestDueDate) cur.oldestDueDate = b.dueDate;
+      if (b.dueDate < cur.oldestDueDate) {
+        cur.oldestDueDate = b.dueDate;
+        cur.oldestBillingId = b.id;
+        cur.oldestOpenAmount = openAmount;
+      }
     }
   }
 

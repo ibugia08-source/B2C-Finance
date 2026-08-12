@@ -28,10 +28,11 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import Link from "next/link";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { MessageDialog } from "@/app/cobrancas/message-dialog";
+import { PaymentDialog } from "@/app/cobrancas/payment-dialog";
 import { COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
-import { MessageSquareText } from "lucide-react";
+import { MessageSquareText, DollarSign } from "lucide-react";
 
 const BUCKET_META: Record<AgingBucket, { label: string; variant: any }> = {
   "1-15": { label: "1–15 dias", variant: "warning" },
@@ -41,7 +42,8 @@ const BUCKET_META: Record<AgingBucket, { label: string; variant: any }> = {
 };
 
 export default async function InadimplenciaPage() {
-  await requirePagePermission("recebimentos.ver_inadimplencia");
+  const viewer = await requirePagePermission("recebimentos.ver_inadimplencia");
+  const canPay = can(viewer, "recebimentos.registrar_pagamento");
   await markOverdueBillings();
 
   const { start, end } = monthRange();
@@ -57,6 +59,13 @@ export default async function InadimplenciaPage() {
       _sum: { amount: true },
     }),
   ]);
+  // Contas para o dialog de recebimento (baixa direta na tela).
+  const accounts = canPay
+    ? await prisma.account.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
 
   const totalVencido = clients.reduce((s, c) => s + c.totalOverdue, 0);
   const recuperado = Number(recoveredAgg._sum.amount ?? 0);
@@ -153,6 +162,21 @@ export default async function InadimplenciaPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-1 justify-end">
+                        {canPay && (
+                          <PaymentDialog
+                            billing={{
+                              id: c.oldestBillingId,
+                              openAmount: c.oldestOpenAmount,
+                              description: `Vencida mais antiga de ${c.clientName} (${formatDateBR(c.oldestDueDate)})${c.billingCount > 1 ? ` — as demais ficam na ficha do cliente` : ""}`,
+                            }}
+                            accounts={accounts}
+                            trigger={
+                              <Button variant="outline" size="sm">
+                                <DollarSign className="h-4 w-4 mr-1" /> Receber
+                              </Button>
+                            }
+                          />
+                        )}
                         <MessageDialog
                           input={{
                             clientName: c.clientName,
@@ -209,6 +233,21 @@ export default async function InadimplenciaPage() {
                     </Field>
                   </div>
                   <MobileCardActions>
+                    {canPay && (
+                      <PaymentDialog
+                        billing={{
+                          id: c.oldestBillingId,
+                          openAmount: c.oldestOpenAmount,
+                          description: `Vencida mais antiga de ${c.clientName} (${formatDateBR(c.oldestDueDate)})`,
+                        }}
+                        accounts={accounts}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            <DollarSign className="h-4 w-4 mr-1" /> Receber
+                          </Button>
+                        }
+                      />
+                    )}
                     <MessageDialog
                       input={{
                         clientName: c.clientName,

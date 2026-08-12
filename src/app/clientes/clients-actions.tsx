@@ -24,11 +24,13 @@ import {
   type DelinquencyValue,
 } from "./_meta";
 import {
-  setClientDelinquency,
   setClientLossReason,
   bulkUpdateClients,
   bulkDeleteClients,
 } from "@/lib/actions/clients";
+import { setClientMonthPayment } from "@/lib/actions/receivables-inline";
+import { undoQuickSettle } from "@/lib/actions/billings";
+import { showUndoToast } from "@/components/undo-toast";
 import type { ClientRow } from "./clients-table";
 import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 
@@ -98,26 +100,43 @@ export function LossReasonDialog({
 }
 
 /**
- * Inadimplência do mês editável inline. Mostra "editado manualmente" quando há
- * override na competência corrente (item 6 do briefing: diferenciar automático
- * de manual). Ao escolher um valor, grava override; opção "Automático" limpa.
+ * Pagamento do mês editável inline — agora REAL (fim dos dois "pagos"):
+ *  - Pago → registra o pagamento pelo núcleo contábil (1 clique + Desfazer);
+ *  - Devendo → marca a cobrança como Inadimplente;
+ *  - limpar → volta para A vencer.
+ * Se o mês ainda não tem cobrança, ela é criada do cadastro na hora
+ * (preencher a célula É o registro, como na planilha). Reflete em
+ * Recebimentos, Inadimplência e Dashboard imediatamente.
  */
 export function DelinquencyCell({ client }: { client: ClientRow }) {
   const options = [...DELINQUENCY_OPTIONS];
   return (
     <div className="inline-flex flex-col gap-0.5">
       <InlineSelect
-        ariaLabel={`Inadimplência de ${client.name}`}
+        ariaLabel={`Pagamento do mês de ${client.name}`}
         value={
           client.delinquency.value === "SEM_COBRANCA" ? "" : client.delinquency.value
         }
         options={options}
         pillClass={(v) => delinquencyPill((v || "SEM_COBRANCA") as any)}
         allowEmpty
-        emptyLabel={client.delinquency.manual ? "Automático" : DELINQUENCY_LABEL.SEM_COBRANCA}
-        action={(v) =>
-          setClientDelinquency(client.id, v || null, client.refMonth, client.refYear)
-        }
+        emptyLabel={DELINQUENCY_LABEL.SEM_COBRANCA}
+        action={async (v) => {
+          const res = await setClientMonthPayment(
+            client.id,
+            (v || null) as "PAGO" | "DEVENDO" | null,
+            client.refMonth,
+            client.refYear
+          );
+          if (res.ok && v === "PAGO") {
+            const paymentId = res.id;
+            showUndoToast({
+              message: `${client.name}: pagamento do mês registrado.`,
+              onUndo: paymentId ? () => undoQuickSettle(paymentId) : undefined,
+            });
+          }
+          return res;
+        }}
       />
       {client.delinquency.manual && (
         <span className="text-[10px] text-muted-foreground">

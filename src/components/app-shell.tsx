@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { SidebarWithToggle } from "./sidebar-with-toggle";
 import { MobileHeader } from "./mobile-header";
 import { MobileNav } from "./mobile-nav";
+import { UndoToastHost } from "./undo-toast";
 import type { UserLike } from "./nav-items";
 
 // /f = formulário público de contratos (sem sidebar/menus, como o login).
@@ -53,6 +54,7 @@ export function AppShell({
         </main>
       </div>
       <MobileNav user={user} />
+      <UndoToastHost />
     </>
   );
 }

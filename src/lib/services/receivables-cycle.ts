@@ -106,6 +106,129 @@ export async function ensureMonthlyBillings(
 }
 
 // ===================================================================
+// Materialização pontual (gesto da planilha na carteira)
+// ===================================================================
+
+/**
+ * Garante a cobrança de UM cliente numa competência (mesmas regras do
+ * "Incluir cliente no mês"): valor/vencimento/descrição saem do CADASTRO
+ * (MRR → mensalidade, TCV → valor do contrato). Se o cliente foi removido
+ * do mês (marcador CANCELED), restaura em vez de duplicar. Usado pelo
+ * clique PAGO/DEVENDO na coluna "Pagamento (mês)" da carteira quando o mês
+ * ainda não tem cobrança — preencher a célula É o registro.
+ */
+export async function ensureClientBillingForMonth(
+  clientId: string,
+  month: number,
+  year: number,
+  byEmail?: string
+): Promise<
+  | { ok: true; billingId: string; created: boolean }
+  | { ok: false; error: string }
+> {
+  const client = await prisma.client.findFirst({
+    where: { id: clientId },
+    select: {
+      id: true,
+      name: true,
+      modality: true,
+      monthlyValue: true,
+      totalContractValue: true,
+      paymentDay: true,
+    },
+  });
+  if (!client) return { ok: false, error: "Cliente não encontrado." };
+
+  const revenueType = client.modality === "TCV" ? "TCV" : "MRR";
+  const amount =
+    revenueType === "TCV" ? n(client.totalContractValue) : n(client.monthlyValue);
+  if (!Number.isFinite(amount) || amount <= 0)
+    return {
+      ok: false,
+      error:
+        revenueType === "TCV"
+          ? "Defina o valor do contrato (TCV) no cadastro do cliente antes."
+          : "Defina o valor mensal no cadastro do cliente antes.",
+    };
+
+  // Cobrança viva na competência? Reusa.
+  const existing = await prisma.billing.findFirst({
+    where: {
+      clientId: client.id,
+      competenceMonth: month,
+      competenceYear: year,
+      revenueType,
+      status: { not: "CANCELED" },
+    },
+    select: { id: true },
+  });
+  if (existing) return { ok: true, billingId: existing.id, created: false };
+
+  const dueDate = getValidDueDateForMonth(year, month, client.paymentDay);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const openStatus = dueDate < today ? "OVERDUE" : "PENDING";
+  const compLabel = `${String(month).padStart(2, "0")}/${year}`;
+  const description =
+    revenueType === "TCV"
+      ? `Contrato ${compLabel} — ${client.name}`
+      : `Mensalidade ${compLabel} — ${client.name}`;
+
+  // Removido do mês? Restaura o marcador em vez de duplicar.
+  const canceledMarker = await prisma.billing.findFirst({
+    where: {
+      clientId: client.id,
+      competenceMonth: month,
+      competenceYear: year,
+      revenueType,
+      status: "CANCELED",
+    },
+    select: { id: true },
+  });
+
+  let billingId: string;
+  if (canceledMarker) {
+    await prisma.billing.update({
+      where: { id: canceledMarker.id },
+      data: {
+        amount,
+        dueDate,
+        description,
+        status: openStatus,
+        canceledAt: null,
+        canceledBy: null,
+        cancelReason: null,
+      },
+    });
+    billingId = canceledMarker.id;
+  } else {
+    const created = await prisma.billing.create({
+      data: {
+        clientId: client.id,
+        description,
+        competenceMonth: month,
+        competenceYear: year,
+        amount,
+        dueDate,
+        revenueType,
+        status: openStatus,
+      },
+    });
+    billingId = created.id;
+  }
+
+  await prisma.collectionHistory.create({
+    data: {
+      billingId,
+      clientId: client.id,
+      status: "NOT_CONTACTED",
+      message: `${canceledMarker ? "Recolocado" : "Incluído"} no mês ${compLabel} pela coluna Pagamento (mês) da carteira${byEmail ? ` por ${byEmail}` : ""}.`,
+    },
+  });
+  return { ok: true, billingId, created: true };
+}
+
+// ===================================================================
 // Status da linha no ciclo (derivado — interface simples)
 // ===================================================================
 

@@ -12,7 +12,9 @@ import {
   RowActions,
 } from "./receivables-actions";
 import { setClientPaymentDay, setClientChargeAmount, setMonthChargeStatus } from "@/lib/actions/receivables-inline";
+import { quickSettleBilling, undoQuickSettle } from "@/lib/actions/billings";
 import { setClientModality } from "@/lib/actions/clients";
+import { showUndoToast } from "@/components/undo-toast";
 import type { ActionResult } from "@/lib/actions/clients";
 import type { ReceivableRow as ReceivableRowType } from "./receivables-table";
 
@@ -44,16 +46,22 @@ function ReceivableRowInner({
   month: number;
   year: number;
 }) {
+  // Gesto da planilha: escolher "Pago" registra NA HORA (saldo do mês) e o
+  // toast oferece Desfazer — sem confirm(). Valor parcial/outra data/conta
+  // continuam no dialog $ da linha.
   const onStatusChange = useCallback((r: ReceivableRowType) => async (v: string): Promise<ActionResult> => {
     if (!r.billingId)
       return { ok: false, error: `Cliente sem cobrança neste mês — use "Incluir cliente no mês".` };
     if (v === "PAID") {
-      if (
-        !confirm(
-          `Registrar pagamento de ${fmtBRL(r.openAmount)} de ${r.name} com data de hoje?\n\nPara valor parcial ou outra data, use a ação "Registrar pagamento" ($).`
-        )
-      )
-        return { ok: false, error: "Pagamento não registrado." };
+      const res = await quickSettleBilling(r.billingId);
+      if (res.ok) {
+        const paymentId = res.id;
+        showUndoToast({
+          message: `${r.name}: pagamento de ${fmtBRL(r.openAmount)} registrado.`,
+          onUndo: paymentId ? () => undoQuickSettle(paymentId) : undefined,
+        });
+      }
+      return res;
     }
     return setMonthChargeStatus(r.billingId, v as any);
   }, []);

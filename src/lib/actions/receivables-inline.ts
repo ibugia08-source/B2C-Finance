@@ -220,6 +220,140 @@ export async function setMonthChargeStatus(
   }
 }
 
+// ===== Pagamento do mês pela CARTEIRA (célula "Pagamento (mês)") =====
+
+/**
+ * A célula "Pagamento (mês)" de /clientes agora opera a cobrança REAL da
+ * competência (fim dos dois "pagos" que não conversavam — o override
+ * cosmético ClientMonthDelinquency não é mais gravado pela UI):
+ *  - PAGO → quita o saldo pelo núcleo contábil (1 clique; mês passado entra
+ *    com a data do vencimento, backfill "pagou em dia"); retorna o id do
+ *    pagamento em `id` para o toast Desfazer;
+ *  - DEVENDO → marca Inadimplente (collectionStatus ESCALATED);
+ *  - limpar (null) → volta para A vencer/Parcial (remove a marcação manual).
+ * Se o mês ainda não tem cobrança, ela é MATERIALIZADA do cadastro
+ * (ensureClientBillingForMonth) — preencher a célula É o registro, como na
+ * planilha. Qualquer override legado da competência é removido para a
+ * verdade automática (agora real) aparecer.
+ */
+export async function setClientMonthPayment(
+  clientId: string,
+  status: "PAGO" | "DEVENDO" | null,
+  month: number,
+  year: number
+): Promise<ActionResult> {
+  const viewer = await requirePermission(
+    status === "PAGO" ? "recebimentos.registrar_pagamento" : "recebimentos.editar"
+  );
+  try {
+    if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year))
+      return { ok: false, error: "Competência inválida." };
+
+    const { ensureClientBillingForMonth } = await import(
+      "@/lib/services/receivables-cycle"
+    );
+
+    // Cobrança viva da competência (qualquer status ≠ CANCELED).
+    let billing = await prisma.billing.findFirst({
+      where: {
+        clientId,
+        competenceMonth: month,
+        competenceYear: year,
+        status: { not: "CANCELED" },
+      },
+      orderBy: { dueDate: "asc" },
+    });
+
+    if (status === null) {
+      // Limpar: sem cobrança não há o que limpar; quitada exige excluir pagamento.
+      await clearDelinquencyOverride(clientId, month, year);
+      if (!billing) {
+        revalidateAll(clientId);
+        return { ok: true };
+      }
+      if (billing.status === "PAID")
+        return {
+          ok: false,
+          error:
+            "Cobrança já quitada — para reabrir, exclua o pagamento na ficha do cliente.",
+        };
+      const res = await setMonthChargeStatus(billing.id, "UPCOMING");
+      if (!res.ok) return res;
+      revalidateAll(clientId);
+      return { ok: true };
+    }
+
+    if (!billing) {
+      const ensured = await ensureClientBillingForMonth(
+        clientId,
+        month,
+        year,
+        viewer.email
+      );
+      if (!ensured.ok) return ensured;
+      billing = await prisma.billing.findUnique({
+        where: { id: ensured.billingId },
+      });
+      if (!billing) return { ok: false, error: "Falha ao materializar a cobrança." };
+    }
+
+    await clearDelinquencyOverride(clientId, month, year);
+
+    if (status === "PAGO") {
+      if (billing.status === "PAID") {
+        revalidateAll(clientId);
+        return { ok: true };
+      }
+      const open = n(billing.amount) - n(billing.paidTotal);
+      if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
+
+      // Mês passado → data do vencimento (backfill "pagou em dia");
+      // mês corrente/futuro → hoje. Mesma regra do 1 clique da Gestão do Mês.
+      const now = new Date();
+      const compKey = year * 12 + (month - 1);
+      const nowKey = now.getFullYear() * 12 + now.getMonth();
+      const paidAt = compKey < nowKey ? billing.dueDate : now;
+
+      const { settleBillingPayment } = await import(
+        "@/lib/services/payment-accounting"
+      );
+      const res = await settleBillingPayment({
+        billingId: billing.id,
+        amount: open,
+        paidAt,
+        method: "OTHER",
+        accountId: null,
+        notes: "Pago com 1 clique (Gestão do Mês).",
+      });
+      if (!res.ok) return res;
+      revalidateAll(clientId);
+      revalidateFinance();
+      return { ok: true, id: res.paymentId };
+    }
+
+    // DEVENDO
+    if (billing.status === "PAID")
+      return {
+        ok: false,
+        error:
+          "Cobrança já quitada — para marcar como devendo, exclua o pagamento antes.",
+      };
+    const res = await setMonthChargeStatus(billing.id, "DELINQUENT");
+    if (!res.ok) return res;
+    revalidateAll(clientId);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao atualizar o pagamento do mês." };
+  }
+}
+
+/** Remove o override legado da competência — a verdade agora é a cobrança. */
+async function clearDelinquencyOverride(clientId: string, month: number, year: number) {
+  await prisma.clientMonthDelinquency.deleteMany({
+    where: { clientId, month, year },
+  });
+}
+
 // ===== Inadimplência anterior (registro manual de meses passados) =====
 
 /**

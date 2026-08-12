@@ -143,6 +143,95 @@ export async function registerBillingPayment(
   }
 }
 
+// ---------- Pagamento em 1 clique + Desfazer (gesto da planilha) ----------
+
+/** Marcador que identifica pagamentos feitos pelo gesto de 1 clique. */
+const QUICK_SETTLE_NOTE = "Pago com 1 clique (Gestão do Mês).";
+/** Janela em que o próprio gesto pode ser desfeito sem permissão de exclusão. */
+const QUICK_UNDO_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * PAGO em 1 clique: quita o saldo em aberto da cobrança.
+ * - Competência do mês corrente/futuro → data de HOJE.
+ * - Competência PASSADA → data do VENCIMENTO (backfill "pagou em dia",
+ *   como preencher a célula verde da planilha do mês antigo). Quem pagou
+ *   atrasado de verdade usa o dialog $ com a data real.
+ * Retorna o id do PAGAMENTO em `id` para o toast "Desfazer".
+ */
+export async function quickSettleBilling(billingId: string): Promise<ActionResult> {
+  await requirePermission("recebimentos.registrar_pagamento");
+  try {
+    const b = await prisma.billing.findUnique({ where: { id: billingId } });
+    if (!b) return { ok: false, error: "Cobrança não encontrada." };
+    if (b.status === "CANCELED")
+      return { ok: false, error: "Cobrança removida do mês — recoloque-a antes." };
+    if (b.status === "PAID") return { ok: false, error: "Cobrança já quitada." };
+    const open = n(b.amount) - n(b.paidTotal);
+    if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
+
+    const now = new Date();
+    const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
+    const nowKey = now.getFullYear() * 12 + now.getMonth();
+    const paidAt = compKey < nowKey ? b.dueDate : now;
+
+    const { settleBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+    const res = await settleBillingPayment({
+      billingId: b.id,
+      amount: open,
+      paidAt,
+      method: "OTHER",
+      accountId: null,
+      notes: QUICK_SETTLE_NOTE,
+    });
+    if (!res.ok) return res;
+
+    revalidateBilling(res.clientId);
+    revalidateFinance(); // pagamento cria Income de conciliação
+    return { ok: true, id: res.paymentId };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao registrar o pagamento." };
+  }
+}
+
+/**
+ * Desfaz o pagamento recém-feito pelo 1 clique (botão "Desfazer" do toast).
+ * Restrito ao próprio gesto: só pagamentos com o marcador de 1 clique e
+ * dentro da janela de 15 minutos — exclusões além disso continuam na aba
+ * Pagamentos do cliente, com a permissão de excluir.
+ */
+export async function undoQuickSettle(paymentId: string): Promise<ActionResult> {
+  await requirePermission("recebimentos.registrar_pagamento");
+  try {
+    const p = await prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!p) return { ok: false, error: "Pagamento não encontrado." };
+    if (p.notes !== QUICK_SETTLE_NOTE)
+      return {
+        ok: false,
+        error: "Só o pagamento de 1 clique pode ser desfeito por aqui.",
+      };
+    if (Date.now() - p.createdAt.getTime() > QUICK_UNDO_WINDOW_MS)
+      return {
+        ok: false,
+        error:
+          "Janela de desfazer expirou — exclua o pagamento na ficha do cliente (aba Pagamentos).",
+      };
+
+    const { revertBillingPayment } = await import(
+      "@/lib/services/payment-accounting"
+    );
+    const res = await revertBillingPayment(paymentId);
+    if (!res.ok) return res;
+
+    revalidateBilling(res.clientId);
+    revalidateFinance();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao desfazer o pagamento." };
+  }
+}
+
 // ---------- Incluir cliente no mês (histórico e ciclo) ----------
 
 const IncludeClientSchema = z.object({
