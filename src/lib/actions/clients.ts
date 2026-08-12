@@ -893,3 +893,28 @@ export async function deleteClientContact(id: string): Promise<ActionResult> {
     return { ok: false, error: e?.message ?? "Falha ao excluir o contato." };
   }
 }
+
+/**
+ * Observações rápidas da linha (coluna Obs da carteira — o campo de
+ * anotação livre da planilha). Grava direto em Client.notes; anotações
+ * estruturadas continuam no dossiê (ClientNote).
+ */
+export async function setClientQuickNotes(
+  clientId: string,
+  notes: string
+): Promise<ActionResult> {
+  await requirePermission("clientes.editar");
+  try {
+    const client = await prisma.client.findFirst({ where: { id: clientId } });
+    if (!client) return { ok: false, error: "Cliente não encontrado." };
+    const text = notes.trim().slice(0, 2000);
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { notes: text || null },
+    });
+    revalidateAgency({ clientId });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao salvar a observação." };
+  }
+}

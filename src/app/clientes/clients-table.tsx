@@ -27,6 +27,10 @@ export type ClientRow = {
   // é gravado NESTE mês/ano (histórico por competência).
   refMonth: number;
   refYear: number;
+  // ===== Colunas estilo planilha (F5) =====
+  services: string[]; // serviços ativos (via contratos)
+  risk: { level: string; label: string } | null; // risco de inadimplência
+  notes: string | null; // observação livre (Client.notes)
 };
 
 export function ClientsTable({

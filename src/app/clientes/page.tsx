@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { monthRange, parseMonthParam } from "@/lib/format";
 import {
   getMonthDelinquencies,
+  getClientSummaries,
+  getClientRiskLevels,
   type MonthDelinquency,
 } from "@/lib/services/client-metrics";
 import { Card, CardContent } from "@/components/ui/card";
@@ -255,8 +257,13 @@ export default async function ClientesPage({
       paymentDay: true,
       contractMonths: true,
       startedAt: true,
+      notes: true,
     },
   });
+  // Colunas estilo planilha (F5) — em lote e SEQUENCIAL (pool do Prisma):
+  // serviços ativos via contratos e risco de inadimplência via cobranças.
+  const summariesById = await getClientSummaries(pageIds);
+  const risksById = await getClientRiskLevels(pageIds);
   const rowById = new Map(rowsRaw.map((r) => [r.id, r]));
   const clients: ClientRow[] = pageIds
     .map((id) => rowById.get(id))
@@ -298,6 +305,12 @@ export default async function ClientesPage({
         // Ajuste de inadimplência na linha é gravado NESTA competência.
         refMonth: curMonth,
         refYear: curYear,
+        services: summariesById.get(r.id)?.activeServices ?? [],
+        risk: (() => {
+          const risk = risksById.get(r.id);
+          return risk ? { level: risk.riskLevel, label: risk.payerLabel } : null;
+        })(),
+        notes: r.notes,
       };
     });
 

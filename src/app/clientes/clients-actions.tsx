@@ -25,6 +25,7 @@ import {
 } from "./_meta";
 import {
   setClientLossReason,
+  setClientQuickNotes,
   bulkUpdateClients,
   bulkDeleteClients,
 } from "@/lib/actions/clients";
@@ -144,6 +145,69 @@ export function DelinquencyCell({ client }: { client: ClientRow }) {
         </span>
       )}
     </div>
+  );
+}
+
+/**
+ * Observação rápida da linha (coluna Obs da planilha): mostra o texto
+ * truncado; clique abre um dialog leve com Textarea → Client.notes.
+ */
+export function NotesCell({ client }: { client: ClientRow }) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const has = !!(client.notes && client.notes.trim());
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title={has ? client.notes ?? "" : "Adicionar observação"}
+        className={`block max-w-[220px] truncate rounded px-1.5 py-0.5 text-left text-xs hover:bg-accent ${
+          has ? "" : "text-muted-foreground/70 italic"
+        }`}
+      >
+        {has ? client.notes : "— obs —"}
+      </button>
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Observações — {client.name}</DialogTitle>
+          </DialogHeader>
+          <form
+            action={(fd) =>
+              start(async () => {
+                setError(null);
+                const res = await setClientQuickNotes(
+                  client.id,
+                  String(fd.get("notes") ?? "")
+                );
+                if (res.ok) setOpen(false);
+                else setError(res.error);
+              })
+            }
+            className="space-y-3"
+          >
+            <Textarea
+              name="notes"
+              rows={4}
+              defaultValue={client.notes ?? ""}
+              placeholder="ex.: pagamento de fevereiro será diluído nos próximos meses"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={pending}>
+                {pending ? "Salvando…" : "Salvar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

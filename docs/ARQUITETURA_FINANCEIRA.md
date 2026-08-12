@@ -53,10 +53,13 @@ CashBox/CashBoxMovement       → caixa/reservas
 | Dashboard (saúde, alertas, indicadores) | `getExecutiveDashboard` (dashboard-metrics) |
 | Rotina diária | queue (billing-metrics/collection-priority) + billings diretos + getCashSummary |
 | Clientes (KPIs) | counts diretos + client-metrics (inadimplência mês) |
-| Recebimentos (grid) | receivables-cycle + KPIs do ciclo calculados na página (paidTotal) |
+| Gestão do Mês (resumo do topo) | `getReceiptsSummary` + `getExpenseSummary` + `getPayrollSummary` — MESMAS fontes do Dashboard, de propósito (não criar cálculo novo aqui) |
+| Gestão do Mês (grid de clientes) | receivables-cycle + KPIs do ciclo calculados na página (paidTotal) |
+| Gestão do Mês (entradas/contas/folha/renovações) | queries diretas por mês + getRenewalOutlook |
 | Relatórios | reports/registry.ts (mistura getPeriodRevenue + agregações próprias) |
 | IA (assistente/rotina) | ai/agency-context.ts → kpis (dashboard-metrics) + finance + séries |
-| Projeções | getCashSummary + getPeriodRevenue + agregações inline na página |
+| Painel Anual | `getAnnualPanel` (annual-panel) → consome `getYearlySeries` do Dashboard + agregações mensais próprias; meta em `AnnualTarget` |
+| Painel Anual (simulador) | getCashSummary + getPeriodRevenue + agregações inline na página |
 
 ## DIVERGÊNCIAS CONHECIDAS (auditoria 2026-07-20)
 

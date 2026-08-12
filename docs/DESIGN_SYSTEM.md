@@ -59,6 +59,9 @@ sempre com par `dark:` (modelo: `bg-red-50 ... dark:bg-red-500/10 dark:text-red-
 | Estado vazio | `components/empty-state.tsx` | ⚠️ adotar nos ~30 "Nenhum..." soltos |
 | Header de página | `components/page-header.tsx` | título + subtítulo específico + ações |
 | Skeleton | `loading.tsx` por rota + `page-skeleton.tsx` | |
+| Navegação de mês | `components/month-nav.tsx` (MonthNav) | ◀ mês/ano ▶ + "Mês atual" — ÚNICO seletor de competência do app (`?mes=YYYY-MM`) |
+| Status financeiro | `lib/status-meta.ts` | língua da planilha: 🟢 Pago / 🟡 A vencer / 🔴 Devendo — rótulo + variante de Badge + tintura de linha (ROW_PAID/ROW_SOON/ROW_OVERDUE) para cobrança, despesa, folha e receita |
+| Toast Desfazer | `components/undo-toast.tsx` (showUndoToast) | gesto registra na hora + Desfazer 15min; host único no AppShell |
 
 ## Regras de uso
 
@@ -66,8 +69,9 @@ sempre com par `dark:` (modelo: `bg-red-50 ... dark:bg-red-500/10 dark:text-red-
    SEMÂNTICOS (nunca fundo de CTA).
 2. Linhas de tabela: hover discreto (`hover:bg-muted/50`); linha clicável =
    `cursor-pointer` + `stopPropagation` nas células interativas; devendo/vencido
-   = fundo vermelho MUITO suave (`bg-red-50/70 dark:bg-red-500/[0.07]`).
-3. Próximo do vencimento = amarelo suave (`bg-warning-soft/60`).
+   = `ROW_OVERDUE`, pago = `ROW_PAID` (importar de `lib/status-meta`, não
+   repetir classes).
+3. Próximo do vencimento = `ROW_SOON` (`lib/status-meta`).
 4. Sem sombras pesadas: `shadow-sm` em cards, `shadow-modal` em modais,
    hover `shadow-md` apenas em clicáveis.
 5. Animações discretas (page-enter, fades); NUNCA bounce/glow (removidos).

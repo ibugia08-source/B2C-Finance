@@ -2,7 +2,8 @@
 import type { ReactNode } from "react";
 import { InlineSelect } from "./inline-select";
 import { InlineMoney } from "./inline-money";
-import { DelinquencyCell } from "./clients-actions";
+import { DelinquencyCell, NotesCell } from "./clients-actions";
+import { Badge } from "@/components/ui/badge";
 import { formatBRL } from "@/lib/format";
 import {
   CLIENT_STATUSES,
@@ -38,6 +39,9 @@ export type ClientColKey =
   | "totalContractValue"
   | "dueDay"
   | "paymentStatus"
+  | "services"
+  | "risk"
+  | "notes"
   | "renewalMonth"
   | "monthsActive"
   | "salesOwner"
@@ -134,6 +138,58 @@ export const ALL_COLUMNS: ClientColumn[] = [
     render: (c) => <DelinquencyCell client={c} />,
   },
   {
+    key: "services",
+    header: "Serviços ativos",
+    tdClass: "max-w-[240px]",
+    render: (c) =>
+      c.services.length === 0 ? (
+        muted("—")
+      ) : (
+        <span className="flex flex-wrap gap-1">
+          {c.services.slice(0, 3).map((s) => (
+            <Badge key={s} variant="outline" className="text-[10px] font-medium">
+              {s}
+            </Badge>
+          ))}
+          {c.services.length > 3 && (
+            <Badge
+              variant="secondary"
+              className="text-[10px]"
+              title={c.services.join(", ")}
+            >
+              +{c.services.length - 3}
+            </Badge>
+          )}
+        </span>
+      ),
+  },
+  {
+    key: "risk",
+    header: "Risco",
+    render: (c) =>
+      !c.risk || c.risk.level === "sem_historico" ? (
+        muted("—")
+      ) : (
+        <Badge
+          variant={
+            c.risk.level === "alto"
+              ? "destructive"
+              : c.risk.level === "medio"
+                ? "warning"
+                : "success"
+          }
+        >
+          {c.risk.label}
+        </Badge>
+      ),
+  },
+  {
+    key: "notes",
+    header: "Obs",
+    interactive: true,
+    render: (c) => <NotesCell client={c} />,
+  },
+  {
     key: "renewalMonth",
     header: "Renovação",
     interactive: true,
@@ -174,15 +230,19 @@ export const COLUMN_LABEL: Record<ClientColKey, string> = ALL_COLUMNS.reduce(
   {} as Record<ClientColKey, string>
 );
 
-/** Colunas visíveis por padrão (as escolhidas pelo cliente + essenciais). */
+/** Colunas visíveis por padrão — a linha da planilha do dono. */
 export const DEFAULT_VISIBLE: ClientColKey[] = [
   "modality",
   "monthlyValue",
   "totalContractValue",
   "dueDay",
   "paymentStatus",
+  "services",
   "renewalMonth",
+  "notes",
   "salesOwner",
 ];
 
-export const STORAGE_KEY = "clientes:columns:v1";
+// v2: colunas novas (Serviços/Risco/Obs) entram no padrão — troca de chave
+// zera a preferência salva UMA vez para todo mundo enxergar as novidades.
+export const STORAGE_KEY = "clientes:columns:v2";

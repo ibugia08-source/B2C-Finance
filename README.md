@@ -1,9 +1,13 @@
 # B2C Finance
 
-ERP financeiro da agência B2C Gestão: clientes, contratos (geração de DOCX),
-cobranças, inadimplência, folha/comissões, finanças pessoais e empresariais
-(transações, cartões, importação de faturas XLSX/PDF), relatórios e assistente
-de IA.
+ERP financeiro da agência B2C Gestão, organizado no modelo de planilha mensal
+do dono: a **Gestão do Mês** (`/cobrancas`) concentra clientes do mês com
+pagamento em 1 clique (🟢 Pago / 🟡 A vencer / 🔴 Devendo, com Desfazer),
+outras entradas, contas a pagar, folha e renovações; o **Painel Anual**
+(`/projecoes`) consolida indicadores × 12 meses + meta anual. Completam o
+sistema: carteira de clientes, contratos (geração de DOCX), inadimplência,
+folha/comissões, cartões e importação de faturas XLSX/PDF, relatórios e
+assistente de IA.
 
 ## Stack
 

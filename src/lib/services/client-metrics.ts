@@ -152,6 +152,22 @@ export type ClientRiskProfile = {
   payerLabel: string; // "Bom pagador" | "Regular" | "Risco — em atraso" | ...
 };
 
+/** Classificação de risco a partir dos contadores — regra única. */
+function classifyRisk(
+  paidCount: number,
+  overdueCount: number,
+  lateCount: number
+): { riskLevel: ClientRiskProfile["riskLevel"]; payerLabel: string; onTimeRate: number | null } {
+  const onTimeRate = paidCount > 0 ? (paidCount - lateCount) / paidCount : null;
+  if (overdueCount > 0) return { riskLevel: "alto", payerLabel: "Risco — em atraso", onTimeRate };
+  if (paidCount === 0) return { riskLevel: "sem_historico", payerLabel: "Sem histórico", onTimeRate };
+  if (paidCount >= 3 && (onTimeRate ?? 0) >= GOOD_PAYER_ONTIME_RATE)
+    return { riskLevel: "baixo", payerLabel: "Bom pagador", onTimeRate };
+  if ((onTimeRate ?? 1) < IRREGULAR_PAYER_ONTIME_RATE)
+    return { riskLevel: "alto", payerLabel: "Pagador irregular", onTimeRate };
+  return { riskLevel: "medio", payerLabel: "Regular", onTimeRate };
+}
+
 export async function getClientRiskProfile(
   clientId: string,
   startedAt: Date | null
@@ -172,26 +188,11 @@ export async function getClientRiskProfile(
       overdueCount += 1;
     }
   }
-  const onTimeRate = paidCount > 0 ? (paidCount - lateCount) / paidCount : null;
-
-  let riskLevel: ClientRiskProfile["riskLevel"];
-  let payerLabel: string;
-  if (overdueCount > 0) {
-    riskLevel = "alto";
-    payerLabel = "Risco — em atraso";
-  } else if (paidCount === 0) {
-    riskLevel = "sem_historico";
-    payerLabel = "Sem histórico";
-  } else if (paidCount >= 3 && (onTimeRate ?? 0) >= GOOD_PAYER_ONTIME_RATE) {
-    riskLevel = "baixo";
-    payerLabel = "Bom pagador";
-  } else if ((onTimeRate ?? 1) < IRREGULAR_PAYER_ONTIME_RATE) {
-    riskLevel = "alto";
-    payerLabel = "Pagador irregular";
-  } else {
-    riskLevel = "medio";
-    payerLabel = "Regular";
-  }
+  const { riskLevel, payerLabel, onTimeRate } = classifyRisk(
+    paidCount,
+    overdueCount,
+    lateCount
+  );
 
   const now = new Date();
   const monthsActive = startedAt
@@ -203,6 +204,46 @@ export async function getClientRiskProfile(
     : null;
 
   return { monthsActive, paidCount, overdueCount, lateCount, onTimeRate, riskLevel, payerLabel };
+}
+
+export type ClientRiskLite = {
+  riskLevel: ClientRiskProfile["riskLevel"];
+  payerLabel: string;
+};
+
+/**
+ * Risco em LOTE (coluna da carteira): mesma classificação do perfil
+ * individual, numa única query para todos os clientes da página — zero N+1.
+ */
+export async function getClientRiskLevels(
+  clientIds: string[]
+): Promise<Map<string, ClientRiskLite>> {
+  const map = new Map<string, ClientRiskLite>(
+    clientIds.map((id) => [id, { riskLevel: "sem_historico", payerLabel: "Sem histórico" }])
+  );
+  if (clientIds.length === 0) return map;
+
+  const billings = await prisma.billing.findMany({
+    where: { clientId: { in: clientIds }, status: { not: "CANCELED" } },
+    select: { clientId: true, status: true, isLate: true, paidInDifferentMonth: true },
+  });
+
+  const counters = new Map<string, { paid: number; overdue: number; late: number }>();
+  for (const b of billings) {
+    const c = counters.get(b.clientId) ?? { paid: 0, overdue: 0, late: 0 };
+    if (b.status === "PAID") {
+      c.paid += 1;
+      if (b.isLate || b.paidInDifferentMonth) c.late += 1;
+    } else if (b.status === "OVERDUE") {
+      c.overdue += 1;
+    }
+    counters.set(b.clientId, c);
+  }
+  for (const [id, c] of counters) {
+    const { riskLevel, payerLabel } = classifyRisk(c.paid, c.overdue, c.late);
+    map.set(id, { riskLevel, payerLabel });
+  }
+  return map;
 }
 
 /**
