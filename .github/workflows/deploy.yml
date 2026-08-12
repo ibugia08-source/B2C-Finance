@@ -1,4 +1,4 @@
-name: Build and Deploy to Vercel
+name: CI (lint + build check)
 
 on:
   push:
@@ -32,18 +32,18 @@ jobs:
         run: npm run build:ci
         env:
           NODE_ENV: production
+          # Valores descartáveis, só para o build compilar. Os guards de
+          # `session.ts`/`middleware.ts` são fail-closed em produção e abortam
+          # o build se SESSION_SECRET não existir. Nenhuma sessão real é
+          # assinada aqui e nenhum banco é acessado — o deploy de verdade roda
+          # na Vercel, com as variáveis reais do projeto.
+          SESSION_SECRET: ci-build-check-secret-nao-usado-em-runtime-32
+          POSTGRES_PRISMA_URL: postgresql://ci:ci@localhost:5432/ci
+          POSTGRES_URL_NON_POOLING: postgresql://ci:ci@localhost:5432/ci
 
-      # ===== Deploy de produção via Vercel CLI oficial (build REMOTO) =====
-      # Requer os secrets do repositório: VERCEL_TOKEN, VERCEL_ORG_ID,
-      # VERCEL_PROJECT_ID. O build roda nos servidores da Vercel (que têm o
-      # DATABASE_URL e demais variáveis do projeto), então `prisma migrate
-      # deploy` funciona — diferente de buildar localmente no CI. Idempotente.
-      - name: Deploy to Vercel (production)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          npm i -g vercel@latest
-          vercel deploy --prod --yes --token="$VERCEL_TOKEN"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      # ===== Deploy =====
+      # Não há passo de deploy aqui de propósito. A integração Git nativa da
+      # Vercel está conectada a este repositório e publica em produção a cada
+      # push na main (e cria preview em PR). Um `vercel deploy --prod` aqui
+      # duplicaria a publicação e faria dois builds concorrerem pelo mesmo
+      # alias. Este workflow é só o portão de qualidade: lint + build check.
