@@ -13,6 +13,7 @@ import {
 import { formatBRL } from "@/lib/format";
 import {
   incomeStatusMeta,
+  cycleStatusMeta,
   expenseStatusMeta,
   payrollStatusMeta,
   type StatusMeta,
@@ -96,28 +97,56 @@ export function SectionNav({
   );
 }
 
-// ===== Outras Entradas =====
+// ===== Recebimentos do Mês =====
 
-export type EntradaRow = {
+/**
+ * Uma linha do controle de recebimentos: cobrança de cliente (paga, a vencer
+ * ou devendo), entrada avulsa, recuperação de inadimplência ou receita extra
+ * manual — TODAS as entradas do mês num lugar só, como a coluna de entradas
+ * da planilha.
+ */
+export type RecebimentoRow = {
   id: string;
+  kind: "billing" | "income" | "extra";
   description: string;
   clientName: string | null;
   amount: number;
+  /** parte já paga (cobranças parciais mostram "pago X de Y") */
+  paidAmount: number;
   dateBR: string;
-  status: string; // Income.status
+  /** rótulo curto da data: "pago em" | "vence" | "recebido em" */
+  dateKind: "pago" | "vence" | "recebido";
+  /** CycleStatus (billing) ou Income.status — resolvido pelo kind */
+  status: string;
   isRecovery: boolean;
   recoveryOf: string | null; // "MM/AAAA" da competência recuperada
 };
 
-export function EntradasSection({
+export type RecebimentosTotals = {
+  recebido: number;
+  aReceber: number;
+  atrasado: number;
+};
+
+function recebimentoMeta(r: RecebimentoRow): StatusMeta {
+  return r.kind === "billing" ? cycleStatusMeta(r.status) : incomeStatusMeta(r.status);
+}
+
+const KIND_LABEL: Record<RecebimentoRow["kind"], string | null> = {
+  billing: null, // mensalidade/cobrança — o cliente já identifica
+  income: "avulsa",
+  extra: "receita extra",
+};
+
+export function RecebimentosSection({
   rows,
-  total,
+  totals,
   canCreate,
   month,
   year,
 }: {
-  rows: EntradaRow[];
-  total: number;
+  rows: RecebimentoRow[];
+  totals: RecebimentosTotals;
   canCreate: boolean;
   month: number;
   year: number;
@@ -125,8 +154,8 @@ export function EntradasSection({
   return (
     <SectionShell
       id="entradas"
-      title="Outras Entradas"
-      subtitle="Entradas fora das mensalidades + recuperações de inadimplência recebidas no mês"
+      title="Recebimentos do Mês"
+      subtitle="Todas as entradas do mês — pagas, a vencer e atrasadas: mensalidades, avulsas, recuperações e receitas extras"
       action={
         <div className="flex items-center gap-2">
           <Link
@@ -143,11 +172,11 @@ export function EntradasSection({
         <CardContent className="p-0">
           {rows.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">
-              Nenhuma entrada avulsa neste mês.
+              Nenhum recebimento neste mês.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
+            <Table containerClassName="max-h-[56vh]">
+              <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
                 <TableRow>
                   <TableHead>Descrição</TableHead>
                   <TableHead>Data</TableHead>
@@ -157,15 +186,23 @@ export function EntradasSection({
               </TableHeader>
               <TableBody>
                 {rows.map((r) => {
-                  const meta = incomeStatusMeta(r.status);
+                  const meta = recebimentoMeta(r);
+                  const kindLabel = KIND_LABEL[r.kind];
                   return (
                     <TableRow key={r.id} className={meta.rowClass}>
                       <TableCell className="max-w-[340px]">
                         <span className="block truncate font-medium">
-                          {r.description}
+                          {r.clientName ?? r.description}
                         </span>
                         <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          {r.clientName && <span>{r.clientName}</span>}
+                          {r.clientName && (
+                            <span className="truncate">{r.description}</span>
+                          )}
+                          {kindLabel && (
+                            <Badge variant="outline" className="text-[10px]">
+                              {kindLabel}
+                            </Badge>
+                          )}
                           {r.isRecovery && (
                             <Badge variant="outline" className="text-[10px]">
                               recuperação{r.recoveryOf ? ` de ${r.recoveryOf}` : ""}
@@ -173,22 +210,52 @@ export function EntradasSection({
                           )}
                         </span>
                       </TableCell>
-                      <TableCell className="tabular-nums">{r.dateBR}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {r.dateBR}
+                        <span className="block text-[10px] text-muted-foreground">
+                          {r.dateKind === "pago"
+                            ? "pago em"
+                            : r.dateKind === "vence"
+                              ? "vencimento"
+                              : "recebido em"}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <StatusBadge meta={meta} />
                       </TableCell>
                       <TableCell className="text-right stat-number">
                         {formatBRL(r.amount)}
+                        {r.paidAmount > 0 && r.paidAmount < r.amount && (
+                          <span className="block text-[10px] text-muted-foreground">
+                            pago {formatBRL(r.paidAmount)}
+                          </span>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
                 })}
                 <TableRow className="bg-muted/40 font-semibold">
-                  <TableCell colSpan={3}>Total recebido no mês</TableCell>
-                  <TableCell className="text-right stat-number">
-                    {formatBRL(total)}
+                  <TableCell colSpan={3}>Recebido no mês</TableCell>
+                  <TableCell className="text-right stat-number text-success">
+                    {formatBRL(totals.recebido)}
                   </TableCell>
                 </TableRow>
+                <TableRow className="bg-muted/20 text-sm">
+                  <TableCell colSpan={3}>A receber (a vencer + atrasado)</TableCell>
+                  <TableCell className="text-right stat-number">
+                    {formatBRL(totals.aReceber)}
+                  </TableCell>
+                </TableRow>
+                {totals.atrasado > 0 && (
+                  <TableRow className="bg-muted/20 text-sm">
+                    <TableCell colSpan={3} className="text-destructive">
+                      Atrasado (dentro do a receber)
+                    </TableCell>
+                    <TableCell className="text-right stat-number text-destructive">
+                      {formatBRL(totals.atrasado)}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           )}

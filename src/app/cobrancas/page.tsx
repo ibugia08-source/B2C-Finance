@@ -33,11 +33,11 @@ import { GenerateAllButton } from "@/app/acordos/generate-all-button";
 import { EXPENSE_TYPE_LABEL } from "@/app/despesas/_meta";
 import {
   SectionNav,
-  EntradasSection,
+  RecebimentosSection,
   ContasSection,
   FolhaSection,
   RenovacoesSection,
-  type EntradaRow,
+  type RecebimentoRow,
   type ContaRow,
   type FolhaRow,
   type RenovacaoRow,
@@ -431,8 +431,10 @@ export default async function RecebimentosPage({
     : null;
   const pctRealizacao =
     receipts.expectedTotal > 0 ? receipts.totalRevenue / receipts.expectedTotal : null;
+  // Resultado do mês = FATURAMENTO ESPERADO − despesas (regra da planilha do
+  // dono: o resultado projeta o mês cheio, não só o que já caiu na conta).
   const resultadoMes =
-    expenseSummary != null ? receipts.totalRevenue - expenseSummary.total : null;
+    expenseSummary != null ? receipts.expectedTotal - expenseSummary.total : null;
 
   // ===== FASE C — listas das seções (só as permitidas; ≤4 em paralelo) =====
   const [entradasIncomes, entradasExtras, contasRaw, folhaItems] = await Promise.all([
@@ -579,36 +581,84 @@ export default async function RecebimentosPage({
   }
 
   // ===== Montagem dos dados das seções (plain objects) =====
-  const entradaRows: EntradaRow[] = [
+  // RECEBIMENTOS DO MÊS = controle completo das entradas: cobranças de
+  // clientes da competência (pagas, a vencer, devendo) + avulsas +
+  // recuperações + receitas extras manuais. Reusa as cobranças já buscadas
+  // para a lista de clientes (billingRows) — nenhuma query nova.
+  type SortableRecebimento = RecebimentoRow & { _sort: number };
+  const billingRecebimentos: SortableRecebimento[] = billingRows
+    .filter((r) => r.cycleStatus !== "REMOVED")
+    .map((r) => {
+      const paid = Math.max(0, r.amountDue - r.openAmount);
+      const isPaid = ["PAID", "PAID_LATE", "PAID_OTHER_MONTH"].includes(r.cycleStatus);
+      const due = (r as any)._dueDate as Date;
+      return {
+        id: `bil-${r.key}`,
+        kind: "billing" as const,
+        description: r.description ?? "Mensalidade",
+        clientName: r.name,
+        amount: r.amountDue,
+        paidAmount: paid,
+        dateBR: isPaid && r.paidAtBR ? r.paidAtBR : r.dueDateBR ?? "—",
+        dateKind: isPaid ? ("pago" as const) : ("vence" as const),
+        status: r.cycleStatus,
+        isRecovery: false,
+        recoveryOf: null,
+        _sort: due ? due.getTime() : 0,
+      };
+    });
+  const avulsaRecebimentos: SortableRecebimento[] = [
     ...entradasIncomes.map((i: any) => ({
       id: `inc-${i.id}`,
+      kind: "income" as const,
       description: i.description,
       clientName: i.client?.name ?? null,
       amount: Number(i.amount),
+      paidAmount: i.status === "RECEIVED" ? Number(i.amount) : 0,
       dateBR: formatDateBR(i.receivedAt),
+      dateKind: "recebido" as const,
       status: i.status,
       isRecovery: i.revenueType === "RECOVERY",
       recoveryOf:
         i.revenueType === "RECOVERY" && i.billing
           ? `${String(i.billing.competenceMonth).padStart(2, "0")}/${i.billing.competenceYear}`
           : null,
+      _sort: new Date(i.receivedAt).getTime(),
     })),
     ...entradasExtras.map((e: any) => ({
       id: `ext-${e.id}`,
+      kind: "extra" as const,
       description: e.description,
       clientName: e.client?.name ?? null,
       amount: Number(e.amount),
+      paidAmount: Number(e.amount),
       dateBR: formatDateBR(e.receivedAt),
+      dateKind: "recebido" as const,
       status: "RECEIVED",
       isRecovery: false,
       recoveryOf: null,
+      _sort: new Date(e.receivedAt).getTime(),
     })),
-  ].sort((a, b) => (a.dateBR < b.dateBR ? 1 : -1));
-  const entradasTotal =
-    entradasIncomes
-      .filter((i: any) => i.status === "RECEIVED")
-      .reduce((s: number, i: any) => s + Number(i.amount), 0) +
-    entradasExtras.reduce((s: number, e: any) => s + Number(e.amount), 0);
+  ];
+  const recebimentoRows: RecebimentoRow[] = [
+    ...billingRecebimentos,
+    ...avulsaRecebimentos,
+  ]
+    .sort((a, b) => a._sort - b._sort)
+    .map(({ _sort, ...r }) => r);
+  const recebimentosTotals = {
+    recebido:
+      billingRecebimentos.reduce((s, r) => s + r.paidAmount, 0) +
+      avulsaRecebimentos
+        .filter((r) => r.status === "RECEIVED")
+        .reduce((s, r) => s + r.amount, 0),
+    aReceber: billingRows
+      .filter((r) => r.cycleStatus !== "REMOVED")
+      .reduce((s, r) => s + r.openAmount, 0),
+    atrasado: billingRows
+      .filter((r) => OWING.includes(r.cycleStatus))
+      .reduce((s, r) => s + r.openAmount, 0),
+  };
 
   const contaRows: ContaRow[] = contasRaw.map((t: any) => ({
     id: t.id,
@@ -681,7 +731,7 @@ export default async function RecebimentosPage({
   const sectionNavItems = [
     { href: "#clientes", label: "Clientes do mês", count: tableRows.length },
     ...(gates.entradas
-      ? [{ href: "#entradas", label: "Outras entradas", count: entradaRows.length }]
+      ? [{ href: "#entradas", label: "Recebimentos", count: recebimentoRows.length }]
       : []),
     ...(gates.contas
       ? [{ href: "#contas", label: "Contas a pagar", count: contaRows.length }]
@@ -785,7 +835,7 @@ export default async function RecebimentosPage({
             title="Resultado do mês"
             value={formatBRL(resultadoMes)}
             intent={resultadoMes >= 0 ? "positive" : "negative"}
-            hint="recebido − despesas"
+            hint="faturamento esperado − despesas"
           />
         )}
       </div>
@@ -880,11 +930,11 @@ export default async function RecebimentosPage({
       </p>
       </section>
 
-      {/* ================= OUTRAS ENTRADAS ================= */}
+      {/* ================= RECEBIMENTOS DO MÊS ================= */}
       {gates.entradas && (
-        <EntradasSection
-          rows={entradaRows}
-          total={entradasTotal}
+        <RecebimentosSection
+          rows={recebimentoRows}
+          totals={recebimentosTotals}
           canCreate={gates.entradasCriar}
           month={mes.month}
           year={mes.year}
