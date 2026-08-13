@@ -307,7 +307,7 @@ export function ContasSection({
             href={`/despesas?mes=${year}-${String(month).padStart(2, "0")}`}
             className="text-xs text-muted-foreground underline-offset-2 hover:underline"
           >
-            despesas &amp; cartões
+            abrir Contas a Pagar
           </Link>
           {canCreate && (
             <ContaQuickDialog month={month} year={year} categories={categories} />

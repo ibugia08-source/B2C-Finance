@@ -84,8 +84,8 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
   return (
     <div>
       <PageHeader
-        title="Despesas"
-        description={`Despesas, cartões e contas da agência · ${monthLabel(ref)}`}
+        title="Contas a Pagar"
+        description={`Contas, despesas e cartões da agência · ${monthLabel(ref)}`}
         actions={aba === "despesas" ? <NewExpenseButton /> : undefined}
       />
 

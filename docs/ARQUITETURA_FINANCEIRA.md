@@ -53,9 +53,12 @@ CashBox/CashBoxMovement       → caixa/reservas
 | Dashboard (saúde, alertas, indicadores) | `getExecutiveDashboard` (dashboard-metrics) |
 | Rotina diária | queue (billing-metrics/collection-priority) + billings diretos + getCashSummary |
 | Clientes (KPIs) | counts diretos + client-metrics (inadimplência mês) |
-| Gestão do Mês (resumo do topo) | `getReceiptsSummary` + `getExpenseSummary` + `getPayrollSummary` — MESMAS fontes do Dashboard, de propósito (não criar cálculo novo aqui) |
+| Gestão do Mês (resumo do topo) | `getReceiptsSummary` + `getExpenseSummary` + `getPayrollSummary` — MESMAS fontes do Dashboard, de propósito (não criar cálculo novo aqui). Resultado do mês = `expectedTotal − despesas` (regra da planilha, 2026-08-13) |
 | Gestão do Mês (grid de clientes) | receivables-cycle + KPIs do ciclo calculados na página (paidTotal) |
-| Gestão do Mês (entradas/contas/folha/renovações) | queries diretas por mês + getRenewalOutlook |
+| Gestão do Mês (Recebimentos do Mês) | reuso das billings do grid + incomes avulsas/RECOVERY + extraRevenue MANUAL (zero query nova de billing) |
+| Gestão do Mês (contas/folha) | queries diretas por mês |
+| Renovações (seção + /renovacoes) | `getRenewalPanel` (renewal-metrics) = Client.renewalMonth ∪ Contract.renewalDate no mês + `expectedRenewalValues` (regra central) + ClientRenewal/ClientLoss do mês; faixa de previsibilidade via `getRenewalStrip` |
+| Upsell (Kanban) | prisma direto + `getUpsellKpis`; venda com lançamento cria Billing ONE_TIME na competência escolhida (`setUpsellStatus`) |
 | Relatórios | reports/registry.ts (mistura getPeriodRevenue + agregações próprias) |
 | IA (assistente/rotina) | ai/agency-context.ts → kpis (dashboard-metrics) + finance + séries |
 | Painel Anual | `getAnnualPanel` (annual-panel) → consome `getYearlySeries` do Dashboard + agregações mensais próprias; meta em `AnnualTarget` |

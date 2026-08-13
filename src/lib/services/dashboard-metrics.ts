@@ -648,7 +648,7 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
       severity: "medium",
       title: "Contratos próximos da renovação",
       detail: `${kpis.contratosEmRenovacao} contrato(s) renovam nos próximos 30 dias`,
-      href: "/acordos",
+      href: "/renovacoes",
     });
   if (finance.folhaSobreReceita > 0.4)
     alerts.push({
@@ -669,7 +669,7 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
   for (const r of renewals.slice(0, 2)) {
     actions.push({
       text: `Renovar contrato "${r.title}" de ${r.client.name} (vence ${r.renewalDate ? formatDateBR(r.renewalDate) : "em breve"})`,
-      href: "/acordos",
+      href: "/renovacoes",
     });
   }
   const topCat = breakdowns.despesasPorCategoria[0];

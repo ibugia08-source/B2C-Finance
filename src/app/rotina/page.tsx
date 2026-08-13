@@ -292,7 +292,7 @@ export default async function RotinaPage() {
     acoes.push({
       key: `renovacoes:${renov.month}`, priority: "media",
       text: `Encaminhar ${renov.count} renovação(ões) do mês — ${formatBRL(renov.expectedTotal)} esperado`,
-      href: `/clientes?mesRenovacao=${renov.month}`,
+      href: "/renovacoes",
     });
   }
   for (const u of openUpsells.slice(0, 2)) {
@@ -618,8 +618,8 @@ export default async function RotinaPage() {
                                 currentDue={p.dueDate ? iso(p.dueDate) : iso(today)}
                               />
                             )}
-                            <Button variant="ghost" size="icon" asChild title="Ver despesa">
-                              <Link href="/despesas">
+                            <Button variant="ghost" size="icon" asChild title="Ver em Contas a Pagar">
+                              <Link href={`/despesas?mes=${(p.dueDate ? iso(p.dueDate) : iso(today)).slice(0, 7)}`}>
                                 <ExternalLink className="h-4 w-4 text-muted-foreground" />
                               </Link>
                             </Button>

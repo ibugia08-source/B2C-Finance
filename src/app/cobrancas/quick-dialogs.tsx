@@ -208,7 +208,7 @@ export function ContaQuickDialog({
             </Select>
           </div>
           <p className="col-span-2 text-xs text-muted-foreground">
-            Cartões, faturas e parcelamentos ficam em Despesas &amp; Cartões.
+            Cartões, faturas e parcelamentos ficam em Contas a Pagar.
           </p>
           {error && <p className="col-span-2 text-sm text-destructive">{error}</p>}
           <DialogFooter className="col-span-2">

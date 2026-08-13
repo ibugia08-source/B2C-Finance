@@ -48,7 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", short: "Início", icon: LayoutDashboard, permission: "dashboard.visualizar", primary: true },
   { href: "/cobrancas", label: "Gestão do Mês", short: "Mês", icon: CalendarRange, permission: "recebimentos.visualizar", primary: true },
   { href: "/clientes", label: "Clientes", short: "Clientes", icon: Building2, permission: "clientes.visualizar", primary: true, section: "Operação" },
-  { href: "/despesas", label: "Despesas & Cartões", short: "Despesas", icon: ArrowUpFromLine, permission: "despesas.visualizar", primary: true, section: "Operação" },
+  { href: "/despesas", label: "Contas a Pagar", short: "Contas", icon: ArrowUpFromLine, permission: "despesas.visualizar", primary: true, section: "Operação" },
   { href: "/folha", label: "Folha", icon: UsersRound, permission: "folha.visualizar", section: "Operação" },
   { href: "/rotina", label: "Rotina Diária", short: "Rotina", icon: CalendarCheck2, permission: "rotina.visualizar", section: "Operação" },
   { href: "/contratos", label: "Contratos", icon: FileSignature, permission: "contratos.visualizar", section: "Comercial" },

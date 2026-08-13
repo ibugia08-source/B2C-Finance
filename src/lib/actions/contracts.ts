@@ -4,12 +4,11 @@ import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ContractStatus, ContractType, RecurrenceType } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, formatBRL, clean } from "@/lib/format";
+import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import {
   generateBillingsForContract,
   generateBillingsForAllActive,
 } from "@/lib/services/contract-metrics";
-import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
 const money = (v: FormDataEntryValue | null): number => parseBRL(String(v ?? "0"));
@@ -237,91 +236,9 @@ export async function renewContract(
   }
 }
 
-/**
- * Renovação pela CARTEIRA (lista de clientes): estende o contrato com o novo
- * ciclo (prazo, valor, forma e modalidade de pagamento) e lança o efeito
- * financeiro — TCV paga o valor cheio de novo no mês da renovação; MRR segue
- * gerando as cobranças mensais do novo período. Cliente volta a ATIVO.
- */
-export async function renewClientContract(formData: FormData): Promise<ActionResult> {
-  await requirePermission("contratos.editar");
-  try {
-    const id = String(formData.get("contractId") ?? "");
-    const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
-    const totalRaw = String(formData.get("totalValue") ?? "").trim();
-    const paymentMethod = String(formData.get("paymentMethod") ?? "").trim() || null;
-    const paymentMode = String(formData.get("paymentMode") ?? "").trim() || null;
-    const details = String(formData.get("details") ?? "").trim() || null;
-
-    const c = await prisma.contract.findUnique({ where: { id } });
-    if (!c) return { ok: false, error: "Contrato não encontrado." };
-
-    const total = totalRaw ? parseBRL(totalRaw) : Number(c.totalValue) || Number(c.monthlyValue) * months;
-    if (!(total > 0)) return { ok: false, error: "Informe o valor do novo ciclo." };
-
-    const today = new Date();
-    const base = c.endDate && c.endDate > today ? c.endDate : today;
-    const newEnd = new Date(base);
-    newEnd.setMonth(newEnd.getMonth() + months);
-    const monthly = c.type === "MRR" ? Math.round((total / months) * 100) / 100 : Number(c.monthlyValue);
-
-    const renewNote = `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), ${formatBRL(total)}` +
-      (paymentMethod ? `, ${paymentMethod}` : "") + (paymentMode ? ` (${paymentMode})` : "") +
-      (details ? ` — ${details}` : "");
-
-    await prisma.contract.update({
-      where: { id },
-      data: {
-        status: "ACTIVE",
-        endDate: newEnd,
-        renewalDate: newEnd,
-        totalValue: Number(c.totalValue) + total,
-        monthlyValue: monthly,
-        paymentMethod,
-        paymentMode,
-        canceledAt: null,
-        notes: [c.notes, renewNote].filter(Boolean).join("\n"),
-      },
-    });
-
-    if (c.type === "TCV" || c.recurrence === "NONE") {
-      // TCV renovado paga o valor CHEIO de novo no mês da renovação
-      let due = getValidDueDateForMonth(today.getFullYear(), today.getMonth() + 1, c.billingDay);
-      if (due < today) {
-        // Vencimento do mês já passou → joga para o mês seguinte (reclampando).
-        const next = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-        due = getValidDueDateForMonth(next.getFullYear(), next.getMonth() + 1, c.billingDay);
-      }
-      await prisma.billing.create({
-        data: {
-          clientId: c.clientId,
-          contractId: c.id,
-          description: `${c.title} — renovação ${String(due.getMonth() + 1).padStart(2, "0")}/${due.getFullYear()}`,
-          competenceMonth: due.getMonth() + 1,
-          competenceYear: due.getFullYear(),
-          amount: total,
-          dueDate: due,
-          revenueType: "TCV",
-          status: "PENDING",
-        },
-      });
-    } else {
-      // MRR: gera as cobranças mensais do novo período (idempotente)
-      await generateBillingsForContract(c.id);
-    }
-
-    // cliente marcado como renovado (volta a ATIVO)
-    await prisma.client.update({
-      where: { id: c.clientId },
-      data: { status: "ACTIVE", churnedAt: null },
-    });
-
-    revalidateContracts(c.clientId);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? "Falha ao renovar o contrato." };
-  }
-}
+// A renovação pela carteira/Gestão do Mês vive agora em
+// src/lib/actions/renewals.ts (renewClientFlow) — fluxo completo com
+// lançamento em competência escolhida e histórico em ClientRenewal.
 
 export async function deleteContract(id: string): Promise<ActionResult> {
   await requirePermission("contratos.excluir");

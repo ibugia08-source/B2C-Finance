@@ -33,7 +33,6 @@ import { ContractDialog } from "./contract-dialog";
 import { ContractActions } from "./row-actions";
 import { ContractFilters } from "./filters";
 import { GenerateAllButton } from "./generate-all-button";
-import { GenerateClientBillingsButton } from "./generate-client-billings";
 import {
   CONTRACT_STATUS_LABEL,
   CONTRACT_TYPE_LABEL,
@@ -275,11 +274,6 @@ export default async function ContratosPage({
                       <Link href={`/clientes/${c.client.id}`} className="hover:underline font-medium block">
                         {c.client.name}
                       </Link>
-                      {["ACTIVE", "RENEWAL", "OVERDUE", "PENDING"].includes(c.status) && (
-                        <span className="mt-1 block">
-                          <GenerateClientBillingsButton contractId={c.id} />
-                        </span>
-                      )}
                     </TableCell>
                     <TableCell>{CONTRACT_TYPE_LABEL[c.type] ?? c.type}</TableCell>
                     <TableCell className="text-right">
@@ -355,9 +349,6 @@ export default async function ContratosPage({
                       {c.renewalDate ? formatDateBR(c.renewalDate) : "—"}
                     </Field>
                   </div>
-                  {["ACTIVE", "RENEWAL", "OVERDUE", "PENDING"].includes(c.status) && (
-                    <GenerateClientBillingsButton contractId={c.id} />
-                  )}
                   <MobileCardActions>
                     <ContractActions
                       contract={c}

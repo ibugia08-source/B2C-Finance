@@ -40,7 +40,6 @@ export function revalidateFinance(
     "/receitas",
     "/caixa",
     "/pessoas",
-    "/pagamentos",
     "/projecoes",
     "/importacoes",
     "/regras",
@@ -66,7 +65,7 @@ export function revalidateAgency(
     "/cobrancas",
     "/inadimplencia",
     "/acordos",
-    "/pagamentos",
+    "/renovacoes",
   ]);
   if (opts.clientId) {
     revalidatePath(`/clientes/${opts.clientId}`);

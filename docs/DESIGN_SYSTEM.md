@@ -62,6 +62,8 @@ sempre com par `dark:` (modelo: `bg-red-50 ... dark:bg-red-500/10 dark:text-red-
 | Navegação de mês | `components/month-nav.tsx` (MonthNav) | ◀ mês/ano ▶ + "Mês atual" — ÚNICO seletor de competência do app (`?mes=YYYY-MM`) |
 | Status financeiro | `lib/status-meta.ts` | língua da planilha: 🟢 Pago / 🟡 A vencer / 🔴 Devendo — rótulo + variante de Badge + tintura de linha (ROW_PAID/ROW_SOON/ROW_OVERDUE) para cobrança, despesa, folha e receita |
 | Toast Desfazer | `components/undo-toast.tsx` (showUndoToast) | gesto registra na hora + Desfazer 15min; host único no AppShell |
+| Fluxo de renovação | `app/renovacoes/renew-flow-dialog.tsx` + `renewals-table.tsx` | ÚNICO caminho "Sim, renovou" (Gestão do Mês e /renovacoes); action `renewClientFlow` |
+| Kanban de funil | `app/upsell/upsell-board.tsx` | HTML5 drag&drop + select no mobile; mover é otimista com Desfazer |
 
 ## Regras de uso
 
