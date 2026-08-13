@@ -21,6 +21,10 @@ export type RenewalPanelRow = {
   status: string; // ClientStatus
   modality: string | null; // MRR | TCV
   salesOwner: string | null;
+  /** Mensalidade atual do cadastro (default do form de renovação MRR). */
+  monthlyValue: number | null;
+  /** Dia recorrente de pagamento do cadastro (default do form MRR). */
+  paymentDay: number | null;
   /** Data de renovação do contrato (renewalDate), quando existe. */
   renewalDateISO: string | null;
   /** Há quantos meses o contrato/relação está ativo (startDate → mês alvo). */
@@ -69,7 +73,7 @@ function monthsBetween(from: Date | null, toYear: number, toMonth: number): numb
 
 const CLIENT_SELECT = {
   id: true, name: true, status: true, modality: true, salesOwner: true,
-  monthlyValue: true, contractMonths: true, startedAt: true,
+  monthlyValue: true, paymentDay: true, contractMonths: true, startedAt: true,
 } as const;
 
 export async function getRenewalPanel(month: number, year: number): Promise<RenewalPanel> {
@@ -184,6 +188,8 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
       status: c.status,
       modality: c.modality,
       salesOwner: c.salesOwner,
+      monthlyValue: c.monthlyValue != null ? n(c.monthlyValue) : null,
+      paymentDay: c.paymentDay,
       renewalDateISO: ct?.renewalDate ? ct.renewalDate.toISOString() : null,
       monthsActive: monthsBetween(ct?.startDate ?? c.startedAt, year, month),
       contractMonths: c.contractMonths,

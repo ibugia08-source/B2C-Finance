@@ -20,16 +20,16 @@ function addMonthsClamped(base: Date, months: number): Date {
  * FLUXO COMPLETO DE RENOVAÇÃO — "Sim, renovou" da Gestão do Mês e do módulo
  * Renovações, num só passo atômico do ponto de vista do usuário:
  *
- *  1. Estende o contrato (quando existe) com o novo ciclo — prazo, valor,
- *     forma/modalidade de pagamento — e reativa o cliente.
- *  2. Atualiza o CADASTRO do cliente (prazo, valores, mês da próxima
- *     renovação = mês do novo fim de vigência).
+ *  1. O dono escolhe a MODALIDADE do contrato renovado (mesma lógica do
+ *     cadastro): MRR = mensalidade + dia de pagamento mensal (o cliente
+ *     segue na lista de recebimentos todo mês; ciclo = mensal × prazo);
+ *     TCV = valor total cheio, sem mensalidade automática.
+ *  2. Estende o contrato (quando existe) e reativa o cliente; contrato e
+ *     cadastro acompanham a modalidade escolhida (normalização do saveClient:
+ *     MRR zera valor total; TCV zera mensalidade e dia recorrente).
  *  3. Opcionalmente LANÇA o valor no módulo de recebimentos, na competência
  *     escolhida (mês atual ou outro), como cobrança real (Billing).
- *  4. MRR: pergunta se o cliente permanece na lista de recebimentos mensais.
- *     "Não" = o cliente (e o contrato) passam a ser tratados como TCV — paga
- *     o ciclo cheio, sem mensalidade automática.
- *  5. Registra o histórico auditável em ClientRenewal (aparece na ficha do
+ *  4. Registra o histórico auditável em ClientRenewal (aparece na ficha do
  *     cliente e no módulo Renovações).
  *
  * REGRAS DE COBRANÇA (auditoria 2026-08-13):
@@ -38,7 +38,7 @@ function addMonthsClamped(base: Date, months: number): Date {
  *    função é por contractId — gerar aqui duplicaria cobranças em massa.
  *    As mensalidades futuras do MRR nascem do CADASTRO (monthlyValue novo)
  *    pelo ciclo normal.
- *  - MRR keepMonthly + lançamento: materializa a mensalidade da competência
+ *  - Renovação MRR + lançamento: materializa a mensalidade da competência
  *    via ensureClientBillingForMonth e ATUALIZA o valor se a cobrança já
  *    existia em aberto com o mensal antigo.
  *  - Contrato + cadastro + histórico são gravados numa transação; o
@@ -53,12 +53,9 @@ export async function renewClientFlow(
     const clientId = String(formData.get("clientId") ?? "");
     const contractId = String(formData.get("contractId") ?? "").trim() || null;
     const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
-    const totalRaw = String(formData.get("totalValue") ?? "").trim();
     const paymentMethod = String(formData.get("paymentMethod") ?? "").trim() || null;
-    const paymentMode = String(formData.get("paymentMode") ?? "").trim() || null;
     const details = String(formData.get("details") ?? "").trim() || null;
     const launch = String(formData.get("launch") ?? "") === "1";
-    const keepMonthly = String(formData.get("keepMonthly") ?? "1") !== "0";
     const payStatus = String(formData.get("payStatus") ?? "aberto"); // aberto | total | parcial
     const paidRaw = String(formData.get("paidAmount") ?? "").trim();
 
@@ -83,13 +80,30 @@ export async function renewClientFlow(
     if (contractId && !contract)
       return { ok: false, error: "Contrato não encontrado para este cliente." };
 
-    const total = totalRaw ? parseBRL(totalRaw) : 0;
-    if (!(total > 0)) return { ok: false, error: "Informe o valor do novo ciclo." };
+    // MODALIDADE do contrato renovado (mesma lógica do cadastro):
+    //  MRR → mensalidade + dia de pagamento mensal; TCV → valor total cheio.
+    const modRaw = String(formData.get("modality") ?? "").trim();
+    const staysMonthly = modRaw
+      ? modRaw === "MRR"
+      : (contract ? contract.type === "MRR" : client.modality !== "TCV");
+    const isMrr = staysMonthly; // modalidade escolhida define o novo ciclo
 
-    // Modalidade efetiva: contrato manda; sem contrato, vale o cadastro.
-    const isMrr = contract ? contract.type === "MRR" : client.modality !== "TCV";
-    const staysMonthly = isMrr && keepMonthly;
-    const monthly = staysMonthly ? Math.round((total / months) * 100) / 100 : null;
+    let monthly: number | null = null;
+    let paymentDay: number | null = null;
+    let total: number;
+    if (staysMonthly) {
+      monthly = parseBRL(String(formData.get("monthlyValue") ?? "").trim());
+      if (!(monthly > 0))
+        return { ok: false, error: "Informe o valor da mensalidade." };
+      paymentDay = parseInt(String(formData.get("paymentDay") ?? ""), 10);
+      if (!Number.isInteger(paymentDay) || paymentDay < 1 || paymentDay > 31)
+        return { ok: false, error: "Informe o dia de pagamento mensal (1-31)." };
+      total = Math.round(monthly * months * 100) / 100;
+    } else {
+      total = parseBRL(String(formData.get("totalValue") ?? "").trim());
+      if (!(total > 0))
+        return { ok: false, error: "Informe o valor total do contrato renovado." };
+    }
 
     const base =
       contract?.endDate && contract.endDate > today ? contract.endDate : today;
@@ -98,9 +112,8 @@ export async function renewClientFlow(
 
     // ===== 1-2-5) Contrato + cadastro + histórico numa TRANSAÇÃO =====
     const renewNote =
-      `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")}` +
+      `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
       (paymentMethod ? `, ${paymentMethod}` : "") +
-      (paymentMode ? ` (${paymentMode})` : "") +
       (details ? ` — ${details}` : "");
 
     const writes: any[] = [];
@@ -114,16 +127,13 @@ export async function renewClientFlow(
             renewalDate: newEnd,
             totalValue: n(contract.totalValue) + total,
             paymentMethod,
-            paymentMode,
             canceledAt: null,
             notes: [contract.notes, renewNote].filter(Boolean).join("\n"),
+            // O contrato acompanha a modalidade escolhida na renovação —
+            // TCV trava a geração de mensalidades (recurrence NONE, mensal 0).
             ...(staysMonthly
-              ? { monthlyValue: monthly! }
-              : isMrr
-                ? // MRR que pagou o ciclo cheio: o CONTRATO também vira TCV —
-                  // trava a geração de mensalidades em lote sobre o ciclo pago.
-                  { type: "TCV" as const, recurrence: "NONE" as const, monthlyValue: 0 }
-                : {}),
+              ? { type: "MRR" as const, recurrence: "MONTHLY" as const, monthlyValue: monthly! }
+              : { type: "TCV" as const, recurrence: "NONE" as const, monthlyValue: 0 }),
           },
         })
       );
@@ -137,11 +147,21 @@ export async function renewClientFlow(
           contractMonths: months,
           // Próxima janela de renovação = mês do novo fim de vigência.
           renewalMonth: newEnd.getMonth() + 1,
+          // Normalização por modalidade — a MESMA regra do saveClient:
+          // MRR zera o valor total; TCV zera mensalidade e dia recorrente.
           ...(staysMonthly
-            ? { monthlyValue: monthly }
-            : isMrr
-              ? { modality: "TCV", totalContractValue: total }
-              : { totalContractValue: total }),
+            ? {
+                modality: "MRR" as const,
+                monthlyValue: monthly,
+                paymentDay,
+                totalContractValue: null,
+              }
+            : {
+                modality: "TCV" as const,
+                totalContractValue: total,
+                monthlyValue: null,
+                paymentDay: null,
+              }),
         },
       })
     );
@@ -155,12 +175,11 @@ export async function renewClientFlow(
           monthlyValue: monthly,
           modality: staysMonthly ? "MRR" : "TCV",
           paymentMethod,
-          paymentMode,
           previousEndDate,
           newEndDate: newEnd,
           billingMonth: launch ? comp.month : null,
           billingYear: launch ? comp.year : null,
-          keptMonthly: isMrr ? keepMonthly : null,
+          keptMonthly: staysMonthly,
           paymentStatus: launch ? payStatus : null,
           notes: details,
           createdBy: viewer.email,
