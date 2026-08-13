@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { MONTHS_PT } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,11 +22,6 @@ import { addPastDelinquency } from "@/lib/actions/receivables-inline";
  * na competência informada (histórico do cliente + relatórios). Não cria
  * Receita Extra — Receita Extra é apenas manual.
  */
-
-const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 export function PastDelinquencyDialog({
   clients,
@@ -79,7 +75,7 @@ export function PastDelinquencyDialog({
           <div>
             <Label>Mês de referência *</Label>
             <Select name="refMonth" defaultValue={String(prev.getMonth() + 1)}>
-              {MONTHS.map((m, i) => (
+              {MONTHS_PT.map((m, i) => (
                 <option key={m} value={i + 1}>{m}</option>
               ))}
             </Select>

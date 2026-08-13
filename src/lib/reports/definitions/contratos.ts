@@ -1,16 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { CONTRACT_STATUS_LABEL } from "@/app/acordos/_meta";
 import { toNumber as n } from "@/lib/format";
 import { type ReportQuery, amountRange } from "../query";
 import { type ReportDef, type ReportRow } from "../shared";
-
-const CONTRACT_STATUS_LABEL: Record<string, string> = {
-  PENDING: "Pendente",
-  ACTIVE: "Ativo",
-  RENEWAL: "Em renovação",
-  OVERDUE: "Vencido",
-  ENDED: "Encerrado",
-  CANCELED: "Cancelado",
-};
 
 async function buildContratos(q: ReportQuery): Promise<ReportRow[]> {
   const where: Record<string, unknown> = {};

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { formatBRL0 } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Pencil, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,6 @@ import { saveAnnualTarget } from "@/lib/actions/annual-target";
  * e média mensal necessária no restante do ano. Edição inline para quem
  * tem configuracoes.editar.
  */
-
-const brl0 = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 export function MetaAnual({
   year,
@@ -91,7 +89,7 @@ export function MetaAnual({
                 </form>
               ) : (
                 <p className="stat-number text-xl font-bold">
-                  {target ? brl0(target) : "— defina a meta"}
+                  {target ? formatBRL0(target) : "— defina a meta"}
                   {canEdit && (
                     <button
                       type="button"
@@ -112,7 +110,7 @@ export function MetaAnual({
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Acumulado no ano
             </p>
-            <p className="stat-number text-xl font-bold text-success">{brl0(achieved)}</p>
+            <p className="stat-number text-xl font-bold text-success">{formatBRL0(achieved)}</p>
           </div>
 
           <div className="min-w-[180px] flex-1">
@@ -141,7 +139,7 @@ export function MetaAnual({
               Média mensal necessária
             </p>
             <p className="stat-number text-xl font-bold">
-              {mediaNecessaria != null ? brl0(mediaNecessaria) : "—"}
+              {mediaNecessaria != null ? formatBRL0(mediaNecessaria) : "—"}
             </p>
             <p className="text-[11px] text-muted-foreground">
               {monthsLeft > 0 ? `nos próximos ${monthsLeft} mês(es)` : "ano encerrado"}

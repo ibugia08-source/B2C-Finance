@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { MONTHS_PT } from "@/lib/format";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -12,11 +13,6 @@ import { CalendarDays } from "lucide-react";
  * da lista de meses para escolher um intervalo de datas livre (De/Até).
  * Atualiza ?date=YYYY-MM-DD_YYYY-MM-DD (lido por resolvePeriod).
  */
-
-const MONTHS_PT = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

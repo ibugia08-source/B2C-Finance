@@ -1,5 +1,6 @@
 "use client";
 import { memo, useCallback } from "react";
+import { formatBRL } from "@/lib/format";
 import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { TableCell, TableRow } from "@/components/ui/table";
@@ -28,9 +29,6 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   label: `Todo dia ${String(i + 1).padStart(2, "0")}`,
 }));
 
-const fmtBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
 function ReceivableRowInner({
   row,
   selected,
@@ -57,7 +55,7 @@ function ReceivableRowInner({
       if (res.ok) {
         const paymentId = res.id;
         showUndoToast({
-          message: `${r.name}: pagamento de ${fmtBRL(r.openAmount)} registrado.`,
+          message: `${r.name}: pagamento de ${formatBRL(r.openAmount)} registrado.`,
           onUndo: paymentId ? () => undoQuickSettle(paymentId) : undefined,
         });
       }

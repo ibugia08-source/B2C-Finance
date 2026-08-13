@@ -10,11 +10,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { renewClientFlow } from "@/lib/actions/renewals";
 import { showUndoToast } from "@/components/undo-toast";
-import { parseBRL } from "@/lib/format";
+import { parseBRL, formatBRL } from "@/lib/format";
 import { RefreshCw } from "lucide-react";
-
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /**
  * "SIM, RENOVOU" — o pop-up completo da renovação. A MODALIDADE do contrato
@@ -179,7 +176,7 @@ export function RenewFlowDialog({
                 />
                 {cycleTotal > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Ciclo: {brl(cycleTotal)} ({months}× {brl(monthlyNum)})
+                    Ciclo: {formatBRL(cycleTotal)} ({months}× {formatBRL(monthlyNum)})
                   </p>
                 )}
               </div>

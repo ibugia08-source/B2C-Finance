@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { monthRange, parseMonthParam } from "@/lib/format";
 import {
   getMonthDelinquencies,
-  getClientSummaries,
   getClientRiskLevels,
   type MonthDelinquency,
 } from "@/lib/services/client-metrics";
@@ -16,7 +15,7 @@ import { ClientFilters } from "./filters";
 import { KpiCard } from "./kpi-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
-import { MonthNav } from "@/app/cobrancas/month-nav";
+import { MonthNav } from "@/components/month-nav";
 import { PageSizeSelect } from "./page-size-select";
 import { PAGE_SIZES, MONTH_LABEL } from "./_meta";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
@@ -260,9 +259,24 @@ export default async function ClientesPage({
       notes: true,
     },
   });
-  // Colunas estilo planilha (F5) — em lote e SEQUENCIAL (pool do Prisma):
-  // serviços ativos via contratos e risco de inadimplência via cobranças.
-  const summariesById = await getClientSummaries(pageIds);
+  // Colunas estilo planilha (F5) — em lote e SEQUENCIAL (pool do Prisma).
+  // Serviços ativos: query direta leve (a carteira só usa os NOMES — o
+  // getClientSummaries completo dispara 5 queries e 4 seriam descartadas).
+  const activeContracts = await prisma.contract.findMany({
+    where: { clientId: { in: pageIds }, status: "ACTIVE" },
+    select: {
+      clientId: true,
+      services: { select: { service: { select: { name: true } } } },
+    },
+  });
+  const servicesById = new Map<string, string[]>();
+  for (const ct of activeContracts) {
+    const cur = servicesById.get(ct.clientId) ?? [];
+    for (const s of ct.services) {
+      if (!cur.includes(s.service.name)) cur.push(s.service.name);
+    }
+    servicesById.set(ct.clientId, cur);
+  }
   const risksById = await getClientRiskLevels(pageIds);
   const rowById = new Map(rowsRaw.map((r) => [r.id, r]));
   const clients: ClientRow[] = pageIds
@@ -305,7 +319,7 @@ export default async function ClientesPage({
         // Ajuste de inadimplência na linha é gravado NESTA competência.
         refMonth: curMonth,
         refYear: curYear,
-        services: summariesById.get(r.id)?.activeServices ?? [],
+        services: servicesById.get(r.id) ?? [],
         risk: (() => {
           const risk = risksById.get(r.id);
           return risk ? { level: risk.riskLevel, label: risk.payerLabel } : null;
@@ -328,8 +342,11 @@ export default async function ClientesPage({
     return `/clientes?${params.toString()}`;
   }
 
+  // Sem pb-24 na raiz: o <main> do AppShell já reserva o espaço da tab bar
+  // (pb-24 mobile / pb-6 desktop) e a FloatingActionBar renderiza em portal —
+  // o padding duplicado criava um vão morto no rodapé.
   return (
-    <div className="pb-24">
+    <div>
       <PageHeader
         title="Clientes"
         description={`Carteira de clientes da B2C Gestão · competência ${selLabel}`}

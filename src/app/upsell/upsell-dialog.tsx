@@ -16,14 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { saveUpsell } from "@/lib/actions/upsells";
 import { Plus, TrendingUp, X } from "lucide-react";
-import { formatDateInput, formatDecimalInput as fmt, parseBRL } from "@/lib/format";
+import { formatDateInput, formatDecimalInput as fmt, parseBRL, formatBRL } from "@/lib/format";
 import { UPSELL_STATUSES, UPSELL_STATUS_LABEL } from "./_meta";
 
 type Opt = { id: string; name: string };
 type ServiceLine = { serviceId: string; unitPrice: number };
-
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 /**
  * Form único de oportunidade de upsell — usado no módulo /upsell, na Gestão
@@ -201,7 +198,7 @@ export function UpsellDialog({
             )}
             {sum > 0 && (
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Soma dos serviços: <span className="font-medium">{brl(sum)}</span>
+                Soma dos serviços: <span className="font-medium">{formatBRL(sum)}</span>
                 {!effectiveValue && " — usada como valor da oportunidade."}
               </p>
             )}

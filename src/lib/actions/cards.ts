@@ -53,39 +53,6 @@ export async function saveCard(formData: FormData) {
   revalidateFinance();
 }
 
-// Criação rápida de conta bancária (usada na importação inline). Retorna o id.
-const QuickAccountSchema = z.object({
-  name: z.string().min(1, "Nome obrigatório"),
-  bank: z.string().optional().nullable(),
-  limitTotal: z.number().nonnegative().default(0),
-  closingDay: z.number().int().min(1).max(31).default(1),
-  dueDay: z.number().int().min(1).max(31).default(10),
-});
-
-export async function createBankAccountQuick(
-  formData: FormData
-): Promise<{ id: string }> {
-  await requirePermission("despesas.editar");
-  const parsed = QuickAccountSchema.parse({
-    name: formData.get("name"),
-    bank: formData.get("bank") || null,
-    limitTotal: parseBRL(String(formData.get("limitTotal") || "0")),
-    closingDay: Number(formData.get("closingDay") || 1),
-    dueDay: Number(formData.get("dueDay") || 10),
-  });
-  const created = await prisma.creditCard.create({
-    data: {
-      name: parsed.name,
-      bank: parsed.bank,
-      limitTotal: parsed.limitTotal,
-      closingDay: parsed.closingDay,
-      dueDay: parsed.dueDay,
-    },
-  });
-  revalidateFinance();
-  return { id: created.id };
-}
-
 export async function quickRenameCard(id: string, name: string) {
   await requirePermission("despesas.editar");
   if (!name.trim()) throw new Error("Nome obrigatório");

@@ -48,6 +48,7 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
       where: { status: { notIn: ["CHURNED", "INACTIVE"] } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
+      take: 2000,
     }),
     prisma.service.findMany({
       where: { active: true },

@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
-import { ClientStatus, ClientModality, DelinquencyStatus } from "@prisma/client";
+import { ClientStatus, ClientModality } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
@@ -408,77 +408,6 @@ export async function listEmployeeOptions(): Promise<{ id: string; name: string 
   return employees;
 }
 
-// ---------- Cadastro por contrato (PDF + IA) ----------
-
-export type ContractExtraction = {
-  ok: true;
-  data: Record<string, string>;
-  missing: string[];
-} | { ok: false; error: string };
-
-/**
- * Lê um contrato em PDF e extrai os dados do cliente com a IA configurada.
- * Nada é gravado — o resultado pré-preenche o formulário de novo cliente e
- * o usuário completa apenas o que faltar.
- */
-export async function extractClientFromContract(formData: FormData): Promise<ContractExtraction> {
-  await requirePermission("clientes.criar");
-  try {
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0)
-      return { ok: false, error: "Envie o contrato em PDF." };
-    if (file.size > 8 * 1024 * 1024) return { ok: false, error: "PDF acima de 8MB." };
-
-    const { getAISettings, isConfigured, chatComplete } = await import("@/lib/ai/provider");
-    const settings = await getAISettings();
-    if (!isConfigured(settings))
-      return { ok: false, error: "Configure a IA em /assistente para ler contratos." };
-
-    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as any;
-    let text = "";
-    try {
-      const parsed = await pdfParse(Buffer.from(await file.arrayBuffer()));
-      text = String(parsed.text ?? "").trim();
-    } catch {
-      return { ok: false, error: "Não foi possível ler o PDF (protegido ou escaneado?)." };
-    }
-    if (text.length < 100)
-      return { ok: false, error: "PDF sem texto legível — envie um contrato digital (não escaneado)." };
-
-    const system = `Você extrai dados de contratos de prestação de serviços de uma agência de marketing brasileira. Responda APENAS com um JSON válido (sem markdown, sem comentários) no formato:
-{"name": string|null, "legalName": string|null, "document": string|null, "email": string|null, "phone": string|null, "city": string|null, "state": string|null (sigla UF), "address": string|null (endereço completo do contratante), "legalRepresentative": string|null (nome do representante legal que assina), "segment": string|null, "paymentModel": "MRR"|"TCV"|null, "contractTotal": string|null (ex: "5100,00"), "contractMonths": string|null (nº de meses do contrato), "paymentDay": string|null (dia de vencimento 1-31), "startedAt": string|null (data de início dd/mm/aaaa), "notes": string|null (resumo de serviços/condições em 1 frase)}
-Regras: "name" é o nome do CONTRATANTE (cliente), nunca da agência/contratada (B2C, B2C Gestão). paymentModel: "MRR" se o pagamento é mensal/recorrente; "TCV" se é valor fechado do projeto. contractTotal: valor TOTAL do contrato (se só houver mensal e prazo, multiplique). Use null quando o dado não estiver no contrato. NUNCA invente.`;
-
-    const result = await chatComplete({
-      settings,
-      system,
-      messages: [{ role: "user", content: `CONTRATO:\n${text.slice(0, 14000)}` }],
-      maxTokens: 700,
-    });
-
-    const raw = result.text.replace(/```json|```/g, "").trim();
-    const json = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
-
-    const data: Record<string, string> = {};
-    for (const [k, v] of Object.entries(json)) {
-      if (v != null && v !== "" && typeof v !== "object") data[k] = String(v);
-    }
-    const FIELD_LABEL: Record<string, string> = {
-      name: "Nome do cliente", document: "CNPJ/CPF", email: "E-mail", phone: "Telefone",
-      paymentModel: "Modelo de pagamento (MRR/TCV)", contractTotal: "Valor total do contrato",
-      contractMonths: "Prazo (meses)", paymentDay: "Dia de pagamento",
-    };
-    const missing = Object.entries(FIELD_LABEL)
-      .filter(([k]) => !data[k])
-      .map(([, label]) => label);
-
-    return { ok: true, data, missing };
-  } catch (e: any) {
-    console.error("extractClientFromContract", e);
-    return { ok: false, error: "Não consegui interpretar o contrato. Confira o PDF ou cadastre manualmente." };
-  }
-}
-
 export async function deleteClient(id: string): Promise<ActionResult> {
   await requirePermission("clientes.excluir");
   try {
@@ -667,59 +596,6 @@ export async function setClientRenewalMonth(
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o mês de renovação.";
-    return { ok: false, error: msg };
-  }
-}
-
-/**
- * Override manual da inadimplência POR COMPETÊNCIA (Pago/Devendo).
- * Grava em ClientMonthDelinquency no mês/ano informados (default: mês atual)
- * — cada mês guarda o próprio ajuste, sem apagar os dos outros meses.
- * `status = null` limpa o override daquela competência (volta ao automático).
- */
-export async function setClientDelinquency(
-  id: string,
-  status: string | null,
-  refMonth?: number,
-  refYear?: number
-): Promise<ActionResult> {
-  const viewer = await requirePermission("clientes.alterar_status");
-  try {
-    const value =
-      status == null || status === ""
-        ? null
-        : z.nativeEnum(DelinquencyStatus).parse(status);
-    const existing = await prisma.client.findUnique({ where: { id } });
-    if (!existing) return { ok: false, error: "Cliente não encontrado." };
-
-    const now = new Date();
-    const month = refMonth && refMonth >= 1 && refMonth <= 12 ? Math.trunc(refMonth) : now.getMonth() + 1;
-    const year = refYear && refYear >= 1990 && refYear <= 2100 ? Math.trunc(refYear) : now.getFullYear();
-
-    if (value == null) {
-      await prisma.clientMonthDelinquency.deleteMany({
-        where: { clientId: id, month, year },
-      });
-    } else {
-      const current = await prisma.clientMonthDelinquency.findFirst({
-        where: { clientId: id, month, year },
-        select: { id: true },
-      });
-      if (current) {
-        await prisma.clientMonthDelinquency.updateMany({
-          where: { id: current.id },
-          data: { status: value, setBy: viewer.name, setAt: now },
-        });
-      } else {
-        await prisma.clientMonthDelinquency.create({
-          data: { clientId: id, month, year, status: value, setBy: viewer.name },
-        });
-      }
-    }
-    revalidateAgency();
-    return { ok: true };
-  } catch (e: any) {
-    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a inadimplência.";
     return { ok: false, error: msg };
   }
 }

@@ -279,19 +279,3 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   }
 }
 
-export async function linkPersonToUser(personId: string, userId: string | null) {
-  await requirePermission("usuarios.editar");
-  if (userId) {
-    // Desfaz vínculo anterior do mesmo user a outra pessoa
-    await prisma.person.updateMany({
-      where: { userId, NOT: { id: personId } },
-      data: { userId: null },
-    });
-  }
-  await prisma.person.update({
-    where: { id: personId },
-    data: { userId },
-  });
-  revalidateAdmin();
-  revalidateFinance({ personId });
-}

@@ -2,6 +2,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CLIENT_TABS as TABS, resolveClientTab } from "./tabs-meta";
 
 export interface TabsCount {
   contratos?: number;
@@ -12,26 +13,6 @@ export interface TabsCount {
   historico?: number;
 }
 
-// Abas da ÁREA DO CLIENTE — mesmos ids dos TabsContent de page.tsx.
-const TABS = [
-  { id: "visao-geral", label: "Visão geral" },
-  { id: "contratos", label: "Contratos", countKey: "contratos" },
-  { id: "documentos", label: "Documentos", countKey: "documentos" },
-  { id: "cobrancas", label: "Cobranças", countKey: "cobrancas" },
-  { id: "pagamentos", label: "Pagamentos", countKey: "pagamentos" },
-  { id: "servicos", label: "Serviços" },
-  { id: "historico", label: "Histórico", countKey: "historico" },
-  { id: "contexto", label: "Contexto", countKey: "contexto" },
-] as const;
-
-// Aliases de links antigos (?tab=recebimentos etc.) — mantêm a aba certa ativa.
-const ALIAS: Record<string, string> = {
-  "dados-principais": "visao-geral",
-  "dados-fiscais": "visao-geral",
-  recebimentos: "cobrancas",
-  notas: "contexto",
-};
-
 export function TabsNavigation({
   clientId,
   counts = {},
@@ -40,8 +21,7 @@ export function TabsNavigation({
   counts?: TabsCount;
 }) {
   const searchParams = useSearchParams();
-  const raw = searchParams.get("tab") || "visao-geral";
-  const activeTab = TABS.some((t) => t.id === raw) ? raw : ALIAS[raw] ?? "visao-geral";
+  const activeTab = resolveClientTab(searchParams.get("tab"));
 
   return (
     <Tabs value={activeTab} asChild>

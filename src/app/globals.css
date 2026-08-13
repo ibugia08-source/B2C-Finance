@@ -47,9 +47,6 @@
     --surface-soft: 210 30% 97%;
     --surface-strong: 210 24% 94%;
 
-    --gold: 41 72% 45%;
-    --gold-soft: 41 80% 92%;
-
     --radius: 0.75rem;                 /* escala coerente: lg=12 · md=10 · sm=8 */
   }
 
@@ -94,9 +91,6 @@
 
     --surface-soft: 240 12% 11%;
     --surface-strong: 240 10% 15%;
-
-    --gold: 45 85% 58%;                /* #E8B547 dourado aquecido + vivo */
-    --gold-soft: 45 40% 14%;           /* profundo gold background */
   }
 }
 
@@ -142,15 +136,6 @@
     font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
     font-weight: 500;
     @apply tabular-nums tracking-tight;
-  }
-  .ring-gold {
-    box-shadow: 0 0 0 1px hsl(var(--gold) / 0.4);
-  }
-  .text-gold {
-    color: hsl(var(--gold));
-  }
-  .bg-gold-soft {
-    background-color: hsl(var(--gold-soft));
   }
   /* Fundo imersivo: brilho roxo + dourado discretos sobre o grafite */
   .app-shell {
@@ -205,150 +190,19 @@
     }
   }
 
-  /* Fade + Scale In (cards, content) */
-  .fade-scale-in {
-    animation: fade-scale-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  @keyframes fade-scale-in {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
-  /* Slide In From Left (modals, drawers) */
-  .slide-in-left {
-    animation: slide-in-left 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  @keyframes slide-in-left {
-    from {
-      opacity: 0;
-      transform: translateX(-100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* Slide In From Right (panels) */
-  .slide-in-right {
-    animation: slide-in-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  @keyframes slide-in-right {
-    from {
-      opacity: 0;
-      transform: translateX(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  /* Slide In From Bottom (bottom sheets, mobile modals) */
-  .slide-in-bottom {
-    animation: slide-in-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  }
-  @keyframes slide-in-bottom {
-    from {
-      opacity: 0;
-      transform: translateY(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  /* Pulse (loading, notification) */
-  .pulse-soft {
-    animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-  @keyframes pulse-soft {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  /* Smooth transitions for interactive elements */
-  .transition-smooth {
-    @apply transition-all duration-200 ease-out;
-  }
-
-  .transition-smooth-lg {
-    @apply transition-all duration-300 ease-out;
-  }
-
   /* Hover lift effect */
   .hover-lift {
     @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
   }
 
-  /* Dark mode specific utilities */
-  .dark-bg-elevated {
-    @apply bg-secondary dark:bg-[#1a1f2e];
-  }
-
-  .dark-border-subtle {
-    @apply border-border dark:border-[#3a424f];
-  }
-
-  /* Placeholder text with better dark mode contrast */
-  .placeholder-soft {
-    @apply placeholder:text-muted-foreground dark:placeholder:text-[#7a8490];
-  }
-
-  /* Focus ring with better dark mode visibility */
-  .focus-ring-dark {
-    @apply focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-[#60a5fa] focus:ring-offset-1 dark:focus:ring-offset-[#0b0d14];
-  }
 }
 
 @layer components {
-  /* Mobile-friendly utilities for touch-first design */
-  .btn-touch {
-    @apply min-h-touch px-4 py-3 font-medium transition-all duration-100;
-  }
-
-  .btn-touch-primary {
-    @apply btn-touch bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95;
-  }
-
-  .btn-touch-secondary {
-    @apply btn-touch bg-secondary text-secondary-foreground hover:bg-secondary/90;
-  }
-
-  .input-touch {
-    @apply h-touch text-base leading-relaxed;
-  }
-
-  .card-mobile {
-    @apply rounded-lg border p-3 sm:p-4 md:p-6;
-  }
-
-  /* Safe area support for notch/home bar */
-  .safe-area-top {
-    padding-top: max(0.75rem, env(safe-area-inset-top));
-  }
-
-  .safe-area-bottom {
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
-  }
-
   /* Smooth collapse/expand animation for sidebar */
   .sidebar-collapse {
     @apply transition-all duration-300 ease-out;
   }
 
-  /* Tab bar at bottom with safe area support */
-  .tab-bar {
-    @apply fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur;
-    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

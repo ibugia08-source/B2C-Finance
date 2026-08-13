@@ -35,6 +35,17 @@ export function formatBRL(value: number | null | undefined): string {
   return BRL.format(Number(value));
 }
 
+/** Moeda sem centavos (tabelas densas: Painel Anual, meta anual). */
+export function formatBRL0(value: number | null | undefined): string {
+  const v = Number(value ?? 0);
+  if (isNaN(v)) return "R$ 0";
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 0,
+  });
+}
+
 /**
  * Moeda compacta para eixos de gráfico: R$ 1,5 mil / R$ 12 mil / R$ 1,2 mi.
  * Mantém legibilidade sem poluir o eixo Y com valores longos.

@@ -3,7 +3,7 @@ import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { toNumber as n } from "@/lib/format";
+import { toNumber as n, MONTHS_PT } from "@/lib/format";
 import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 
 /**
@@ -414,11 +414,6 @@ export type RenewalWindow = {
   clients: RenewalClient[];
 };
 
-const MONTH_LABEL_PT = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
-
 /**
  * Valor esperado de renovação (regra centralizada):
  *  - TCV → mesmo valor pago na última adesão/fechamento (último contrato TCV;
@@ -514,7 +509,7 @@ export async function getRenewalOutlook(
       offset,
       month,
       year,
-      label: `${MONTH_LABEL_PT[month - 1]}/${year}`,
+      label: `${MONTHS_PT[month - 1]}/${year}`,
       count: windowClients.length,
       expectedTotal: windowClients.reduce((s, c) => s + c.expected, 0),
       clients: windowClients,

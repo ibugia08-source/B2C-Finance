@@ -282,6 +282,13 @@ export type PayrollSummary = {
   status: string | null;
   total: number; // Σ itens (descontos negativos)
   byEmployee: { employeeId: string; name: string; role: string | null; total: number }[];
+  /** Itens crus da folha (já buscados) — evita rebusca na Gestão do Mês. */
+  items: {
+    employeeId: string;
+    kind: string;
+    amount: number;
+    employee: { id: string; name: string; role: string | null };
+  }[];
   folhaSobreReceita: number;
 };
 
@@ -296,6 +303,12 @@ export async function getPayrollSummary(
     },
   });
 
+  // Sem folha lançada no mês (caso comum ao navegar meses antigos/futuros):
+  // retorna zerado ANTES dos aggregates de receita — 2 queries a menos.
+  if (!run) {
+    return { runId: null, status: null, total: 0, byEmployee: [], items: [], folhaSobreReceita: 0 };
+  }
+
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 1);
   const [txReceita, incomeReceived] = await Promise.all([
@@ -309,10 +322,6 @@ export async function getPayrollSummary(
     }),
   ]);
   const receitas = n(txReceita._sum.amount) + n(incomeReceived._sum.amount);
-
-  if (!run) {
-    return { runId: null, status: null, total: 0, byEmployee: [], folhaSobreReceita: 0 };
-  }
 
   const byEmp = new Map<string, { employeeId: string; name: string; role: string | null; total: number }>();
   let total = 0;
@@ -334,6 +343,14 @@ export async function getPayrollSummary(
     status: run.status,
     total,
     byEmployee: Array.from(byEmp.values()).sort((a, b) => b.total - a.total),
+    // Itens crus já buscados pelo include — consumidores (Gestão do Mês)
+    // reusam em vez de rebuscar payrollItem.findMany na mesma request.
+    items: run.items.map((it) => ({
+      employeeId: it.employeeId,
+      kind: it.kind,
+      amount: n(it.amount),
+      employee: { id: it.employee.id, name: it.employee.name, role: it.employee.role },
+    })),
     folhaSobreReceita: receitas > 0 ? total / receitas : 0,
   };
 }

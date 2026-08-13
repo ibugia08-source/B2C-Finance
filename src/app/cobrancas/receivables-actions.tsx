@@ -22,7 +22,7 @@ import { setClientContractMonths, bulkSetMonthStatus, bulkRemoveClientsFromList 
 import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 import { bulkUpdateClients } from "@/lib/actions/clients";
 import { restoreBilling, registerBillingPaymentsBulk } from "@/lib/actions/billings";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInput, formatBRL } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL } from "./_meta";
 import type { ActionResult } from "@/lib/actions/clients";
 import type { ReceivableRow } from "./receivables-table";
@@ -70,9 +70,6 @@ const STATUS_PILL: Record<string, string> = {
   REMOVED: "bg-muted text-muted-foreground border-transparent",
   NO_CHARGE: "bg-muted text-muted-foreground border-transparent",
 };
-
-const fmtBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 function statusSelectValue(cycleStatus: string): string {
   if (["PAID", "PAID_LATE", "PAID_OTHER_MONTH"].includes(cycleStatus)) return "PAID";
@@ -122,7 +119,7 @@ export function StatusCell({
         ) : row.cycleStatus === "PAID_OTHER_MONTH" ? (
           "inadimplência regularizada em outro mês"
         ) : row.cycleStatus === "PARTIAL" ? (
-          `${fmtBRL(row.openAmount)} em aberto`
+          `${formatBRL(row.openAmount)} em aberto`
         ) : row.paidAtBR ? (
           `pago em ${row.paidAtBR}`
         ) : (
@@ -223,7 +220,7 @@ export function InlineMoney({
       }}
       className="font-medium tabular-nums underline-offset-4 hover:underline disabled:opacity-60"
     >
-      {shown > 0 ? fmtBRL(shown) : "— definir —"}
+      {shown > 0 ? formatBRL(shown) : "— definir —"}
     </button>
   );
 }
@@ -239,7 +236,7 @@ export function DeletePaymentButton({
   function run() {
     if (
       !confirm(
-        `Excluir o(s) pagamento(s) de ${row.name} (${fmtBRL(row.amountDue)})?\n\nA cobrança volta a ficar em aberto/vencida e os valores saem de "Recebido". Esta ação não pode ser desfeita.`
+        `Excluir o(s) pagamento(s) de ${row.name} (${formatBRL(row.amountDue)})?\n\nA cobrança volta a ficar em aberto/vencida e os valores saem de "Recebido". Esta ação não pode ser desfeita.`
       )
     )
       return;

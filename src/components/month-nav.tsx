@@ -1,5 +1,6 @@
 "use client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { MONTHS_PT } from "@/lib/format";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -10,11 +11,6 @@ import { Select } from "@/components/ui/select";
  * É o MESMO controle em todas as telas por competência (Gestão do Mês,
  * Clientes, Despesas, Folha, Receitas) — trocar de mês é trocar de "aba".
  */
-
-const MONTHS = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
 
 export function MonthNav({ month, year }: { month: number; year: number }) {
   const router = useRouter();
@@ -57,7 +53,7 @@ export function MonthNav({ month, year }: { month: number; year: number }) {
           value={String(month)}
           onChange={(e) => go(parseInt(e.target.value, 10), year)}
         >
-          {MONTHS.map((m, i) => (
+          {MONTHS_PT.map((m, i) => (
             <option key={m} value={i + 1}>
               {m}
             </option>

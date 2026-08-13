@@ -98,8 +98,7 @@ export type TemplateMetaExtraction =
 /**
  * Lê o TEXTO do modelo DOCX e usa a IA configurada para sugerir os metadados
  * comerciais (tipo, prazo, valores, serviços) — o usuário confere antes de
- * salvar; nada é gravado aqui. Mesmo padrão do cadastro de cliente por
- * contrato PDF (extractClientFromContract).
+ * salvar; nada é gravado aqui.
  */
 export async function extractTemplateMeta(formData: FormData): Promise<TemplateMetaExtraction> {
   await requirePermission("contratos.editar");

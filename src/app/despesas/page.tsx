@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/record-card";
 import { cn } from "@/lib/utils";
 import { ExpenseDialog } from "./expense-dialog";
-import { MonthNav } from "@/app/cobrancas/month-nav";
+import { MonthNav } from "@/components/month-nav";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";

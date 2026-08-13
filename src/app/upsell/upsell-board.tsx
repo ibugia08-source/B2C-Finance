@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { formatBRL } from "@/lib/format";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +37,6 @@ export type BoardUpsell = {
   services: { serviceId: string; unitPrice: number }[];
 };
 
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const dateBR = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("pt-BR") : null;
 
@@ -151,7 +150,7 @@ export function UpsellBoard({
                 </span>
               </div>
               <p className="mb-2 px-1 text-[11px] text-muted-foreground stat-number">
-                {colTotal > 0 ? brl(colTotal) : "—"}
+                {colTotal > 0 ? formatBRL(colTotal) : "—"}
               </p>
               <div className="space-y-2 min-h-[80px]">
                 {colItems.map((u) => (
@@ -180,7 +179,7 @@ export function UpsellBoard({
                       )}
                     </div>
                     <p className="stat-number mt-0.5 text-base font-semibold">
-                      {brl(u.value)}
+                      {formatBRL(u.value)}
                     </p>
                     {u.title && (
                       <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
@@ -348,7 +347,7 @@ function SellUpsellDialog({
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{upsell.clientName}</span> —{" "}
           {upsell.title ?? upsell.serviceNames.join(", ") ?? "venda interna"} ·{" "}
-          <span className="font-medium text-foreground">{brl(upsell.value)}</span>
+          <span className="font-medium text-foreground">{formatBRL(upsell.value)}</span>
         </p>
         <div className="grid gap-3">
           <div>

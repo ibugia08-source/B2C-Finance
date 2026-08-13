@@ -276,13 +276,6 @@ export async function sendChatMessage(
   };
 }
 
-export async function clearConversation(conversationId: string) {
-  await requirePermission("assistente.visualizar");
-  // deleteMany é escopado por dono → só apaga se a conversa for do próprio usuário.
-  await prisma.aIConversation.deleteMany({ where: { id: conversationId } });
-  revalidateAssistant();
-}
-
 // ---------- Análise sob demanda ----------
 
 export type InsightsResult = { ok: true; report: string; tokens: number } | { ok: false; error: string };

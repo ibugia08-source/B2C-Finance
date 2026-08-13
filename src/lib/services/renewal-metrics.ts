@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
+import { ownerCached } from "@/lib/owner-cache";
+import { CACHE_TAGS } from "@/lib/cache-tags";
 import { expectedRenewalValues } from "./revenue-metrics";
 
 /**
@@ -241,7 +243,7 @@ export type RenewalStripItem = {
   expectedTotal: number;
 };
 
-export async function getRenewalStrip(
+async function getRenewalStripImpl(
   fromMonth: number,
   fromYear: number,
   span = 6
@@ -270,3 +272,10 @@ export async function getRenewalStrip(
     return { month, year: ref.getFullYear(), ...bucket };
   });
 }
+
+/** Versão cacheada por (usuário, janela) — TTL 300s; invalidada por mutações
+ * de clientes/contratos (revalidateAgency → tags). */
+export const getRenewalStrip = ownerCached("renewal-strip", getRenewalStripImpl, {
+  revalidate: 300,
+  tags: [CACHE_TAGS.CLIENTS, CACHE_TAGS.CONTRACTS],
+});

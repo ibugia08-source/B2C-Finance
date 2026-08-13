@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { formatBRL0, MONTHS_PT_SHORT } from "@/lib/format";
 import type { AnnualPanel } from "@/lib/services/annual-panel";
 
 /**
@@ -7,10 +8,6 @@ import type { AnnualPanel } from "@/lib/services/annual-panel";
  * Meses futuros ficam "—". Verde/vermelho seguem os tokens do design system.
  */
 
-const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-const brl0 = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const pct = (v: number) => `${(v * 100).toFixed(1).replace(".", ",")}%`;
 
 type CellKind = "money" | "moneySigned" | "pct" | "pctSigned" | "int";
@@ -27,10 +24,10 @@ function fmt(v: number | null, kind: CellKind): { text: string; cls: string } {
   if (v == null) return { text: "—", cls: "text-muted-foreground/60" };
   switch (kind) {
     case "money":
-      return { text: brl0(v), cls: "" };
+      return { text: formatBRL0(v), cls: "" };
     case "moneySigned":
       return {
-        text: v < 0 ? `(${brl0(Math.abs(v))})` : brl0(v),
+        text: v < 0 ? `(${formatBRL0(Math.abs(v))})` : formatBRL0(v),
         cls: v < 0 ? "text-destructive" : "text-success",
       };
     case "pct":
@@ -186,7 +183,7 @@ export function AnnualTable({ panel }: { panel: AnnualPanel }) {
                 <th className="sticky left-0 z-30 bg-muted px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground border-r">
                   Indicador
                 </th>
-                {MONTHS.map((m) => (
+                {MONTHS_PT_SHORT.map((m) => (
                   <th
                     key={m}
                     className="px-2.5 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"

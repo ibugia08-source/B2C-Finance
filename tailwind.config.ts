@@ -6,6 +6,9 @@ const config: Config = {
     "./src/pages/**/*.{ts,tsx}",
     "./src/components/**/*.{ts,tsx}",
     "./src/app/**/*.{ts,tsx}",
+    // src/lib carrega classes de UI (ex.: tinturas ROW_PAID/ROW_SOON/
+    // ROW_OVERDUE em lib/status-meta.ts) — sem escanear, o JIT não as gera.
+    "./src/lib/**/*.{ts,tsx}",
   ],
   theme: {
     container: {
@@ -40,10 +43,6 @@ const config: Config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-        gold: {
-          DEFAULT: "hsl(var(--gold))",
-          soft: "hsl(var(--gold-soft))",
-        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

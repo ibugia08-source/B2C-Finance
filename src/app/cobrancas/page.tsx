@@ -23,7 +23,7 @@ import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
 import { BillingDialog } from "./billing-dialog";
 import { IncludeClientDialog, type IncludeClientOption } from "./include-client-dialog";
-import { MonthNav } from "./month-nav";
+import { MonthNav } from "@/components/month-nav";
 import { CycleFilters } from "./cycle-filters";
 import { ClientSearch } from "./search-client";
 import { PastDelinquencyDialog } from "./past-delinquency-dialog";
@@ -149,8 +149,6 @@ export default async function RecebimentosPage({
               paymentDay: true, salesOwner: true, contractMonths: true, status: true,
             },
           },
-          contract: { select: { title: true } },
-          service: { select: { name: true } },
           _count: { select: { history: true } },
         },
       }),
@@ -175,6 +173,7 @@ export default async function RecebimentosPage({
       prisma.contract.findMany({
         orderBy: { title: "asc" },
         select: { id: true, title: true, clientId: true },
+        take: 2000,
       }),
       prisma.service.findMany({
         where: { active: true },
@@ -504,17 +503,11 @@ export default async function RecebimentosPage({
           },
         })
       : Promise.resolve([] as any[]),
-    gates.folha && payrollSummary?.runId
-      ? prisma.payrollItem.findMany({
-          where: { payrollId: payrollSummary.runId },
-          select: {
-            employeeId: true,
-            kind: true,
-            amount: true,
-            employee: { select: { id: true, name: true, role: true } },
-          },
-        })
-      : Promise.resolve([] as any[]),
+    // Itens da folha vêm do próprio getPayrollSummary (já buscados no include
+    // da FASE B) — sem rebuscar payrollItem na mesma request.
+    Promise.resolve(
+      gates.folha && payrollSummary?.runId ? payrollSummary.items : ([] as any[])
+    ),
   ]);
 
   // ===== FASE D — apoio (prévia da folha, renovações, categorias) =====
@@ -768,11 +761,9 @@ export default async function RecebimentosPage({
       <CobrancasTabs active="/cobrancas" />
 
       {/* ===== Barra superior: mês · busca ===== */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <div className="flex flex-wrap items-center gap-2">
-          <MonthNav month={mes.month} year={mes.year} />
-          <ClientSearch />
-        </div>
+      <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+        <MonthNav month={mes.month} year={mes.year} />
+        <ClientSearch />
       </div>
 
       {/* ===== Resumo do mês (Ativo · Passivo · Resultado da planilha) ===== */}

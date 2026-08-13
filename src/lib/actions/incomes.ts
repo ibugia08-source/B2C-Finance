@@ -109,11 +109,3 @@ export async function deleteIncome(id: string) {
   revalidateFinance();
 }
 
-export async function setIncomeStatus(
-  id: string,
-  status: (typeof STATUS)[number]
-) {
-  await requirePermission("receitas.editar");
-  await prisma.income.update({ where: { id }, data: { status } });
-  revalidateFinance();
-}

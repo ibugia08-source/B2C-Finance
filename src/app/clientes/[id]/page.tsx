@@ -34,31 +34,10 @@ import {
   DOCUMENT_TYPE_LABEL,
   NOTE_TYPE_LABEL,
 } from "@/app/contratos/_meta";
+import { CONTRACT_STATUS_LABEL, contractStatusVariant } from "@/app/acordos/_meta";
+import { PAYMENT_METHOD_LABEL, COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
+import { resolveClientTab } from "./tabs-meta";
 
-const CONTRACT_STATUS: Record<string, { label: string; variant: any }> = {
-  PENDING: { label: "Pendente", variant: "secondary" },
-  ACTIVE: { label: "Ativo", variant: "success" },
-  RENEWAL: { label: "Em renovação", variant: "warning" },
-  OVERDUE: { label: "Vencido", variant: "destructive" },
-  ENDED: { label: "Encerrado", variant: "outline" },
-  CANCELED: { label: "Cancelado", variant: "outline" },
-};
-const PAYMENT_METHOD: Record<string, string> = {
-  PIX: "Pix",
-  TRANSFER: "Transferência",
-  BOLETO: "Boleto",
-  CARD: "Cartão",
-  CASH: "Dinheiro",
-  OTHER: "Outro",
-};
-const COLLECTION_STATUS: Record<string, string> = {
-  NOT_CONTACTED: "Sem contato",
-  CONTACTED: "Contatado",
-  PROMISED: "Prometeu pagar",
-  PAID: "Pago",
-  IGNORED: "Sem resposta",
-  ESCALATED: "Escalado",
-};
 
 export default async function ClientDetailPage({
   params,
@@ -180,22 +159,9 @@ export default async function ClientDetailPage({
   const activeServiceNames =
     summary.activeServices.length > 0 ? summary.activeServices : [];
 
-  // A aba ativa vem da URL (?tab=) — a barra de abas é a TabsNavigation do
-  // layout (header persistente). Aliases antigos continuam funcionando.
-  const TAB_ALIAS: Record<string, string> = {
-    "dados-principais": "visao-geral",
-    "dados-fiscais": "visao-geral",
-    recebimentos: "cobrancas",
-    notas: "contexto",
-  };
-  const VALID_TABS = [
-    "visao-geral", "contratos", "documentos", "cobrancas",
-    "pagamentos", "servicos", "historico", "contexto",
-  ];
-  const rawTab = searchParams?.tab ?? "visao-geral";
-  const activeTab = VALID_TABS.includes(rawTab)
-    ? rawTab
-    : TAB_ALIAS[rawTab] ?? "visao-geral";
+  // A aba ativa vem da URL (?tab=) — mesma resolução da TabsNavigation do
+  // layout (fonte única em tabs-meta.ts, aliases antigos inclusos).
+  const activeTab = resolveClientTab(searchParams?.tab);
 
   return (
     <div>
@@ -314,8 +280,8 @@ export default async function ClientDetailPage({
                           {ct.title}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={CONTRACT_STATUS[ct.status]?.variant ?? "secondary"}>
-                            {CONTRACT_STATUS[ct.status]?.label ?? ct.status}
+                          <Badge variant={contractStatusVariant(ct.status)}>
+                            {CONTRACT_STATUS_LABEL[ct.status] ?? ct.status}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
@@ -466,7 +432,7 @@ export default async function ClientDetailPage({
                         <TableCell className="max-w-xs truncate">
                           {p.billing.description}
                         </TableCell>
-                        <TableCell>{PAYMENT_METHOD[p.method] ?? p.method}</TableCell>
+                        <TableCell>{PAYMENT_METHOD_LABEL[p.method] ?? p.method}</TableCell>
                         <TableCell>{p.account?.name ?? "—"}</TableCell>
                         <TableCell className="text-right font-medium text-emerald-600">
                           +{formatBRL(Number(p.amount))}
@@ -558,7 +524,7 @@ export default async function ClientDetailPage({
                       <div key={h.id} className="rounded-lg border p-3 text-sm">
                         <div className="flex items-center justify-between">
                           <Badge variant="outline">
-                            {COLLECTION_STATUS[h.status] ?? h.status}
+                            {COLLECTION_STATUS_LABEL[h.status] ?? h.status}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
                             {formatDateBR(h.contactedAt)}
