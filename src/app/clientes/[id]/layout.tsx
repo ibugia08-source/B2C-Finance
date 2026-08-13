@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientHeader } from "./client-header";
 import { TabsNavigation, type TabsCount } from "./tabs-navigation";
 import { getClientSummaries, getClientRiskProfile } from "@/lib/services/client-metrics";
@@ -15,7 +15,8 @@ export default async function ClientDetailLayout({
   params: { id: string };
   children: React.ReactNode;
 }) {
-  await requirePagePermission("clientes.visualizar");
+  const viewer = await requirePagePermission("clientes.visualizar");
+  const canUpsell = can(viewer, "upsell.criar");
 
   const [client, contracts, billings, payments, generatedContracts, documents, notes, history, summaries] =
     await Promise.all([
@@ -50,6 +51,22 @@ export default async function ClientDetailLayout({
 
   const risk = await getClientRiskProfile(params.id, client.startedAt);
 
+  // Opções para o quick-add de upsell do header (só se o viewer pode criar).
+  const [upsellServices, upsellOffers] = canUpsell
+    ? await Promise.all([
+        prisma.service.findMany({
+          where: { active: true },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+        prisma.offer.findMany({
+          where: { active: true },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        }),
+      ])
+    : [[], []];
+
   const summary = summaries.get(params.id) || {
     activeContracts: 0,
     nextRenewal: null,
@@ -76,6 +93,11 @@ export default async function ClientDetailLayout({
         summary={summary}
         monthly={monthly}
         risk={risk}
+        upsell={
+          canUpsell
+            ? { services: upsellServices, offers: upsellOffers }
+            : null
+        }
       />
 
       <TabsNavigation clientId={params.id} counts={tabCounts} />

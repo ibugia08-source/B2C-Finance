@@ -1,10 +1,11 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { revalidateCatalog, revalidateFinance } from "@/lib/revalidate";
+import { revalidateCatalog, revalidateFinance, revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { UpsellStatus } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, clean } from "@/lib/format";
+import { parseBRL, parseDateBR, clean, toNumber as n } from "@/lib/format";
+import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
 
 const UpsellSchema = z.object({
@@ -13,17 +14,33 @@ const UpsellSchema = z.object({
   serviceId: z.string().nullable(),
   offerId: z.string().nullable(),
   title: z.string().trim().nullable(),
-  value: z.number().positive("Informe o valor da oportunidade."),
+  value: z.number().nonnegative(),
   responsible: z.string().trim().nullable(),
   status: z.nativeEnum(UpsellStatus).default("OPPORTUNITY"),
   expectedCloseAt: z.date().nullable(),
   notes: z.string().trim().nullable(),
 });
 
+// Serviços da oportunidade: [{ serviceId, unitPrice }] serializado no form.
+const ServicesSchema = z.array(
+  z.object({ serviceId: z.string().min(1), unitPrice: z.number().nonnegative() })
+);
 
 export async function saveUpsell(formData: FormData): Promise<ActionResult> {
   await requirePermission("upsell.editar");
   try {
+    // Serviços associados (opcional) — cada um com seu valor.
+    let services: z.infer<typeof ServicesSchema> = [];
+    const servicesRaw = clean(formData.get("services"));
+    if (servicesRaw) {
+      try {
+        services = ServicesSchema.parse(JSON.parse(servicesRaw));
+      } catch {
+        return { ok: false, error: "Serviços da oportunidade inválidos." };
+      }
+    }
+    const servicesSum = services.reduce((s, it) => s + it.unitPrice, 0);
+
     const parsed = UpsellSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
       clientId: String(formData.get("clientId") ?? ""),
@@ -40,6 +57,11 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
       notes: clean(formData.get("notes")),
     });
 
+    // Valor da oportunidade: informado, ou a soma dos serviços associados.
+    const value = parsed.value > 0 ? parsed.value : servicesSum;
+    if (!(value > 0))
+      return { ok: false, error: "Informe o valor da oportunidade (ou dos serviços)." };
+
     // Cliente precisa pertencer ao dono atual (findFirst é escopado).
     const owned = await prisma.client.findFirst({
       where: { id: parsed.clientId },
@@ -47,12 +69,23 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
     });
     if (!owned) return { ok: false, error: "Cliente não encontrado." };
 
+    // Serviços precisam existir no catálogo do dono.
+    if (services.length > 0) {
+      const found = await prisma.service.count({
+        where: { id: { in: services.map((s) => s.serviceId) } },
+      });
+      if (found !== services.length)
+        return { ok: false, error: "Serviço não encontrado no catálogo." };
+    }
+
     const data = {
       clientId: parsed.clientId,
-      serviceId: parsed.serviceId,
+      // serviceId legado continua aceito (compatibilidade); a associação
+      // principal agora é a lista services (N:N com valor).
+      serviceId: parsed.serviceId ?? services[0]?.serviceId ?? null,
       offerId: parsed.offerId,
       title: parsed.title,
-      value: parsed.value,
+      value,
       // Sem responsável informado → herda o responsável do cliente.
       responsible: parsed.responsible ?? owned.salesOwner,
       status: parsed.status,
@@ -82,6 +115,18 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
       id = created.id;
     }
 
+    // Sincroniza os serviços da oportunidade (replace simples).
+    await prisma.upsellService.deleteMany({ where: { upsellId: id } });
+    if (services.length > 0) {
+      await prisma.upsellService.createMany({
+        data: services.map((s) => ({
+          upsellId: id!,
+          serviceId: s.serviceId,
+          unitPrice: s.unitPrice,
+        })),
+      });
+    }
+
     revalidateCatalog();
     return { ok: true, id };
   } catch (e: any) {
@@ -91,40 +136,62 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
 }
 
 /**
- * Muda o status da oportunidade. Ao marcar como VENDIDO (WON) com
- * `generateIncome`, cria uma receita (Income) associada ao cliente —
- * alimenta faturamento recebido, relatórios e rentabilidade.
+ * Muda o status da oportunidade (movimentação do Kanban).
+ * Ao marcar como VENDIDO (WON) com `launchBilling`, LANÇA a venda na lista
+ * de recebimentos como cobrança real (Billing PENDING) na competência
+ * escolhida — mês atual ou outro — onde ela segue o fluxo normal
+ * (pagamento em 1 clique, inadimplência, métricas).
  */
 export async function setUpsellStatus(
   id: string,
   status: string,
-  opts?: { generateIncome?: boolean }
+  opts?: { launchBilling?: boolean; month?: number; year?: number }
 ): Promise<ActionResult> {
   await requirePermission("upsell.marcar_vendido");
   try {
     const s = z.nativeEnum(UpsellStatus).parse(status);
-    const existing = await prisma.upsell.findUnique({ where: { id } });
+    const existing = await prisma.upsell.findUnique({
+      where: { id },
+      include: {
+        client: { select: { id: true, name: true, paymentDay: true } },
+        services: { include: { service: { select: { name: true } } } },
+      },
+    });
     if (!existing) return { ok: false, error: "Oportunidade não encontrada." };
 
     const closing = s === "WON" || s === "LOST";
-    let incomeId = existing.incomeId;
+    let billingId = existing.billingId;
 
-    if (s === "WON" && opts?.generateIncome && !existing.incomeId) {
+    if (s === "WON" && opts?.launchBilling && !existing.billingId) {
       const now = new Date();
-      const income = await prisma.income.create({
+      const month =
+        opts.month && opts.month >= 1 && opts.month <= 12
+          ? opts.month
+          : now.getMonth() + 1;
+      const year =
+        opts.year && opts.year >= 2000 && opts.year <= 2100
+          ? opts.year
+          : now.getFullYear();
+      const due = getValidDueDateForMonth(
+        year, month, existing.client.paymentDay ?? now.getDate()
+      );
+      const serviceNames = existing.services.map((us) => us.service.name).join(", ");
+      const billing = await prisma.billing.create({
         data: {
-          description: `Upsell — ${existing.title ?? "venda interna"}`,
-          amount: Number(existing.value),
-          receivedAt: now,
-          incomeType: "CLIENT",
-          status: "RECEIVED",
-          revenueType: "ONE_TIME",
-          competenceMonth: now.getMonth() + 1,
-          competenceYear: now.getFullYear(),
           clientId: existing.clientId,
+          serviceId: existing.serviceId,
+          description: `Upsell — ${existing.title ?? (serviceNames || "venda interna")}`,
+          competenceMonth: month,
+          competenceYear: year,
+          amount: n(existing.value),
+          dueDate: due,
+          revenueType: "ONE_TIME",
+          status: "PENDING",
+          notes: "Gerada pela venda de upsell.",
         },
+        select: { id: true },
       });
-      incomeId = income.id;
+      billingId = billing.id;
     }
 
     await prisma.upsell.update({
@@ -132,13 +199,14 @@ export async function setUpsellStatus(
       data: {
         status: s,
         closedAt: closing ? existing.closedAt ?? new Date() : null,
-        incomeId,
+        billingId,
       },
     });
 
     revalidateCatalog();
     revalidateFinance();
-    return { ok: true };
+    revalidateAgency({ clientId: existing.clientId });
+    return { ok: true, id: billingId ?? undefined };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };

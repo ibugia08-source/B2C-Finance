@@ -2,38 +2,32 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
+import { formatBRL, monthRange } from "@/lib/format";
 import { getUpsellKpis } from "@/lib/services/upsell-metrics";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  MobileCards,
-  MobileCard,
-  MobileCardHeader,
-  MobileCardActions,
-  Field,
-  MobileEmpty,
-} from "@/components/ui/record-card";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { UpsellDialog } from "./upsell-dialog";
-import { UpsellActions } from "./row-actions";
-import { UPSELL_STATUSES, UPSELL_STATUS_LABEL, upsellStatusVariant } from "./_meta";
+import { UpsellBoard, type BoardUpsell } from "./upsell-board";
 
-type Search = { status?: string; responsavel?: string };
+type Search = { responsavel?: string };
 
+/**
+ * UPSELL — funil Kanban das vendas internas para a base: Oportunidade →
+ * Apresentação → Vendido / Recusado. Cards arrastáveis; vender pergunta em
+ * qual mês lançar a cobrança nos recebimentos. Oportunidades nascem aqui ou
+ * pela ficha do cliente (Gestão do Mês → cliente → Upsell).
+ */
 export default async function UpsellPage({ searchParams }: { searchParams: Search }) {
-  await requirePagePermission("upsell.visualizar");
+  const viewer = await requirePagePermission("upsell.visualizar");
+  const gates = {
+    criar: can(viewer, "upsell.criar"),
+    editar: can(viewer, "upsell.editar"),
+    vender: can(viewer, "upsell.marcar_vendido"),
+    excluir: can(viewer, "upsell.excluir"),
+  };
 
   const where: any = {};
-  if (searchParams.status) where.status = searchParams.status;
   if (searchParams.responsavel) where.responsible = searchParams.responsavel;
 
   const { start, end } = monthRange();
@@ -41,12 +35,13 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
   const [upsellsRaw, clients, services, offers, kpis, respRows] = await Promise.all([
     prisma.upsell.findMany({
       where,
-      orderBy: [{ status: "asc" }, { expectedCloseAt: "asc" }, { createdAt: "desc" }],
+      orderBy: [{ createdAt: "desc" }],
       take: 300,
       include: {
         client: { select: { name: true } },
         service: { select: { name: true } },
         offer: { select: { name: true } },
+        services: { include: { service: { select: { name: true } } } },
       },
     }),
     prisma.client.findMany({
@@ -73,14 +68,28 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
     }),
   ]);
 
-  // Serializa Decimal + achata nomes para componentes client.
-  const upsells = upsellsRaw.map((u) => ({
-    ...u,
-    value: Number(u.value),
+  // Serializa Decimal/Date para o board (client component).
+  const upsells: BoardUpsell[] = upsellsRaw.map((u) => ({
+    id: u.id,
+    clientId: u.clientId,
     clientName: u.client.name,
+    title: u.title,
+    value: Number(u.value),
+    responsible: u.responsible,
+    status: u.status,
+    expectedCloseAt: u.expectedCloseAt ? u.expectedCloseAt.toISOString() : null,
+    closedAt: u.closedAt ? u.closedAt.toISOString() : null,
+    serviceNames: u.services.map((us) => us.service.name),
     targetName: u.offer?.name ?? u.service?.name ?? null,
-    client: undefined,
+    notes: u.notes,
+    serviceId: u.serviceId,
+    offerId: u.offerId,
+    services: u.services.map((us) => ({
+      serviceId: us.serviceId,
+      unitPrice: Number(us.unitPrice),
+    })),
   }));
+
   const responsibles = respRows.map((r) => r.responsible!).filter(Boolean);
   const convPct = Math.round(kpis.conversionRate * 100);
 
@@ -89,15 +98,20 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
     for (const [k, v] of Object.entries({ ...searchParams, ...params })) {
       if (v) sp.set(k, v);
     }
-    return `/upsell?${sp.toString()}`;
+    const qs = sp.toString();
+    return qs ? `/upsell?${qs}` : "/upsell";
   }
 
   return (
     <div>
       <PageHeader
         title="Upsell"
-        description="Oportunidades de venda interna para clientes da base"
-        actions={<UpsellDialog clients={clients} services={services} offers={offers} />}
+        description="Funil de vendas internas para a base — arraste os cards entre as etapas"
+        actions={
+          gates.criar ? (
+            <UpsellDialog clients={clients} services={services} offers={offers} />
+          ) : undefined
+        }
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
@@ -120,133 +134,35 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
         />
       </div>
 
-      {/* Filtros simples por chips */}
-      <div className="flex flex-wrap items-center gap-2 mb-4 print:hidden">
-        <Link href="/upsell">
-          <Badge variant={!searchParams.status ? "default" : "outline"}>Todas</Badge>
-        </Link>
-        {UPSELL_STATUSES.map((s) => (
-          <Link key={s} href={filterHref({ status: s })}>
-            <Badge variant={searchParams.status === s ? "default" : "outline"}>
-              {UPSELL_STATUS_LABEL[s]}
-            </Badge>
+      {/* Filtro por responsável */}
+      {responsibles.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4 print:hidden">
+          <span className="text-xs text-muted-foreground">Responsável:</span>
+          <Link href="/upsell">
+            <Badge variant={!searchParams.responsavel ? "default" : "outline"}>Todos</Badge>
           </Link>
-        ))}
-        {responsibles.length > 0 && <span className="text-xs text-muted-foreground ml-2">Responsável:</span>}
-        {responsibles.map((r) => (
-          <Link key={r} href={filterHref({ responsavel: searchParams.responsavel === r ? "" : r })}>
-            <Badge variant={searchParams.responsavel === r ? "default" : "outline"}>{r}</Badge>
-          </Link>
-        ))}
-      </div>
+          {responsibles.map((r) => (
+            <Link
+              key={r}
+              href={filterHref({ responsavel: searchParams.responsavel === r ? "" : r })}
+            >
+              <Badge variant={searchParams.responsavel === r ? "default" : "outline"}>
+                {r}
+              </Badge>
+            </Link>
+          ))}
+        </div>
+      )}
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="hidden md:block overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Serviço / Oferta</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Responsável</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Previsão</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {upsells.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
-                      Nenhuma oportunidade registrada. Identifique serviços ou
-                      ofertas que podem ser vendidos para a base atual.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {upsells.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/clientes/${u.clientId}`} className="hover:underline">
-                        {u.clientName}
-                      </Link>
-                      {u.title && (
-                        <p className="text-xs text-muted-foreground max-w-[220px] truncate">
-                          {u.title}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>{u.targetName ?? "—"}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatBRL(u.value)}
-                    </TableCell>
-                    <TableCell className="text-sm">{u.responsible ?? "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={upsellStatusVariant(u.status)}>
-                        {UPSELL_STATUS_LABEL[u.status as keyof typeof UPSELL_STATUS_LABEL]}
-                      </Badge>
-                      {u.closedAt && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          fechado {formatDateBR(u.closedAt)}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {u.expectedCloseAt ? formatDateBR(u.expectedCloseAt) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <UpsellActions
-                        upsell={u}
-                        clients={clients}
-                        services={services}
-                        offers={offers}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          <MobileCards>
-            {upsells.length === 0 ? (
-              <MobileEmpty>
-                Nenhuma oportunidade registrada. Identifique serviços ou ofertas que
-                podem ser vendidos para a base atual.
-              </MobileEmpty>
-            ) : (
-              upsells.map((u) => (
-                <MobileCard key={u.id}>
-                  <MobileCardHeader
-                    title={u.clientName}
-                    aside={
-                      <Badge variant={upsellStatusVariant(u.status)}>
-                        {UPSELL_STATUS_LABEL[u.status as keyof typeof UPSELL_STATUS_LABEL]}
-                      </Badge>
-                    }
-                  />
-                  <div className="space-y-1.5">
-                    <Field label="Serviço/Oferta">{u.targetName ?? u.title ?? "—"}</Field>
-                    <Field label="Valor">{formatBRL(u.value)}</Field>
-                    <Field label="Responsável">{u.responsible ?? "—"}</Field>
-                    <Field label="Previsão">
-                      {u.expectedCloseAt ? formatDateBR(u.expectedCloseAt) : "—"}
-                    </Field>
-                  </div>
-                  <MobileCardActions>
-                    <UpsellActions
-                      upsell={u}
-                      clients={clients}
-                      services={services}
-                      offers={offers}
-                    />
-                  </MobileCardActions>
-                </MobileCard>
-              ))
-            )}
-          </MobileCards>
-        </CardContent>
-      </Card>
+      <UpsellBoard
+        upsells={upsells}
+        clients={clients}
+        services={services}
+        offers={offers}
+        canEdit={gates.editar}
+        canSell={gates.vender}
+        canDelete={gates.excluir}
+      />
 
       {/* Rankings */}
       {(kpis.byResponsible.length > 0 || kpis.byTarget.length > 0) && (

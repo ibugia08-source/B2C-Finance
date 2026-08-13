@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { ArrowLeft, FileSignature, HandCoins } from "lucide-react";
+import { ArrowLeft, FileSignature, HandCoins, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
@@ -9,6 +9,7 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import type { ClientRiskProfile } from "@/lib/services/client-metrics";
 import { ClientStatusSelect } from "../status-select";
 import { ClientDialog } from "../client-dialog";
+import { UpsellDialog } from "@/app/upsell/upsell-dialog";
 import {
   AttachDocumentDialog,
   NoteDialog,
@@ -33,6 +34,11 @@ export interface ClientHeaderProps {
   };
   monthly: number;
   risk: ClientRiskProfile;
+  /** Opções do quick-add de upsell (null = viewer sem upsell.criar). */
+  upsell?: {
+    services: { id: string; name: string }[];
+    offers: { id: string; name: string }[];
+  } | null;
 }
 
 const RISK_BADGE: Record<ClientRiskProfile["riskLevel"], any> = {
@@ -42,7 +48,7 @@ const RISK_BADGE: Record<ClientRiskProfile["riskLevel"], any> = {
   sem_historico: "secondary",
 };
 
-export function ClientHeader({ client, summary, monthly, risk }: ClientHeaderProps) {
+export function ClientHeader({ client, summary, monthly, risk, upsell }: ClientHeaderProps) {
   const onTimePct =
     risk.onTimeRate != null ? Math.round(risk.onTimeRate * 100) : null;
   return (
@@ -92,6 +98,19 @@ export function ClientHeader({ client, summary, monthly, risk }: ClientHeaderPro
             <HandCoins className="h-3.5 w-3.5 mr-1" /> Nova cobrança
           </Link>
         </Button>
+        {upsell && (
+          <UpsellDialog
+            clients={[]}
+            services={upsell.services}
+            offers={upsell.offers}
+            fixedClient={{ id: client.id, name: client.name }}
+            trigger={
+              <Button size="sm" variant="outline">
+                <TrendingUp className="h-3.5 w-3.5 mr-1" /> Oportunidade de Upsell
+              </Button>
+            }
+          />
+        )}
       </div>
 
       {/* Mini-dashboard do cliente */}

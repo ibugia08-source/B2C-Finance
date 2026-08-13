@@ -18,6 +18,21 @@ export const UPSELL_STATUS_LABEL: Record<UpsellStatusValue, string> = {
   PAUSED: "Pausado",
 };
 
+/**
+ * Colunas do Kanban de upsell — as 4 etapas do funil do dono. PAUSED não tem
+ * coluna própria: aparece na primeira com badge "pausado".
+ */
+export const KANBAN_COLUMNS: {
+  key: UpsellStatusValue;
+  label: string;
+  statuses: UpsellStatusValue[];
+}[] = [
+  { key: "OPPORTUNITY", label: "Oportunidade de Upsell", statuses: ["OPPORTUNITY", "PAUSED"] },
+  { key: "NEGOTIATION", label: "Apresentação de oportunidade", statuses: ["NEGOTIATION"] },
+  { key: "WON", label: "Upsell vendido", statuses: ["WON"] },
+  { key: "LOST", label: "Upsell recusado", statuses: ["LOST"] },
+];
+
 type BadgeVariant = "default" | "secondary" | "destructive" | "success" | "warning" | "outline";
 
 export function upsellStatusVariant(status: string): BadgeVariant {
