@@ -90,6 +90,7 @@ export default async function ClientDetailPage({
     documents,
     contextNotes,
     services,
+    renewals,
   ] =
     await Promise.all([
       prisma.contract.findMany({
@@ -137,6 +138,12 @@ export default async function ClientDetailPage({
         where: { active: true },
         orderBy: { name: "asc" },
         select: { id: true, name: true },
+      }),
+      // Histórico de renovações — cada "Sim, renovou" registrado.
+      prisma.clientRenewal.findMany({
+        where: { clientId: params.id },
+        orderBy: { renewedAt: "desc" },
+        take: 20,
       }),
     ]);
 
@@ -497,6 +504,46 @@ export default async function ClientDetailPage({
 
         {/* ---------- Histórico financeiro ---------- */}
         <TabsContent value="historico">
+          {/* Renovações — cada "Sim, renovou" registrado (Gestão do Mês / Renovações) */}
+          <Card className="mb-4">
+            <CardContent className="p-5">
+              <h2 className="font-semibold mb-3">Renovações de contrato</h2>
+              {renewals.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Nenhuma renovação registrada ainda.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {renewals.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex flex-wrap items-center justify-between gap-2 text-sm border-b border-border/50 pb-2 last:border-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium">
+                          {formatDateBR(r.renewedAt)} — {r.months} mês(es)
+                          {r.modality ? ` · ${r.modality}` : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.paymentMethod ? `${r.paymentMethod}` : ""}
+                          {r.paymentMode ? ` (${r.paymentMode.replace("_", " ")})` : ""}
+                          {r.billingMonth
+                            ? ` · lançado em ${String(r.billingMonth).padStart(2, "0")}/${r.billingYear}`
+                            : " · sem lançamento"}
+                          {r.keptMonthly === false ? " · saiu da lista mensal" : ""}
+                          {r.notes ? ` · ${r.notes}` : ""}
+                        </p>
+                      </div>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-300 shrink-0">
+                        {formatBRL(Number(r.totalValue))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-5">

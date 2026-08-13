@@ -90,9 +90,11 @@ model User {
   ownedOffers         Offer[]        @relation("OwnerOffer")
   ownedOfferServices  OfferService[] @relation("OwnerOfferService")
   ownedUpsells        Upsell[]       @relation("OwnerUpsell")
+  ownedUpsellServices UpsellService[] @relation("OwnerUpsellService")
   ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
   ownedRoutineItemStates RoutineItemState[] @relation("OwnerRoutineItemState")
   ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
+  ownedClientRenewals ClientRenewal[] @relation("OwnerClientRenewal")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -745,6 +747,9 @@ model Client {
   // Inadimplência manual por competência (histórico mês a mês)
   monthDelinquencies ClientMonthDelinquency[]
 
+  // Histórico de renovações de contrato (um registro por "Sim, renovou")
+  renewals ClientRenewal[]
+
   @@index([ownerId])
   @@index([status])
   @@index([modality])
@@ -770,6 +775,42 @@ model ClientMonthDelinquency {
 
   @@index([year, month])
   @@index([clientId, year, month])
+  @@index([ownerId])
+}
+
+// Registro de RENOVAÇÃO de cliente — histórico auditável de cada "Sim,
+// renovou" (Gestão do Mês / módulo Renovações). Guarda o snapshot do novo
+// ciclo (prazo, valor, forma de pagamento), a decisão de lançamento nos
+// recebimentos (competência escolhida + cobrança criada) e, para MRR, se o
+// cliente permaneceu na lista de recebimentos mensais.
+model ClientRenewal {
+  id              String          @id @default(cuid())
+  clientId        String
+  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contractId      String? // contrato estendido (null = renovação só pelo cadastro)
+  renewedAt       DateTime        @default(now())
+  months          Int // prazo do novo ciclo
+  totalValue      Decimal         @db.Decimal(14, 2) // valor do novo ciclo
+  monthlyValue    Decimal?        @db.Decimal(14, 2) // mensal resultante (MRR)
+  modality        ClientModality? // snapshot da modalidade na renovação
+  paymentMethod   String? // pix | boleto | cartão | transferência | outro
+  paymentMode     String? // à vista | parcelado | mensal
+  previousEndDate DateTime? // fim de vigência antes da renovação
+  newEndDate      DateTime? // novo fim de vigência
+  billingId       String? // cobrança lançada nos recebimentos (se houver)
+  billingMonth    Int? // competência escolhida para o lançamento (1-12)
+  billingYear     Int?
+  keptMonthly     Boolean? // MRR: manteve o cliente nos recebimentos mensais?
+  paymentStatus   String? // aberto | pago_total | pago_parcial
+  notes           String?
+  createdBy       String? // e-mail de quem registrou
+  ownerId         String?
+  owner           User?           @relation("OwnerClientRenewal", fields: [ownerId], references: [id])
+  createdAt       DateTime        @default(now())
+
+  @@index([clientId])
+  @@index([renewedAt])
+  @@index([billingYear, billingMonth])
   @@index([ownerId])
 }
 
@@ -997,6 +1038,7 @@ model Service {
   transactions     Transaction[]
   offerServices    OfferService[]
   upsells          Upsell[]
+  upsellServices   UpsellService[]
 
   @@index([active])
   @@index([category])
@@ -1047,15 +1089,37 @@ model Upsell {
   expectedCloseAt DateTime? // data prevista de fechamento
   closedAt        DateTime? // data real de fechamento (WON/LOST)
   notes           String?
-  incomeId        String? // receita gerada ao vender (conciliação)
+  incomeId        String? // receita gerada ao vender (conciliação — legado)
+  billingId       String? // cobrança lançada nos recebimentos ao vender
   ownerId         String?
   owner           User?        @relation("OwnerUpsell", fields: [ownerId], references: [id])
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+  services UpsellService[] // serviços da oportunidade (N:N com valor)
+
   @@index([clientId])
   @@index([status])
   @@index([expectedCloseAt])
+  @@index([ownerId])
+}
+
+// Serviços incluídos numa oportunidade de upsell (N:N com valor unitário) —
+// permite compor a oportunidade com vários serviços, cada um com seu valor.
+model UpsellService {
+  id        String   @id @default(cuid())
+  upsellId  String
+  upsell    Upsell   @relation(fields: [upsellId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id])
+  unitPrice Decimal  @default(0) @db.Decimal(14, 2)
+  ownerId   String?
+  owner     User?    @relation("OwnerUpsellService", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([upsellId, serviceId])
+  @@index([upsellId])
+  @@index([serviceId])
   @@index([ownerId])
 }
 

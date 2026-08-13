@@ -424,8 +424,9 @@ const MONTH_LABEL_PT = [
  *  - TCV → mesmo valor pago na última adesão/fechamento (último contrato TCV;
  *    fallback: última cobrança TCV; fallback final: valor mensal cadastrado).
  *  - MRR → valor mensal recorrente atual do cliente.
+ * Exportada para o painel de renovações (renewal-metrics) usar a MESMA regra.
  */
-async function expectedRenewalValues(
+export async function expectedRenewalValues(
   clients: { id: string; modality: string | null; monthlyValue: unknown }[]
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();

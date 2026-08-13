@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -19,14 +18,14 @@ import {
   type StatusMeta,
 } from "@/lib/status-meta";
 import { MarkExpensePaid } from "@/app/rotina/expense-actions";
-import { RenewClientDialog } from "@/app/clientes/renew-dialog";
-import { ClientLossDialog } from "@/app/clientes/loss-dialog";
+import { RenewalsTable } from "@/app/renovacoes/renewals-table";
+import { ScheduleRenewalDialog } from "@/app/renovacoes/schedule-renewal-dialog";
+import type { RenewalPanelRow } from "@/lib/services/renewal-metrics";
 import {
   EntradaQuickDialog,
   ContaQuickDialog,
   PagarFolhaButton,
 } from "./quick-dialogs";
-import { CLIENT_STATUS_LABEL, clientStatusVariant } from "@/app/clientes/_meta";
 
 /**
  * Seções da GESTÃO DO MÊS — os blocos da aba mensal da planilha, cada um
@@ -498,131 +497,60 @@ export function FolhaSection({
 
 // ===== Renovações do mês =====
 
-export type RenovacaoRow = {
-  clientId: string;
-  name: string;
-  status: string;
-  modality: string | null;
-  expected: number;
-  salesOwner: string | null;
-  contract: {
-    id: string;
-    type: string;
-    totalValue: number;
-    monthlyValue: number;
-  } | null;
-};
-
 export function RenovacoesSection({
   rows,
   expectedTotal,
+  renewedCount,
   canRenew,
   canMarkLost,
+  canSchedule,
+  canRegisterPayment,
+  scheduleClients,
   monthLabel,
+  competence,
+  defaultMonth,
 }: {
-  rows: RenovacaoRow[];
+  rows: RenewalPanelRow[];
   expectedTotal: number;
+  renewedCount: number;
   canRenew: boolean;
   canMarkLost: boolean;
+  canSchedule: boolean;
+  canRegisterPayment: boolean;
+  scheduleClients: { id: string; name: string }[];
   monthLabel: string;
+  competence: string; // "YYYY-MM"
+  defaultMonth: number;
 }) {
   return (
     <SectionShell
       id="renovacoes"
       title="Renovações do Mês"
-      subtitle={`${rows.length} cliente(s) com renovação em ${monthLabel} · ${formatBRL(expectedTotal)} esperado`}
+      subtitle={`${rows.length} cliente(s) com renovação em ${monthLabel} · ${formatBRL(expectedTotal)} esperado · ${renewedCount} renovado(s)`}
+      action={
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/renovacoes?mes=${competence}`}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            abrir Renovações
+          </Link>
+          {canSchedule && (
+            <ScheduleRenewalDialog clients={scheduleClients} defaultMonth={defaultMonth} />
+          )}
+        </div>
+      }
     >
       <Card>
         <CardContent className="p-0">
-          {rows.length === 0 ? (
-            <p className="p-6 text-sm text-muted-foreground">
-              Nenhuma renovação prevista para este mês.
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Modalidade</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Valor esperado</TableHead>
-                  <TableHead>Responsável</TableHead>
-                  <TableHead className="text-right">Renovou?</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.clientId}>
-                    <TableCell>
-                      <Link
-                        href={`/clientes/${r.clientId}`}
-                        className="font-medium hover:underline"
-                      >
-                        {r.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{r.modality ?? "—"}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={clientStatusVariant(r.status)}>
-                        {(CLIENT_STATUS_LABEL as Record<string, string>)[r.status] ??
-                          r.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right stat-number">
-                      {r.expected > 0 ? formatBRL(r.expected) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {r.salesOwner ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {canRenew && r.contract && (
-                          <RenewClientDialog
-                            contract={r.contract}
-                            clientName={r.name}
-                            trigger={
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-success border-success/40"
-                              >
-                                Sim, renovou
-                              </Button>
-                            }
-                          />
-                        )}
-                        {canRenew && !r.contract && (
-                          <span
-                            className="text-xs text-muted-foreground"
-                            title="Sem acordo comercial cadastrado — renove pela ficha do cliente."
-                          >
-                            sem acordo
-                          </span>
-                        )}
-                        {canMarkLost && (
-                          <ClientLossDialog
-                            clientId={r.clientId}
-                            clientName={r.name}
-                            trigger={
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive border-destructive/40"
-                              >
-                                Não renovou
-                              </Button>
-                            }
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <RenewalsTable
+            rows={rows}
+            canRenew={canRenew}
+            canMarkLost={canMarkLost}
+            canRegisterPayment={canRegisterPayment}
+            defaultCompetence={competence}
+            emptyMessage="Nenhuma renovação prevista para este mês. Use Agendar renovação para incluir um cliente."
+          />
         </CardContent>
       </Card>
     </SectionShell>

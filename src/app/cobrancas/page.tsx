@@ -19,7 +19,6 @@ import { HandCoins } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { getReceiptsSummary } from "@/lib/services/revenue-metrics";
-import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
 import { BillingDialog } from "./billing-dialog";
@@ -40,8 +39,8 @@ import {
   type RecebimentoRow,
   type ContaRow,
   type FolhaRow,
-  type RenovacaoRow,
 } from "./month-sections";
+import { getRenewalPanel } from "@/lib/services/renewal-metrics";
 import type { BillingMessageInput } from "@/lib/billing-message";
 
 /**
@@ -125,6 +124,7 @@ export default async function RecebimentosPage({
     renovacoes: can(viewer, "clientes.visualizar"),
     renovar: can(viewer, "contratos.editar"),
     marcarPerda: can(viewer, "clientes.alterar_status"),
+    agendarRenovacao: can(viewer, "clientes.editar"),
     gerarCobrancas: can(viewer, "recebimentos.gerar_cobranca"),
   };
 
@@ -535,50 +535,10 @@ export default async function RecebimentosPage({
         : Promise.resolve([] as any[]),
     ]);
 
-  let renovacaoRows: RenovacaoRow[] = [];
-  let renovacaoExpected = 0;
-  if (gates.renovacoes) {
-    const nowKey = now.getFullYear() * 12 + now.getMonth();
-    const targetKey = mes.year * 12 + (mes.month - 1);
-    const [win] = await getRenewalOutlook([targetKey - nowKey]);
-    const ids = win.clients.map((c) => c.id);
-    const contracts = ids.length
-      ? await prisma.contract.findMany({
-          where: { clientId: { in: ids }, status: { in: ["ACTIVE", "RENEWAL"] } },
-          orderBy: { endDate: "desc" },
-          select: {
-            id: true,
-            clientId: true,
-            type: true,
-            totalValue: true,
-            monthlyValue: true,
-          },
-        })
-      : [];
-    const contractByClient = new Map<string, (typeof contracts)[number]>();
-    for (const c of contracts)
-      if (!contractByClient.has(c.clientId)) contractByClient.set(c.clientId, c);
-    renovacaoRows = win.clients.map((c) => {
-      const ct = contractByClient.get(c.id);
-      return {
-        clientId: c.id,
-        name: c.name,
-        status: c.status,
-        modality: c.modality,
-        expected: c.expected,
-        salesOwner: c.salesOwner,
-        contract: ct
-          ? {
-              id: ct.id,
-              type: ct.type,
-              totalValue: Number(ct.totalValue ?? 0),
-              monthlyValue: Number(ct.monthlyValue ?? 0),
-            }
-          : null,
-      };
-    });
-    renovacaoExpected = win.expectedTotal;
-  }
+  // Renovações do mês — mesma fonte do módulo /renovacoes (painel unificado).
+  const renewalPanel = gates.renovacoes
+    ? await getRenewalPanel(mes.month, mes.year)
+    : null;
 
   // ===== Montagem dos dados das seções (plain objects) =====
   // RECEBIMENTOS DO MÊS = controle completo das entradas: cobranças de
@@ -740,7 +700,7 @@ export default async function RecebimentosPage({
       ? [{ href: "#folha", label: "Folha", count: folhaRows.length }]
       : []),
     ...(gates.renovacoes
-      ? [{ href: "#renovacoes", label: "Renovações", count: renovacaoRows.length }]
+      ? [{ href: "#renovacoes", label: "Renovações", count: renewalPanel?.rows.length ?? 0 }]
       : []),
   ];
 
@@ -969,13 +929,19 @@ export default async function RecebimentosPage({
       )}
 
       {/* ================= RENOVAÇÕES DO MÊS ================= */}
-      {gates.renovacoes && (
+      {gates.renovacoes && renewalPanel && (
         <RenovacoesSection
-          rows={renovacaoRows}
-          expectedTotal={renovacaoExpected}
+          rows={renewalPanel.rows}
+          expectedTotal={renewalPanel.expectedTotal}
+          renewedCount={renewalPanel.renewedCount}
           canRenew={gates.renovar}
           canMarkLost={gates.marcarPerda}
+          canSchedule={gates.agendarRenovacao}
+          canRegisterPayment={can(viewer, "recebimentos.registrar_pagamento")}
+          scheduleClients={allClientsBasic}
           monthLabel={referenceMonth}
+          competence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
+          defaultMonth={mes.month}
         />
       )}
 
