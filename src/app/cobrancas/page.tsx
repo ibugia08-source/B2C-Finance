@@ -410,6 +410,11 @@ export default async function RecebimentosPage({
 
   // Serializa para o client component (sem Date/Decimal).
   const allClientsBasic = allClients.map((c) => ({ id: c.id, name: c.name }));
+  // Agendar renovação só faz sentido para cliente em atividade (o painel de
+  // renovações filtra por esses status — agendar um CHURNED seria invisível).
+  const scheduleClients = allClients
+    .filter((c) => ["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"].includes(c.status))
+    .map((c) => ({ id: c.id, name: c.name }));
   const includeOptions: IncludeClientOption[] = allClients.map((c) => ({
     id: c.id,
     name: c.name,
@@ -444,6 +449,8 @@ export default async function RecebimentosPage({
             receivedAt: { gte: monthStart, lt: monthEnd },
             status: { not: "CANCELED" },
             OR: [{ billingId: null }, { revenueType: "RECOVERY" }],
+            // ?cliente= filtra a página inteira — inclusive esta seção.
+            ...(searchParams.cliente ? { clientId: searchParams.cliente } : {}),
           },
           orderBy: { receivedAt: "desc" },
           take: 100,
@@ -461,7 +468,11 @@ export default async function RecebimentosPage({
       : Promise.resolve([] as any[]),
     gates.entradas
       ? prisma.extraRevenue.findMany({
-          where: { receivedAt: { gte: monthStart, lt: monthEnd }, origin: "MANUAL" },
+          where: {
+            receivedAt: { gte: monthStart, lt: monthEnd },
+            origin: "MANUAL",
+            ...(searchParams.cliente ? { clientId: searchParams.cliente } : {}),
+          },
           orderBy: { receivedAt: "desc" },
           take: 50,
           select: {
@@ -567,8 +578,20 @@ export default async function RecebimentosPage({
         _sort: due ? due.getTime() : 0,
       };
     });
+  // Recuperação do PRÓPRIO mês exibido sai da lista: o pagamento já está na
+  // linha da cobrança (pago com atraso dentro do mês gera Income RECOVERY —
+  // exibir os dois contaria o mesmo dinheiro 2x).
+  const incomesForSection = entradasIncomes.filter(
+    (i: any) =>
+      !(
+        i.revenueType === "RECOVERY" &&
+        i.billing &&
+        i.billing.competenceMonth === mes.month &&
+        i.billing.competenceYear === mes.year
+      )
+  );
   const avulsaRecebimentos: SortableRecebimento[] = [
-    ...entradasIncomes.map((i: any) => ({
+    ...incomesForSection.map((i: any) => ({
       id: `inc-${i.id}`,
       kind: "income" as const,
       description: i.description,
@@ -607,8 +630,13 @@ export default async function RecebimentosPage({
     .sort((a, b) => a._sort - b._sort)
     .map(({ _sort, ...r }) => r);
   const recebimentosTotals = {
+    // PAID_OTHER_MONTH fica FORA do recebido: pela regra de fechamento, o
+    // valor conta como recuperação no mês do pagamento, não na competência
+    // original (a linha continua visível com o rótulo "Recebido em outro mês").
     recebido:
-      billingRecebimentos.reduce((s, r) => s + r.paidAmount, 0) +
+      billingRecebimentos
+        .filter((r) => r.status !== "PAID_OTHER_MONTH")
+        .reduce((s, r) => s + r.paidAmount, 0) +
       avulsaRecebimentos
         .filter((r) => r.status === "RECEIVED")
         .reduce((s, r) => s + r.amount, 0),
@@ -938,7 +966,7 @@ export default async function RecebimentosPage({
           canMarkLost={gates.marcarPerda}
           canSchedule={gates.agendarRenovacao}
           canRegisterPayment={can(viewer, "recebimentos.registrar_pagamento")}
-          scheduleClients={allClientsBasic}
+          scheduleClients={scheduleClients}
           monthLabel={referenceMonth}
           competence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
           defaultMonth={mes.month}

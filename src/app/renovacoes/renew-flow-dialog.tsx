@@ -23,6 +23,7 @@ export function RenewFlowDialog({
   client,
   modality,
   contract,
+  expectedValue = 0,
   defaultCompetence,
   canRegisterPayment,
   trigger,
@@ -35,6 +36,9 @@ export function RenewFlowDialog({
     totalValue: number;
     monthlyValue: number;
   } | null;
+  /** Sugestão de valor: TCV = valor da última adesão (regra central) — NUNCA
+   * o totalValue acumulado do contrato, que cresce a cada renovação. */
+  expectedValue?: number;
   defaultCompetence: string; // "YYYY-MM"
   canRegisterPayment: boolean;
   trigger?: React.ReactNode;
@@ -47,11 +51,7 @@ export function RenewFlowDialog({
   const [keepMonthly, setKeepMonthly] = useState(true);
 
   const isMrr = contract ? contract.type === "MRR" : modality !== "TCV";
-  const defaultValue = contract
-    ? contract.type === "TCV"
-      ? contract.totalValue
-      : 0
-    : 0;
+  const defaultValue = isMrr ? 0 : expectedValue;
 
   return (
     <Dialog

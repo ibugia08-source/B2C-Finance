@@ -67,41 +67,62 @@ function monthsBetween(from: Date | null, toYear: number, toMonth: number): numb
   return Math.max(0, key - fromKey);
 }
 
+const CLIENT_SELECT = {
+  id: true, name: true, status: true, modality: true, salesOwner: true,
+  monthlyValue: true, contractMonths: true, startedAt: true,
+} as const;
+
 export async function getRenewalPanel(month: number, year: number): Promise<RenewalPanel> {
   const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 1);
 
-  // FASE 1 — clientes da agenda (renewalMonth) + contratos com renewalDate no mês.
-  const [byMonth, contractsInMonth] = await Promise.all([
+  // FASE 1 — quatro fontes da lista do mês:
+  //  (a) agenda da carteira (Client.renewalMonth) — clientes em atividade;
+  //  (b) contratos vigentes com renewalDate dentro do mês;
+  //  (c) renovações JÁ registradas para o mês (por data OU pela competência
+  //      de lançamento escolhida) — mantém a linha verde mesmo que a
+  //      renovação tenha mudado o renewalMonth do cliente, e marca como
+  //      renovada a renovação antecipada feita noutro mês;
+  //  (d) perdas do mês — o "Não renovou" vira CHURNED e ainda assim precisa
+  //      aparecer como linha vermelha.
+  const [byMonth, contractsInMonth, renewals, losses] = await Promise.all([
     prisma.client.findMany({
       where: {
         renewalMonth: month,
         status: { in: ACTIVE_STATUSES as any },
       },
       orderBy: { name: "asc" },
-      select: {
-        id: true, name: true, status: true, modality: true, salesOwner: true,
-        monthlyValue: true, contractMonths: true, startedAt: true,
-      },
+      select: CLIENT_SELECT,
     }),
     prisma.contract.findMany({
       where: {
         renewalDate: { gte: monthStart, lt: monthEnd },
         status: { in: ["ACTIVE", "RENEWAL"] },
       },
-      select: {
-        clientId: true,
-        client: {
-          select: {
-            id: true, name: true, status: true, modality: true, salesOwner: true,
-            monthlyValue: true, contractMonths: true, startedAt: true,
-          },
-        },
+      select: { clientId: true, client: { select: CLIENT_SELECT } },
+    }),
+    prisma.clientRenewal.findMany({
+      where: {
+        OR: [
+          { renewedAt: { gte: monthStart, lt: monthEnd } },
+          { billingYear: year, billingMonth: month },
+        ],
       },
+      orderBy: { renewedAt: "desc" },
+      select: {
+        id: true, clientId: true, renewedAt: true, months: true, totalValue: true,
+        client: { select: CLIENT_SELECT },
+      },
+    }),
+    prisma.clientLoss.findMany({
+      where: { lostAt: { gte: monthStart, lt: monthEnd } },
+      orderBy: { lostAt: "desc" },
+      select: { clientId: true, lostAt: true, client: { select: CLIENT_SELECT } },
     }),
   ]);
 
-  // União (dedup por cliente); contratos de clientes fora de atividade ficam de fora.
+  // União (dedup por cliente). Contratos exigem cliente em atividade;
+  // renovados/perdidos do mês entram SEMPRE (o desfecho é a própria linha).
   const clientById = new Map<string, (typeof byMonth)[number]>();
   for (const c of byMonth) clientById.set(c.id, c);
   for (const ct of contractsInMonth) {
@@ -111,6 +132,12 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
     ) {
       clientById.set(ct.clientId, ct.client);
     }
+  }
+  for (const r of renewals) {
+    if (!clientById.has(r.clientId)) clientById.set(r.clientId, r.client);
+  }
+  for (const l of losses) {
+    if (!clientById.has(l.clientId)) clientById.set(l.clientId, l.client);
   }
   const clients = Array.from(clientById.values()).sort((a, b) =>
     a.name.localeCompare(b.name, "pt-BR")
@@ -124,9 +151,8 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
     };
   }
 
-  // FASE 2 — apoio: contrato vigente por cliente, valores esperados,
-  // renovações e perdas já registradas no mês.
-  const [contracts, expected, renewals, losses] = await Promise.all([
+  // FASE 2 — apoio: contrato vigente por cliente + valores esperados.
+  const [contracts, expected] = await Promise.all([
     prisma.contract.findMany({
       where: { clientId: { in: ids }, status: { in: ["ACTIVE", "RENEWAL"] } },
       orderBy: { endDate: "desc" },
@@ -136,16 +162,6 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
       },
     }),
     expectedRenewalValues(clients),
-    prisma.clientRenewal.findMany({
-      where: { clientId: { in: ids }, renewedAt: { gte: monthStart, lt: monthEnd } },
-      orderBy: { renewedAt: "desc" },
-      select: { id: true, clientId: true, renewedAt: true, months: true, totalValue: true },
-    }),
-    prisma.clientLoss.findMany({
-      where: { clientId: { in: ids }, lostAt: { gte: monthStart, lt: monthEnd } },
-      orderBy: { lostAt: "desc" },
-      select: { clientId: true, lostAt: true },
-    }),
   ]);
 
   const contractByClient = new Map<string, (typeof contracts)[number]>();

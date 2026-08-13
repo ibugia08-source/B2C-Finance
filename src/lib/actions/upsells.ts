@@ -27,7 +27,11 @@ const ServicesSchema = z.array(
 );
 
 export async function saveUpsell(formData: FormData): Promise<ActionResult> {
-  await requirePermission("upsell.editar");
+  // Criar exige upsell.criar; editar registro existente exige upsell.editar
+  // (os pontos de entrada de criação — ficha do cliente, header do Kanban —
+  // gateiam por upsell.criar).
+  const isEdit = Boolean(clean(formData.get("id")));
+  await requirePermission(isEdit ? "upsell.editar" : "upsell.criar");
   try {
     // Serviços associados (opcional) — cada um com seu valor.
     let services: z.infer<typeof ServicesSchema> = [];
@@ -147,7 +151,7 @@ export async function setUpsellStatus(
   status: string,
   opts?: { launchBilling?: boolean; month?: number; year?: number }
 ): Promise<ActionResult> {
-  await requirePermission("upsell.marcar_vendido");
+  const viewer = await requirePermission("upsell.marcar_vendido");
   try {
     const s = z.nativeEnum(UpsellStatus).parse(status);
     const existing = await prisma.upsell.findUnique({
@@ -161,8 +165,36 @@ export async function setUpsellStatus(
 
     const closing = s === "WON" || s === "LOST";
     let billingId = existing.billingId;
+    let warning: string | undefined;
 
-    if (s === "WON" && opts?.launchBilling && !existing.billingId) {
+    // Desfazer a venda (sair de WON): a cobrança lançada não pode ficar viva
+    // nos recebimentos. Sem pagamento → cancela (soft) e libera novo
+    // lançamento; com pagamento → mantém e avisa (reverter dinheiro é manual).
+    if (existing.status === "WON" && s !== "WON" && existing.billingId) {
+      const billing = await prisma.billing.findUnique({
+        where: { id: existing.billingId },
+        select: { id: true, status: true, paidTotal: true },
+      });
+      if (!billing || billing.status === "CANCELED") {
+        billingId = null;
+      } else if (n(billing.paidTotal) === 0) {
+        await prisma.billing.update({
+          where: { id: billing.id },
+          data: {
+            status: "CANCELED",
+            canceledAt: new Date(),
+            canceledBy: viewer.email,
+            cancelReason: "Venda de upsell desfeita.",
+          },
+        });
+        billingId = null;
+      } else {
+        warning =
+          "A cobrança do upsell já tem pagamento registrado — ela foi mantida nos recebimentos.";
+      }
+    }
+
+    if (s === "WON" && opts?.launchBilling && !billingId) {
       const now = new Date();
       const month =
         opts.month && opts.month >= 1 && opts.month <= 12
@@ -206,7 +238,7 @@ export async function setUpsellStatus(
     revalidateCatalog();
     revalidateFinance();
     revalidateAgency({ clientId: existing.clientId });
-    return { ok: true, id: billingId ?? undefined };
+    return { ok: true, id: billingId ?? undefined, ...(warning ? { warning } : {}) };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };

@@ -69,6 +69,7 @@ export function RenewalsTable({
             client={{ id: r.clientId, name: r.name }}
             modality={r.modality}
             contract={r.contract}
+            expectedValue={r.expected}
             defaultCompetence={defaultCompetence}
             canRegisterPayment={canRegisterPayment}
             trigger={

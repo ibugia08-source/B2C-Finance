@@ -49,15 +49,24 @@ export function UpsellDialog({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [lines, setLines] = useState<ServiceLine[]>(
-    () =>
-      (initial?.services as ServiceLine[] | undefined)?.map((s) => ({
-        serviceId: s.serviceId,
-        unitPrice: Number(s.unitPrice),
-      })) ?? []
-  );
+  const linesFromInitial = () =>
+    (initial?.services as ServiceLine[] | undefined)?.map((s) => ({
+      serviceId: s.serviceId,
+      unitPrice: Number(s.unitPrice),
+    })) ?? [];
+  const [lines, setLines] = useState<ServiceLine[]>(linesFromInitial);
   const [valueStr, setValueStr] = useState<string>(fmt(initial?.value) ?? "");
   const [valueTouched, setValueTouched] = useState<boolean>(!!initial?.id);
+
+  // O componente fica montado (renderiza o próprio trigger): a cada ABERTURA
+  // o estado ressincroniza com `initial` — Cancelar não vaza dados para a
+  // próxima edição/criação.
+  function resetState() {
+    setError(null);
+    setLines(linesFromInitial());
+    setValueStr(fmt(initial?.value) ?? "");
+    setValueTouched(!!initial?.id);
+  }
 
   const serviceName = useMemo(
     () => new Map(services.map((s) => [s.id, s.name])),
@@ -84,7 +93,14 @@ export function UpsellDialog({
   const effectiveValue = valueTouched && valueStr.trim() ? valueStr : "";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) resetState();
+        else setError(null);
+      }}
+    >
       <DialogTrigger asChild>
         {trigger ?? (
           <Button>

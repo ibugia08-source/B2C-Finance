@@ -2,12 +2,19 @@
 import { prisma } from "@/lib/prisma";
 import { requirePermission, can } from "@/lib/auth/viewer";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
-import { parseBRL, formatBRL, parseMonthParam, toNumber as n } from "@/lib/format";
+import { parseBRL, parseMonthParam, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
-import { generateBillingsForContract } from "@/lib/services/contract-metrics";
 import { settleBillingPayment } from "@/lib/services/payment-accounting";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
+
+/** Soma meses com clamp de fim de mês (31/01 + 1m = 28/02, não 03/03). */
+function addMonthsClamped(base: Date, months: number): Date {
+  const y = base.getFullYear();
+  const m = base.getMonth() + months;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(base.getDate(), lastDay));
+}
 
 /**
  * FLUXO COMPLETO DE RENOVAÇÃO — "Sim, renovou" da Gestão do Mês e do módulo
@@ -20,13 +27,23 @@ import type { ActionResult } from "./clients";
  *  3. Opcionalmente LANÇA o valor no módulo de recebimentos, na competência
  *     escolhida (mês atual ou outro), como cobrança real (Billing).
  *  4. MRR: pergunta se o cliente permanece na lista de recebimentos mensais.
- *     "Não" = o cliente passa a ser tratado como TCV (paga o ciclo cheio,
- *     sem mensalidade automática) — mesma regra do cadastro.
+ *     "Não" = o cliente (e o contrato) passam a ser tratados como TCV — paga
+ *     o ciclo cheio, sem mensalidade automática.
  *  5. Registra o histórico auditável em ClientRenewal (aparece na ficha do
  *     cliente e no módulo Renovações).
  *
- * Diferente do antigo renewClientContract, funciona também para cliente SEM
- * contrato cadastrado (renova pelo cadastro) — fim do beco "sem acordo".
+ * REGRAS DE COBRANÇA (auditoria 2026-08-13):
+ *  - NUNCA chamar generateBillingsForContract aqui: as mensalidades do dia a
+ *    dia nascem SEM contractId (ensureMonthlyBillings) e o dedupe daquela
+ *    função é por contractId — gerar aqui duplicaria cobranças em massa.
+ *    As mensalidades futuras do MRR nascem do CADASTRO (monthlyValue novo)
+ *    pelo ciclo normal.
+ *  - MRR keepMonthly + lançamento: materializa a mensalidade da competência
+ *    via ensureClientBillingForMonth e ATUALIZA o valor se a cobrança já
+ *    existia em aberto com o mensal antigo.
+ *  - Contrato + cadastro + histórico são gravados numa transação; o
+ *    lançamento/pagamento roda depois e falha vira warning (nunca deixa
+ *    contrato estendido sem histórico).
  */
 export async function renewClientFlow(
   formData: FormData
@@ -77,51 +94,83 @@ export async function renewClientFlow(
     const base =
       contract?.endDate && contract.endDate > today ? contract.endDate : today;
     const previousEndDate = contract?.endDate ?? null;
-    const newEnd = new Date(base);
-    newEnd.setMonth(newEnd.getMonth() + months);
+    const newEnd = addMonthsClamped(base, months);
 
-    // ===== 1) Contrato (quando existe) =====
+    // ===== 1-2-5) Contrato + cadastro + histórico numa TRANSAÇÃO =====
+    const renewNote =
+      `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")}` +
+      (paymentMethod ? `, ${paymentMethod}` : "") +
+      (paymentMode ? ` (${paymentMode})` : "") +
+      (details ? ` — ${details}` : "");
+
+    const writes: any[] = [];
     if (contract) {
-      const renewNote =
-        `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), ${formatBRL(total)}` +
-        (paymentMethod ? `, ${paymentMethod}` : "") +
-        (paymentMode ? ` (${paymentMode})` : "") +
-        (details ? ` — ${details}` : "");
-      await prisma.contract.update({
-        where: { id: contract.id },
+      writes.push(
+        prisma.contract.update({
+          where: { id: contract.id },
+          data: {
+            status: "ACTIVE",
+            endDate: newEnd,
+            renewalDate: newEnd,
+            totalValue: n(contract.totalValue) + total,
+            paymentMethod,
+            paymentMode,
+            canceledAt: null,
+            notes: [contract.notes, renewNote].filter(Boolean).join("\n"),
+            ...(staysMonthly
+              ? { monthlyValue: monthly! }
+              : isMrr
+                ? // MRR que pagou o ciclo cheio: o CONTRATO também vira TCV —
+                  // trava a geração de mensalidades em lote sobre o ciclo pago.
+                  { type: "TCV" as const, recurrence: "NONE" as const, monthlyValue: 0 }
+                : {}),
+          },
+        })
+      );
+    }
+    writes.push(
+      prisma.client.update({
+        where: { id: clientId },
         data: {
           status: "ACTIVE",
-          endDate: newEnd,
-          renewalDate: newEnd,
-          totalValue: n(contract.totalValue) + total,
-          monthlyValue: monthly ?? contract.monthlyValue,
+          churnedAt: null,
+          contractMonths: months,
+          // Próxima janela de renovação = mês do novo fim de vigência.
+          renewalMonth: newEnd.getMonth() + 1,
+          ...(staysMonthly
+            ? { monthlyValue: monthly }
+            : isMrr
+              ? { modality: "TCV", totalContractValue: total }
+              : { totalContractValue: total }),
+        },
+      })
+    );
+    writes.push(
+      prisma.clientRenewal.create({
+        data: {
+          clientId,
+          contractId: contract?.id ?? null,
+          months,
+          totalValue: total,
+          monthlyValue: monthly,
+          modality: staysMonthly ? "MRR" : "TCV",
           paymentMethod,
           paymentMode,
-          canceledAt: null,
-          notes: [contract.notes, renewNote].filter(Boolean).join("\n"),
+          previousEndDate,
+          newEndDate: newEnd,
+          billingMonth: launch ? comp.month : null,
+          billingYear: launch ? comp.year : null,
+          keptMonthly: isMrr ? keepMonthly : null,
+          paymentStatus: launch ? payStatus : null,
+          notes: details,
+          createdBy: viewer.email,
         },
-      });
-    }
+      })
+    );
+    const results = await prisma.$transaction(writes);
+    const renewal = results[results.length - 1] as { id: string };
 
-    // ===== 2) Cadastro do cliente =====
-    await prisma.client.update({
-      where: { id: clientId },
-      data: {
-        status: "ACTIVE",
-        churnedAt: null,
-        contractMonths: months,
-        // Próxima janela de renovação = mês do novo fim de vigência.
-        renewalMonth: newEnd.getMonth() + 1,
-        ...(staysMonthly
-          ? { monthlyValue: monthly }
-          : isMrr
-            ? // MRR que saiu da lista mensal → tratado como TCV daqui em diante.
-              { modality: "TCV", totalContractValue: total }
-            : { totalContractValue: total }),
-      },
-    });
-
-    // ===== 3) Lançamento nos recebimentos (competência escolhida) =====
+    // ===== 3) Lançamento nos recebimentos (fora da transação; falha = warning) =====
     let billingId: string | null = null;
     let warning: string | undefined;
     if (launch) {
@@ -131,10 +180,30 @@ export async function renewClientFlow(
         const ensured = await ensureClientBillingForMonth(
           clientId, comp.month, comp.year, viewer.email
         );
-        if (ensured.ok) billingId = ensured.billingId;
-        else warning = `Renovado, mas a mensalidade não foi lançada: ${ensured.error}`;
-        // Gera também as demais mensalidades do novo período (idempotente).
-        if (contract) await generateBillingsForContract(contract.id);
+        if (ensured.ok) {
+          billingId = ensured.billingId;
+          if (!ensured.created) {
+            // Mensalidade já existia (valor antigo): atualiza se ainda em aberto.
+            const existing = await prisma.billing.findUnique({
+              where: { id: billingId },
+              select: { paidTotal: true, status: true, amount: true },
+            });
+            if (
+              existing &&
+              existing.status !== "CANCELED" &&
+              n(existing.paidTotal) === 0 &&
+              monthly != null &&
+              Math.abs(n(existing.amount) - monthly) > 0.005
+            ) {
+              await prisma.billing.update({
+                where: { id: billingId },
+                data: { amount: monthly },
+              });
+            }
+          }
+        } else {
+          warning = `Renovado, mas a mensalidade não foi lançada: ${ensured.error}`;
+        }
       } else {
         const due = getValidDueDateForMonth(
           comp.year, comp.month, client.paymentDay ?? contract?.billingDay ?? today.getDate()
@@ -154,6 +223,13 @@ export async function renewClientFlow(
           select: { id: true },
         });
         billingId = created.id;
+      }
+
+      if (billingId) {
+        await prisma.clientRenewal.update({
+          where: { id: renewal.id },
+          data: { billingId },
+        });
       }
 
       // Situação do pagamento informada na renovação (total/parcial).
@@ -183,34 +259,7 @@ export async function renewClientFlow(
           }
         }
       }
-    } else if (staysMonthly && contract) {
-      // Sem lançamento imediato, mas o novo período MRR segue gerando mensalidades.
-      await generateBillingsForContract(contract.id);
     }
-
-    // ===== 4) Histórico auditável =====
-    const renewal = await prisma.clientRenewal.create({
-      data: {
-        clientId,
-        contractId: contract?.id ?? null,
-        months,
-        totalValue: total,
-        monthlyValue: monthly,
-        modality: staysMonthly ? "MRR" : "TCV",
-        paymentMethod,
-        paymentMode,
-        previousEndDate,
-        newEndDate: newEnd,
-        billingId,
-        billingMonth: launch ? comp.month : null,
-        billingYear: launch ? comp.year : null,
-        keptMonthly: isMrr ? keepMonthly : null,
-        paymentStatus: launch ? payStatus : null,
-        notes: details,
-        createdBy: viewer.email,
-      },
-      select: { id: true },
-    });
 
     revalidateAgency({ clientId, contractId: contract?.id ?? null });
     revalidateFinance();

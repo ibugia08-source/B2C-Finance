@@ -55,7 +55,18 @@ export function ScheduleRenewalDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setError(null); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (o) {
+          // Ressincroniza com o mês em exibição a cada abertura (o componente
+          // fica montado enquanto o usuário navega entre meses).
+          setMonth(defaultMonth);
+          setError(null);
+        } else setError(null);
+      }}
+    >
       <DialogTrigger asChild>
         {trigger ?? (
           <Button size="sm" variant="outline">

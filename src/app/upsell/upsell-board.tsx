@@ -96,8 +96,9 @@ export function UpsellBoard({
         alert(res.error);
         return;
       }
+      const warning = (res as { warning?: string }).warning;
       showUndoToast({
-        message: `${u.clientName}: movido para ${UPSELL_STATUS_LABEL[status as keyof typeof UPSELL_STATUS_LABEL] ?? status}.`,
+        message: `${u.clientName}: movido para ${UPSELL_STATUS_LABEL[status as keyof typeof UPSELL_STATUS_LABEL] ?? status}.${warning ? ` ${warning}` : ""}`,
         onUndo: () => setUpsellStatus(u.id, u.status),
       });
       router.refresh();
