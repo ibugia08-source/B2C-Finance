@@ -360,7 +360,10 @@ export default async function ClientesPage({
         }
       />
 
-      <CobrancasTabs active="/clientes" />
+      <CobrancasTabs
+        active="/clientes"
+        showInadimplencia={can(viewer, "recebimentos.ver_inadimplencia")}
+      />
 
       {!isCurrentMonth && (
         <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] px-4 py-2.5 text-sm">

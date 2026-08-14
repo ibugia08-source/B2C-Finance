@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateCatalog, revalidateFinance, revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { UpsellStatus } from "@prisma/client";
-import { requirePermission } from "@/lib/auth/viewer";
+import { requirePermission, can } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import type { ActionResult } from "./clients";
@@ -31,7 +31,7 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
   // (os pontos de entrada de criação — ficha do cliente, header do Kanban —
   // gateiam por upsell.criar).
   const isEdit = Boolean(clean(formData.get("id")));
-  await requirePermission(isEdit ? "upsell.editar" : "upsell.criar");
+  const viewer = await requirePermission(isEdit ? "upsell.editar" : "upsell.criar");
   try {
     // Serviços associados (opcional) — cada um com seu valor.
     let services: z.infer<typeof ServicesSchema> = [];
@@ -60,6 +60,25 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
       })(),
       notes: clean(formData.get("notes")),
     });
+
+    // Decidir o funil (vendido/recusado) exige a permissão própria — o
+    // formulário de edição não pode contornar o gate do quadro, senão uma
+    // venda entra sem a pergunta de lançamento e nunca vira cobrança
+    // (auditoria 2026-08-13).
+    if (parsed.status === "WON" || parsed.status === "LOST") {
+      const prev = parsed.id
+        ? await prisma.upsell.findUnique({
+            where: { id: parsed.id },
+            select: { status: true },
+          })
+        : null;
+      if (prev?.status !== parsed.status && !can(viewer, "upsell.marcar_vendido"))
+        return {
+          ok: false,
+          error:
+            "Marcar como vendido/recusado é decisão do funil — mova o card no quadro (exige a permissão \"Marcar como vendido\").",
+        };
+    }
 
     // Valor da oportunidade: informado, ou a soma dos serviços associados.
     const value = parsed.value > 0 ? parsed.value : servicesSum;

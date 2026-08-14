@@ -89,6 +89,7 @@ export default async function UpsellPage({ searchParams }: { searchParams: Searc
       serviceId: us.serviceId,
       unitPrice: Number(us.unitPrice),
     })),
+    billingId: u.billingId ?? null,
   }));
 
   const responsibles = respRows.map((r) => r.responsible!).filter(Boolean);

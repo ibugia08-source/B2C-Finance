@@ -165,13 +165,39 @@ export async function generateBillingsForContract(
           ? "SETUP"
           : "MRR";
 
+  // DEDUPE EM DUAS CAMADAS (auditoria 2026-08-13):
+  //  - MRR: por CLIENTE — as mensalidades do ciclo (ensureMonthlyBillings)
+  //    nascem SEM contractId e o dedupe antigo por contractId não as
+  //    enxergava ("Gerar cobranças" duplicava a base inteira). Invariante:
+  //    UMA mensalidade viva por (cliente, competência) — reforçada também
+  //    pelo índice único parcial no banco. CANCELED conta como existente de
+  //    propósito (removido do mês não é recriado, mesma regra do ciclo).
+  //  - TCV/ONE_TIME/SETUP: por CONTRATO (comportamento original) — esses
+  //    tipos PODEM legitimamente repetir na mesma competência (segunda venda
+  //    TCV, setup de outro contrato, upsell); dedupe por cliente aqui
+  //    engoliria receita real em silêncio.
   const existing = await prisma.billing.findMany({
-    where: { contractId: contract.id },
-    select: { competenceMonth: true, competenceYear: true, revenueType: true },
+    where: { clientId: contract.clientId },
+    select: {
+      competenceMonth: true,
+      competenceYear: true,
+      revenueType: true,
+      contractId: true,
+    },
   });
-  const has = new Set(
-    existing.map((b) => `${b.competenceYear}-${b.competenceMonth}-${b.revenueType}`)
+  const key = (b: { competenceYear: number; competenceMonth: number; revenueType: string }) =>
+    `${b.competenceYear}-${b.competenceMonth}-${b.revenueType}`;
+  const clientMrr = new Set(
+    existing.filter((b) => b.revenueType === "MRR").map(key)
   );
+  const contractHas = new Set(
+    existing.filter((b) => b.contractId === contract.id).map(key)
+  );
+  const has = {
+    has: (k: string) =>
+      contractHas.has(k) || (k.endsWith("-MRR") && clientMrr.has(k)),
+    size: contractHas.size,
+  };
 
   const toCreate: any[] = [];
   const startM = contract.startDate;
@@ -240,7 +266,10 @@ export async function generateBillingsForContract(
     status: b.dueDate < today ? "OVERDUE" : "PENDING",
   }));
 
-  if (rows.length > 0) await prisma.billing.createMany({ data: rows });
+  // skipDuplicates: corrida com o ciclo/outra instância degrada em no-op
+  // (ON CONFLICT DO NOTHING cobre o índice único parcial de MRR).
+  if (rows.length > 0)
+    await prisma.billing.createMany({ data: rows, skipDuplicates: true });
   return { created: rows.length, skipped: has.size };
 }
 

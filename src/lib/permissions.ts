@@ -331,6 +331,10 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "assistente.visualizar",
     "dashboard.visualizar",
     "dashboard.ver_financeiro",
+    // Ver clientes: sem isto, todo link de nome de cliente (Gestão do Mês,
+    // Rotina, Inadimplência) caía em "Acesso restrito" e a seção Renovações
+    // sumia justamente para quem registra o pagamento (auditoria 2026-08-13).
+    "clientes.visualizar",
     "recebimentos.visualizar",
     "recebimentos.registrar_pagamento",
     "recebimentos.gerar_cobranca",

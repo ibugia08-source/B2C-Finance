@@ -80,6 +80,25 @@ export async function renewClientFlow(
     if (contractId && !contract)
       return { ok: false, error: "Contrato não encontrado para este cliente." };
 
+    // GUARDA ANTI-DUPLO ENVIO (auditoria 2026-08-13): retry de rede ou duas
+    // abas não podem estender o contrato 2× nem lançar duas cobranças. Uma
+    // renovação do MESMO cliente registrada há poucos minutos bloqueia a
+    // repetição — renovar de novo de verdade (caso raro) espera a janela.
+    const recentRenewal = await prisma.clientRenewal.findFirst({
+      where: {
+        clientId,
+        renewedAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recentRenewal) {
+      return {
+        ok: false,
+        error:
+          "Este cliente já tem uma renovação registrada há poucos minutos — confira o histórico dele antes de renovar novamente.",
+      };
+    }
+
     // MODALIDADE do contrato renovado (mesma lógica do cadastro):
     //  MRR → mensalidade + dia de pagamento mensal; TCV → valor total cheio.
     const modRaw = String(formData.get("modality") ?? "").trim();
@@ -224,24 +243,46 @@ export async function renewClientFlow(
           warning = `Renovado, mas a mensalidade não foi lançada: ${ensured.error}`;
         }
       } else {
-        const due = getValidDueDateForMonth(
-          comp.year, comp.month, client.paymentDay ?? contract?.billingDay ?? today.getDate()
-        );
-        const created = await prisma.billing.create({
-          data: {
+        // Idempotência do lançamento TCV: reusa APENAS cobrança que nasceu de
+        // renovação (descrição "Renovação — …") com o mesmo valor nesta
+        // competência — repetição do fluxo não cria segunda cobrança cheia.
+        // O filtro de descrição é essencial: sem ele, a cobrança de ADESÃO
+        // TCV do mesmo valor no mesmo mês seria "reusada" e o ciclo renovado
+        // nunca seria faturado (revisão adversarial 2026-08-13).
+        const existingTcv = await prisma.billing.findFirst({
+          where: {
             clientId,
-            contractId: contract?.id ?? null,
-            description: `Renovação — ${contract?.title ?? client.name} (${String(comp.month).padStart(2, "0")}/${comp.year})`,
             competenceMonth: comp.month,
             competenceYear: comp.year,
-            amount: total,
-            dueDate: due,
             revenueType: "TCV",
-            status: "PENDING",
+            status: { not: "CANCELED" },
+            amount: total,
+            description: { startsWith: "Renovação — " },
           },
           select: { id: true },
         });
-        billingId = created.id;
+        if (existingTcv) {
+          billingId = existingTcv.id;
+        } else {
+          const due = getValidDueDateForMonth(
+            comp.year, comp.month, client.paymentDay ?? contract?.billingDay ?? today.getDate()
+          );
+          const created = await prisma.billing.create({
+            data: {
+              clientId,
+              contractId: contract?.id ?? null,
+              description: `Renovação — ${contract?.title ?? client.name} (${String(comp.month).padStart(2, "0")}/${comp.year})`,
+              competenceMonth: comp.month,
+              competenceYear: comp.year,
+              amount: total,
+              dueDate: due,
+              revenueType: "TCV",
+              status: "PENDING",
+            },
+            select: { id: true },
+          });
+          billingId = created.id;
+        }
       }
 
       if (billingId) {

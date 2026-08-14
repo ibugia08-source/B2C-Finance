@@ -359,7 +359,12 @@ export const IMPORT_DEFS: ImportDef[] = [
         rows.map((r) => `${r.clientId}|${r.competenceYear}-${r.competenceMonth}|${norm(r.description)}|${Number(r.amount)}`)
       );
     },
-    create: async (rows) => (await prisma.billing.createMany({ data: rows as any[] })).count,
+    // skipDuplicates: uma linha que colida com o índice único de mensalidade
+    // (cliente+competência MRR viva) é pulada em vez de derrubar o LOTE
+    // inteiro (createMany é atômico) — o count devolvido já reflete só as
+    // linhas realmente inseridas.
+    create: async (rows) =>
+      (await prisma.billing.createMany({ data: rows as any[], skipDuplicates: true })).count,
   },
 
   // ---------------- Receitas ----------------

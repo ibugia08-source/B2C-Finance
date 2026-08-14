@@ -1,5 +1,6 @@
 import { MONEY_EPSILON } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
+import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { toNumber as n } from "@/lib/format";
 
 /**
@@ -41,102 +42,128 @@ export type SettleResult =
     }
   | { ok: false; error: string };
 
+/** Erro de negócio do fechamento — vira `{ ok:false }`, nunca 500. */
+class SettleError extends Error {}
+
 export async function settleBillingPayment(input: SettleInput): Promise<SettleResult> {
-  const billing = await prisma.billing.findUnique({
-    where: { id: input.billingId },
-    include: {
-      contract: { select: { id: true } },
-      client: { select: { name: true } },
-    },
-  });
-  if (!billing) return { ok: false, error: "Cobrança não encontrada." };
-  if (billing.status === "CANCELED")
-    return { ok: false, error: "Cobrança cancelada não recebe pagamento." };
+  try {
+    // TRANSAÇÃO ÚNICA (auditoria 2026-08-13): Payment + Income de conciliação
+    // + saldo/status da cobrança são gravados de forma atômica. A releitura do
+    // saldo acontece DENTRO da transação e o update é guardado pelo paidTotal
+    // lido — dois cliques "Pago" quase simultâneos não pagam em dobro: o
+    // segundo falha na guarda e recebe erro amigável.
+    return await prisma.$transaction(async (tx) => {
+      const billing = await tx.billing.findUnique({
+        where: { id: input.billingId },
+        include: {
+          contract: { select: { id: true } },
+          client: { select: { name: true } },
+        },
+      });
+      if (!billing) throw new SettleError("Cobrança não encontrada.");
+      if (billing.status === "CANCELED")
+        throw new SettleError("Cobrança cancelada não recebe pagamento.");
 
-  const openAmount = n(billing.amount) - n(billing.paidTotal);
-  if (input.amount > openAmount + MONEY_EPSILON) {
-    return {
-      ok: false,
-      error: `Valor maior que o saldo em aberto (${openAmount.toFixed(2)}).`,
-    };
+      const openAmount = n(billing.amount) - n(billing.paidTotal);
+      if (input.amount > openAmount + MONEY_EPSILON) {
+        throw new SettleError(
+          `Valor maior que o saldo em aberto (${openAmount.toFixed(2)}).`
+        );
+      }
+
+      const newPaidTotal = n(billing.paidTotal) + input.amount;
+      const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
+
+      // ===== Classificação do fechamento mensal =====
+      const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
+      const paidKey = input.paidAt.getFullYear() * 12 + input.paidAt.getMonth();
+      const inLaterMonth = paidKey > compKey;
+      const lateSameMonth = !inLaterMonth && input.paidAt > billing.dueDate;
+
+      const payment = await tx.payment.create({
+        data: {
+          billingId: billing.id,
+          amount: input.amount,
+          paidAt: input.paidAt,
+          method: input.method as any,
+          accountId: input.accountId,
+          notes: input.notes,
+        },
+      });
+
+      // Conciliação caixa ↔ competência (Income vinculado à cobrança E ao
+      // pagamento — a reversão apaga por paymentId, nunca por coincidência
+      // de valor/data). RECOVERY é SÓ pagamento em mês posterior à
+      // competência; atraso dentro do próprio mês é isLate, não recuperação.
+      await tx.income.create({
+        data: {
+          description: `${billing.description} (${fullyPaid ? "quitação" : "parcial"})`,
+          amount: input.amount,
+          receivedAt: input.paidAt,
+          sourceType:
+            input.method === "CASH" ? "CASH" : input.method === "PIX" ? "PIX" : "BANK_ACCOUNT",
+          incomeType: "SALE",
+          status: "RECEIVED",
+          accountId: input.accountId,
+          clientId: billing.clientId,
+          contractId: billing.contractId,
+          billingId: billing.id,
+          paymentId: payment.id,
+          revenueType: inLaterMonth ? "RECOVERY" : billing.revenueType,
+        },
+      });
+
+      // Guarda otimista: só atualiza se o saldo ainda for o lido acima.
+      // runWithoutScope: a extensão multi-tenant injeta ownerId no where de
+      // updateMany, e cobrança legada com ownerId NULL nunca casaria (o
+      // pagamento falharia para sempre com a mensagem de concorrência). A
+      // posse já foi validada no findUnique acima — o bypass aqui é seguro.
+      const updated = await runWithoutScope(() =>
+        tx.billing.updateMany({
+          where: { id: billing.id, paidTotal: billing.paidTotal },
+          data: {
+            paidTotal: newPaidTotal,
+            status: fullyPaid ? "PAID" : "PARTIAL",
+            paidAt: fullyPaid ? input.paidAt : null,
+            collectionStatus: fullyPaid ? "PAID" : billing.collectionStatus,
+            isLate: fullyPaid ? lateSameMonth : billing.isLate,
+            paidInDifferentMonth: fullyPaid ? inLaterMonth : billing.paidInDifferentMonth,
+          },
+        })
+      );
+      if (updated.count === 0)
+        throw new SettleError(
+          "Outro pagamento desta cobrança foi registrado ao mesmo tempo — confira o saldo antes de repetir."
+        );
+
+      await tx.collectionHistory.create({
+        data: {
+          billingId: billing.id,
+          clientId: billing.clientId,
+          status: fullyPaid ? "PAID" : "PROMISED",
+          message: fullyPaid
+            ? `Pagamento total registrado (${input.method}).${inLaterMonth ? " Pago em mês posterior à competência — inadimplência regularizada (o mês original permanece não recebido)." : lateSameMonth ? " Pago com atraso (dentro do mês)." : ""}`
+            : `Pagamento parcial de R$ ${input.amount.toFixed(2)} registrado (${input.method}).`,
+        },
+      });
+
+      // Receita Extra automática foi REMOVIDA (regra atual: Receita Extra é
+      // apenas manual). O pagamento em mês posterior fica registrado pelas
+      // flags e conta como recuperação na camada de recebimentos.
+      return {
+        ok: true as const,
+        fullyPaid,
+        isLate: fullyPaid ? lateSameMonth : false,
+        paidInDifferentMonth: fullyPaid ? inLaterMonth : false,
+        extraRevenueId: null,
+        paymentId: payment.id,
+        clientId: billing.clientId,
+      };
+    });
+  } catch (e) {
+    if (e instanceof SettleError) return { ok: false, error: e.message };
+    throw e; // infra/DB: deixa o try/catch da action reportar
   }
-
-  const wasOverdue = billing.status === "OVERDUE";
-  const newPaidTotal = n(billing.paidTotal) + input.amount;
-  const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
-
-  // ===== Classificação do fechamento mensal =====
-  const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
-  const paidKey = input.paidAt.getFullYear() * 12 + input.paidAt.getMonth();
-  const inLaterMonth = paidKey > compKey;
-  const lateSameMonth = !inLaterMonth && input.paidAt > billing.dueDate;
-
-  const payment = await prisma.payment.create({
-    data: {
-      billingId: billing.id,
-      amount: input.amount,
-      paidAt: input.paidAt,
-      method: input.method as any,
-      accountId: input.accountId,
-      notes: input.notes,
-    },
-  });
-
-  // Conciliação caixa ↔ competência (Income vinculado à cobrança).
-  await prisma.income.create({
-    data: {
-      description: `${billing.description} (${fullyPaid ? "quitação" : "parcial"})`,
-      amount: input.amount,
-      receivedAt: input.paidAt,
-      sourceType:
-        input.method === "CASH" ? "CASH" : input.method === "PIX" ? "PIX" : "BANK_ACCOUNT",
-      incomeType: "SALE",
-      status: "RECEIVED",
-      accountId: input.accountId,
-      clientId: billing.clientId,
-      contractId: billing.contractId,
-      billingId: billing.id,
-      revenueType: wasOverdue ? "RECOVERY" : billing.revenueType,
-    },
-  });
-
-  // Receita Extra automática foi REMOVIDA (regra atual: Receita Extra é
-  // apenas manual). O pagamento em mês posterior fica registrado pelas flags
-  // e conta como recuperação de inadimplência na camada de recebimentos.
-  const extraRevenueId: string | null = null;
-
-  await prisma.billing.update({
-    where: { id: billing.id },
-    data: {
-      paidTotal: newPaidTotal,
-      status: fullyPaid ? "PAID" : "PARTIAL",
-      paidAt: fullyPaid ? input.paidAt : null,
-      collectionStatus: fullyPaid ? "PAID" : billing.collectionStatus,
-      isLate: fullyPaid ? lateSameMonth : billing.isLate,
-      paidInDifferentMonth: fullyPaid ? inLaterMonth : billing.paidInDifferentMonth,
-    },
-  });
-
-  await prisma.collectionHistory.create({
-    data: {
-      billingId: billing.id,
-      clientId: billing.clientId,
-      status: fullyPaid ? "PAID" : "PROMISED",
-      message: fullyPaid
-        ? `Pagamento total registrado (${input.method}).${inLaterMonth ? " Pago em mês posterior à competência — inadimplência regularizada (o mês original permanece não recebido)." : lateSameMonth ? " Pago com atraso (dentro do mês)." : ""}`
-        : `Pagamento parcial de R$ ${input.amount.toFixed(2)} registrado (${input.method}).`,
-    },
-  });
-
-  return {
-    ok: true,
-    fullyPaid,
-    isLate: fullyPaid ? lateSameMonth : false,
-    paidInDifferentMonth: fullyPaid ? inLaterMonth : false,
-    extraRevenueId,
-    paymentId: payment.id,
-    clientId: billing.clientId,
-  };
 }
 
 /** Reverte um pagamento (exclusão): saldo, status, flags e Receita Extra. */
@@ -162,9 +189,23 @@ export async function revertBillingPayment(paymentId: string): Promise<
   // fora da transação e podia divergir em caso de erro no meio).
   await prisma.$transaction(async (tx) => {
     await tx.payment.delete({ where: { id: paymentId } });
-    await tx.income.deleteMany({
-      where: { billingId: b.id, amount: n(payment.amount), receivedAt: payment.paidAt },
-    });
+    // Conciliação: apaga pelo vínculo direto (paymentId). Fallback legado
+    // (Incomes anteriores ao vínculo): coincidência de valor/data, limitado a
+    // UM registro sem paymentId — dois parciais iguais no mesmo dia nunca
+    // perdem as duas conciliações ao desfazer um.
+    const linked = await tx.income.deleteMany({ where: { paymentId } });
+    if (linked.count === 0) {
+      const legacy = await tx.income.findFirst({
+        where: {
+          billingId: b.id,
+          amount: n(payment.amount),
+          receivedAt: payment.paidAt,
+          paymentId: null,
+        },
+        select: { id: true },
+      });
+      if (legacy) await tx.income.delete({ where: { id: legacy.id } });
+    }
     await tx.billing.update({
       where: { id: b.id },
       data: {

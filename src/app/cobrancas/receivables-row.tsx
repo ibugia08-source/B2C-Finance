@@ -29,25 +29,12 @@ const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => ({
   label: `Todo dia ${String(i + 1).padStart(2, "0")}`,
 }));
 
-function ReceivableRowInner({
-  row,
-  selected,
-  onToggle,
-  accounts,
-  month,
-  year,
-}: {
-  row: ReceivableRowType;
-  selected: boolean;
-  onToggle: () => void;
-  accounts: { id: string; name: string }[];
-  month: number;
-  year: number;
-}) {
-  // Gesto da planilha: escolher "Pago" registra NA HORA (saldo do mês) e o
-  // toast oferece Desfazer — sem confirm(). Valor parcial/outra data/conta
-  // continuam no dialog $ da linha.
-  const onStatusChange = useCallback((r: ReceivableRowType) => async (v: string): Promise<ActionResult> => {
+// Gesto da planilha: escolher "Pago" registra NA HORA (saldo do mês) e o
+// toast oferece Desfazer — sem confirm(). Valor parcial/outra data/conta
+// continuam no dialog $ da linha. Compartilhado entre a tabela (desktop) e
+// os cards (mobile) — os dois gestos são o MESMO pagamento real.
+export function useStatusChangeHandler() {
+  return useCallback((r: ReceivableRowType) => async (v: string): Promise<ActionResult> => {
     if (!r.billingId)
       return { ok: false, error: `Cliente sem cobrança neste mês — use "Incluir cliente no mês".` };
     if (v === "PAID") {
@@ -63,6 +50,24 @@ function ReceivableRowInner({
     }
     return setMonthChargeStatus(r.billingId, v as any);
   }, []);
+}
+
+function ReceivableRowInner({
+  row,
+  selected,
+  onToggle,
+  accounts,
+  month,
+  year,
+}: {
+  row: ReceivableRowType;
+  selected: boolean;
+  onToggle: () => void;
+  accounts: { id: string; name: string }[];
+  month: number;
+  year: number;
+}) {
+  const onStatusChange = useStatusChangeHandler();
 
   return (
     <TableRow data-state={selected ? "selected" : undefined}>

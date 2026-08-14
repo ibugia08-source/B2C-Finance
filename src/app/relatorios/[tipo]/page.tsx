@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getReport } from "@/lib/reports/registry";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
@@ -22,7 +22,7 @@ export default async function RelatorioPage({
   params: { tipo: string };
   searchParams?: SearchParams;
 }) {
-  await requirePagePermission("relatorios.visualizar");
+  const viewer = await requirePagePermission("relatorios.visualizar");
   const def = getReport(params.tipo);
   if (!def) notFound();
 
@@ -87,6 +87,7 @@ export default async function RelatorioPage({
           <CardContent className="p-4">
             <ReportControls
               reportKey={def.key}
+              canExport={can(viewer, "relatorios.exportar")}
               filterFields={def.filterFields}
               columns={def.columns.map((c) => ({ key: c.key, label: c.label }))}
               groupOptions={def.groupOptions.map((k) => ({

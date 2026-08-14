@@ -20,7 +20,7 @@ import {
   MobileEmpty,
 } from "@/components/ui/record-card";
 import { Badge } from "@/components/ui/badge";
-import { ReceivableRow } from "./receivables-row";
+import { ReceivableRow, useStatusChangeHandler } from "./receivables-row";
 import {
   StatusCell,
   TermSelect,
@@ -43,6 +43,7 @@ export function ReceivablesPanel({
   year: number;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const onStatusChange = useStatusChangeHandler();
   const allKeys = rows.map((r) => r.key);
   const allSelected = allKeys.length > 0 && selected.size === allKeys.length;
   const someSelected = selected.size > 0 && !allSelected;
@@ -144,7 +145,7 @@ export function ReceivablesPanel({
                   />
                 </Field>
                 <Field label="Status">
-                  <StatusCell row={r} onStatusChange={() => async () => ({ ok: false, error: "" })} />
+                  <StatusCell row={r} onStatusChange={onStatusChange} />
                 </Field>
                 <Field label="Vencimento">
                   {r.dueDateBR ?? (r.paymentDay ? `todo dia ${r.paymentDay}` : "—")}

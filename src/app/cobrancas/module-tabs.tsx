@@ -12,10 +12,20 @@ const TABS = [
   { href: "/inadimplencia", label: "Inadimplência" },
 ];
 
-export function CobrancasTabs({ active }: { active: string }) {
+export function CobrancasTabs({
+  active,
+  showInadimplencia = true,
+}: {
+  active: string;
+  /** Sem recebimentos.ver_inadimplencia a aba nem aparece (não expulsa). */
+  showInadimplencia?: boolean;
+}) {
+  const tabs = showInadimplencia
+    ? TABS
+    : TABS.filter((t) => t.href !== "/inadimplencia");
   return (
     <div className="mb-4 inline-flex items-center gap-1 rounded-lg bg-muted p-1">
-      {TABS.map((t) => (
+      {tabs.map((t) => (
         <Link
           key={t.href}
           href={t.href}

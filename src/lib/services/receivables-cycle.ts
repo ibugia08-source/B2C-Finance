@@ -101,7 +101,11 @@ export async function ensureMonthlyBillings(
     });
   }
 
-  if (rows.length > 0) await prisma.billing.createMany({ data: rows });
+  // skipDuplicates: o throttle é por instância (serverless pode rodar duas
+  // lambdas frias ao mesmo tempo) — sem isto, a corrida estouraria o índice
+  // único parcial de MRR e derrubaria a renderização da página do mês.
+  if (rows.length > 0)
+    await prisma.billing.createMany({ data: rows, skipDuplicates: true });
   return { created: rows.length };
 }
 

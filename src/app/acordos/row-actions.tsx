@@ -1,23 +1,13 @@
 "use client";
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ContractDialog } from "./contract-dialog";
 import { Pencil, Trash2, RefreshCw, Square, Receipt } from "lucide-react";
 import {
   deleteContract,
   endContract,
   cancelContract,
-  renewContract,
   generateContractBillings,
 } from "@/lib/actions/contracts";
 
@@ -57,7 +47,17 @@ export function ContractActions({
             <Receipt className="h-4 w-4" />
           </Button>
         )}
-        {live && <RenewDialog contractId={contract.id} onDone={setFeedback} />}
+        {/* Renovação SÓ pelo fluxo oficial (módulo Renovações): o atalho
+            antigo estendia o contrato sem registrar ClientRenewal, sem
+            atualizar o cadastro e sem lançar cobrança — o cliente seguia
+            "Pendente" no painel e o time renovava em dobro (aud. 13/08). */}
+        {live && (
+          <Button variant="ghost" size="icon" title="Renovar (abre o módulo Renovações)" asChild>
+            <Link href="/renovacoes">
+              <RefreshCw className="h-4 w-4" />
+            </Link>
+          </Button>
+        )}
         <ContractDialog
           clients={clients}
           services={services}
@@ -115,54 +115,3 @@ export function ContractActions({
   );
 }
 
-function RenewDialog({
-  contractId,
-  onDone,
-}: {
-  contractId: string;
-  onDone: (msg: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Renovar contrato">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Renovar contrato</DialogTitle>
-        </DialogHeader>
-        <form
-          action={(fd) =>
-            start(async () => {
-              const res = await renewContract(contractId, fd);
-              setOpen(false);
-              onDone(res.ok ? "Contrato renovado ✅" : res.error);
-            })
-          }
-          className="space-y-3"
-        >
-          <div>
-            <Label>Renovar por quantos meses?</Label>
-            <Input type="number" name="months" min={1} defaultValue={12} required />
-            <p className="text-xs text-muted-foreground mt-1">
-              Estende a vigência, atualiza a próxima renovação e soma o novo
-              período ao TCV.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Renovando…" : "Renovar"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}

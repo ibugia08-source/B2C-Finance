@@ -56,6 +56,25 @@ export async function requirePermission(permission: string): Promise<Viewer> {
 }
 
 /**
+ * Guarda de AÇÃO INLINE (selects/botões dentro de tabelas): sessão obrigatória
+ * (sem sessão → /login, como sempre); sem a permissão retorna null para a
+ * action responder `{ ok:false, error }` NO LUGAR — o redirect para
+ * /acesso-restrito no meio de um gesto jogava o usuário para fora da tela,
+ * perdendo mês, filtros e seleção (auditoria 2026-08-13). Páginas e dialogs
+ * de navegação continuam com requirePermission/requirePagePermission.
+ */
+export async function tryPermission(permission: string): Promise<Viewer | null> {
+  const v = await getViewer();
+  return hasPermission(v, permission) ? v : null;
+}
+
+/** Resposta padrão de action para gesto sem permissão. */
+export const NO_PERMISSION = {
+  ok: false as const,
+  error: "Você não tem permissão para esta ação — fale com o administrador.",
+};
+
+/**
  * Guarda de PÁGINA: sessão obrigatória + permissão de visualização.
  * Sem permissão → redireciona para a tela de acesso restrito (sem loop:
  * /acesso-restrito não exige permissão nenhuma, só sessão).

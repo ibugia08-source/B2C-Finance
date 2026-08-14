@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ClientStatus, ClientModality } from "@prisma/client";
-import { requirePermission } from "@/lib/auth/viewer";
+import { requirePermission, tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 
@@ -123,7 +123,7 @@ async function recordLosses(
 }
 
 export async function saveClient(formData: FormData): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const parsed = ClientSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -428,7 +428,7 @@ export async function setClientStatus(
   status: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  await requirePermission("clientes.alterar_status");
+  if (!(await tryPermission("clientes.alterar_status"))) return NO_PERMISSION;
   try {
     const s = z.nativeEnum(ClientStatus).parse(status);
     const existing = await prisma.client.findUnique({ where: { id } });
@@ -463,7 +463,7 @@ export async function markClientLost(
   lostAtRaw: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  await requirePermission("clientes.alterar_status");
+  if (!(await tryPermission("clientes.alterar_status"))) return NO_PERMISSION;
   try {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(lostAtRaw ?? "").trim());
     if (!m) return { ok: false, error: "Informe a data da saída." };
@@ -515,7 +515,7 @@ export async function setClientLossReason(
   clientId: string,
   reason: string
 ): Promise<ActionResult> {
-  await requirePermission("clientes.alterar_status");
+  if (!(await tryPermission("clientes.alterar_status"))) return NO_PERMISSION;
   try {
     const text = reason.trim();
     if (!text) return { ok: true };
@@ -541,7 +541,7 @@ export async function setClientModality(
   id: string,
   modality: string | null
 ): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const value =
       modality == null || modality === ""
@@ -563,7 +563,7 @@ export async function setClientMonthlyValue(
   id: string,
   raw: string
 ): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const value = raw && raw.trim() ? parseBRL(raw) : null;
     if (value != null && value < 0)
@@ -583,7 +583,7 @@ export async function setClientRenewalMonth(
   id: string,
   month: number | null
 ): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const value =
       month == null
@@ -624,7 +624,7 @@ export async function bulkUpdateClients(input: {
   modality?: string | null;
   paymentDay?: number | null;
 }): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const parsed = BulkSchema.parse({
       ids: input.ids,
@@ -701,7 +701,7 @@ const ContactSchema = z.object({
 });
 
 export async function saveClientContact(formData: FormData): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const parsed = ContactSchema.parse({
       id: clean(formData.get("id")) ?? undefined,
@@ -758,7 +758,7 @@ export async function saveClientContact(formData: FormData): Promise<ActionResul
 }
 
 export async function deleteClientContact(id: string): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const existing = await prisma.clientContact.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Contato não encontrado." };
@@ -779,7 +779,7 @@ export async function setClientQuickNotes(
   clientId: string,
   notes: string
 ): Promise<ActionResult> {
-  await requirePermission("clientes.editar");
+  if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
     const client = await prisma.client.findFirst({ where: { id: clientId } });
     if (!client) return { ok: false, error: "Cliente não encontrado." };

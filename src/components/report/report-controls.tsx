@@ -13,6 +13,9 @@ type VL = { value: string; label: string };
 
 export type ReportControlsConfig = {
   reportKey: string;
+  /** Sem relatorios.exportar os botões CSV/XLSX nem aparecem (a rota de
+   *  export responderia 403 em JSON cru — auditoria 2026-08-13). */
+  canExport?: boolean;
   filterFields: string[];
   columns: { key: string; label: string }[];
   groupOptions: { key: string; label: string }[];
@@ -206,16 +209,20 @@ export function ReportControls(cfg: ReportControlsConfig) {
 
         <span className="flex-1" />
 
-        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
-          <a href={`/relatorios/${cfg.reportKey}/export?formato=csv${exportQS ? `&${exportQS}` : ""}`}>
-            <Download className="h-3.5 w-3.5 mr-1" /> CSV
-          </a>
-        </Button>
-        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
-          <a href={`/relatorios/${cfg.reportKey}/export?formato=xlsx${exportQS ? `&${exportQS}` : ""}`}>
-            <Download className="h-3.5 w-3.5 mr-1" /> XLSX
-          </a>
-        </Button>
+        {cfg.canExport !== false && (
+          <>
+            <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+              <a href={`/relatorios/${cfg.reportKey}/export?formato=csv${exportQS ? `&${exportQS}` : ""}`}>
+                <Download className="h-3.5 w-3.5 mr-1" /> CSV
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+              <a href={`/relatorios/${cfg.reportKey}/export?formato=xlsx${exportQS ? `&${exportQS}` : ""}`}>
+                <Download className="h-3.5 w-3.5 mr-1" /> XLSX
+              </a>
+            </Button>
+          </>
+        )}
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => window.print()}>
           <Printer className="h-3.5 w-3.5 mr-1" /> Imprimir / PDF
         </Button>

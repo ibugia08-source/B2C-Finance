@@ -35,6 +35,8 @@ export type BoardUpsell = {
   serviceId: string | null;
   offerId: string | null;
   services: { serviceId: string; unitPrice: number }[];
+  /** Cobrança lançada nos recebimentos (null = venda ainda não faturada). */
+  billingId: string | null;
 };
 
 const dateBR = (iso: string | null) =>
@@ -211,6 +213,20 @@ export function UpsellBoard({
                       </span>
                     </div>
 
+                    {/* Venda ganha sem cobrança lançada: sem esta ação o card
+                        virava beco sem saída (só relançando via drag para fora
+                        e de volta) — auditoria 2026-08-13. */}
+                    {u.status === "WON" && !u.billingId && canSell && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 h-7 w-full text-xs"
+                        onClick={() => setSellFor(u)}
+                      >
+                        Lançar cobrança nos recebimentos
+                      </Button>
+                    )}
+
                     <div className="mt-2 flex items-center justify-between gap-1">
                       {/* Fallback touch/mobile: mover por select */}
                       {canSell ? (
@@ -314,6 +330,7 @@ function SellUpsellDialog({
   onSold: (launched: boolean) => void;
 }) {
   const now = new Date();
+  const alreadyWon = upsell.status === "WON";
   const [launch, setLaunch] = useState(true);
   const [competence, setCompetence] = useState(
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
@@ -342,7 +359,9 @@ function SellUpsellDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upsell vendido 🎉</DialogTitle>
+          <DialogTitle>
+            {alreadyWon ? "Lançar a venda nos recebimentos" : "Upsell vendido 🎉"}
+          </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{upsell.clientName}</span> —{" "}

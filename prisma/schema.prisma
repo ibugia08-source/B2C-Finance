@@ -417,6 +417,9 @@ model Income {
   contract        Contract?    @relation(fields: [contractId], references: [id])
   billingId       String? // cobrança que originou este recebimento (conciliação)
   billing         Billing?     @relation(fields: [billingId], references: [id])
+  // Pagamento que gerou esta conciliação — a reversão apaga por ESTE id
+  // (escalar de propósito, sem FK: excluir o Payment não pode cascatear).
+  paymentId       String?
 
   ownerId   String?
   owner     User?    @relation("OwnerIncome", fields: [ownerId], references: [id])
@@ -428,6 +431,7 @@ model Income {
   @@index([clientId])
   @@index([contractId])
   @@index([billingId])
+  @@index([paymentId])
   @@index([ownerId])
 }
 

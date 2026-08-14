@@ -758,7 +758,10 @@ export default async function RecebimentosPage({
         }
       />
 
-      <CobrancasTabs active="/cobrancas" />
+      <CobrancasTabs
+        active="/cobrancas"
+        showInadimplencia={can(viewer, "recebimentos.ver_inadimplencia")}
+      />
 
       {/* ===== Barra superior: mês · busca ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">

@@ -8,7 +8,7 @@ import {
   PaymentMethod,
   RevenueType,
 } from "@prisma/client";
-import { requirePermission } from "@/lib/auth/viewer";
+import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
@@ -35,7 +35,7 @@ const BillingSchema = z.object({
 });
 
 export async function saveBilling(formData: FormData): Promise<ActionResult> {
-  await requirePermission("recebimentos.editar");
+  if (!(await tryPermission("recebimentos.editar"))) return NO_PERMISSION;
   try {
     const comp = clean(formData.get("competence")) ?? ""; // "YYYY-MM"
     const [cy, cm] = comp.split("-").map(Number);
@@ -63,6 +63,28 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { id, ...data } = parsed;
+
+    // Uma mensalidade (MRR) viva por competência — mesma invariante do
+    // índice único do banco; checa antes para o erro ser de negócio, não
+    // o P2002 cru do Prisma.
+    if (data.revenueType === "MRR") {
+      const dup = await prisma.billing.findFirst({
+        where: {
+          clientId: data.clientId,
+          competenceMonth: data.competenceMonth,
+          competenceYear: data.competenceYear,
+          revenueType: "MRR",
+          status: { not: "CANCELED" },
+          ...(id ? { id: { not: id } } : {}),
+        },
+        select: { id: true },
+      });
+      if (dup)
+        return {
+          ok: false,
+          error: `Este cliente já tem a mensalidade de ${String(data.competenceMonth).padStart(2, "0")}/${data.competenceYear} — edite a cobrança existente ou registre como Avulsa.`,
+        };
+    }
 
     let billingId = id;
     if (billingId) {
@@ -92,6 +114,12 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
     revalidateBilling(parsed.clientId);
     return { ok: true, id: billingId };
   } catch (e: any) {
+    if (e?.code === "P2002")
+      return {
+        ok: false,
+        error:
+          "Este cliente já tem mensalidade nesta competência — edite a cobrança existente ou registre como Avulsa.",
+      };
     return {
       ok: false,
       error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a cobrança.",
@@ -113,7 +141,7 @@ const PaymentSchema = z.object({
 export async function registerBillingPayment(
   formData: FormData
 ): Promise<ActionResult> {
-  await requirePermission("recebimentos.registrar_pagamento");
+  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
   try {
     const parsed = PaymentSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),
@@ -159,7 +187,7 @@ const QUICK_UNDO_WINDOW_MS = 15 * 60 * 1000;
  * Retorna o id do PAGAMENTO em `id` para o toast "Desfazer".
  */
 export async function quickSettleBilling(billingId: string): Promise<ActionResult> {
-  await requirePermission("recebimentos.registrar_pagamento");
+  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
   try {
     const b = await prisma.billing.findUnique({ where: { id: billingId } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -202,7 +230,7 @@ export async function quickSettleBilling(billingId: string): Promise<ActionResul
  * Pagamentos do cliente, com a permissão de excluir.
  */
 export async function undoQuickSettle(paymentId: string): Promise<ActionResult> {
-  await requirePermission("recebimentos.registrar_pagamento");
+  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
   try {
     const p = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!p) return { ok: false, error: "Pagamento não encontrado." };
@@ -260,12 +288,14 @@ const IncludeClientSchema = z.object({
  * em vez de duplicar — consistente com ensureMonthlyBillings.
  */
 export async function includeClientInMonth(formData: FormData): Promise<ActionResult> {
-  const viewer = await requirePermission("recebimentos.editar");
+  const viewer = await tryPermission("recebimentos.editar");
+  if (!viewer) return NO_PERMISSION;
   try {
     const comp = clean(formData.get("competence")) ?? ""; // "YYYY-MM"
     const [cy, cm] = comp.split("-").map(Number);
     const paid = formData.get("paid") === "true";
-    if (paid) await requirePermission("recebimentos.registrar_pagamento");
+    if (paid && !(await tryPermission("recebimentos.registrar_pagamento")))
+      return NO_PERMISSION;
 
     const client = await prisma.client.findFirst({
       where: { id: String(formData.get("clientId") ?? "") },
@@ -426,7 +456,7 @@ export async function registerBillingPaymentsBulk(
   ids: string[],
   opts: { mode: "due" | "single"; paidAt?: string; method: string; accountId?: string | null }
 ): Promise<ActionResult> {
-  await requirePermission("recebimentos.registrar_pagamento");
+  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
   try {
     const unique = Array.from(new Set(ids.filter(Boolean)));
     if (unique.length === 0) return { ok: false, error: "Nenhuma cobrança selecionada." };
@@ -515,7 +545,8 @@ export async function cancelBilling(
   id: string,
   reason?: string | null
 ): Promise<ActionResult> {
-  const viewer = await requirePermission("recebimentos.excluir");
+  const viewer = await tryPermission("recebimentos.excluir");
+  if (!viewer) return NO_PERMISSION;
   try {
     const b = await prisma.billing.findUnique({ where: { id } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -558,7 +589,8 @@ export async function cancelBillingsBulk(
   ids: string[],
   reason?: string | null
 ): Promise<ActionResult> {
-  const viewer = await requirePermission("recebimentos.excluir");
+  const viewer = await tryPermission("recebimentos.excluir");
+  if (!viewer) return NO_PERMISSION;
   try {
     const unique = Array.from(new Set(ids.filter(Boolean)));
     if (unique.length === 0) return { ok: false, error: "Nenhuma cobrança selecionada." };
@@ -633,7 +665,8 @@ export async function cancelBillingsBulk(
 
 /** Recoloca no ciclo do mês uma cobrança removida por engano. */
 export async function restoreBilling(id: string): Promise<ActionResult> {
-  const viewer = await requirePermission("recebimentos.excluir");
+  const viewer = await tryPermission("recebimentos.excluir");
+  if (!viewer) return NO_PERMISSION;
   try {
     const b = await prisma.billing.findUnique({ where: { id } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -672,7 +705,7 @@ export async function registerBillingContact(
   channel: "whatsapp" | "copia",
   excerpt: string
 ): Promise<ActionResult> {
-  await requirePermission("recebimentos.gerar_cobranca");
+  if (!(await tryPermission("recebimentos.gerar_cobranca"))) return NO_PERMISSION;
   try {
     const b = await prisma.billing.findUnique({ where: { id: billingId } });
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
@@ -706,7 +739,7 @@ export async function rescheduleBilling(
   id: string,
   formData: FormData
 ): Promise<ActionResult> {
-  await requirePermission("recebimentos.alterar_vencimento");
+  if (!(await tryPermission("recebimentos.alterar_vencimento"))) return NO_PERMISSION;
   try {
     const newDue = parseDateBR(String(formData.get("dueDate") ?? ""));
     if (!newDue) return { ok: false, error: "Informe a nova data de vencimento." };
@@ -751,7 +784,7 @@ const NoteSchema = z.object({
 });
 
 export async function addCollectionNote(formData: FormData): Promise<ActionResult> {
-  await requirePermission("recebimentos.gerar_cobranca");
+  if (!(await tryPermission("recebimentos.gerar_cobranca"))) return NO_PERMISSION;
   try {
     const parsed = NoteSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),

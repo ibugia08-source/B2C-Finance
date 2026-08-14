@@ -200,45 +200,11 @@ export async function cancelContract(id: string): Promise<ActionResult> {
   }
 }
 
-/**
- * Renova o contrato por N meses:
- * estende endDate/renewalDate a partir do maior entre hoje e o fim atual,
- * soma o novo período ao TCV e reativa o contrato.
- */
-export async function renewContract(
-  id: string,
-  formData: FormData
-): Promise<ActionResult> {
-  await requirePermission("contratos.editar");
-  try {
-    const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
-    const c = await prisma.contract.findUnique({ where: { id } });
-    if (!c) return { ok: false, error: "Contrato não encontrado." };
-
-    const base = c.endDate && c.endDate > new Date() ? c.endDate : new Date();
-    const newEnd = new Date(base);
-    newEnd.setMonth(newEnd.getMonth() + months);
-
-    await prisma.contract.update({
-      where: { id },
-      data: {
-        status: "ACTIVE",
-        endDate: c.endDate ? newEnd : null, // contrato sem fim continua sem fim
-        renewalDate: newEnd,
-        totalValue: Number(c.totalValue) + Number(c.monthlyValue) * months,
-        canceledAt: null,
-      },
-    });
-    revalidateContracts(c.clientId);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? "Falha ao renovar o contrato." };
-  }
-}
-
-// A renovação pela carteira/Gestão do Mês vive agora em
-// src/lib/actions/renewals.ts (renewClientFlow) — fluxo completo com
-// lançamento em competência escolhida e histórico em ClientRenewal.
+// A renovação de contrato vive SOMENTE em src/lib/actions/renewals.ts
+// (renewClientFlow) — fluxo completo com modalidade, lançamento em
+// competência escolhida e histórico em ClientRenewal. O renewContract
+// legado (estendia sem registrar ClientRenewal nem atualizar o cadastro)
+// foi removido na auditoria de 2026-08-13; recuperável no git se preciso.
 
 export async function deleteContract(id: string): Promise<ActionResult> {
   await requirePermission("contratos.excluir");
