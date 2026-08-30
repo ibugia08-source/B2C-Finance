@@ -101,8 +101,14 @@ cada tabela de negócio, provando que estão zeradas.
 ## Passo 5 — Subir o sistema
 
 ```bash
-npm run dev     # http://localhost:3000
+npm run dev     # http://localhost:3100
 ```
+
+> **Por que 3100 e não 3000?** A porta 3000 já é usada por outro projeto nesta
+> máquina (`actus-hub-onboarding`). O `npm run dev` do B2C Finance está fixado em
+> **3100** no `package.json` para os dois rodarem ao mesmo tempo, sem conflito.
+> Para servir o build de produção localmente use `npm run start:local` (também
+> na 3100) — o `npm start` continua sem porta fixa, como a Vercel espera.
 
 Login: o `ADMIN_EMAIL` e o `ADMIN_PASSWORD` que você definiu no `.env`.
 O sistema abre **completo e vazio** — todos os 19 módulos, zero dados.
@@ -174,6 +180,6 @@ terminar.
 | `npm run db:migrate:deploy` | aplica as migrations (cria as 55 tabelas) |
 | `npm run db:seed:dev` | admin + categorias + regras · **zero dados de negócio** |
 | `npm run db:seed` | seed completo, **com** pessoas e cartões de exemplo (não use em dev limpo) |
-| `npm run dev` | sobe o sistema em http://localhost:3000 |
+| `npm run dev` | sobe o sistema em http://localhost:3100 |
 | `npm run build:ci` | valida typecheck + build (obrigatório antes de commitar) |
 | `npm run prisma:studio` | inspeciona o banco numa interface visual |

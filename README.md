@@ -31,7 +31,7 @@ importação de faturas XLSX/PDF), relatórios e assistente de IA.
 npm install
 cp .env.example .env   # preencher POSTGRES_PRISMA_URL, SESSION_SECRET etc.
 npm run db:seed        # requer ADMIN_PASSWORD definido
-npm run dev            # http://localhost:3000
+npm run dev            # http://localhost:3100
 ```
 
 ### Variáveis obrigatórias
