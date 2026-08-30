@@ -37,7 +37,7 @@ export function AppShell({
       <div className="flex min-h-screen app-shell">
         <SidebarWithToggle
           user={user}
-          defaultExpanded={false}
+          defaultExpanded={true}
           responsive={true}
           mobileVariant="drawer"
           mobileOpen={mobileMenuOpen}
@@ -45,12 +45,13 @@ export function AppShell({
         />
         <main
           key={path}
-          // Aproveitamento máximo da tela: largura TOTAL (sem max-w) e margens
-          // enxutas — o conteúdo ocupa o espaço, não o respiro em volta.
+          // Conteúdo contido (max-w) e centralizado: em monitores largos a
+          // linha de leitura não estica de ponta a ponta — tabelas continuam
+          // com todo o espaço útil de que precisam.
           // pb-24 no mobile abre espaço para a tab bar inferior.
           className="page-enter flex-1 p-3 sm:p-4 md:p-5 lg:p-6 pb-24 md:pb-6 w-full min-w-0"
         >
-          {children}
+          <div className="mx-auto w-full max-w-[1560px]">{children}</div>
         </main>
       </div>
       <MobileNav user={user} />

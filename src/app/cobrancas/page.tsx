@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";
+import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import {
@@ -328,7 +328,6 @@ export default async function RecebimentosPage({
   const chargeRows = baseRows.filter((r) => r.billingId && r.cycleStatus !== "REMOVED");
   const paidOf = (r: Row) => r.amountDue - r.openAmount;
   // A receber = o que ainda não foi pago no mês (a vencer + vencido).
-  const kAReceber = chargeRows.reduce((s, r) => s + r.openAmount, 0);
   const kRecebido = chargeRows.reduce((s, r) => s + paidOf(r), 0);
   const kAVencer = chargeRows
     .filter((r) => r.cycleStatus === "UPCOMING" || r.cycleStatus === "PARTIAL")
@@ -380,11 +379,13 @@ export default async function RecebimentosPage({
 
   // Filtros enxutos: variações de "pago" (com atraso / outro mês) continuam
   // visíveis no status de cada linha e acessíveis por link direto (?st=).
-  const CHIPS: { label: string; st: string }[] = [
+  // Reconstrução 29/08: os chips carregam o VALOR — substituem o painel de
+  // 5 cards que duplicava o resumo do mês com números quase iguais.
+  const CHIPS: { label: string; st: string; value?: string }[] = [
     { label: "Todos", st: "" },
-    { label: "A vencer", st: "UPCOMING" },
-    { label: "Pagos", st: "PAID" },
-    { label: "Vencidos", st: "OVERDUE" },
+    { label: "A vencer", st: "UPCOMING", value: formatBRL0(kAVencer) },
+    { label: "Pagos", st: "PAID", value: formatBRL0(kRecebido) },
+    { label: "Vencidos", st: "OVERDUE", value: formatBRL0(kVencido) },
     { label: "Inadimplentes", st: "DELINQUENT" },
     { label: "Sem cobrança", st: "NO_CHARGE" },
     { label: "Removidos do mês", st: "REMOVED" },
@@ -826,36 +827,32 @@ export default async function RecebimentosPage({
 
       {/* ================= CLIENTES DO MÊS ================= */}
       <section id="clientes" className="scroll-mt-20">
-      <div className="mb-2">
-        <h2 className="font-display text-lg font-semibold tracking-[-0.01em]">
-          Clientes do Mês
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Um cliente por linha, como na planilha — o status colorido registra o
-          pagamento de verdade (com Desfazer)
+      <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 className="font-display text-lg font-semibold tracking-[-0.01em]">
+            Clientes do Mês
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Um cliente por linha, como na planilha — o status colorido registra o
+            pagamento de verdade (com Desfazer)
+          </p>
+        </div>
+        <p className="text-sm text-muted-foreground tabular-nums">
+          <span className="font-semibold text-foreground">{kPagos}</span>
+          {" de "}{chargeRows.length} clientes pagos
         </p>
-      </div>
-
-      {/* ===== Painel do mês: só as 5 métricas essenciais (clicáveis) ===== */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-        <StatCard title="A receber" value={formatBRL(kAReceber)}
-          hint="ainda não pago no mês" href={chipHref({})} />
-        <StatCard title="Recebido" value={formatBRL(kRecebido)} intent="positive"
-          href={chipHref({ st: "PAID" })} />
-        <StatCard title="A vencer" value={formatBRL(kAVencer)} intent="warning"
-          href={chipHref({ st: "UPCOMING" })} />
-        <StatCard title="Vencido" value={formatBRL(kVencido)}
-          intent={kVencido > 0 ? "negative" : "default"}
-          href={chipHref({ st: "OVERDUE" })} />
-        <StatCard title="Clientes pagos" value={String(kPagos)} intent="positive"
-          href={chipHref({ st: "PAID" })} />
       </div>
 
       {/* ===== Chips de status + Mais filtros ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
         {CHIPS.map((c) => (
           <Link key={c.label} href={chipHref({ st: c.st })}>
-            <Badge variant={stFilter === c.st ? "default" : "outline"}>{c.label}</Badge>
+            <Badge variant={stFilter === c.st ? "default" : "outline"}>
+              {c.label}
+              {c.value != null && (
+                <span className="ml-1.5 font-normal opacity-75 tabular-nums">{c.value}</span>
+              )}
+            </Badge>
           </Link>
         ))}
         <span className="mx-1 h-4 w-px bg-border" aria-hidden />

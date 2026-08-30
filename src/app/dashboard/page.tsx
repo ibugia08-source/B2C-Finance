@@ -46,6 +46,7 @@ import { PersonalDashboard } from "./personal-dashboard";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   XCircle,
   Sparkles,
 } from "lucide-react";
@@ -184,8 +185,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description={`Visão geral do financeiro da B2C Gestão · ${period.label}`}
+        title="Início"
+        description={`O essencial do mês — números oficiais, alertas e tendência · ${period.label}`}
       />
 
       <div className="mb-3 print:hidden flex items-center justify-between gap-3 flex-wrap">
@@ -263,25 +264,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         />
       </div>
 
-      {/* ===== Gráficos principais — Faturamento · Despesas · Resultado (ano) ===== */}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Evolução em {selectedYear}
-      </h2>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
-        <MainChart title="Faturamento"
-          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.faturamento[i] }))}
-          color="hsl(var(--primary))" selectedIndex={selectedMonthIndex} />
-        <MainChart title="Despesas"
-          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.despesas[i] }))}
-          color="hsl(var(--warning))" selectedIndex={selectedMonthIndex} />
-        <MainChart title="Resultado mensal" variant="bar" diverging
-          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.resultado[i] }))}
-          selectedIndex={selectedMonthIndex} />
-      </div>
-
       {/* ===== Alertas discretos ===== */}
       {alerts.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-3">
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4">
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
               <AlertTriangle className="h-3.5 w-3.5" /> Atenção
@@ -347,115 +332,144 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         </Card>
       </div>
 
-      {/* ===== Indicadores gerenciais agrupados ===== */}
+      {/* ===== Gráficos principais — Faturamento · Despesas · Resultado (ano) ===== */}
       <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Indicadores gerenciais
+        Evolução em {selectedYear}
       </h2>
-
-      {/* Grupo: Receita */}
-      <p className="text-xs font-medium text-foreground mb-2">Receita</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-        <SecondaryStat label="% Realização" value={previsto > 0 ? `${Math.round((recebido / previsto) * 100)}%` : "—"}
-          help="Quanto do faturamento previsto do mês já virou dinheiro recebido — a régua central da gestão mensal."
-          tone={previsto <= 0 ? "default" : recebido / previsto >= 0.9 ? "pos" : recebido / previsto >= 0.6 ? "default" : "neg"} />
-        <SecondaryStat label="Faturamento MRR" value={formatBRL(M.mrr)}
-          help="Soma dos valores mensais dos clientes MRR ativos no mês."
-          delta={mrrDelta}
-          detailTitle="Clientes MRR do mês"
-          detail={<NamedValueList items={mrrClientsDetail} total={M.mrr} totalLabel="Total MRR" valueSuffix="/mês" emptyText="Nenhum cliente MRR ativo." />} />
-        <SecondaryStat label="Faturamento TCV" value={formatBRL(M.tcv)}
-          help="Soma dos contratos TCV com fechamento, entrada ou renovação no mês. Não é rateado."
-          delta={tcvDelta}
-          detailTitle="Clientes TCV do mês"
-          detail={<NamedValueList items={tcvClientsDetail} total={M.tcv} totalLabel="Total TCV" emptyText="Nenhum TCV no mês." />} />
-        <SecondaryStat label="Receita de novos clientes" value={formatBRL(newClients.revenue)}
-          help="Receita dos clientes que entraram no mês (MRR = valor mensal; TCV = valor total do contrato)."
-          tone={newClients.revenue > 0 ? "pos" : "default"}
-          detailTitle="Novos clientes do mês"
-          detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
-        <SecondaryStat label="Ticket médio geral"
-          value={clientsBlock.ativos > 0 ? formatBRL(ticketMedioGeral) : "—"}
-          help="Faturamento total dividido pela quantidade de clientes ativos no mês."
-          hint={`${clientsBlock.ativos} ativo(s)`} />
-        <SecondaryStat label="% Recorrência" value={`${recorrenciaPct}%`}
-          help="Percentual do faturamento que vem de MRR (MRR / Faturamento total). Mede a previsibilidade da receita."
-          tone={recorrenciaPct >= 60 ? "pos" : recorrenciaPct >= 40 ? "warn" : "neg"} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+        <MainChart title="Faturamento"
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.faturamento[i] }))}
+          color="hsl(var(--primary))" selectedIndex={selectedMonthIndex} />
+        <MainChart title="Despesas"
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.despesas[i] }))}
+          color="hsl(var(--warning))" selectedIndex={selectedMonthIndex} />
+        <MainChart title="Resultado mensal" variant="bar" diverging
+          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.resultado[i] }))}
+          selectedIndex={selectedMonthIndex} />
       </div>
 
-      {/* Grupo: Clientes */}
-      <p className="text-xs font-medium text-foreground mb-2">Clientes</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-        <SecondaryStat label="Clientes ativos" value={String(clientsBlock.ativos)}
-          help="Quantidade total de clientes ativos no mês selecionado." />
-        <SecondaryStat label="Novos clientes" value={String(newClients.count)}
-          help="Clientes que entraram no mês (por data de entrada; fallback: data de cadastro)."
-          tone={newClients.count > 0 ? "pos" : "default"}
-          detailTitle="Novos clientes do mês"
-          detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
-        <SecondaryStat label="Renovações do mês" value={String(renewalClientsDetail.length)}
-          help="Clientes cujo mês de renovação é o mês selecionado."
-          tone={renewalClientsDetail.length > 0 ? "warn" : "default"}
-          detailTitle="Renovações do mês"
-          detail={<NamedValueList items={renewalClientsDetail} emptyText="Nenhuma renovação neste mês." />} />
-        <SecondaryStat label="Churn (mês)" value={String(churn.count)}
-          help="Clientes perdidos no mês."
-          tone={churn.count > 0 ? "neg" : "pos"}
-          hint={churn.value > 0 ? `${formatBRL(churn.value)} de receita perdida` : undefined} />
-        <SecondaryStat label="Clientes em aberto" value={String(clientsBlock.devendoMes)}
-          help="Clientes ativos ainda sem pagamento registrado no mês."
-          tone={clientsBlock.devendoMes > 0 ? "neg" : "pos"} />
-      </div>
+      {/* ===== Todos os indicadores (recolhido por padrão) =====
+          Reconstrução 29/08: a página aberta mostra só o essencial — os 5
+          números oficiais, alertas, saúde e evolução. Os 16 indicadores
+          gerenciais + composições moram aqui, a um clique, sem gritar. */}
+      <details className="group rounded-xl border bg-card">
+        <summary className="flex cursor-pointer select-none list-none items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+          <span className="text-sm font-medium">
+            Todos os indicadores do mês
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              receita · clientes · eficiência · composição
+            </span>
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+        </summary>
+        <div className="border-t px-5 pt-5 pb-5">
+          {/* ===== Indicadores gerenciais agrupados ===== */}
 
-      {/* Grupo: Eficiência */}
-      <p className="text-xs font-medium text-foreground mb-2">Eficiência</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
-        <SecondaryStat label="Custo por cliente"
-          value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
-          help="Total de despesas dividido pela quantidade de clientes ativos no mês."
-          hint={`${clientsBlock.ativos} ativo(s)`} />
-        <SecondaryStat label="% Folha no faturamento" value={`${folhaPct}%`}
-          help="Quanto a folha representa sobre o faturamento total do mês."
-          tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
-        <SecondaryStat label="Margem operacional" value={`${margemPct}%`}
-          help="Resultado do mês dividido pelo faturamento recebido."
-          tone={margemPct >= 20 ? "pos" : margemPct >= 0 ? "warn" : "neg"} />
-        <SecondaryStat label="Inadimplência (vencido)" value={formatBRL(vencido)}
-          help="Parte do em aberto do mês que já passou da data de vencimento."
-          tone={vencido > 0 ? "neg" : "pos"} />
-        <SecondaryStat label="Upsell em aberto" value={formatBRL(upsell.openValue)}
-          help="Valor das oportunidades de upsell em aberto."
-          hint={`${upsell.openCount} oportunidade(s)`} />
-      </div>
+          {/* Grupo: Receita */}
+          <p className="text-xs font-medium text-foreground mb-2">Receita</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            <SecondaryStat label="% Realização" value={previsto > 0 ? `${Math.round((recebido / previsto) * 100)}%` : "—"}
+              help="Quanto do faturamento previsto do mês já virou dinheiro recebido — a régua central da gestão mensal."
+              tone={previsto <= 0 ? "default" : recebido / previsto >= 0.9 ? "pos" : recebido / previsto >= 0.6 ? "default" : "neg"} />
+            <SecondaryStat label="Faturamento MRR" value={formatBRL(M.mrr)}
+              help="Soma dos valores mensais dos clientes MRR ativos no mês."
+              delta={mrrDelta}
+              detailTitle="Clientes MRR do mês"
+              detail={<NamedValueList items={mrrClientsDetail} total={M.mrr} totalLabel="Total MRR" valueSuffix="/mês" emptyText="Nenhum cliente MRR ativo." />} />
+            <SecondaryStat label="Faturamento TCV" value={formatBRL(M.tcv)}
+              help="Soma dos contratos TCV com fechamento, entrada ou renovação no mês. Não é rateado."
+              delta={tcvDelta}
+              detailTitle="Clientes TCV do mês"
+              detail={<NamedValueList items={tcvClientsDetail} total={M.tcv} totalLabel="Total TCV" emptyText="Nenhum TCV no mês." />} />
+            <SecondaryStat label="Receita de novos clientes" value={formatBRL(newClients.revenue)}
+              help="Receita dos clientes que entraram no mês (MRR = valor mensal; TCV = valor total do contrato)."
+              tone={newClients.revenue > 0 ? "pos" : "default"}
+              detailTitle="Novos clientes do mês"
+              detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
+            <SecondaryStat label="Ticket médio geral"
+              value={clientsBlock.ativos > 0 ? formatBRL(ticketMedioGeral) : "—"}
+              help="Faturamento total dividido pela quantidade de clientes ativos no mês."
+              hint={`${clientsBlock.ativos} ativo(s)`} />
+            <SecondaryStat label="% Recorrência" value={`${recorrenciaPct}%`}
+              help="Percentual do faturamento que vem de MRR (MRR / Faturamento total). Mede a previsibilidade da receita."
+              tone={recorrenciaPct >= 60 ? "pos" : recorrenciaPct >= 40 ? "warn" : "neg"} />
+          </div>
 
-      {/* ===== Análises complementares ===== */}
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-        Análises complementares · {period.label}
-      </h2>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard title="Composição do faturamento" hint="MRR · TCV · Receita Extra">
-          <CompositionDonut
-            data={[
-              { label: "MRR", value: M.mrr, color: "hsl(var(--primary))" },
-              { label: "TCV", value: M.tcv, color: "hsl(262 60% 58%)" },
-              { label: "Receita Extra", value: M.extraManual, color: "hsl(var(--muted-foreground))" },
-            ]}
-          />
-        </ChartCard>
-        <ChartCard title="Despesas por categoria" hint="no período">
-          <HBarList colorClass="bg-primary" items={expensesByCategory.slice(0, 6)} />
-        </ChartCard>
-        <ChartCard title="Novos clientes × renovações" hint="quantidade no mês">
-          <HBarList
-            colorClass="bg-primary"
-            format={(v: number) => String(Math.round(v))}
-            emptyText="Sem movimento de clientes no mês."
-            items={[
-              { label: "Novos clientes", value: newClients.count },
-              { label: "Renovações", value: renewalClientsDetail.length },
-            ]}
-          />
-        </ChartCard>
-      </div>
+          {/* Grupo: Clientes */}
+          <p className="text-xs font-medium text-foreground mb-2">Clientes</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+            <SecondaryStat label="Clientes ativos" value={String(clientsBlock.ativos)}
+              help="Quantidade total de clientes ativos no mês selecionado." />
+            <SecondaryStat label="Novos clientes" value={String(newClients.count)}
+              help="Clientes que entraram no mês (por data de entrada; fallback: data de cadastro)."
+              tone={newClients.count > 0 ? "pos" : "default"}
+              detailTitle="Novos clientes do mês"
+              detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
+            <SecondaryStat label="Renovações do mês" value={String(renewalClientsDetail.length)}
+              help="Clientes cujo mês de renovação é o mês selecionado."
+              tone={renewalClientsDetail.length > 0 ? "warn" : "default"}
+              detailTitle="Renovações do mês"
+              detail={<NamedValueList items={renewalClientsDetail} emptyText="Nenhuma renovação neste mês." />} />
+            <SecondaryStat label="Churn (mês)" value={String(churn.count)}
+              help="Clientes perdidos no mês."
+              tone={churn.count > 0 ? "neg" : "pos"}
+              hint={churn.value > 0 ? `${formatBRL(churn.value)} de receita perdida` : undefined} />
+            <SecondaryStat label="Clientes em aberto" value={String(clientsBlock.devendoMes)}
+              help="Clientes ativos ainda sem pagamento registrado no mês."
+              tone={clientsBlock.devendoMes > 0 ? "neg" : "pos"} />
+          </div>
+
+          {/* Grupo: Eficiência */}
+          <p className="text-xs font-medium text-foreground mb-2">Eficiência</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
+            <SecondaryStat label="Custo por cliente"
+              value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
+              help="Total de despesas dividido pela quantidade de clientes ativos no mês."
+              hint={`${clientsBlock.ativos} ativo(s)`} />
+            <SecondaryStat label="% Folha no faturamento" value={`${folhaPct}%`}
+              help="Quanto a folha representa sobre o faturamento total do mês."
+              tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
+            <SecondaryStat label="Margem operacional" value={`${margemPct}%`}
+              help="Resultado do mês dividido pelo faturamento recebido."
+              tone={margemPct >= 20 ? "pos" : margemPct >= 0 ? "warn" : "neg"} />
+            <SecondaryStat label="Inadimplência (vencido)" value={formatBRL(vencido)}
+              help="Parte do em aberto do mês que já passou da data de vencimento."
+              tone={vencido > 0 ? "neg" : "pos"} />
+            <SecondaryStat label="Upsell em aberto" value={formatBRL(upsell.openValue)}
+              help="Valor das oportunidades de upsell em aberto."
+              hint={`${upsell.openCount} oportunidade(s)`} />
+          </div>
+          {/* ===== Análises complementares ===== */}
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
+            Análises complementares · {period.label}
+          </h2>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <ChartCard title="Composição do faturamento" hint="MRR · TCV · Receita Extra">
+              <CompositionDonut
+                data={[
+                  { label: "MRR", value: M.mrr, color: "hsl(var(--primary))" },
+                  { label: "TCV", value: M.tcv, color: "hsl(262 60% 58%)" },
+                  { label: "Receita Extra", value: M.extraManual, color: "hsl(var(--muted-foreground))" },
+                ]}
+              />
+            </ChartCard>
+            <ChartCard title="Despesas por categoria" hint="no período">
+              <HBarList colorClass="bg-primary" items={expensesByCategory.slice(0, 6)} />
+            </ChartCard>
+            <ChartCard title="Novos clientes × renovações" hint="quantidade no mês">
+              <HBarList
+                colorClass="bg-primary"
+                format={(v: number) => String(Math.round(v))}
+                emptyText="Sem movimento de clientes no mês."
+                items={[
+                  { label: "Novos clientes", value: newClients.count },
+                  { label: "Renovações", value: renewalClientsDetail.length },
+                ]}
+              />
+            </ChartCard>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

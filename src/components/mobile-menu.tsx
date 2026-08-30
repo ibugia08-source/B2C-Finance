@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useTransition } from "react";
 import { X, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { visibleNavItems, type UserLike } from "./nav-items";
+import { visibleAreas, type UserLike } from "./nav-items";
 import { B2CLogo } from "./mascot";
 import { ThemeToggle } from "./theme-toggle";
 import { logoutAction } from "@/lib/actions/auth";
@@ -27,7 +27,7 @@ export function MobileMenu({
   const [open, setOpen] = React.useState(false);
   const [pending, start] = useTransition();
   const path = usePathname();
-  const items = visibleNavItems(user);
+  const areas = visibleAreas(user);
 
   // Fecha a gaveta automaticamente ao trocar de rota.
   React.useEffect(() => {
@@ -69,26 +69,37 @@ export function MobileMenu({
             </Dialog.Close>
           </div>
 
-          {/* Navegação (rolável) */}
-          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-            {items.map((it) => {
-              const Icon = it.icon;
-              const active = path === it.href || path?.startsWith(it.href + "/");
+          {/* Navegação (rolável) — agrupada por ÁREA, como a sidebar */}
+          <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
+            {areas.map((area) => {
+              const Icon = area.icon;
               return (
-                <Link
-                  key={it.href}
-                  href={it.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 min-h-[48px] text-[15px] font-medium transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
-                      : "text-foreground/90 hover:bg-accent hover:text-accent-foreground"
-                  )}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  {it.label}
-                </Link>
+                <div key={area.key}>
+                  <p className="flex items-center gap-2 px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">
+                    <Icon className="h-3.5 w-3.5" />
+                    {area.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {area.pages.map((p) => {
+                      const active = path === p.href || path?.startsWith(p.href + "/");
+                      return (
+                        <Link
+                          key={p.href}
+                          href={p.href}
+                          onClick={() => setOpen(false)}
+                          className={cn(
+                            "flex items-center rounded-lg px-3 min-h-[44px] text-[15px] font-medium transition-colors",
+                            active
+                              ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20"
+                              : "text-foreground/90 hover:bg-accent hover:text-accent-foreground"
+                          )}
+                        >
+                          {p.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
           </nav>

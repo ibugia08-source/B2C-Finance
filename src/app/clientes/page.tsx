@@ -14,7 +14,6 @@ import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
 import { KpiCard } from "./kpi-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
-import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { MonthNav } from "@/components/month-nav";
 import { PageSizeSelect } from "./page-size-select";
 import { PAGE_SIZES, MONTH_LABEL } from "./_meta";
@@ -358,11 +357,6 @@ export default async function ClientesPage({
             {canCreateClient && <ClientDialog />}
           </div>
         }
-      />
-
-      <CobrancasTabs
-        active="/clientes"
-        showInadimplencia={can(viewer, "recebimentos.ver_inadimplencia")}
       />
 
       {!isCurrentMonth && (
