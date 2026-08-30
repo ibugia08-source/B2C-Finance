@@ -33,7 +33,42 @@ clientes**.
 
 ---
 
-## Passo 1 — Criar o projeto Supabase de desenvolvimento
+## Opção rápida — Postgres local, sem instalar nada (EM USO)
+
+Este é o ambiente montado em 29/08/2026 e o que está rodando hoje. Usa um
+Postgres real baixado por npm (`embedded-postgres`), fora do repositório, em
+`../.devdb`. Não exige Docker, Homebrew nem conta na nuvem.
+
+```bash
+# 1. Banco local (deixe este terminal aberto — é o servidor do banco)
+cd ~/Desktop/B2C-FINANCE/.devdb && node start-db.mjs
+
+# 2. Aplicação, em outro terminal
+cd ~/Desktop/B2C-FINANCE/bugia-Finance && npm run dev
+```
+
+- Banco: `postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_dev`
+- Dados persistem em `../.devdb/data` entre reinícios.
+- O `.env` do repositório já aponta para ele; o de produção ficou guardado
+  em `.env.producao.backup`.
+
+> **Detalhe que quebra a instalação em Postgres puro:** a migration
+> `20260724000000_security_rls_login_throttle` faz
+> `REVOKE ... FROM anon, authenticated` — roles que existem no Supabase mas não
+> num Postgres comum. O `start-db.mjs init` cria as duas antes de migrar. Sem
+> isso, `db:migrate:deploy` falha com *role "anon" does not exist*.
+
+Para recriar do zero: apague `../.devdb/data`, rode `node start-db.mjs init` e
+depois `npm run db:migrate:deploy && npm run db:seed:dev`.
+
+Limitação: é local. Para ter **preview online** na Vercel, siga a opção Supabase
+abaixo.
+
+---
+
+## Opção com nuvem — Supabase (necessária para preview online)
+
+### Passo 1 — Criar o projeto Supabase de desenvolvimento
 
 1. Acesse [supabase.com/dashboard](https://supabase.com/dashboard) → **New project**.
 2. Preencha:
