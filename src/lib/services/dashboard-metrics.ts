@@ -429,7 +429,9 @@ const FIXAS_SOBRE_RECEITA_LIMITE = 0.6;
 export function computeHealth(
   finance: FinanceSummary,
   cash: CashSummary,
-  inadimplenciaTaxa: number
+  inadimplenciaTaxa: number,
+  /** Churn do mês corrente: perdas ÷ ativos (0-1). Opcional por compatibilidade. */
+  churnRate?: number
 ): Health {
   let score = 100;
   const fatores: { ok: boolean; text: string }[] = [];
@@ -452,6 +454,15 @@ export function computeHealth(
   if (inadimplenciaTaxa > INADIMPLENCIA_ALTA) hit(15, `Inadimplência alta: ${inadPct}% do que está em aberto já venceu`);
   else if (inadimplenciaTaxa > INADIMPLENCIA_ATENCAO) hit(8, `Inadimplência em ${inadPct}% do aberto — atenção`);
   else ok(`Inadimplência controlada (${inadPct}%)`);
+
+  // Churn — a auditoria de 2026 mostrou perdas de até 28%/mês passando
+  // despercebidas pelo score. Limiares: >10% crítico · >5% atenção.
+  if (churnRate != null) {
+    const churnPct = Math.round(churnRate * 100);
+    if (churnRate > 0.1) hit(20, `Churn de ${churnPct}% no mês — a base está encolhendo rápido`);
+    else if (churnRate > 0.05) hit(10, `Churn de ${churnPct}% no mês — acima do saudável (5%)`);
+    else ok(`Churn controlado (${churnPct}% no mês)`);
+  }
 
   const folhaPct = Math.round(finance.folhaSobreReceita * 100);
   if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_CRITICA) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
@@ -618,7 +629,11 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
       }),
     ]);
 
-  const health = computeHealth(finance, cash, kpis.inadimplenciaTaxa);
+  const churnRate =
+    clients.ativos + losses.currentMonth.count > 0
+      ? losses.currentMonth.count / (clients.ativos + losses.currentMonth.count)
+      : 0;
+  const health = computeHealth(finance, cash, kpis.inadimplenciaTaxa, churnRate);
 
   // --- Alertas ---
   const alerts: DashAlert[] = [];

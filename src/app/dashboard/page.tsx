@@ -354,7 +354,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
 
       {/* Grupo: Receita */}
       <p className="text-xs font-medium text-foreground mb-2">Receita</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+        <SecondaryStat label="% Realização" value={previsto > 0 ? `${Math.round((recebido / previsto) * 100)}%` : "—"}
+          help="Quanto do faturamento previsto do mês já virou dinheiro recebido — a régua central da gestão mensal."
+          tone={previsto <= 0 ? "default" : recebido / previsto >= 0.9 ? "pos" : recebido / previsto >= 0.6 ? "default" : "neg"} />
         <SecondaryStat label="Faturamento MRR" value={formatBRL(M.mrr)}
           help="Soma dos valores mensais dos clientes MRR ativos no mês."
           delta={mrrDelta}

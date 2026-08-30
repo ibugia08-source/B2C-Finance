@@ -20,7 +20,15 @@ export type OwnerContext = {
   bypass?: boolean;
 };
 
-const storage = new AsyncLocalStorage<OwnerContext>();
+// SINGLETON GLOBAL de propósito: em dev o bundler pode instanciar este
+// módulo mais de uma vez (camadas de compilação distintas). Com duas
+// instâncias, runWithOwner escreve num AsyncLocalStorage e a extensão do
+// Prisma lê noutro — dentro de unstable_cache (onde cookies() lança) o
+// escopo caía no fail-closed e TODA métrica cacheada zerava. Ancorar o
+// storage em globalThis garante UMA instância por processo (produção
+// já era única; segue idêntica).
+const g = globalThis as unknown as { __b2cOwnerScope?: AsyncLocalStorage<OwnerContext> };
+const storage = (g.__b2cOwnerScope ??= new AsyncLocalStorage<OwnerContext>());
 
 /**
  * Executa `fn` com um dono fixado (jobs sem sessão, testes, migração).
