@@ -5,92 +5,127 @@
 
 @layer base {
   :root {
-    /* B2C Finance — claro (experiência principal · identidade B2C Gestão) */
-    --background: 210 40% 98%;         /* #F8FAFC cinza muito claro */
-    --foreground: 222 47% 11%;         /* #0F172A */
+    /* B2C Finance 2 — claro "Porcelana & Esmeralda" (identidade 30/08) */
+    --background: 160 24% 97%;          /* porcelana com respiro verde */
+    --foreground: 182 26% 10%;          /* grafite esverdeado profundo */
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 182 26% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 182 26% 10%;
 
-    --primary: 212 75% 47%;           /* azul B2C #1E70D3 */
+    --primary: 172 68% 25%;             /* esmeralda profunda */
     --primary-foreground: 0 0% 100%;
-    --primary-active: 212 75% 38%;     /* #195FB5 press-state */
-    --primary-disabled: 212 55% 78%;   /* #A8C7EA azul esmaecido */
+    --primary-active: 172 72% 19%;      /* press-state */
+    --primary-disabled: 170 28% 72%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 13%;
+    --secondary: 164 22% 94%;
+    --secondary-foreground: 182 26% 12%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 42%;   /* #64748B */
+    --muted: 164 20% 93%;
+    --muted-foreground: 176 10% 38%;
 
-    --accent: 213 100% 96%;            /* #EAF3FF azul claríssimo */
-    --accent-foreground: 212 70% 30%;
+    --accent: 168 44% 93%;              /* wash esmeralda claríssimo */
+    --accent-foreground: 172 62% 19%;
 
-    --destructive: 0 74% 50%;          /* #DC2626 */
+    --destructive: 4 72% 46%;
     --destructive-foreground: 0 0% 100%;
 
     /* Semânticos de estado — discretos (badges/textos usam tons suaves) */
-    --success: 152 60% 36%;            /* verde sóbrio */
-    --success-soft: 150 60% 95%;
-    --warning: 35 92% 44%;             /* âmbar sóbrio */
-    --warning-soft: 45 95% 94%;
+    --success: 152 58% 32%;
+    --success-soft: 150 55% 93%;
+    --warning: 36 92% 40%;
+    --warning-soft: 45 92% 92%;
 
-    --border: 214 32% 91%;             /* #E2E8F0 */
-    --border-soft: 220 20% 94%;        /* divisor mais leve (linhas de tabela) */
-    --input: 214 32% 91%;
-    --ring: 212 75% 47%;
+    --border: 164 16% 87%;
+    --border-soft: 164 16% 91%;         /* divisor mais leve (linhas de tabela) */
+    --input: 164 16% 83%;
+    --ring: 172 68% 30%;
 
     /* Superfícies de apoio (busca pill, botões secundários, plates de ícone) */
-    --surface-soft: 210 30% 97%;
-    --surface-strong: 210 24% 94%;
+    --surface-soft: 162 22% 95.5%;
+    --surface-strong: 162 18% 92%;
 
-    --radius: 0.75rem;                 /* escala coerente: lg=12 · md=10 · sm=8 */
+    --radius: 0.625rem;                 /* escala mais afiada: lg=10 · md=8 · sm=6 */
   }
 
   .dark {
-    /* B2C Finance — escuro (otimizado para legibilidade + WCAG AA) */
-    --background: 240 15% 3.5%;        /* #0B0D14 muito profundo */
-    --foreground: 210 11% 96.5%;       /* #F5F6FA branco puro */
+    /* B2C Finance 2 — escuro "Abissal" (verde-negro + esmeralda viva) */
+    --background: 186 26% 6%;
+    --foreground: 160 14% 95%;
 
-    --card: 240 14% 9%;                /* #141820 grafite profundo */
-    --card-foreground: 210 11% 96.5%;
+    --card: 184 20% 9%;
+    --card-foreground: 160 14% 95%;
 
-    --popover: 240 14% 9%;
-    --popover-foreground: 210 11% 96.5%;
+    --popover: 184 20% 9%;
+    --popover-foreground: 160 14% 95%;
 
-    --primary: 211 89% 62%;            /* #3B82F6 azul vivo + legível */
-    --primary-foreground: 0 0% 100%;
-    --primary-active: 211 80% 52%;
-    --primary-disabled: 211 40% 32%;
+    --primary: 163 60% 52%;             /* esmeralda viva */
+    --primary-foreground: 186 40% 7%;   /* tinta escura sobre o verde */
+    --primary-active: 163 62% 44%;
+    --primary-disabled: 168 24% 27%;
 
-    --secondary: 240 10% 15%;          /* #252A33 painel suave */
-    --secondary-foreground: 210 11% 96.5%;
+    --secondary: 182 15% 14%;
+    --secondary-foreground: 160 14% 95%;
 
-    --muted: 240 12% 22%;              /* #363D4A textura media */
-    --muted-foreground: 210 9% 68%;    /* #A8AFB8 cinza legível */
+    --muted: 182 13% 18%;
+    --muted-foreground: 168 9% 66%;
 
-    --accent: 217 24% 17%;             /* hover sutil (tinta azulada discreta) */
-    --accent-foreground: 210 11% 96.5%;
+    --accent: 174 22% 15%;              /* hover sutil esverdeado */
+    --accent-foreground: 160 14% 95%;
 
-    --destructive: 0 84% 62%;          /* #F87171 vermelho legível */
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 3 78% 60%;
+    --destructive-foreground: 186 40% 7%;
 
     /* Semânticos de estado — versões dark */
-    --success: 152 55% 52%;
-    --success-soft: 152 40% 14%;
-    --warning: 40 90% 58%;
-    --warning-soft: 42 50% 13%;
+    --success: 152 55% 50%;
+    --success-soft: 152 40% 13%;
+    --warning: 42 90% 55%;
+    --warning-soft: 42 50% 12%;
 
-    --border: 240 12% 16%;             /* #2A2F3D divisores suaves */
-    --border-soft: 240 12% 13%;
-    --input: 240 12% 16%;
-    --ring: 211 89% 65%;
+    --border: 182 15% 15%;
+    --border-soft: 182 15% 12%;
+    --input: 182 15% 17%;
+    --ring: 163 60% 55%;
 
-    --surface-soft: 240 12% 11%;
-    --surface-strong: 240 10% 15%;
+    --surface-soft: 183 18% 10.5%;
+    --surface-strong: 182 15% 14%;
+  }
+
+  /* ===== Personalização: cor de destaque (Configurações → Aparência) =====
+     O padrão é Esmeralda (tokens acima). Cada preset redefine SOMENTE os
+     tokens de destaque, no claro E no escuro — html[data-accent] (0,1,1)
+     vence :root, e html.dark[data-accent] (0,2,1) vence os dois. */
+  html[data-accent="safira"] {
+    --primary: 214 78% 42%; --primary-foreground: 0 0% 100%;
+    --primary-active: 214 82% 34%; --primary-disabled: 214 40% 74%;
+    --ring: 214 78% 46%; --accent: 214 64% 94%; --accent-foreground: 214 72% 24%;
+  }
+  html.dark[data-accent="safira"] {
+    --primary: 212 88% 62%; --primary-foreground: 220 45% 8%;
+    --primary-active: 212 80% 54%; --primary-disabled: 212 32% 30%;
+    --ring: 212 88% 65%; --accent: 214 28% 16%; --accent-foreground: 210 16% 95%;
+  }
+  html[data-accent="ametista"] {
+    --primary: 268 52% 44%; --primary-foreground: 0 0% 100%;
+    --primary-active: 268 56% 36%; --primary-disabled: 268 30% 76%;
+    --ring: 268 52% 48%; --accent: 268 50% 95%; --accent-foreground: 268 50% 28%;
+  }
+  html.dark[data-accent="ametista"] {
+    --primary: 268 72% 70%; --primary-foreground: 270 45% 10%;
+    --primary-active: 268 64% 62%; --primary-disabled: 268 28% 30%;
+    --ring: 268 72% 72%; --accent: 268 24% 17%; --accent-foreground: 265 16% 95%;
+  }
+  html[data-accent="ambar"] {
+    --primary: 30 88% 34%; --primary-foreground: 0 0% 100%;
+    --primary-active: 28 90% 27%; --primary-disabled: 32 45% 74%;
+    --ring: 30 88% 38%; --accent: 36 80% 92%; --accent-foreground: 28 80% 22%;
+  }
+  html.dark[data-accent="ambar"] {
+    --primary: 38 88% 56%; --primary-foreground: 30 60% 8%;
+    --primary-active: 36 84% 48%; --primary-disabled: 36 30% 28%;
+    --ring: 38 88% 60%; --accent: 36 26% 15%; --accent-foreground: 40 20% 95%;
   }
 }
 
@@ -104,7 +139,7 @@
   body {
     @apply bg-background text-foreground;
     font-family:
-      var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
       Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -137,7 +172,7 @@
     font-weight: 500;
     @apply tabular-nums tracking-tight;
   }
-  /* Fundo imersivo: brilho roxo + dourado discretos sobre o grafite */
+  /* Fundo do produto: brilho suave da cor de destaque sobre a base */
   .app-shell {
     background:
       radial-gradient(1200px 600px at -10% -10%, hsl(var(--primary) / 0.12), transparent 60%),

@@ -105,8 +105,8 @@ export default async function PainelAnualPage({
   return (
     <div>
       <PageHeader
-        title="Painel Anual"
-        description={`B2C Gestão ${year} — indicadores mês a mês, acumulado e meta anual`}
+        title="Histórico Anual"
+        description={`${year} mês a mês — indicadores, acumulado e meta anual da B2C Gestão`}
         actions={
           <div className="inline-flex items-center gap-1.5">
             <Button variant="outline" size="icon" className="h-9 w-9" asChild>

@@ -1,32 +1,32 @@
 import {
-  LayoutDashboard,
-  CalendarRange,
-  Settings2,
-  ArrowUpFromLine,
+  Home,
   Building2,
-  LineChart,
+  Wallet,
+  Handshake,
+  Settings2,
   type LucideIcon,
 } from "lucide-react";
 
 /**
- * NAVEGAÇÃO POR ÁREAS — fonte única (sidebar desktop, barra inferior e
- * gaveta "Mais" do mobile).
+ * NAVEGAÇÃO POR ESPAÇOS DE TRABALHO — fonte única (barra superior, subnav,
+ * barra inferior e gaveta do mobile).
  *
- * Reconstrução de 29/08: o menu plano de 20 itens virou 6 ÁREAS com
- * subpáginas — a pessoa decide entre 6 conceitos, não 20 telas:
+ * B2C Finance 2 (30/08): o produto se organiza nos 4 pilares pedidos pelo
+ * dono + o ponto de partida + o sistema:
  *
- *   Início        → visão geral + rotina do dia
- *   Gestão do Mês → planilha mensal de recebimentos + inadimplência
- *   Clientes      → carteira, retenção, renovações, upsell, contratos
- *   Despesas      → contas a pagar + folha
- *   Análise       → painel anual, relatórios, reservas, assistente
- *   Sistema       → configurações, usuários, catálogo, regras, importações
+ *   Hoje       → visão do dia, rotina e assistente
+ *   Clientes   → gerir a carteira por completo (carteira + retenção)
+ *   Financeiro → gerir o financeiro por completo (mês, inadimplência,
+ *                contas, folha, reservas, relatórios) e o HISTÓRICO
+ *                mês a mês do ano (pilar "meses anteriores")
+ *   Comercial  → upsell, renovações, contratos, serviços e planos
+ *   Sistema    → configurações, usuários, regras e importações
  *
- * pages[0] é a página principal da área (o clique na área leva a ela).
+ * pages[0] é a página principal do espaço (o clique no nome leva a ela).
  * Rotas fora do menu (/transacoes, /pessoas, /pagamentos, /receitas,
  * /acordos, /cartoes) continuam acessíveis por links contextuais.
- * Visibilidade: cada página exige a permissão de visualizar (RBAC); a
- * área some quando nenhuma página dela é visível.
+ * Visibilidade: cada página exige a permissão de visualizar (RBAC); o
+ * espaço some quando nenhuma página dele é visível.
  */
 
 export type NavPage = {
@@ -44,30 +44,20 @@ export type NavArea = {
   icon: LucideIcon;
   /** Aparece como atalho na barra inferior do mobile. */
   primary?: boolean;
-  /** pages[0] = página principal da área. */
+  /** pages[0] = página principal do espaço. */
   pages: NavPage[];
 };
 
 export const NAV_AREAS: NavArea[] = [
   {
-    key: "inicio",
-    label: "Início",
-    icon: LayoutDashboard,
+    key: "hoje",
+    label: "Hoje",
+    icon: Home,
     primary: true,
     pages: [
       { href: "/dashboard", label: "Visão geral", permission: "dashboard.visualizar" },
       { href: "/rotina", label: "Rotina do dia", permission: "rotina.visualizar" },
-    ],
-  },
-  {
-    key: "mes",
-    label: "Gestão do Mês",
-    short: "Mês",
-    icon: CalendarRange,
-    primary: true,
-    pages: [
-      { href: "/cobrancas", label: "Recebimentos", permission: "recebimentos.visualizar" },
-      { href: "/inadimplencia", label: "Inadimplência", permission: "recebimentos.ver_inadimplencia" },
+      { href: "/assistente", label: "Assistente IA", permission: "assistente.visualizar" },
     ],
   },
   {
@@ -78,30 +68,36 @@ export const NAV_AREAS: NavArea[] = [
     pages: [
       { href: "/clientes", label: "Carteira", permission: "clientes.visualizar" },
       { href: "/retencao", label: "Retenção", permission: "clientes.visualizar" },
-      { href: "/renovacoes", label: "Renovações", permission: "clientes.visualizar" },
-      { href: "/upsell", label: "Upsell", permission: "upsell.visualizar" },
-      { href: "/contratos", label: "Contratos", permission: "contratos.visualizar" },
     ],
   },
   {
-    key: "despesas",
-    label: "Despesas",
-    icon: ArrowUpFromLine,
+    key: "financeiro",
+    label: "Financeiro",
+    short: "Fin",
+    icon: Wallet,
     primary: true,
     pages: [
+      { href: "/cobrancas", label: "Mês (Recebimentos)", permission: "recebimentos.visualizar" },
+      { href: "/inadimplencia", label: "Inadimplência", permission: "recebimentos.ver_inadimplencia" },
       { href: "/despesas", label: "Contas a Pagar", permission: "despesas.visualizar" },
-      { href: "/folha", label: "Folha de Pagamento", permission: "folha.visualizar" },
+      { href: "/folha", label: "Folha", permission: "folha.visualizar" },
+      { href: "/projecoes", label: "Histórico Anual", permission: "projecoes.visualizar" },
+      { href: "/caixa", label: "Reservas", permission: "caixa.visualizar" },
+      { href: "/relatorios", label: "Relatórios", permission: "relatorios.visualizar" },
     ],
   },
   {
-    key: "analise",
-    label: "Análise",
-    icon: LineChart,
+    key: "comercial",
+    label: "Comercial",
+    short: "Com",
+    icon: Handshake,
+    primary: true,
     pages: [
-      { href: "/projecoes", label: "Painel Anual", permission: "projecoes.visualizar" },
-      { href: "/relatorios", label: "Relatórios", permission: "relatorios.visualizar" },
-      { href: "/caixa", label: "Reservas (Caixa)", permission: "caixa.visualizar" },
-      { href: "/assistente", label: "Assistente IA", permission: "assistente.visualizar" },
+      { href: "/upsell", label: "Upsell", permission: "upsell.visualizar" },
+      { href: "/renovacoes", label: "Renovações", permission: "clientes.visualizar" },
+      { href: "/contratos", label: "Contratos", permission: "contratos.visualizar" },
+      { href: "/servicos", label: "Serviços", permission: "servicos.visualizar" },
+      { href: "/ofertas", label: "Planos", permission: "ofertas.visualizar" },
     ],
   },
   {
@@ -111,8 +107,6 @@ export const NAV_AREAS: NavArea[] = [
     pages: [
       { href: "/configuracoes", label: "Configurações", permission: "configuracoes.visualizar" },
       { href: "/usuarios", label: "Usuários", permission: "usuarios.visualizar" },
-      { href: "/servicos", label: "Catálogo de Serviços", permission: "servicos.visualizar" },
-      { href: "/ofertas", label: "Planos (Ofertas)", permission: "ofertas.visualizar" },
       { href: "/regras", label: "Regras de Categoria", permission: "regras.visualizar" },
       { href: "/importacoes", label: "Importar Dados", permission: "importacoes.visualizar" },
     ],

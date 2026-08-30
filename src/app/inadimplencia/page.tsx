@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/page-header";
-import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
@@ -80,9 +79,6 @@ export default async function InadimplenciaPage() {
         title="Inadimplência"
         description="Clientes com cobranças vencidas no mês e ações de recuperação"
       />
-
-      {/* Navegação entre as visões do módulo é pelas abas abaixo — sem botão duplicado. */}
-      <CobrancasTabs active="/inadimplencia" />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Total vencido" value={formatBRL(totalVencido)}

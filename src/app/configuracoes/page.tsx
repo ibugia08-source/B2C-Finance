@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
+import { AppearanceCard } from "./appearance-card";
 import { CategoryDialog } from "./category-dialog";
 import { CategoriesList, type CategoryRow } from "./categories-list";
 import { requirePagePermission } from "@/lib/auth/viewer";
@@ -37,9 +38,11 @@ export default async function ConfiguracoesPage() {
     <div>
       <PageHeader
         title="Configurações"
-        description="Categorias usadas para classificar transações e receitas."
+        description="Aparência do sistema e categorias de classificação."
         actions={<CategoryDialog />}
       />
+
+      <AppearanceCard />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         <StatCard title="Categorias" value={String(rows.length)} />

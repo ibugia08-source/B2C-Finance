@@ -1,5 +1,4 @@
 "use client";
-import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -8,68 +7,45 @@ import type { UserLike } from "./nav-items";
 interface MobileHeaderProps {
   title?: string;
   subtitle?: string;
-  onMenuClick?: () => void;
+  /** Gatilho do menu (ex.: MobileMenu com botão hambúrguer). */
+  menuSlot?: React.ReactNode;
   user?: UserLike;
-  sticky?: boolean;
   showTheme?: boolean;
   showUser?: boolean;
 }
 
+/**
+ * Linha 1 do cabeçalho no mobile/tablet (< lg). Fundo, borda e sticky são
+ * responsabilidade do <header> wrapper no AppShell — aqui só o conteúdo.
+ */
 export function MobileHeader({
   title,
   subtitle,
-  onMenuClick,
+  menuSlot,
   user,
-  sticky = true,
   showTheme = true,
   showUser = true,
 }: MobileHeaderProps) {
   return (
-    <header
-      className={cn(
-        // Visível até lg (tablet incluso): a sidebar fixa só existe em ≥lg,
-        // então tablets abrem o menu por este hambúrguer.
-        "lg:hidden bg-background/95 backdrop-blur border-b supports-[backdrop-filter]:bg-background/80",
-        sticky && "sticky top-0 z-30",
-        "flex items-center h-14 px-3 gap-2"
-      )}
-      style={{ paddingTop: `max(0.75rem, env(safe-area-inset-top, 0.75rem))` }}
+    <div
+      className={cn("lg:hidden flex items-center h-14 px-3 gap-2")}
+      style={{ paddingTop: `max(0.5rem, env(safe-area-inset-top, 0.5rem))` }}
     >
-      {/* Hamburger Button */}
-      {onMenuClick && (
-        <button
-          onClick={onMenuClick}
-          className={cn(
-            "flex items-center justify-center rounded-lg transition-colors",
-            "h-10 w-10 min-h-touch",
-            "hover:bg-accent hover:text-accent-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          )}
-          aria-label="Abrir menu"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-      )}
-
-      {/* Title & Subtitle */}
+      {menuSlot}
       {title && (
         <div className="flex-1 min-w-0">
-          <h1 className="text-sm font-semibold truncate text-foreground">
+          <h1 className="font-display text-sm font-semibold truncate text-foreground">
             {title}
           </h1>
           {subtitle && (
-            <p className="text-xs text-muted-foreground truncate">
-              {subtitle}
-            </p>
+            <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
           )}
         </div>
       )}
-
-      {/* Actions: Theme + User Menu */}
       <div className="flex items-center gap-1">
         {showTheme && <ThemeToggle className="scale-75 origin-right" />}
-        {showUser && user && <UserMenu user={user} />}
+        {showUser && user && <UserMenu user={user} compact />}
       </div>
-    </header>
+    </div>
   );
 }

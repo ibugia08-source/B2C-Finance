@@ -182,10 +182,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     folhaPct, recorrenciaPct,
   });
 
+  // Saudação pessoal (horário de Brasília — o servidor roda em UTC).
+  const hourSP = Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo",
+    }).format(new Date())
+  );
+  const saudacao = hourSP < 12 ? "Bom dia" : hourSP < 18 ? "Boa tarde" : "Boa noite";
+  const firstName = (viewer.name ?? "").trim().split(/\s+/)[0] ?? "";
+
   return (
     <div>
       <PageHeader
-        title="Início"
+        title={firstName ? `${saudacao}, ${firstName}` : saudacao}
         description={`O essencial do mês — números oficiais, alertas e tendência · ${period.label}`}
       />
 

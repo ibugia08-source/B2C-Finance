@@ -35,11 +35,14 @@ export function B2CLogo({
         textAnchor="middle"
         textLength="300"
         lengthAdjust="spacingAndGlyphs"
-        fontFamily="Inter, 'Arial Black', 'Helvetica Neue', Arial, sans-serif"
-        fontWeight={900}
+        fontFamily="var(--font-display), 'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        fontWeight={800}
         fontSize={118}
         letterSpacing={-3}
-        fill={variant === "white" ? "#FFFFFF" : "#1E70D3"}
+        // Wordmark herda a cor de destaque via style (var() não funciona em
+        // atributo de apresentação SVG) — acompanha tema E personalização;
+        // "white" segue fixo (uso sobre fundos primários).
+        style={{ fill: variant === "white" ? "#FFFFFF" : "hsl(var(--primary))" }}
       >
         B2C
       </text>

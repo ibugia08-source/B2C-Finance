@@ -26,10 +26,10 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        // Inter (display+corpo) via next/font — títulos diferenciam por peso/
-        // tracking, não por fonte. JetBrains Mono para valores financeiros.
-        display: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Identidade 30/08: Bricolage Grotesque (títulos) + Instrument Sans
+        // (corpo) + IBM Plex Mono (valores financeiros) — via next/font.
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {

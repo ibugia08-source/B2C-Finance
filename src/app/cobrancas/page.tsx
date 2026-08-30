@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/page-header";
-import { CobrancasTabs } from "@/app/cobrancas/module-tabs";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
@@ -757,11 +756,6 @@ export default async function RecebimentosPage({
             />
           </div>
         }
-      />
-
-      <CobrancasTabs
-        active="/cobrancas"
-        showInadimplencia={can(viewer, "recebimentos.ver_inadimplencia")}
       />
 
       {/* ===== Barra superior: mês · busca ===== */}
