@@ -23,6 +23,10 @@ importação de faturas XLSX/PDF), relatórios e assistente de IA.
 
 ## Rodando localmente
 
+> 🧪 **Vai desenvolver?** Não use o banco de produção. O guia
+> [docs/AMBIENTE_DEV.md](docs/AMBIENTE_DEV.md) monta o sistema completo num
+> banco próprio e **vazio** (branch `dev` + `npm run db:seed:dev`).
+
 ```bash
 npm install
 cp .env.example .env   # preencher POSTGRES_PRISMA_URL, SESSION_SECRET etc.
