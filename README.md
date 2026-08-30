@@ -63,5 +63,8 @@ docs/archive/      relatórios históricos de fases/deploys
 scripts/           tooling de dev (ver scripts/README.md)
 ```
 
-Documentação de domínio em [docs/](docs/): arquitetura financeira, plano de
-contas, métricas e design system.
+Documentação de domínio em [docs/](docs/). Comece pela
+**[DOCUMENTACAO_COMPLETA.md](docs/DOCUMENTACAO_COMPLETA.md)** (referência única:
+módulos, campos, regras, métricas, entradas de dados e capacidades); os demais
+arquivos aprofundam arquitetura financeira, plano de contas, métricas e design
+system.

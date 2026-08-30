@@ -22,3 +22,7 @@ tsconfig.tsbuildinfo
 backups/
 .uploads
 .env*
+
+# Documentação consolidada gerada (derivada de docs/*.md — não versionar)
+docs/B2C-Finance-Documentacao-Consolidada.md
+docs/B2C-Finance-Documentacao-Consolidada.html
