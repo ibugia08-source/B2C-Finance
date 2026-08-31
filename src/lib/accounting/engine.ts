@@ -135,6 +135,12 @@ export async function post(fact: PostingFact, tx?: TxClient): Promise<PostingRes
       buscarConta(context.workspaceId, codigoCredito),
     ]);
 
+    // A natureza é conferida ANTES da bandeira, de propósito: com o razão
+    // desligado o motor continua VALIDANDO, e é assim que uma regra errada
+    // aparece em desenvolvimento em vez de aparecer em produção no primeiro
+    // fechamento (F0.8).
+    conferirNatureza(fact.eventType, regra.affectsPnl, contaDebito, contaCredito);
+
     if (!await isLedgerEnabled(context.workspaceId))
       return { ok: true, posted: false, reason: "flag_desligada" };
 
@@ -289,7 +295,10 @@ async function buscarConta(workspaceId: string, code: string) {
   const conta = await runWithoutScope(async () =>
     prisma.accountingAccount.findFirst({
       where: { workspaceId, code, active: true },
-      select: { id: true, code: true, isPostingAccount: true },
+      select: {
+        id: true, code: true, name: true, isPostingAccount: true,
+        accountType: true, normalBalance: true, statementType: true,
+      },
     })
   );
   if (!conta)
@@ -301,4 +310,143 @@ async function buscarConta(workspaceId: string, code: string) {
   return conta;
 }
 
+/**
+ * GUARDA DE NATUREZA (F3.1 · ref. 01 §3.11).
+ *
+ * "O engine conhece a natureza (impede empréstimo/fatura/transferência
+ * virarem despesa duplicada)."
+ *
+ * O ERRO QUE ISTO EVITA é o mais caro da contabilidade gerencial e o mais
+ * difícil de perceber: dinheiro que SAI mas não é despesa. Pagar a fatura do
+ * cartão, amortizar empréstimo e transferir para a reserva movimentam o
+ * caixa e NÃO são custo — a compra no cartão já foi despesa quando foi feita,
+ * o empréstimo já entrou como passivo, a reserva continua sendo da empresa.
+ * Lançar qualquer um deles no resultado conta a mesma saída duas vezes, e o
+ * DRE passa a mostrar um prejuízo que não existe.
+ *
+ * A regra é simples e vale nos dois sentidos:
+ *   · regra que NÃO afeta a DRE não pode tocar em conta de resultado;
+ *   · regra que AFETA a DRE tem de tocar em pelo menos uma.
+ *
+ * A segunda metade é tão importante quanto a primeira: uma despesa lançada
+ * entre duas contas de balanço some do resultado sem ninguém notar.
+ */
+function conferirNatureza(
+  eventType: string,
+  afetaDre: boolean,
+  debito: { code: string; name: string; statementType: string },
+  credito: { code: string; name: string; statementType: string }
+): void {
+  const resultado = [debito, credito].filter((c) => c.statementType === "PNL");
+
+  if (!afetaDre && resultado.length > 0) {
+    const c = resultado[0];
+    throw new PostingError(
+      `"${eventType}" não afeta o resultado, mas a regra aponta para "${c.code} ${c.name}", que é conta de resultado. ` +
+        `Isso contaria a mesma saída duas vezes no DRE.`
+    );
+  }
+  if (afetaDre && resultado.length === 0) {
+    throw new PostingError(
+      `"${eventType}" afeta o resultado, mas nenhuma das contas ("${debito.code}" e "${credito.code}") é de resultado. ` +
+        `O lançamento sumiria do DRE.`
+    );
+  }
+}
+
 export { toCompetence, POSTING_RULES_VERSION, LEDGER_FLAG };
+
+/**
+ * REVERSAL (F3.1 · ref. 01 §3.10, §3.12).
+ *
+ * "Contas inversas do original; conforme original; neutraliza."
+ *
+ * O reversal é o ÚNICO evento da matriz sem contas próprias, e por um motivo
+ * que é a regra inteira: ele não sabe o que está desfazendo até olhar o
+ * original. Dar a ele um par fixo de contas produziria um estorno que
+ * neutraliza a transação errada — o razão fecharia e o DRE mentiria.
+ *
+ * Correção é sempre por reversal, nunca por edição (01 §2.14): a transação
+ * original continua lá, e a leitura do mês passa a ser a soma das duas. É o
+ * que permite responder "isto foi estornado" em vez de "isto nunca existiu".
+ */
+export async function reverter(
+  ledgerTransactionId: string,
+  /** Vai para a trilha de auditoria: o razão guarda o elo, não o texto. */
+  motivo: string,
+  tx?: TxClient
+): Promise<PostingResult> {
+  try {
+    if (!motivo || motivo.trim().length < 3)
+      throw new PostingError("Estorno exige motivo.");
+
+    const original = await runWithoutScope(async () =>
+      prisma.ledgerTransaction.findUnique({
+        where: { id: ledgerTransactionId },
+        include: { entries: true },
+      })
+    );
+    if (!original) throw new PostingError("Lançamento original não encontrado.");
+    if (original.eventType === "REVERSAL")
+      throw new PostingError("Estorno de estorno não existe — reponha o fato original.");
+
+    const chave = `REVERSAL:LedgerTransaction:${original.id}:${original.competence}`;
+    const jaEstornado = await runWithoutScope(async () =>
+      prisma.ledgerTransaction.findFirst({
+        where: { workspaceId: original.workspaceId, idempotencyKey: chave },
+        select: { id: true },
+      })
+    );
+    if (jaEstornado)
+      return { ok: true, posted: false, reason: "ja_postado", ledgerTransactionId: jaEstornado.id };
+
+    if (!(await isLedgerEnabled(original.workspaceId)))
+      return { ok: true, posted: false, reason: "flag_desligada" };
+
+    const escrever = async (db: TxClient) => {
+      const t = await db.ledgerTransaction.create({
+        data: {
+          workspaceId: original.workspaceId,
+          eventType: "REVERSAL",
+          sourceType: "LedgerTransaction",
+          sourceId: original.id,
+          // A COMPETÊNCIA É A DO ORIGINAL, não a de hoje: o estorno tem de
+          // neutralizar o mês em que o erro entrou, senão sobra receita em um
+          // mês e sobra estorno no outro, e nenhum dos dois fecha.
+          competence: original.competence,
+          postedAt: new Date(),
+          postingRuleVersion: POSTING_RULES_VERSION,
+          idempotencyKey: chave,
+          ownerId: original.ownerId,
+          // O elo formal com o original (§3.10). É `@unique`, então o banco
+          // garante que uma transação só pode ser estornada UMA vez — dois
+          // estornos do mesmo fato zerariam e depois inverteriam o sinal.
+          reversalOfId: original.id,
+        },
+        select: { id: true },
+      });
+      await db.ledgerEntry.createMany({
+        data: original.entries.map((e: any) => ({
+          ledgerTransactionId: t.id,
+          accountId: e.accountId,
+          // Espelhado: o que era débito vira crédito e vice-versa.
+          debit: e.credit,
+          credit: e.debit,
+          agencyId: e.agencyId,
+          clientId: e.clientId,
+          serviceId: e.serviceId,
+        })),
+      });
+      return t;
+    };
+
+    const criada = tx
+      ? await escrever(tx)
+      : await runWithoutScope(async () => prisma.$transaction(async (t) => escrever(t as any)));
+
+    return { ok: true, posted: true, ledgerTransactionId: criada.id };
+  } catch (e) {
+    if (e instanceof PostingError) return { ok: false, error: e.message };
+    throw e;
+  }
+}

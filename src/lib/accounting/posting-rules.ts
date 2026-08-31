@@ -42,7 +42,19 @@ export type PostingRuleSpec = {
   creditAccountCode: string;
   /** Reconhece resultado (entra na DRE)? */
   affectsPnl: boolean;
-  /** Implementado no motor nesta fase? (F0.8 entrega os cinco primeiros.) */
+  /**
+   * O motor sabe postar este evento?
+   *
+   * Todos os 17 da matriz ficaram TRUE na F3.1: o motor valida a regra,
+   * confere a natureza das contas e grava a partida dobrada para qualquer um
+   * deles, e há teste provando isso um a um.
+   *
+   * Não confundir com "o produto já EMITE este evento": alguns só passam a
+   * ser emitidos quando a tela que os origina existir (provisão de imposto na
+   * F3.3, write-off na F3.8). O relatório de cobertura do verify-ledger
+   * mostra as duas colunas separadas, para a diferença ficar visível em vez
+   * de virar suposição.
+   */
   implemented: boolean;
 };
 
@@ -103,7 +115,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "2.1",
     creditAccountCode: "1.1",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "CARD_PURCHASE",
@@ -112,7 +124,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "10.4",
     creditAccountCode: "2.2",
     affectsPnl: true,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "CARD_INVOICE_PAID",
@@ -122,7 +134,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "2.2",
     creditAccountCode: "1.1",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "LOAN_RECEIVED",
@@ -131,7 +143,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "1.1",
     creditAccountCode: "2.5",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "LOAN_PRINCIPAL_PAID",
@@ -140,7 +152,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "2.5",
     creditAccountCode: "1.1",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "INTEREST_EXPENSE",
@@ -149,7 +161,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "12.1",
     creditAccountCode: "1.1",
     affectsPnl: true,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "ACCOUNT_TRANSFER",
@@ -158,7 +170,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "15.1",
     creditAccountCode: "1.1",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "TAX_PROVISIONED",
@@ -167,7 +179,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "11.1",
     creditAccountCode: "2.3",
     affectsPnl: true,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "TAX_PAID",
@@ -176,7 +188,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "2.3",
     creditAccountCode: "1.1",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "CUSTOMER_REFUND",
@@ -185,7 +197,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "14.1",
     creditAccountCode: "1.1",
     affectsPnl: true,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "RECEIVABLE_WRITE_OFF",
@@ -194,7 +206,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "14.2",
     creditAccountCode: "1.3",
     affectsPnl: true,
-    implemented: false,
+    implemented: true,
   },
   {
     eventType: "REVERSAL",
@@ -204,7 +216,7 @@ export const POSTING_RULES: PostingRuleSpec[] = [
     debitAccountCode: "(inverso do original)",
     creditAccountCode: "(inverso do original)",
     affectsPnl: false,
-    implemented: false,
+    implemented: true,
   },
 ];
 

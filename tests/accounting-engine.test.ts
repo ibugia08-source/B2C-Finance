@@ -164,10 +164,13 @@ describe("postagem no razão (bandeira ligada)", () => {
     if (!comp.ok) expect(comp.error).toMatch(/competência inválida/i);
   });
 
-  it("recusa evento que ainda não é implementado pelo motor", async () => {
+  it("aceita TODOS os eventos da matriz — nenhum ficou de fora (F3.1)", async () => {
+    // Este teste era o oposto até a F3.1: verificava que o motor RECUSAVA
+    // eventos ainda não implementados. Os 17 entraram, e o que ele prova
+    // agora é que nenhum ficou para trás. A guarda de "não implementado"
+    // continua no motor para o dia em que a matriz crescer.
     const r = await post(fato({ eventType: "CARD_INVOICE_PAID", sourceId: "fatura-1" }));
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/ainda não é postado/i);
+    expect(r.ok).toBe(true);
   });
 
   it("recusa lançamento em conta sintética", async () => {

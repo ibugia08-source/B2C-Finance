@@ -89,8 +89,8 @@ export async function registerCashMovement(formData: FormData) {
   const delta = parsed.type === "IN" ? parsed.amount : -parsed.amount;
   const next = n(box.currentAmount) + delta;
 
-  await prisma.$transaction([
-    prisma.cashBoxMovement.create({
+  await prisma.$transaction(async (tx) => {
+    const mov = await tx.cashBoxMovement.create({
       data: {
         cashBoxId: parsed.cashBoxId,
         type: parsed.type,
@@ -98,12 +98,38 @@ export async function registerCashMovement(formData: FormData) {
         date: parsed.date,
         description: parsed.description,
       },
-    }),
-    prisma.cashBox.update({
+      select: { id: true },
+    });
+    await tx.cashBox.update({
       where: { id: parsed.cashBoxId },
       data: { currentAmount: next },
-    }),
-  ]);
+    });
+
+    // RAZÃO (F3.1 · 01 §3.10 "Transferência entre contas/reservas").
+    //
+    // Guardar na reserva é o exemplo mais direto de dinheiro que SAI do
+    // banco e NÃO é despesa: continua sendo da empresa, só mudou de lugar.
+    // Lançar isso no resultado é o erro que a guarda de natureza recusa —
+    // e é justamente o erro que passa despercebido, porque o extrato bate.
+    const { post } = await import("@/lib/accounting/engine");
+    const { currentWorkspaceId } = await import("@/lib/services/workspace");
+    const { toCompetence } = await import("@/lib/competence");
+    const r = await post(
+      {
+        eventType: "ACCOUNT_TRANSFER",
+        sourceType: "CashBoxMovement",
+        sourceId: mov.id,
+        competence: toCompetence(parsed.date.getFullYear(), parsed.date.getMonth() + 1),
+        amount: parsed.amount,
+        postedAt: parsed.date,
+        context: { workspaceId: await currentWorkspaceId() },
+      },
+      tx as any
+    );
+    // Erro de REGRA contábil derruba o movimento: um caixa que anda sem o
+    // razão andar junto é a divergência que ninguém acha depois.
+    if (!r.ok) throw new Error(r.error);
+  });
 
   revalidateFinance();
 }

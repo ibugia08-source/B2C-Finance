@@ -1,7 +1,7 @@
 import { MONEY_EPSILON } from "@/lib/billing-status";
 import { auditEvent, auditUpdate } from "@/lib/audit";
 import { publish } from "@/lib/outbox";
-import { post } from "@/lib/accounting/engine";
+import { post, reverter } from "@/lib/accounting/engine";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { toCompetence } from "@/lib/competence";
 import { systemContext, type EngineContext } from "@/lib/engines/context";
@@ -369,6 +369,23 @@ export async function revertBillingPayment(
         paidInDifferentMonth: false,
       },
     });
+
+    // ESTORNO NO RAZÃO (F3.1 · 01 §3.10 "Reversal", §2.14).
+    //
+    // O pagamento sai do banco operacional, mas o LANÇAMENTO não é apagado:
+    // ele é neutralizado por um estorno espelhado, na competência do
+    // original. Apagar faria o razão de um mês fechado mudar sozinho — e é
+    // justamente o que a fotografia e o job de integridade existem para
+    // impedir. Com o estorno, a leitura do mês passa a ser a soma dos dois, e
+    // dá para responder "isto foi estornado" em vez de "isto nunca existiu".
+    const lancamento = await tx.ledgerTransaction.findFirst({
+      where: { eventType: "CUSTOMER_PAYMENT_RECEIVED", sourceType: "Payment", sourceId: paymentId },
+      select: { id: true },
+    });
+    if (lancamento) {
+      const r = await reverter(lancamento.id, "Estorno de pagamento", tx as any);
+      if (!r.ok) throw new SettleError(r.error);
+    }
 
     // Trilha do estorno, dentro da transação (03 §4.1).
     await auditEvent(tx as any, "Payment", paymentId, "REVERSE", ctx);

@@ -69,8 +69,52 @@ async function main() {
   const reprovou = !h.balanceOk || (h.enabled && h.pagamentosSemLancamento > 0);
   console.log(reprovou ? "\n  RESULTADO: REPROVADO\n" : "\n  RESULTADO: aprovado\n");
 
+  // A cobertura sai ANTES do disconnect e antes do exit: um relatório que só
+  // aparece quando o razão está saudável nunca é lido justamente no dia em
+  // que interessa.
+  await cobertura();
   await prisma.$disconnect();
   process.exit(reprovou ? 1 : 0);
+}
+
+
+/**
+ * COBERTURA DA MATRIZ (F3.1).
+ *
+ * Duas colunas separadas de propósito. "O motor sabe postar" e "o produto já
+ * emite" são coisas diferentes, e juntá-las esconderia exatamente o que
+ * interessa saber: quais eventos da matriz ainda não têm nenhuma tela que os
+ * origine. Sem essa separação, "17 de 17 implementados" pareceria cobertura
+ * completa quando metade nunca é disparada.
+ */
+async function cobertura() {
+  const { POSTING_RULES } = await import("@/lib/accounting/posting-rules");
+  const { prisma } = await import("@/lib/prisma");
+  const { runWithoutScope } = await import("@/lib/auth/owner-scope");
+
+  const emitidos = await runWithoutScope(async () =>
+    prisma.ledgerTransaction.groupBy({ by: ["eventType"], _count: { _all: true } })
+  );
+  const porEvento = new Map(emitidos.map((e) => [e.eventType, e._count._all]));
+
+  console.log("\nCOBERTURA DA MATRIZ (01 §3.10)");
+  console.log(`${"evento".padEnd(30)} motor  já emitido`);
+  let semUso = 0;
+  for (const r of POSTING_RULES) {
+    const n = porEvento.get(r.eventType) ?? 0;
+    if (n === 0) semUso++;
+    console.log(
+      `${r.eventType.padEnd(30)} ${r.implemented ? "sim  " : "NÃO  "}  ${n === 0 ? "—" : n}`
+    );
+  }
+  console.log(
+    `\n${POSTING_RULES.length - semUso} de ${POSTING_RULES.length} eventos já apareceram no razão deste ambiente.`
+  );
+  console.log(
+    "Os que estão em '—' têm regra e motor prontos, mas ainda não há tela que" +
+      "\nos origine — cada um entra com a tarefa dele (imposto na F3.3," +
+      "\nwrite-off e reembolso na F3.8)."
+  );
 }
 
 main().catch((e) => {
