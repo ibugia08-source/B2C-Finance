@@ -19,6 +19,7 @@
  * Uso: npx tsx scripts/import-reestruturacao.ts
  */
 import { loadEnv } from "./env";
+import { assertDestructiveAllowed } from "./guard";
 loadEnv();
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -64,11 +65,12 @@ const NOTA_RATEIO =
   "Histórico 2026 importado da planilha gerencial. Valor individual rateado do total mensal — não usar como saldo cobrável isolado.";
 
 async function main() {
-  const url = process.env.POSTGRES_PRISMA_URL ?? "";
-  if (!/127\.0\.0\.1|localhost/.test(url)) {
-    console.error("⛔ ABORTADO: o banco alvo não é local. Este import é só para desenvolvimento.");
-    process.exit(1);
-  }
+  // Guarda única do repositório (03 §4.6): ambiente explícito + ALLOW_DESTRUCTIVE
+  // + conferência de que o APP_ENV declarado bate com o banco configurado.
+  assertDestructiveAllowed({
+    script: "scripts/import-reestruturacao.ts",
+    allowEnvs: ["local", "staging"],
+  });
 
   const { prisma } = await import("@/lib/prisma");
   const { runWithoutScope } = await import("@/lib/auth/owner-scope");

@@ -3,7 +3,10 @@
  * Uso: npx tsx scripts/test-comissao.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-comissao.ts" });
 
 const TAG = "__teste_com__";
 const MONTH = 2;

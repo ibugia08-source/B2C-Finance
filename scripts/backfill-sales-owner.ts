@@ -12,14 +12,17 @@
  *
  * Uso:
  *   npx tsx scripts/backfill-sales-owner.ts           (dry-run: só relata)
- *   npx tsx scripts/backfill-sales-owner.ts --apply   (executa)
+ *   APP_ENV=local ALLOW_DESTRUCTIVE=true npx tsx scripts/backfill-sales-owner.ts --apply
  *
  * Pré-requisito: migration 20260728000000_client_sales_owner_employee aplicada.
  */
 import { loadEnv } from "./env";
+import { assertDestructiveAllowed } from "./guard";
 loadEnv();
 
 const APPLY = process.argv.includes("--apply");
+// Dry-run é leitura pura e não passa pela guarda; --apply escreve (03 §4.6).
+if (APPLY) assertDestructiveAllowed({ script: "scripts/backfill-sales-owner.ts" });
 const norm = (s: string) => s.trim().toLowerCase();
 
 async function main() {

@@ -10,7 +10,10 @@
  * Uso: npx tsx scripts/test-carteira-venda-exclusao.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-carteira-venda-exclusao.ts" });
 
 const TAG = "__teste_carteira__";
 let passed = 0;

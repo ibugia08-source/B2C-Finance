@@ -3,7 +3,10 @@
  * Uso: npx tsx scripts/test-erp-isolation.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-erp-isolation.ts" });
 
 async function main() {
   // Importa pelos MESMOS especificadores usados no app (alias @/) para

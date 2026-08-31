@@ -11,7 +11,10 @@
  * Dados com TAG + cleanup. Uso: npx tsx scripts/test-bloco3-ciclo.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-bloco3-ciclo.ts" });
 
 const TAG = "__teste_bloco3__";
 let passed = 0;

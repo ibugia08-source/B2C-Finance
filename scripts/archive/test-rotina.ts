@@ -3,7 +3,10 @@
  * Uso: npx tsx scripts/test-rotina.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-rotina.ts" });
 
 const TAG = "__teste_rot__";
 

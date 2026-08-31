@@ -13,7 +13,10 @@
  * Uso: npx tsx scripts/test-bloco2-recebimentos.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-bloco2-recebimentos.ts" });
 
 const TAG = "__teste_bloco2__";
 let passed = 0;

@@ -3,7 +3,10 @@
  * Uso: npx tsx scripts/test-ai-context.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-ai-context.ts" });
 
 const TAG = "__teste_ia__";
 

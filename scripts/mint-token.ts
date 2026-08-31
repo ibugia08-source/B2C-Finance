@@ -1,5 +1,8 @@
 import { loadEnv } from "./env";
+import { assertNotProduction } from "./guard";
 loadEnv();
+// Emite sessão de ADMIN: jamais contra produção (03 §4.6).
+assertNotProduction("scripts/mint-token.ts");
 
 async function main() {
   const { prisma } = await import("@/lib/prisma");

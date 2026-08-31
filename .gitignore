@@ -25,6 +25,7 @@ backups/
 # ...exceto os modelos sem segredo (o .env* acima os pegaria de volta)
 !.env.example
 !.env.development.example
+!.env.staging.example
 
 # Documentação consolidada gerada (derivada de docs/*.md — não versionar)
 docs/B2C-Finance-Documentacao-Consolidada.md

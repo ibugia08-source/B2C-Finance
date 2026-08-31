@@ -16,7 +16,10 @@
  * Uso: npx tsx scripts/test-fechamento-mensal.ts
  */
 import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
+// Script legado de teste manual: cria e apaga dados (03 §4.6).
+assertDestructiveAllowed({ script: "scripts/archive/test-fechamento-mensal.ts" });
 
 const TAG = "__teste_fechamento__";
 let passed = 0;
