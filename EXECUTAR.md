@@ -28,16 +28,18 @@ Objetivo: rede de proteção antes de mexer no que funciona.
 - [x] F0.8 Matriz canônica: implementar AccountingEngine com PostingRule versionada e a tabela de eventos de 01 3.10 como seed; nesta fase apenas os eventos de receita reconhecida, recebimento, despesa reconhecida/paga; postagem ainda atrás de feature flag ledger_enabled. Ref: 01 3.10-3.11; 03 4.1.
 - [x] F0.9 [SCHEMA] Constraints de idempotência: uniques de 03 4.3 (geração MRR, parcela TCV, Payment externalId, LedgerTransaction source+postingType, avaliação relação+competência); checks de debit/credit. Ref: 03 4.3.
 - [x] F0.10 Transactional Outbox: model OutboxEvent (status, tentativas, dedupeKey, payload) + worker com retry exponencial e dead-letter; sem consumidores ainda. Ref: 03 4.2.
-- [~] F0.11 Desenho de cutover (script ENTREGUE e rodando; aguarda DECISÃO 19.32 — data oficial): script dry-run que extrai do banco v1 os saldos de abertura (contas, reservas, receber aberto, pagar, cartões, folha a pagar, empréstimos) e gera relatório de conferência. DECISÃO 19.32: data oficial de cutover. Ref: 03 3.2.
+- [x] F0.11 Desenho de cutover (RESOLVIDO por decisão em 31/08: NÃO HÁ CUTOVER — o sistema nasce zerado; o script fica como ferramenta de conferência): script dry-run que extrai do banco v1 os saldos de abertura (contas, reservas, receber aberto, pagar, cartões, folha a pagar, empréstimos) e gera relatório de conferência. Ref: 03 3.2.
 - [x] F0.12 CI: build:ci + testes como gate de merge; lint proibindo cor crua de Tailwind fora de dataviz (regra inicial permissiva com allowlist do legado). Ref: 02 7.10; 03 4.6.
 
 GATE F0: F0.2 e F0.7 verdes com paridade; dry-run F0.11 rodando; nenhuma DECISÃO da fase pendente.
 
-**AVALIAÇÃO DO GATE F0 (2026-08-31) — 2 de 3 critérios cumpridos; portão FECHADO.**
+**GATE F0 ABERTO em 2026-08-31** — a direção respondeu TODAS as decisões pendentes (ver bloco DECISÕES).
 - [x] F0.2 verde: 112 testes passando em banco dedicado.
-- [x] F0.7 com paridade: 216 comparações em 12 meses de dados reais, 0 divergências.
-- [x] Dry-run F0.11 rodando: relatório dos 9 saldos de abertura gerado.
-- [ ] **DECISÃO 19.32 PENDENTE** — data oficial de cutover. Sem ela o portão não abre e a Fase 1 não começa (§6.4 do arquivo 03 também exige 6.2 com dono e prazo, 6.3 com parâmetros ou default aprovado, matriz validada com o contador e saldos iniciais documentados).
+- [x] F0.7 com paridade: 216 comparações em 12 meses, 0 divergências.
+- [x] Dry-run F0.11 rodando.
+- [x] DECISÃO 19.32 respondida: **não há migração nem saldo de abertura — o sistema entra em produção com o banco vazio.** Saldos iniciais documentados = ZERO, e isso é o próprio documento.
+- [x] 6.2 e 6.3 respondidos (bloco DECISÕES abaixo).
+- RESSALVA HONESTA: a paridade da F0.7 foi medida contra os dados que existiam, que a direção declarou FICTÍCIOS. Ela continua valendo como prova de que os motores calculam igual, que é para o que serve; não vale como conferência contábil da realidade, e nenhuma decisão depende disso.
 
 -
 
@@ -57,7 +59,7 @@ Modelo:
 - [x] F1.9 [SCHEMA] AuditLog append-only campo a campo nas entidades financeiras e de carteira, com origem e motivo; helper único de escrita. Ref: 01 4.10.
 
 Segurança:
-- [ ] F1.10 RBAC estendido com as permissões novas de 03 1.2; escopos workspace|legalEntity|agency|meus clientes; permissão de campo para valores sensíveis. Ref: 03 1.1-1.2.
+- [ ] F1.10 RBAC estendido com as permissões novas de 03 1.2; escopo por usuário **workspace | agência** (DECIDIDO 19.11: "meus clientes" sai — sem vínculo usuário↔pessoa da folha, não há como derivar); permissão de campo para valores sensíveis; **folha visível só para o dono**, tudo o mais concedido no painel. Ref: 03 1.1-1.2.
 - [x] F1.11 Cache seguro: chaves de ownerCached ganham legalEntityId/agencyId, userScope, permissionFingerprint, competence, metricVersion; teste provando que cache de Admin não serve Gestor. Ref: 03 1.4.
 - [x] F1.12 RLS: revisar policies para as tabelas novas; teste de isolamento de escopo. Ref: 03 1.4.
 
@@ -70,7 +72,7 @@ Produto:
 - [x] F1.18 Onboarding básico: OnboardingTask + template padrão + board por cliente + prazos D+7/30/90; cliente manual também inicia. Ref: 01 4.11; 02 4.2.
 - [~] F1.19 Homes por papel (PARCIAL — executiva e do GESTOR prontas; falta a central de notificações in-app, que precisa de modelo próprio): executiva (painel auditado de 02 5.1 com sparklines e card Liquidez disponível) e do gestor (02 5.4); central de notificações in-app com catálogo, agrupamento e teto diário. Ref: 02 2, 4.7, 5.1, 5.4.
 - [ ] F1.20 Setup guiado de primeiro uso (6 passos, nada bloqueia; EmptyStates apontando para o passo). Ref: 02 3.
-- [ ] F1.21 Migração v1 completa + planilhas (CONCILIADA, AJUSTES, COMERCIAL) com proveniência (sourceSystem, sourceRow, importBatchId, migrationConfidence), fila de revisão para ambíguos, lançamento de abertura dos saldos; validação da lista de 03 3.3 gerando MigrationReconciliationIssue. DECISÕES 19.13 e 19.15 afetam esta tarefa. Ref: 03 3.2-3.3.
+- [ ] F1.21 **INÍCIO ZERADO + entrada de dados reais** (REESCRITA em 31/08 pela decisão 19.32: não há migração do v1, os dados atuais são fictícios). Script de início limpo guardado por ALLOW_DESTRUCTIVE; importação por planilha (clientes, contratos/termos, contas a pagar) com proveniência (sourceRow, importBatchId) e fila de revisão para ambíguos; nenhum lançamento de abertura, porque o saldo de abertura é zero. Ref: 03 3.3.
 
 GATE F1: cenários S1, S8, S11, S12, S13, S23 passam em staging; paridade reconciliada dos números do Dashboard com o v1 no mesmo mês.
 
@@ -84,7 +86,7 @@ GATE F1: cenários S1, S8, S11, S12, S13, S23 passam em staging; paridade reconc
 - [ ] F2.4 Navegação em fotografia: competência CLOSED lê snapshot, faixa âmbar com selo/versão/autor, controles ausentes, badge temporal travado; colunas posteriores marcadas "não existia neste período". Ref: 02 7.8.
 - [ ] F2.5 Comparativo de períodos lado a lado com deltas (entradas, saídas, valores, estabilidade). Ref: 02 5.3, 7.8.
 - [ ] F2.6 Reabertura: Approval + justificativa, versão N+1, SnapshotDependency marcando posteriores NEEDS_REVALIDATION; pagamento posterior a período fechado seguindo 01 5.6. Ref: 01 5.5-5.6.
-- [ ] F2.7 Snapshots retroativos da migração (REBUILT_FROM_MIGRATION) desde jan/2026. Ref: 03 3.3.
+- [~] F2.7 ~~Snapshots retroativos da migração desde jan/2026~~ — **SAI DO PLANO** pela decisão 19.32: sem migração não há período anterior para reconstruir. A primeira fotografia é a do primeiro mês real.
 - [ ] F2.8 Job de integridade: balanço do ledger + recálculo até sourceCutoffAt + comparação de checksums + alerta. Ref: 01 5.4.
 - [ ] F2.9 Fotografias avulsas nomeadas por permissão. Ref: 01 5.7.
 - [ ] F2.10 Tema documento: exportação PDF de fotografia e DRE com capa navy/grão/quadrados/dourado e miolo no gabarito Documento, rodapé com versão e checksum. Ref: 02 7.8.
@@ -96,16 +98,16 @@ GATE F2: S4, S6, S10, S17, S22, S27.
 ## FASE 3 - CONTÁBIL, CONCILIAÇÃO E COBRANÇA AVANÇADA
 
 - [ ] F3.1 Ledger completo: todos os eventos da matriz (empréstimos com principal x juros, cartão compra/fatura, transferências, provisão x pagamento de imposto, write-off, reembolso, chargeback, reversal). Ref: 01 3.10-3.12.
-- [ ] F3.2 DRE por competência/agência/entidade (só PNL) + razão + filtros (competência, caixa, gerencial, normalizada informativa, consolidado); exportação do contador por CNPJ com NF. DECISÃO 19.12 (pró-labore) define flag padrão. Ref: 02 4.5.
+- [ ] F3.2 DRE por competência/agência (só PNL) + razão + filtros (competência, caixa, gerencial, normalizada informativa, consolidado); exportação para o contador. DECIDIDO 19.12: pró-labore DENTRO do resultado, com chave para ver sem ele. DECIDIDO 19.15: sem recorte por CNPJ nesta versão (agência é organizadora, não empresa). Ref: 02 4.5.
 - [ ] F3.3 Provisão tributária automática por EntidadeLegal + sugestão de reserva (nunca executa transferência). Ref: 01 3.8.
 - [ ] F3.4 Allocation Engine genérico + regras + tela de rateio da fatura de ads + "não alocado" visível + margem de contribuição por cliente. Ref: 01 4.7; 02 4.4.
 - [ ] F3.5 Conciliação: import OFX/CSV, BankStatementEntry, matches sugeridos (1:N, N:1, parcial), estados, proposta de ajuste; % conciliado no checklist. Ref: 01 4.7; 02 4.4.
-- [ ] F3.6 FiscalDocument completo + pendências por regra. DECISÃO 19.38 (quais serviços exigem NF). Ref: 01 4.7.
+- [ ] F3.6 FiscalDocument como REGISTRO OPCIONAL de nota (DECIDIDO 19.38: a maioria dos serviços não emite NF; nenhuma regra gera pendência e nada exige CNPJ). Ref: 01 4.7.
 - [ ] F3.7 Renegociação/reparcelamento: wizard, RenegotiationAgreement, SETTLEMENT_ONLY, aging pelo saldo renegociado. Ref: 01 3.13.
-- [ ] F3.8 BillingAdjustment (desconto, juros, write-off) com thresholds e Approval automático; fila de aprovações completa com segregação. DECISÕES 19.35/19.36 (thresholds). Ref: 01 4.7, 4.10; 02 4.7.
+- [ ] F3.8 BillingAdjustment (desconto, juros, write-off) por permissão e auditado. DECIDIDO 19.35/19.36: **não existem tetos nem fila de aprovação** — quem tem a permissão faz, e o ajuste fica na trilha. Ref: 01 4.7; 02 4.7.
 - [ ] F3.9 Régua de cobrança em modo tarefa (D-3 a D+15, tons, promessa/opt-out/silêncio) + Modo Fila operável por teclado para cobrança, aprovações, conciliação e revisão de import. Ref: 02 4.3, 7.5, 7.7.
 - [ ] F3.10 Rotina semanal. Ref: 02 4.6.
-- [ ] F3.11 Fluxo de caixa por conta com projeções 30/60/90 e Liquidez disponível (reservas restritas configuráveis; DECISÃO 19.34). Ref: 01 7.2; 02 4.4.
+- [ ] F3.11 Fluxo de caixa por conta com projeções 30/60/90 e Liquidez disponível (DECIDIDO 19.34: restrição configurável por reserva, com impostos e 13º restritos por padrão). Ref: 01 7.2; 02 4.4.
 - [ ] F3.12 Atalhos completos + e-mails transacionais no tema. Ref: 02 3, 7.8.
 
 GATE F3: S7, S9, S14, S15, S16, S18, S19, S21, S25.
@@ -120,7 +122,7 @@ GATE F3: S7, S9, S14, S15, S16, S18, S19, S21, S25.
 - [ ] F4.4 Handoff de venda: WON cria/vincula Client + Relationship + Contract rascunho + CommercialTerm + Onboarding + Billings; nada trava sem contrato. Ref: 01 6.1.
 - [ ] F4.5 Metas por agência/SDR/closer/gestor + homes de closer e SDR. Ref: 02 5.4.
 - [ ] F4.6 Métricas comerciais no registry (CPL, CPMQL, custo por agendamento/reunião, comparecimento, conversão, CAC, ROAS com base de valoração explícita, pipeline coverage). Ref: 01 7.5.
-- [ ] F4.7 Comissão por regra versionada com gatilho configurável alimentando folha. DECISÃO 19.14 (regras da Bianca e Raiane por escrito). Ref: 01 4.8.
+- [ ] F4.7 Campo de comissão DIGITADO À MÃO alimentando a folha (DECIDIDO 19.14: sem regra versionada e sem gatilho automático). Ref: 01 4.8.
 - [ ] F4.8 Integração AvanceCRM por webhook (Outbox na saída; idempotência na entrada). Ref: 03 4.2; cenário S20.
 
 GATE F4: S2, S3, S5, S24 e reconstrução de pipeline histórico.
@@ -129,13 +131,13 @@ GATE F4: S2, S3, S5, S24 e reconstrução de pipeline histórico.
 
 ## FASE 5 - AUTOMAÇÃO E INTELIGÊNCIA (contínua)
 
-- [ ] F5.1 Régua automática via WhatsApp/AvanceCRM com janelas, frequência máxima e opt-out. DECISÃO 19.17.
-- [ ] F5.2 Gateway Pix/boleto com link na cobrança e baixa automática idempotente. DECISÃO 19.10 (pode antecipar).
+- [ ] F5.1 Régua automática via WhatsApp/AvanceCRM com janelas, frequência máxima e opt-out (19.17: janelas e frequência a definir quando a Fase 5 começar).
+- [ ] F5.2 Gateway Pix/boleto com link na cobrança e baixa automática idempotente. DECIDIDO 19.10: **não antecipar** — fica na Fase 5.
 - [ ] F5.3 Open Finance / conciliação automática avançada.
 - [ ] F5.4 NRR, coortes e previsão de churn por sinais (estabilidade, atraso, ads pausado, tenure).
 - [ ] F5.5 Margem totalmente alocada (overhead via Allocation).
 - [ ] F5.6 Assistente IA com retrato ampliado (agências, fechamento, avaliação) e guardrails do v1.
-- [ ] F5.7 Relatórios agendados; PWA instalável para SDR/cobrança. DECISÃO 19.38 do arquivo 03 (19.38 operacional).
+- [ ] F5.7 Relatórios agendados; PWA instalável para SDR/cobrança (sem decisão pendente: a Fase 5 não começou).
 
 -
 
@@ -151,9 +153,82 @@ GATE F4: S2, S3, S5, S24 e reconstrução de pipeline histórico.
 
 -
 
-## DECISÕES QUE BLOQUEIAM TAREFAS (perguntar quando alcançar)
+## DECISÕES — TODAS RESPONDIDAS PELA DIREÇÃO EM 2026-08-31
 
-19.9 assinatura certificada ou aceite; 19.10 gateway antecipado; 19.11 escopo de leitura do gestor; 19.12 pró-labore; 19.13 contas pessoais históricas; 19.14 regras de comissão; 19.15 CNPJs por entidade; 19.16 quem fecha/reabre; 19.17 régua automática; 19.32 data de cutover; 19.33 calendário de vencimento; 19.34 reservas na liquidez; 19.35/19.36 thresholds; 19.37 mínimos de conciliação; 19.38 NF; 19.39 arredondamento (default half-up aprovado salvo exceção).
+Nenhuma tarefa deste plano continua bloqueada por decisão. Abaixo, o que foi
+decidido e — mais importante — **o que cada resposta MUDA no plano**.
+
+**19.32 CUTOVER — o sistema nasce ZERADO.** Não há migração: a direção declarou
+que os dados atuais são fictícios e que a versão nova começa do zero absoluto.
+Saldo de abertura = zero em tudo; a data de corte é a data de lançamento.
+MUDA: F0.11 deixa de ser dry-run de saldos e vira ferramenta de conferência;
+F1.21 deixa de ser migração e vira "início zerado + entrada de dados reais";
+F2.7 (snapshots retroativos desde jan/2026) PERDE O OBJETO e sai do plano.
+CONSEQUÊNCIA QUE PRECISA SER DITA: com banco vazio, quem constrói o valor do
+sistema no primeiro dia é a F1.20 (setup guiado) e a importação por planilha —
+elas deixam de ser conforto e viram o caminho crítico.
+
+**19.11 ESCOPO — folha é do dono e de mais ninguém.** Usuário do sistema NUNCA
+é ligado automaticamente a pessoa da folha: Raiane e Bianca existem nos dois
+lugares e os dois registros são independentes de propósito. Todo papel nasce
+RESTRITO e o dono concede no painel de permissões (mesmo modelo que a direção
+pediu em 19.16). MUDA: cai o escopo "meus clientes" por adivinhação de nome —
+sem vínculo, não há como saber; o recorte por usuário passa a ser por AGÊNCIA,
+que é exatamente para o que a agência serve (19.15). manager-panel.ts perde o
+casamento por nome.
+
+**19.15 AGÊNCIA É ORGANIZADORA, NÃO EMPRESA.** Sem CNPJ, sem razão social, sem
+regime tributário. Serve só para dizer quais clientes são de quem. MUDA: o
+cadastro fiscal da EntidadeLegal fica opcional e fora das telas; F3.2 não
+exporta "por CNPJ". O modelo LegalEntity FICA no banco (custa nada e a direção
+já disse que a separação fiscal vem depois) — o que sai é a exigência.
+
+**19.13 NÃO EXISTE CONTA PESSOAL.** Contas em nome de sócio ("Cartão Magalu
+Pai") são da empresa: usadas e pagas por ela, e existem porque o crédito sai
+mais fácil na pessoa física. O sistema NÃO separa nada sozinho; entra uma
+CATEGORIZAÇÃO por lançamento (pessoal | CNPJ), informativa, e o gasto continua
+dentro do resultado. MUDA: nenhuma conta é excluída de nada, em lugar nenhum.
+
+**19.16 FECHAMENTO** — fecha e reabre o usuário Master; a permissão é
+CONCEDÍVEL a outros no painel. MUDA: F2.1/F2.6 ganham `periodos.fechar` e
+`periodos.reabrir` no catálogo, padrão só do dono.
+
+**19.33 VENCIMENTO EM DIA NÃO ÚTIL** — posterga para o próximo dia útil.
+
+**19.12 PRÓ-LABORE** — dentro do resultado, com chave para ver o DRE sem ele.
+
+**19.34 LIQUIDEZ** — restrição configurável por reserva; impostos e 13º
+restritos por padrão.
+
+**19.35/19.36 THRESHOLDS — não existem.** Sem teto, sem fila de aprovação, sem
+segregação por valor. MUDA: F3.8 fica só com o ajuste em si — quem tem a
+permissão faz, e fica na trilha de auditoria; some a máquina de aprovação
+inteira, junto com a coluna "aprovações" do Modo Fila da F3.9.
+
+**19.37 CONCILIAÇÃO** — conta com movimento, conciliar até o dia 5; conta
+parada, confirmar saldo.
+
+**19.38 NF — em aberto por escolha:** a maioria dos serviços prestados não gera
+nota. MUDA: F3.6 vira registro OPCIONAL de nota, sem regra que gere pendência
+e sem exigir CNPJ.
+
+**19.39 ARREDONDAMENTO** — half-up com sobra na última parcela. Confirmado.
+
+**19.14 COMISSÃO** — valor digitado à mão no campo de comissão. MUDA: F4.7
+perde a regra versionada e o gatilho configurável.
+
+**19.9 ASSINATURA** — não existe assinatura eletrônica nesta versão; fica só a
+geração de contrato que já existe hoje.
+
+**19.10 GATEWAY** — não trabalhar agora; F5.2 segue na Fase 5.
+
+**19.17 RÉGUA AUTOMÁTICA** — sem resposta e sem bloqueio: a Fase 5 não começou.
+
+ÚNICO PONTO A CONFIRMAR (não bloqueia nada agora, cobrar na Fase 3): em 19.35
+a direção escreveu "isso não deve existir no sistema" sobre o TETO de desconto
+e write-off. Foi lido como "não existe teto nem aprovação", mantendo o ajuste
+em si. Se a intenção era que desconto e baixa de dívida não existam de forma
+alguma, é uma linha a mudar na F3.8.
 
 ## DIÁRIO DE EXECUÇÃO
 
