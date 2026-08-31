@@ -25,11 +25,13 @@ export type StatusMeta = {
   rowClass: string;
 };
 
-// Cores suaves de linha (design system — mesmas de /rotina):
-// pago = verde discreto · alerta = amarelo discreto · devendo = vermelho discreto.
-export const ROW_PAID = "bg-emerald-50/60 dark:bg-emerald-500/[0.06]";
+// Tintura suave da linha, sempre pelo token semântico (02 §7.2: "fundo suave
+// sempre com par dark"). Os tokens *-soft já trazem o par dos dois temas —
+// no claro uma tintura clara, no escuro uma translúcida — então aqui não
+// existe mais variante `dark:`.
+export const ROW_PAID = "bg-success-soft/60";
 export const ROW_SOON = "bg-warning-soft/60";
-export const ROW_OVERDUE = "bg-red-50/70 dark:bg-red-500/[0.07]";
+export const ROW_OVERDUE = "bg-danger-soft/60";
 
 const META = {
   pago: (label: string): StatusMeta => ({ label, variant: "success", rowClass: ROW_PAID }),

@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";

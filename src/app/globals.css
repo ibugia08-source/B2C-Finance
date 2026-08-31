@@ -1,131 +1,216 @@
-/* Fonte carregada via next/font (src/app/layout.tsx) — sem @import bloqueante. */
+/* =====================================================================
+   B2C FINANCE 2.2 — FUNDAÇÕES DE DESIGN (F1.13 · ref. 02 §7.1-7.4)
+   Fontes via next/font (src/app/layout.tsx) — sem @import bloqueante.
+
+   DIREÇÃO: "Precisão Editorial" (02 §7.1). Dois territórios:
+     · MARCA   → login, capas de PDF/fotografia, e-mails. Navy, dourado, grão.
+     · PRODUTO → telas de trabalho. Canvas neutro, UM acento azul, zero ornamento.
+   Dourado NUNCA entra em tela de trabalho (lá, âmbar = atenção).
+
+   ARQUITETURA EM 2 CAMADAS:
+     1. Escalas primitivas (--blue-*, --slate-*, --green-* ...) — NUNCA use
+        na UI. Existem só para os tokens semânticos derivarem delas.
+     2. Tokens semânticos — o que a UI consome, sempre via classe Tailwind.
+
+   DE-PARA DE NOMES (leia antes de mexer): a spec chama o azul da marca de
+   "accent"; o shadcn, que o v1 inteiro usa em ~200 arquivos, chama de
+   "primary" e reserva "accent" para a superfície de hover. Renomear
+   quebraria o sistema todo sem ganho visual. Então:
+        spec accent/accent-hover/accent-active/accent-subtle  ->  primary + brand
+        spec canvas/surface/text/text-muted/text-faint        ->  background/card/foreground/muted-foreground
+   Código novo deve usar `brand-*`, `canvas`, `surface*` e `text-*`; o
+   legado segue em `primary-*` e renderiza exatamente a mesma cor.
+   ===================================================================== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* B2C Finance 2 — claro "Porcelana & Esmeralda" (identidade 30/08) */
-    --background: 160 24% 97%;          /* porcelana com respiro verde */
-    --foreground: 182 26% 10%;          /* grafite esverdeado profundo */
+    /* ============ 1. ESCALAS PRIMITIVAS (não consumir direto) ============ */
 
-    --card: 0 0% 100%;
-    --card-foreground: 182 26% 10%;
+    /* Azul institucional B2C — matiz 213-215, harmonizado com o navy da
+       marca (#0d1b2e = hsl(214.5 56% 11.6%)): a mesma família, do topo
+       claro até o navy, é o que faz marca e produto parecerem um só sistema. */
+    --blue-50:  213 100% 97%;
+    --blue-100: 213 96% 93%;
+    --blue-200: 213 94% 86%;
+    --blue-300: 213 91% 76%;
+    --blue-400: 214 88% 64%;
+    --blue-500: 214 84% 55%;
+    --blue-600: 215 82% 46%;
+    --blue-700: 215 80% 41%;
+    --blue-800: 215 74% 33%;
+    --blue-900: 214 66% 26%;
+    --blue-950: 214 58% 17%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 182 26% 10%;
+    /* Neutro base slate — levemente azulado para casar com o acento.
+       Cinza puro leria como "não escolhido". */
+    --slate-50:  210 40% 98%;
+    --slate-100: 210 33% 96%;
+    --slate-200: 213 27% 91%;
+    --slate-300: 213 24% 84%;
+    --slate-400: 214 17% 65%;
+    --slate-500: 215 15% 50%;
+    --slate-600: 215 18% 38%;
+    --slate-700: 215 25% 28%;
+    --slate-800: 217 30% 19%;
+    --slate-900: 218 38% 13%;
+    --slate-950: 220 47% 8%;   /* canvas escuro #0B1220 (02 §7.2) */
 
-    --primary: 172 68% 25%;             /* esmeralda profunda */
-    --primary-foreground: 0 0% 100%;
-    --primary-active: 172 72% 19%;      /* press-state */
-    --primary-disabled: 170 28% 72%;
+    /* ============ 2. MARCA (exclusivo: login, PDF, e-mail) ============ */
+    --navy: 214 56% 12%;
+    --navy-deep: 214 60% 8%;
+    --gold: 46 91% 52%;        /* #F5C518 — proibido em tela de trabalho */
 
-    --secondary: 164 22% 94%;
-    --secondary-foreground: 182 26% 12%;
+    /* ============ 3. TOKENS SEMÂNTICOS — TEMA CLARO ============ */
 
-    --muted: 164 20% 93%;
-    --muted-foreground: 176 10% 38%;
+    /* Superfícies */
+    --canvas: 210 30% 97%;
+    --surface: 0 0% 100%;
+    --surface-raised: 0 0% 100%;
+    --surface-sunken: 210 30% 94%;
 
-    --accent: 168 44% 93%;              /* wash esmeralda claríssimo */
-    --accent-foreground: 172 62% 19%;
+    /* Traços */
+    --border: 213 24% 87%;
+    --border-soft: 213 27% 92%;
+    --input: 213 24% 82%;
 
-    --destructive: 4 72% 46%;
-    --destructive-foreground: 0 0% 100%;
+    /* Tinta — todos os três passam AA sobre canvas e surface */
+    --text: 218 38% 12%;
+    --text-muted: 215 18% 38%;
+    --text-faint: 215 15% 48%;
 
-    /* Semânticos de estado — discretos (badges/textos usam tons suaves) */
-    --success: 152 58% 32%;
-    --success-soft: 150 55% 93%;
-    --warning: 36 92% 40%;
-    --warning-soft: 45 92% 92%;
+    /* Acento (um só por tela, além da semântica) */
+    --brand: 215 80% 41%;
+    --brand-hover: 215 82% 36%;
+    --brand-active: 215 84% 30%;
+    --brand-subtle: 213 94% 95%;
+    --brand-foreground: 0 0% 100%;
+    --ring: 215 82% 46%;
 
-    --border: 164 16% 87%;
-    --border-soft: 164 16% 91%;         /* divisor mais leve (linhas de tabela) */
-    --input: 164 16% 83%;
-    --ring: 172 68% 30%;
+    /* Semântica de estado — sólido, suave e tinta, nos dois temas */
+    --success: 152 60% 30%;
+    --success-soft: 150 60% 94%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 88% 36%;
+    --warning-soft: 40 92% 92%;
+    --warning-foreground: 0 0% 100%;
+    --danger: 0 72% 44%;
+    --danger-soft: 0 84% 96%;
+    --danger-foreground: 0 0% 100%;
+    --info: 199 88% 32%;
+    --info-soft: 199 85% 94%;
+    --info-foreground: 0 0% 100%;
 
-    /* Superfícies de apoio (busca pill, botões secundários, plates de ícone) */
-    --surface-soft: 162 22% 95.5%;
-    --surface-strong: 162 18% 92%;
+    /* Dataviz — 6 séries daltônico-seguras começando pelo acento (02 §7.4).
+       Validadas por scripts/validate_palette.js: banda de luminosidade,
+       piso de croma, separação em deuteranopia/protanopia/tritanopia,
+       piso de visão normal e contraste. Ordem é contrato: a série 1 é
+       sempre o acento e as 4 primeiras (teto de séries por gráfico)
+       separam-se entre TODOS os pares, não só entre vizinhas. */
+    --chart-1: 215 75% 47%;    /* #1D64C4 azul (acento) */
+    --chart-2: 353 79% 67%;    /* #EE6677 vermelho */
+    --chart-3: 130 60% 33%;    /* #228833 verde */
+    --chart-4:  50 51% 50%;    /* #BFAE3E oliva */
+    --chart-5: 194 72% 59%;    /* #4CBCE2 ciano */
+    --chart-6: 322 53% 44%;    /* #AA3377 magenta */
+    --chart-grid: 213 24% 89%;
 
-    --radius: 0.625rem;                 /* escala mais afiada: lg=10 · md=8 · sm=6 */
+    /* ---- Aliases shadcn: o legado inteiro depende destes nomes ---- */
+    --background: var(--canvas);
+    --foreground: var(--text);
+    --card: var(--surface);
+    --card-foreground: var(--text);
+    --popover: var(--surface-raised);
+    --popover-foreground: var(--text);
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-foreground);
+    --primary-active: var(--brand-active);
+    --primary-disabled: 213 24% 78%;
+    --secondary: 210 30% 95%;
+    --secondary-foreground: var(--text);
+    --muted: 210 30% 95%;
+    --muted-foreground: var(--text-muted);
+    --accent: 213 94% 95%;              /* superfície de hover (shadcn) */
+    --accent-foreground: 215 80% 30%;
+    --destructive: var(--danger);
+    --destructive-foreground: var(--danger-foreground);
+    --surface-soft: 210 30% 96%;
+    --surface-strong: 210 28% 92%;
+
+    /* ============ 4. FORMA (02 §7.2) ============ */
+    --radius-pill: 9999px;      /* botões, badges */
+    --radius-cell: 0.5rem;      /* 8px  — células editáveis */
+    --radius-input: 0.75rem;    /* 12px — inputs */
+    --radius-card: 1rem;        /* 16px — cards */
+    --radius-modal: 1.5rem;     /* 24px — modais */
+    --radius: 0.75rem;          /* base shadcn: lg=12 · md=10 · sm=8 */
+
+    /* ============ 5. MOVIMENTO (02 §7.3) ============ */
+    --dur-instant: 80ms;   /* hover, foco, press */
+    --dur-fast: 140ms;     /* dropdown, tooltip, chip */
+    --dur-base: 200ms;     /* aba, expandir linha, drawer */
+    --dur-slow: 280ms;     /* modal, troca de mês */
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+    --ease-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   }
 
   .dark {
-    /* B2C Finance 2 — escuro "Abissal" (verde-negro + esmeralda viva) */
-    --background: 186 26% 6%;
-    --foreground: 160 14% 95%;
+    /* Escuro de PRIMEIRA CLASSE (02 §7.2): passos próprios das mesmas
+       escalas, não uma inversão automática. Elevação por CLAREAMENTO +
+       borda — sombra não existe sobre fundo escuro. */
+    --canvas: 220 47% 8%;
+    --surface: 220 38% 11%;
+    --surface-raised: 220 32% 14%;
+    --surface-sunken: 220 50% 6%;
 
-    --card: 184 20% 9%;
-    --card-foreground: 160 14% 95%;
+    --border: 218 22% 21%;
+    --border-soft: 219 26% 16%;
+    --input: 218 22% 24%;
 
-    --popover: 184 20% 9%;
-    --popover-foreground: 160 14% 95%;
+    --text: 210 30% 96%;
+    --text-muted: 214 16% 68%;
+    --text-faint: 214 14% 55%;
 
-    --primary: 163 60% 52%;             /* esmeralda viva */
-    --primary-foreground: 186 40% 7%;   /* tinta escura sobre o verde */
-    --primary-active: 163 62% 44%;
-    --primary-disabled: 168 24% 27%;
+    --brand: 214 88% 64%;
+    --brand-hover: 213 91% 71%;
+    --brand-active: 214 84% 56%;
+    --brand-subtle: 215 60% 18%;
+    --brand-foreground: 220 50% 8%;
+    --ring: 214 88% 68%;
 
-    --secondary: 182 15% 14%;
-    --secondary-foreground: 160 14% 95%;
+    --success: 152 56% 52%;
+    --success-soft: 152 42% 15%;
+    --success-foreground: 152 60% 8%;
+    --warning: 38 92% 58%;
+    --warning-soft: 38 48% 15%;
+    --warning-foreground: 32 70% 8%;
+    --danger: 0 78% 63%;
+    --danger-soft: 0 45% 17%;
+    --danger-foreground: 0 60% 8%;
+    --info: 199 85% 58%;
+    --info-soft: 199 45% 15%;
+    --info-foreground: 199 70% 8%;
 
-    --muted: 182 13% 18%;
-    --muted-foreground: 168 9% 66%;
+    /* Mesma família, na banda de luminosidade do escuro (0.48-0.67):
+       clarear demais faz a série florescer sobre o canvas. */
+    --chart-1: 214 65% 54%;    /* #3C7BD6 */
+    --chart-2: 352 71% 61%;    /* #E2556A */
+    --chart-3: 130 54% 39%;    /* #2E9B41 */
+    --chart-4:  50 56% 41%;    /* #A2922E */
+    --chart-5: 194 60% 50%;    /* #34A2CB */
+    --chart-6: 324 48% 50%;    /* #BC4285 */
+    --chart-grid: 218 22% 22%;
 
-    --accent: 174 22% 15%;              /* hover sutil esverdeado */
-    --accent-foreground: 160 14% 95%;
-
-    --destructive: 3 78% 60%;
-    --destructive-foreground: 186 40% 7%;
-
-    /* Semânticos de estado — versões dark */
-    --success: 152 55% 50%;
-    --success-soft: 152 40% 13%;
-    --warning: 42 90% 55%;
-    --warning-soft: 42 50% 12%;
-
-    --border: 182 15% 15%;
-    --border-soft: 182 15% 12%;
-    --input: 182 15% 17%;
-    --ring: 163 60% 55%;
-
-    --surface-soft: 183 18% 10.5%;
-    --surface-strong: 182 15% 14%;
-  }
-
-  /* ===== Personalização: cor de destaque (Configurações → Aparência) =====
-     O padrão é Esmeralda (tokens acima). Cada preset redefine SOMENTE os
-     tokens de destaque, no claro E no escuro — html[data-accent] (0,1,1)
-     vence :root, e html.dark[data-accent] (0,2,1) vence os dois. */
-  html[data-accent="safira"] {
-    --primary: 214 78% 42%; --primary-foreground: 0 0% 100%;
-    --primary-active: 214 82% 34%; --primary-disabled: 214 40% 74%;
-    --ring: 214 78% 46%; --accent: 214 64% 94%; --accent-foreground: 214 72% 24%;
-  }
-  html.dark[data-accent="safira"] {
-    --primary: 212 88% 62%; --primary-foreground: 220 45% 8%;
-    --primary-active: 212 80% 54%; --primary-disabled: 212 32% 30%;
-    --ring: 212 88% 65%; --accent: 214 28% 16%; --accent-foreground: 210 16% 95%;
-  }
-  html[data-accent="ametista"] {
-    --primary: 268 52% 44%; --primary-foreground: 0 0% 100%;
-    --primary-active: 268 56% 36%; --primary-disabled: 268 30% 76%;
-    --ring: 268 52% 48%; --accent: 268 50% 95%; --accent-foreground: 268 50% 28%;
-  }
-  html.dark[data-accent="ametista"] {
-    --primary: 268 72% 70%; --primary-foreground: 270 45% 10%;
-    --primary-active: 268 64% 62%; --primary-disabled: 268 28% 30%;
-    --ring: 268 72% 72%; --accent: 268 24% 17%; --accent-foreground: 265 16% 95%;
-  }
-  html[data-accent="ambar"] {
-    --primary: 30 88% 34%; --primary-foreground: 0 0% 100%;
-    --primary-active: 28 90% 27%; --primary-disabled: 32 45% 74%;
-    --ring: 30 88% 38%; --accent: 36 80% 92%; --accent-foreground: 28 80% 22%;
-  }
-  html.dark[data-accent="ambar"] {
-    --primary: 38 88% 56%; --primary-foreground: 30 60% 8%;
-    --primary-active: 36 84% 48%; --primary-disabled: 36 30% 28%;
-    --ring: 38 88% 60%; --accent: 36 26% 15%; --accent-foreground: 40 20% 95%;
+    --primary-disabled: 218 20% 32%;
+    --secondary: 220 32% 15%;
+    --muted: 220 32% 16%;
+    --accent: 215 45% 18%;
+    --accent-foreground: 213 91% 82%;
+    --surface-soft: 220 36% 12%;
+    --surface-strong: 220 32% 16%;
   }
 }
 
@@ -134,110 +219,89 @@
   html {
     scroll-behavior: smooth;
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+    scrollbar-color: hsl(var(--text-faint) / 0.35) transparent;
   }
   body {
     @apply bg-background text-foreground;
-    font-family:
-      var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-      Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  h1, h2, h3, h4 { letter-spacing: -0.01em; }
+  /* Título de página: peso 600 e tracking -0.02em; NUNCA 700+ (02 §7.2). */
+  h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
+  ::selection { background: hsl(var(--brand) / 0.22); }
 
-  /* seleção de texto na cor da marca */
-  ::selection { background: hsl(var(--primary) / 0.28); }
-
-  /* scrollbar temática (WebKit) */
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.25);
-    border-radius: 9999px;
+    background: hsl(var(--text-faint) / 0.3);
+    border-radius: var(--radius-pill);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.45);
-    background-clip: padding-box;
-  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--text-faint) / 0.5); background-clip: padding-box; }
 }
 
 @layer components {
-  /* Números financeiros: fonte mono (JetBrains Mono via next/font) — valores
-     visualmente estáveis e fáceis de comparar (padrão institucional). */
+  /* TODO número financeiro usa a mono tabular (02 §7.2) — dígitos de
+     largura fixa é o que deixa uma coluna de valores comparável a olho. */
   .stat-number {
     font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
     font-weight: 500;
-    @apply tabular-nums tracking-tight;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
-  /* Fundo do produto: brilho suave da cor de destaque sobre a base */
-  .app-shell {
+  /* Superfície de trabalho: canvas neutro e chapado. O gradiente da
+     identidade anterior saiu — 02 §7.1 pede "zero ornamento" no produto. */
+  .app-shell { background: hsl(var(--canvas)); }
+
+  /* Território de MARCA: login, capas de PDF/fotografia, e-mails. */
+  .brand-canvas {
     background:
-      radial-gradient(1200px 600px at -10% -10%, hsl(var(--primary) / 0.12), transparent 60%),
-      radial-gradient(900px 500px at 110% 0%, hsl(var(--primary) / 0.04), transparent 55%),
-      hsl(var(--background));
+      radial-gradient(1100px 620px at 12% -12%, hsl(var(--blue-900) / 0.55), transparent 62%),
+      hsl(var(--navy-deep));
+    color: hsl(var(--slate-50));
+  }
+  /* Grão sutil da identidade — só sobre .brand-canvas. */
+  .brand-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
   }
 }
 
 @layer utilities {
-  /* Sombra suave premium para superfícies elevadas */
-  .shadow-soft {
-    box-shadow:
-      0 1px 2px hsl(240 30% 4% / 0.06),
-      0 8px 24px -8px hsl(240 30% 4% / 0.12);
-  }
-  .dark .shadow-soft {
-    box-shadow:
-      0 1px 3px hsl(0 0% 0% / 0.5),
-      0 10px 28px -8px hsl(0 0% 0% / 0.6);
-  }
+  /* ELEVAÇÃO EM 4 NÍVEIS (02 §7.2): borda + sombra mínima. Nível 0 é
+     chapado (tabelas) e por isso não tem classe. */
+  .elev-1 { box-shadow: 0 1px 2px hsl(218 39% 11% / 0.06); }
+  .elev-2 { box-shadow: 0 4px 12px -2px hsl(218 39% 11% / 0.10), 0 2px 4px -2px hsl(218 39% 11% / 0.06); }
+  .elev-3 { box-shadow: 0 24px 48px -12px hsl(218 39% 11% / 0.18), 0 8px 16px -8px hsl(218 39% 11% / 0.10); }
+  /* No escuro a sombra não se enxerga: a elevação vem da borda clara. */
+  .dark .elev-1 { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04); }
+  .dark .elev-2 { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 8px 24px -8px hsl(0 0% 0% / 0.6); }
+  .dark .elev-3 { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08), 0 28px 56px -16px hsl(0 0% 0% / 0.75); }
 
-  /* Sombra elevada para modais/sheets */
-  .shadow-modal {
-    box-shadow:
-      0 20px 25px -5px hsl(240 30% 4% / 0.1),
-      0 10px 10px -5px hsl(240 30% 4% / 0.04);
-  }
-  .dark .shadow-modal {
-    box-shadow:
-      0 20px 25px -5px hsl(0 0% 0% / 0.3),
-      0 10px 10px -5px hsl(0 0% 0% / 0.2);
-  }
+  /* Aliases do legado — mesmos níveis, nomes antigos. @apply não serve
+     aqui: elev-* é CSS puro, não utilitário gerado pelo Tailwind. */
+  .shadow-soft { box-shadow: 0 1px 2px hsl(218 39% 11% / 0.06); }
+  .shadow-modal { box-shadow: 0 24px 48px -12px hsl(218 39% 11% / 0.18), 0 8px 16px -8px hsl(218 39% 11% / 0.10); }
+  .dark .shadow-soft { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04); }
+  .dark .shadow-modal { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08), 0 28px 56px -16px hsl(0 0% 0% / 0.75); }
 
-  /* Entrada suave de conteúdo ao navegar entre páginas */
-  .page-enter {
-    animation: page-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-  /* Nota: o keyframe final NÃO declara `transform`. Um `transform: translateY(0)`
-     retido (animation-fill-mode: both) computa como matriz — ou seja, ≠ none — e
-     transforma o <main> em bloco de contenção para descendentes `position: fixed`,
-     fazendo a barra de ação (fixed bottom-0) grudar no rodapé do conteúdo em vez do
-     viewport. Omitindo o transform no final, ele volta a `none` após a entrada. */
+  /* Troca de tela: 12px na direção do tempo, com fade (02 §7.3). */
+  .page-enter { animation: page-enter var(--dur-slow) var(--ease-decelerate) both; }
+  /* O keyframe final NÃO declara `transform`: um translateY(0) retido
+     (fill-mode both) computa como matriz — ou seja ≠ none — e transforma o
+     <main> em bloco de contenção para descendentes `position: fixed`,
+     grudando a barra de ação no rodapé do conteúdo em vez do viewport. */
   @keyframes page-enter {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-    }
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; }
   }
-
-  /* Hover lift effect */
-  .hover-lift {
-    @apply transition-all duration-200 hover:shadow-md hover:-translate-y-1;
-  }
-
-}
-
-@layer components {
-  /* Smooth collapse/expand animation for sidebar */
-  .sidebar-collapse {
-    @apply transition-all duration-300 ease-out;
-  }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -249,17 +313,9 @@
   }
 }
 
-/* Impressão de relatórios: só o conteúdo (tabela/gráfico) vai para o PDF. */
+/* Impressão: só o conteúdo vai para o PDF. */
 @media print {
-  aside,
-  nav,
-  .print\:hidden {
-    display: none !important;
-  }
-  main {
-    padding: 0 !important;
-  }
-  body {
-    background: white !important;
-  }
+  aside, nav, .print\:hidden { display: none !important; }
+  main { padding: 0 !important; }
+  body { background: white !important; }
 }

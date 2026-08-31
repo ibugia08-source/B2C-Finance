@@ -1,7 +1,7 @@
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";

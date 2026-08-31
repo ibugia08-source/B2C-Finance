@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { MonthNav } from "@/components/month-nav";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";

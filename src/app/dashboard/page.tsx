@@ -34,8 +34,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChartCard, HBarList } from "@/components/charts";
 import { MainChart, CompositionDonut } from "@/components/dashboard/charts-lazy";
-import { MetricCard } from "@/components/dashboard/metric-card";
-import { SecondaryStat } from "@/components/dashboard/secondary-stat";
+import { MetricCard } from "@/components/metric-card";
+import { SecondaryStat } from "@/components/metric-card";
 import { LaunchToCash } from "@/components/dashboard/launch-to-cash";
 import {
   FaturamentoDetail, DespesasDetail, RecebidoDetail, EmAbertoDetail, ResultadoDetail,
@@ -237,7 +237,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           help="Soma de todas as despesas registradas no mês, incluindo folha, ferramentas, impostos e custos operacionais."
           delta={main.deltas.despesas}
           goodWhenUp={false}
-          valueTone={finance.despesas > 0 ? "neg" : "default"}
+          tone={finance.despesas > 0 ? "neg" : "default"}
           detailTitle="Total de despesas do mês"
           detail={<DespesasDetail categories={expensesByCategory} items={expensesDetail} total={finance.despesas} />}
         />
@@ -246,7 +246,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           value={formatBRL(recebido)}
           help="Total de valores efetivamente registrados como recebidos no mês selecionado."
           delta={main.deltas.recebido}
-          valueTone="pos"
+          tone="pos"
           detailTitle="Faturamento recebido do mês"
           detail={<RecebidoDetail items={receivedDetail} mrrReceived={M.mrrRecebido}
             tcvReceived={M.tcvRecebido} total={recebido} />}
@@ -265,7 +265,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           value={formatBRL(resultado)}
           help="Lucro ou prejuízo operacional do mês. Fórmula: Faturamento recebido − Total de despesas."
           delta={main.deltas.resultado}
-          valueTone={resultado > 0 ? "pos" : resultado < 0 ? "neg" : "default"}
+          tone={resultado > 0 ? "pos" : resultado < 0 ? "neg" : "default"}
           detailTitle="Resultado do mês"
           detail={<ResultadoDetail recebido={recebido} despesas={finance.despesas}
             resultado={resultado} margem={M.margem} disponivel={disponivelCaixa} />}

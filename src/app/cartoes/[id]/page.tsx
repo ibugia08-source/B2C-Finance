@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange, parseMonthParam, toNumber as n } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

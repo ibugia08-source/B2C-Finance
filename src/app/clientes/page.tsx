@@ -12,7 +12,7 @@ import Link from "next/link";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
-import { KpiCard } from "./kpi-card";
+import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { MonthNav } from "@/components/month-nav";
 import { PageSizeSelect } from "./page-size-select";

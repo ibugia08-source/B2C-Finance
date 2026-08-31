@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange, monthLabel, toNumber as n } from "@/lib/format";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";

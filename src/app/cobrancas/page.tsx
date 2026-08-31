@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";

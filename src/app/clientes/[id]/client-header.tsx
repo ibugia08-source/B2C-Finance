@@ -4,7 +4,7 @@ import { ArrowLeft, FileSignature, HandCoins, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import type { ClientRiskProfile } from "@/lib/services/client-metrics";
 import { ClientStatusSelect } from "../status-select";

@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { AppearanceCard } from "./appearance-card";
 import { CategoryDialog } from "./category-dialog";

@@ -99,7 +99,7 @@ function GroupRows({
                 className={cn(
                   numericAlign(c.kind),
                   c.kind === "money" && "tabular-nums",
-                  negative && "text-red-600"
+                  negative && "text-destructive"
                 )}
               >
                 {formatCell(raw, c.kind) || "—"}

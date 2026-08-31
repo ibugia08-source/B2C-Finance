@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/stat-card";
+import { StatCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, monthRange, monthLabel } from "@/lib/format";
