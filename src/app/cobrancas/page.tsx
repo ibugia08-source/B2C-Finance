@@ -1,6 +1,8 @@
 import { PageHeader } from "@/components/page-header";
 import { PeriodBadge } from "@/components/period-badge";
+import { SnapshotBanner } from "@/components/snapshot-banner";
 import { periodoDe } from "@/lib/services/closing-period";
+import { lerFotografia } from "@/lib/snapshots/read";
 import { MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
@@ -113,9 +115,16 @@ export default async function RecebimentosPage({
 
   // Estado do período (F2.1). Competência sem linha é ABERTA — não há
   // semeadura, então isto é barato e é sempre a verdade.
-  const periodo = await periodoDe(`${mes.year}-${String(mes.month).padStart(2, "0")}`);
+  const competenciaDoMes = `${mes.year}-${String(mes.month).padStart(2, "0")}`;
+  const periodo = await periodoDe(competenciaDoMes);
   const podeFechar = can(viewer, "fechamento.fechar");
   const podeReabrir = can(viewer, "fechamento.reabrir");
+  // Mês fechado: os gestos que MEXEM no mês somem (02 §7.8 — ausentes, não
+  // desabilitados). Os gestos de RECEBER continuam, e isso é regra, não
+  // esquecimento: 01 §5.6 diz que o pagamento de uma cobrança antiga é
+  // normal e entra no mês em que o dinheiro cai.
+  const mesFechado = periodo.estado === "CLOSED";
+  const fotografia = mesFechado ? await lerFotografia(competenciaDoMes) : null;
 
   // Gates por módulo de origem (padrão da Rotina): sem permissão, a seção
   // some E as queries dela são puladas.
@@ -747,7 +756,17 @@ export default async function RecebimentosPage({
               podeFechar={podeFechar}
               podeReabrir={podeReabrir}
             />
-            <PastDelinquencyDialog clients={allClientsBasic} />
+            {mesFechado ? (
+              <Link
+                href={`/fechamento/fotografia?mes=${competenciaDoMes}`}
+                className="text-dense text-brand hover:underline"
+              >
+                Ver a fotografia
+              </Link>
+            ) : null}
+            {mesFechado ? null : <PastDelinquencyDialog clients={allClientsBasic} />}
+            {mesFechado ? null : (
+              <>
             <BillingDialog
               clients={allClientsBasic}
               contracts={contractsRaw}
@@ -769,9 +788,21 @@ export default async function RecebimentosPage({
               month={mes.month}
               year={mes.year}
             />
+              </>
+            )}
           </div>
         }
       />
+
+      {fotografia ? (
+        <SnapshotBanner
+          competence={fotografia.competence}
+          versao={fotografia.versao}
+          fechadoPor={fotografia.fechadoPor}
+          fechadoEm={fotografia.fechadoEm}
+          precisaRevalidar={fotografia.precisaRevalidar}
+        />
+      ) : null}
 
       {/* ===== Barra superior: mês · busca ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
