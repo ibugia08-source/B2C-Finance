@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/page-header";
-import { StatCard } from "@/components/metric-card";
+import { MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
@@ -434,7 +434,7 @@ export default async function RecebimentosPage({
     : null;
   const pctRealizacao =
     receipts.expectedTotal > 0 ? receipts.totalRevenue / receipts.expectedTotal : null;
-  // Resultado do mês = FATURAMENTO ESPERADO − despesas (regra da planilha do
+  // PROJEÇÃO do mês (02 §5.2) = FATURAMENTO ESPERADO − despesas (regra da planilha do
   // dono: o resultado projeta o mês cheio, não só o que já caiu na conta).
   const resultadoMes =
     expenseSummary != null ? receipts.expectedTotal - expenseSummary.total : null;
@@ -762,55 +762,70 @@ export default async function RecebimentosPage({
         <ClientSearch />
       </div>
 
-      {/* ===== Resumo do mês (Ativo · Passivo · Resultado da planilha) ===== */}
-      <div
-        className={`grid grid-cols-2 md:grid-cols-3 ${expenseSummary ? "xl:grid-cols-6" : "xl:grid-cols-4"} gap-3 mb-3`}
-      >
-        <StatCard
+      {/* ===== RESUMO DO MÊS — 6 cards (02 §5.2) =====
+          O card antes chamado "Resultado do mês" virou "PROJEÇÃO do mês",
+          como a spec manda. Não é preciosismo: o número aqui é
+          esperado − despesas, e a Início tem um "Resultado do mês" que é
+          recebido − despesas. Dois números diferentes com o mesmo rótulo
+          em duas telas é exatamente o que §5.5 proíbe. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <MetricCard
           title="Faturamento esperado"
           value={formatBRL(receipts.expectedTotal)}
-          hint="cobranças da competência"
+          basis="competencia"
+          hint="tudo que foi cobrado na competência"
+          help="Soma de TODA cobrança com competência neste mês que não foi cancelada — mensalidade (MRR), parcela de contrato (TCV), implantação (setup), avulsa e upsell entram todas. Pagas e em aberto contam igual: é o que se esperava faturar, não o que entrou."
         />
-        <StatCard
+        <MetricCard
           title="Recebido no mês"
           value={formatBRL(receipts.totalRevenue)}
-          intent="positive"
+          basis="caixa"
+          tone="pos"
           hint="mensalidades + entradas"
+          help="Dinheiro efetivamente registrado como recebido dentro deste mês, incluindo entradas avulsas."
         />
-        <StatCard
+        <MetricCard
           title="% Realização"
-          value={pctRealizacao != null ? `${Math.round(pctRealizacao * 100)}%` : "—"}
-          intent={
+          value={pctRealizacao != null ? `${Math.round(pctRealizacao * 100)}%` : null}
+          nullReason="Nada esperado neste mês"
+          hint="recebido ÷ esperado"
+          help="Quanto do faturamento esperado já virou dinheiro em caixa. Sem cobrança no mês não existe divisão possível, e aí o campo mostra um traço em vez de zero."
+          tone={
             pctRealizacao == null
               ? "default"
               : pctRealizacao >= 0.9
-                ? "positive"
+                ? "pos"
                 : pctRealizacao >= 0.6
-                  ? "warning"
-                  : "negative"
+                  ? "warn"
+                  : "neg"
           }
-          hint="recebido ÷ esperado"
         />
-        <StatCard
+        <MetricCard
           title="Falta receber"
           value={formatBRL(receipts.openMonth)}
-          intent={receipts.openMonth > 0 ? "warning" : "positive"}
+          basis="competencia"
           hint="em aberto na competência"
+          help="Faturamento esperado menos o que foi recebido dentro da competência. Não inclui dívida de meses anteriores — essa aparece como recuperação."
+          tone={receipts.openMonth > 0 ? "warn" : "pos"}
         />
         {expenseSummary && (
-          <StatCard
+          <MetricCard
             title="Despesas do mês"
             value={formatBRL(expenseSummary.total)}
-            intent="negative"
+            basis="competencia"
+            tone="neg"
             hint="contas + cartões + folha paga"
+            help="Todas as saídas reconhecidas no mês: contas a pagar, faturas de cartão e folha."
           />
         )}
         {resultadoMes != null && (
-          <StatCard
-            title="Resultado do mês"
+          <MetricCard
+            title="Projeção do mês"
             value={formatBRL(resultadoMes)}
-            intent={resultadoMes >= 0 ? "positive" : "negative"}
-            hint="faturamento esperado − despesas"
+            basis="competencia"
+            tone={resultadoMes >= 0 ? "pos" : "neg"}
+            hint="esperado − despesas"
+            help="Faturamento ESPERADO menos as despesas do mês. É uma projeção: assume que tudo que foi cobrado será recebido. Não confundir com o Resultado do mês da tela Início, que usa o RECEBIDO em caixa e por isso costuma ser menor enquanto o mês não fecha."
           />
         )}
       </div>
