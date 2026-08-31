@@ -64,4 +64,7 @@ execFileSync("npx", ["tsx", "prisma/seed-chart-of-accounts.ts"], { stdio: "inher
 // Registry de métricas: a suíte confere o contrato das métricas (01 §7).
 execFileSync("npx", ["tsx", "prisma/seed-metric-registry.ts"], { stdio: "inherit", env });
 
+// Matriz canônica de eventos contábeis: a suíte posta fatos no razão (01 §3.10).
+execFileSync("npx", ["tsx", "prisma/seed-posting-rules.ts"], { stdio: "inherit", env });
+
 console.log("✓ banco de testes pronto");

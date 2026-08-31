@@ -35,6 +35,9 @@ model Workspace {
   legalEntities  LegalEntity[]
   accounts       AccountingAccount[]
   metrics        MetricDefinition[]
+  postingRules   PostingRule[]
+  ledger         LedgerTransaction[]
+  featureFlags   FeatureFlag[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
 }
@@ -148,6 +151,7 @@ model User {
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
   workspace          Workspace?           @relation("OwnerWorkspace")
+  ownedLedgerTx      LedgerTransaction[]  @relation("OwnerLedgerTransaction")
   ownedAccounts      Account[]            @relation("OwnerAccount")
   ownedCards         CreditCard[]         @relation("OwnerCreditCard")
   ownedAccountCards  AccountCard[]        @relation("OwnerAccountCard")
@@ -375,7 +379,8 @@ model AccountingAccount {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
-  categories Category[]
+  categories  Category[]
+  LedgerEntry LedgerEntry[]
 
   @@unique([workspaceId, code])
   @@index([workspaceId])
@@ -447,6 +452,109 @@ model MetricDefinition {
   @@unique([workspaceId, key, version])
   @@index([workspaceId])
   @@index([key])
+}
+
+// ===================================================================
+// RAZÃO (LEDGER) E REGRAS DE LANÇAMENTO (01 §3.10-3.11, §4.9)
+//
+// Nenhuma tela escreve aqui. O domínio publica um FATO; o AccountingEngine
+// aplica a PostingRule ativa e versionada e grava a partida dobrada.
+//
+// Invariantes:
+//  - débitos = créditos em toda transação;
+//  - um lançamento tem UM lado (ou débito, ou crédito), nunca os dois;
+//  - transação postada não é editada nem apagada: corrige-se por REVERSAL
+//    (evento compensatório), preservando a história (01 §2.8).
+// ===================================================================
+
+model PostingRule {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Evento de domínio (ex.: "REVENUE_RECOGNIZED"). Ver 01 §3.10.
+  eventType         String
+  version           Int       @default(1)
+  name              String
+  description       String
+  /// Códigos de conta do plano (03 §2.2). "Banco/Caixa" e afins são
+  /// resolvidos em tempo de execução a partir do contexto do fato.
+  debitAccountCode  String
+  creditAccountCode String
+  /// A operação reconhece resultado (entra na DRE) ou só move ativo/passivo?
+  affectsPnl        Boolean
+  active            Boolean   @default(true)
+  effectiveFrom     DateTime  @default(now()) @db.Timestamptz(3)
+  effectiveTo       DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, eventType, version])
+  @@index([workspaceId, eventType, active])
+}
+
+model LedgerTransaction {
+  id                 String             @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  eventType          String
+  /// Fato de origem: "Billing", "Payment", "Transaction"...
+  sourceType         String
+  sourceId           String
+  /// Competência do RESULTADO (YYYY-MM). Caixa tem data própria em postedAt.
+  competence         String
+  postedAt           DateTime           @default(now()) @db.Timestamptz(3)
+  /// Preenchido quando esta transação NEUTRALIZA outra (01 §3.10 "Reversal").
+  reversalOfId       String?            @unique
+  reversalOf         LedgerTransaction? @relation("Reversal", fields: [reversalOfId], references: [id])
+  reversedBy         LedgerTransaction? @relation("Reversal")
+  postingRuleVersion Int
+  /// Chave que impede postar o mesmo fato duas vezes (01 §2.13).
+  idempotencyKey     String
+  ownerId            String?
+  owner              User?              @relation("OwnerLedgerTransaction", fields: [ownerId], references: [id])
+  createdAt          DateTime           @default(now()) @db.Timestamptz(3)
+
+  entries LedgerEntry[]
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, competence])
+  @@index([workspaceId, eventType])
+  @@index([sourceType, sourceId])
+  @@index([ownerId])
+}
+
+model LedgerEntry {
+  id                  String            @id @default(cuid())
+  ledgerTransactionId String
+  ledgerTransaction   LedgerTransaction @relation(fields: [ledgerTransactionId], references: [id], onDelete: Cascade)
+  accountId           String
+  account             AccountingAccount @relation(fields: [accountId], references: [id])
+  debit               Decimal           @default(0) @db.Decimal(14, 2)
+  credit              Decimal           @default(0) @db.Decimal(14, 2)
+  /// Dimensões gerenciais do lançamento (01 §4.9).
+  agencyId            String?
+  clientId            String?
+  serviceId           String?
+  createdAt           DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([ledgerTransactionId])
+  @@index([accountId])
+  @@index([clientId])
+  @@index([agencyId])
+}
+
+// Bandeira de recurso (03 §4.6): liga módulos sensíveis sem deploy. A
+// postagem no razão nasce DESLIGADA (ledger_enabled), como manda F0.8.
+model FeatureFlag {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key         String
+  enabled     Boolean   @default(false)
+  description String?
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, key])
 }
 
 model Category {
