@@ -31,6 +31,89 @@ model Workspace {
   owner     User?    @relation("OwnerWorkspace", fields: [ownerId], references: [id])
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  legalEntities  LegalEntity[]
+  agencies       Agency[]
+  economicGroups EconomicGroup[]
+}
+
+// ===================================================================
+// ENTIDADE LEGAL × AGÊNCIA (01 §4.2)
+//
+// EntidadeLegal é o CNPJ: dona da emissão fiscal, das contas bancárias, dos
+// passivos fiscais e do calendário tributário — é por ela que sai a
+// exportação do contador. Agência é a unidade de NEGÓCIO (dimensão
+// gerencial); várias agências podem dividir a mesma EntidadeLegal.
+//
+// Padrão de setup: 1 EntidadeLegal = 1 Agência espelhadas, até o
+// administrador separar. A B2C Gestão nasce assim.
+// ===================================================================
+model LegalEntity {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Razão social.
+  legalName     String
+  /// Nome fantasia (o que aparece na interface).
+  tradeName     String?
+  /// Só dígitos, sem máscara. Único por workspace quando informado.
+  cnpj          String?
+  /// SIMPLES_NACIONAL | LUCRO_PRESUMIDO | LUCRO_REAL | MEI | OUTRO
+  taxRegime     String?
+  /// Inscrições estadual/municipal e afins: { estadual, municipal, ... }
+  registrations Json?
+  timezone      String    @default("America/Bahia")
+  currency      String    @default("BRL")
+  /// Parâmetros fiscais (alíquotas, regras de provisão) — 01 §3.8.
+  taxSettings   Json?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  agencies Agency[]
+
+  @@unique([workspaceId, cnpj])
+  @@index([workspaceId])
+  @@index([active])
+}
+
+model Agency {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// A qual CNPJ esta unidade de negócio pertence (várias podem compartilhar).
+  legalEntityId String
+  legalEntity   LegalEntity @relation(fields: [legalEntityId], references: [id])
+  name          String
+  /// Identificador curto e estável para URL e importação (ex.: "b2c-gestao").
+  slug          String
+  /// Cor de identificação nos painéis (hex, ex.: "#1E70D3").
+  color         String?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([legalEntityId])
+  @@index([active])
+}
+
+// Agregador ANALÍTICO de clientes relacionados (receita, LTV, inadimplência
+// e exposição consolidadas). Não substitui Client: um grupo econômico reúne
+// clientes que continuam distintos (01 §4.2).
+model EconomicGroup {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  notes       String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 model User {
