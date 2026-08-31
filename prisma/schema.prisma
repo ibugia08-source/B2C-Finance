@@ -38,6 +38,7 @@ model Workspace {
   postingRules   PostingRule[]
   ledger         LedgerTransaction[]
   featureFlags   FeatureFlag[]
+  outbox         OutboxEvent[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
 }
@@ -555,6 +556,59 @@ model FeatureFlag {
   updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
 
   @@unique([workspaceId, key])
+}
+
+// ===================================================================
+// TRANSACTIONAL OUTBOX (03 §4.2; 01 §2.20)
+//
+// Integração externa fica FORA da atomicidade financeira. O fato, o razão, a
+// auditoria e o evento de saída são gravados na MESMA transação; a entrega
+// (WhatsApp, CRM, e-mail, webhook) acontece depois, por um worker.
+//
+// Por que assim: se a entrega fosse dentro da transação, um WhatsApp fora do
+// ar desfaria um pagamento já registrado. E se fosse fora, sem outbox, um
+// crash entre o commit e o envio perderia a notificação em silêncio.
+// ===================================================================
+
+enum OutboxStatus {
+  /// Esperando a próxima tentativa.
+  PENDING
+  /// Entregue com sucesso.
+  DELIVERED
+  /// Esgotou as tentativas — exige olhar humano (dead-letter).
+  DEAD_LETTER
+  /// Cancelado antes de entregar (ex.: fato revertido).
+  CANCELED
+}
+
+model OutboxEvent {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Tipo do evento de saída (ex.: "PAYMENT_RECEIVED").
+  eventType     String
+  /// Destino lógico ("whatsapp", "crm", "email", "webhook").
+  channel       String
+  /// Fato de origem, para rastrear de volta.
+  sourceType    String
+  sourceId      String
+  /// Conteúdo MÍNIMO da entrega (03 §4.2) — nunca dados sensíveis a mais.
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  /// Quando a próxima tentativa pode ocorrer (recuo exponencial).
+  nextAttemptAt DateTime     @default(now()) @db.Timestamptz(3)
+  lastError     String?
+  deliveredAt   DateTime?    @db.Timestamptz(3)
+  /// Impede publicar o mesmo evento duas vezes (unique no banco).
+  dedupeKey     String
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId, status])
+  @@index([sourceType, sourceId])
 }
 
 model Category {
