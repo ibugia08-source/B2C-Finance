@@ -11,22 +11,44 @@ datasource db {
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
+// ===================================================================
+// WORKSPACE — dono lógico e limite de isolamento (01 §4.2).
+//
+// Guarda os parâmetros que o resto do sistema consulta em vez de assumir:
+// fuso, moeda e locale (01 §3.4/§3.15). Enquanto houver um único workspace,
+// existe exatamente uma linha; a Fase 1 liga LegalEntity e Agencia a ele.
+// ===================================================================
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  /// Fuso de EXIBIÇÃO. Os instantes são gravados em UTC (timestamptz);
+  /// competência e vencimento são lidos neste fuso.
+  timezone  String   @default("America/Bahia")
+  locale    String   @default("pt-BR")
+  currency  String   @default("BRL")
+  /// Dono da conta (User do v1 que já funciona como limite de isolamento).
+  ownerId   String?  @unique
+  owner     User?    @relation("OwnerWorkspace", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
 model User {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
   // Papel/função na equipe. String (não enum) de propósito: novos papéis não
   // exigem migration. Valores: ADMIN | GESTOR | FINANCEIRO | ADMINISTRATIVO |
   // COMERCIAL | COBRANCA | USER (legado). Catálogo em src/lib/permissions.ts.
-  role         String   @default("USER")
-  active       Boolean  @default(true)
+  role         String    @default("USER")
+  active       Boolean   @default(true)
   // Proteção contra força bruta no login: contador de falhas seguidas e
   // bloqueio temporário (ver loginAction em lib/actions/auth.ts).
   failedLogins Int       @default(0)
-  lockedUntil  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  lockedUntil  DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
 
   person Person?
 
@@ -40,6 +62,7 @@ model User {
   permissions UserPermission[]
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
+  workspace          Workspace?           @relation("OwnerWorkspace")
   ownedAccounts      Account[]            @relation("OwnerAccount")
   ownedCards         CreditCard[]         @relation("OwnerCreditCard")
   ownedAccountCards  AccountCard[]        @relation("OwnerAccountCard")
@@ -86,15 +109,15 @@ model User {
   ownedClientNotes        ClientNote[]        @relation("OwnerClientNote")
 
   // ===== Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra =====
-  ownedClientLosses   ClientLoss[]   @relation("OwnerClientLoss")
-  ownedOffers         Offer[]        @relation("OwnerOffer")
-  ownedOfferServices  OfferService[] @relation("OwnerOfferService")
-  ownedUpsells        Upsell[]       @relation("OwnerUpsell")
-  ownedUpsellServices UpsellService[] @relation("OwnerUpsellService")
-  ownedExtraRevenues  ExtraRevenue[] @relation("OwnerExtraRevenue")
-  ownedRoutineItemStates RoutineItemState[] @relation("OwnerRoutineItemState")
+  ownedClientLosses             ClientLoss[]             @relation("OwnerClientLoss")
+  ownedOffers                   Offer[]                  @relation("OwnerOffer")
+  ownedOfferServices            OfferService[]           @relation("OwnerOfferService")
+  ownedUpsells                  Upsell[]                 @relation("OwnerUpsell")
+  ownedUpsellServices           UpsellService[]          @relation("OwnerUpsellService")
+  ownedExtraRevenues            ExtraRevenue[]           @relation("OwnerExtraRevenue")
+  ownedRoutineItemStates        RoutineItemState[]       @relation("OwnerRoutineItemState")
   ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
-  ownedClientRenewals ClientRenewal[] @relation("OwnerClientRenewal")
+  ownedClientRenewals           ClientRenewal[]          @relation("OwnerClientRenewal")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -108,8 +131,8 @@ model UserPermission {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   permission String
   enabled    Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([userId, permission])
   @@index([userId])
@@ -125,8 +148,8 @@ model Person {
   // Dono do registro (conta multiusuário). O nome é único POR dono, não global.
   ownerId   String?
   owner     User?    @relation("OwnerPerson", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   cards        CreditCard[]    @relation("CardHolder")
   transactions Transaction[]   @relation("ResponsiblePerson")
@@ -149,8 +172,8 @@ model Account {
   active    Boolean  @default(true)
   ownerId   String?
   owner     User?    @relation("OwnerAccount", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   transactions    Transaction[]
   incomes         Income[]
@@ -171,14 +194,14 @@ model CreditCard {
   holder     Person?  @relation("CardHolder", fields: [holderId], references: [id])
   accountId  String?
   account    Account? @relation(fields: [accountId], references: [id])
-  limitTotal Decimal @default(0) @db.Decimal(14, 2)
+  limitTotal Decimal  @default(0) @db.Decimal(14, 2)
   closingDay Int      @default(1)
   dueDay     Int      @default(10)
   active     Boolean  @default(true)
   ownerId    String?
   owner      User?    @relation("OwnerCreditCard", fields: [ownerId], references: [id])
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   transactions Transaction[]
   invoices     CreditCardInvoice[]
@@ -200,8 +223,8 @@ model AccountCard {
   notes      String?
   ownerId    String?
   owner      User?      @relation("OwnerAccountCard", fields: [ownerId], references: [id])
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime   @updatedAt @db.Timestamptz(3)
 
   transactions Transaction[]
 
@@ -216,8 +239,8 @@ model Category {
   parentId  String?
   parent    Category?  @relation("CategoryParent", fields: [parentId], references: [id])
   children  Category[] @relation("CategoryParent")
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  createdAt DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime   @updatedAt @db.Timestamptz(3)
 
   transactions Transaction[]
   rules        CategorizationRule[]
@@ -226,9 +249,9 @@ model Category {
 
 model Transaction {
   id            String             @id @default(cuid())
-  date          DateTime
+  date          DateTime           @db.Timestamptz(3)
   description   String
-  amount        Decimal  @db.Decimal(14, 2) // sempre positivo; tipo define sinal
+  amount        Decimal            @db.Decimal(14, 2) // sempre positivo; tipo define sinal
   type          String             @default("despesa") // despesa | receita | transferencia | ajuste
   origin        String             @default("cartao") // cartao | pix | debito | boleto | dinheiro
   cardId        String?
@@ -244,7 +267,7 @@ model Transaction {
   belongsTo     String             @default("pessoal") // pessoal | empresa | terceiro | familiar
   status        String             @default("pendente") // pendente | pago | devendo | reembolsado | cancelado
   reimbursable  Boolean            @default(false)
-  dueDate       DateTime? // vencimento (despesas manuais a vencer)
+  dueDate       DateTime?          @db.Timestamptz(3) // vencimento (despesas manuais a vencer)
   notes         String?
   invoiceId     String?
   invoice       CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
@@ -276,18 +299,18 @@ model Transaction {
 
   // ===== ERP de agência: classificação gerencial da DESPESA =====
   // Opcionais para não afetar lançamentos pessoais existentes.
-  expenseType  ExpenseType? // fixa | variável | folha | ads | ...
-  recurrence   RecurrenceType? // recorrência da despesa (fixas)
-  clientId     String? // despesa alocada a um cliente (rentabilidade)
-  client       Client?         @relation(fields: [clientId], references: [id])
-  serviceId    String? // serviço vinculado (rentabilidade por serviço)
-  service      Service?        @relation(fields: [serviceId], references: [id])
+  expenseType ExpenseType? // fixa | variável | folha | ads | ...
+  recurrence  RecurrenceType? // recorrência da despesa (fixas)
+  clientId    String? // despesa alocada a um cliente (rentabilidade)
+  client      Client?         @relation(fields: [clientId], references: [id])
+  serviceId   String? // serviço vinculado (rentabilidade por serviço)
+  service     Service?        @relation(fields: [serviceId], references: [id])
 
   // ===== Recorrência de despesa (ocorrências materializadas) =====
   // Despesa recorrente gera ocorrências futuras ligadas pelo mesmo grupo.
   // Permite editar UMA ocorrência ou TODAS, e encerrar a recorrência
   // (remove futuras não pagas). CUSTOM usa recurrenceInterval (meses).
-  recurrenceGroupId String?
+  recurrenceGroupId  String?
   recurrenceInterval Int? // intervalo em meses quando recurrence=CUSTOM
 
   // ===== Despesa tipo CARTÃO: competência da fatura =====
@@ -298,8 +321,8 @@ model Transaction {
   ownerId String?
   owner   User?   @relation("OwnerTransaction", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([date])
   @@index([cardId])
@@ -321,14 +344,14 @@ model Installment {
   transaction   Transaction        @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   number        Int
   total         Int
-  amount        Decimal  @db.Decimal(14, 2)
-  dueDate       DateTime
+  amount        Decimal            @db.Decimal(14, 2)
+  dueDate       DateTime           @db.Timestamptz(3)
   paid          Boolean            @default(false)
   invoiceId     String?
   invoice       CreditCardInvoice? @relation(fields: [invoiceId], references: [id])
   ownerId       String?
   owner         User?              @relation("OwnerInstallment", fields: [ownerId], references: [id])
-  createdAt     DateTime           @default(now())
+  createdAt     DateTime           @default(now()) @db.Timestamptz(3)
 
   @@index([transactionId])
   @@index([paid, dueDate])
@@ -342,8 +365,8 @@ model CreditCardInvoice {
   card           CreditCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
   referenceMonth Int // 1-12
   referenceYear  Int
-  closingDate    DateTime
-  dueDate        DateTime
+  closingDate    DateTime   @db.Timestamptz(3)
+  dueDate        DateTime   @db.Timestamptz(3)
   total          Decimal    @default(0) @db.Decimal(14, 2)
   paid           Decimal    @default(0) @db.Decimal(14, 2)
   // Total declarado no PDF da fatura (para conferência com a soma importada).
@@ -353,8 +376,8 @@ model CreditCardInvoice {
   externalId     String?
   ownerId        String?
   owner          User?      @relation("OwnerInvoice", fields: [ownerId], references: [id])
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
 
   transactions Transaction[]
   installments Installment[]
@@ -371,15 +394,15 @@ model Receivable {
   person        Person       @relation(fields: [personId], references: [id])
   transactionId String?
   transaction   Transaction? @relation(fields: [transactionId], references: [id])
-  amount        Decimal  @db.Decimal(14, 2)
-  dueDate       DateTime
-  paidAt        DateTime?
+  amount        Decimal      @db.Decimal(14, 2)
+  dueDate       DateTime     @db.Timestamptz(3)
+  paidAt        DateTime?    @db.Timestamptz(3)
   status        String       @default("aberto") // aberto | pago | atrasado | renegociado
   notes         String?
   ownerId       String?
   owner         User?        @relation("OwnerReceivable", fields: [ownerId], references: [id])
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
 }
@@ -387,8 +410,8 @@ model Receivable {
 model Income {
   id          String    @id @default(cuid())
   description String    @default("")
-  amount      Decimal  @db.Decimal(14, 2)
-  receivedAt  DateTime  @default(now())
+  amount      Decimal   @db.Decimal(14, 2)
+  receivedAt  DateTime  @default(now()) @db.Timestamptz(3)
   // Origem do recebimento: BANK_ACCOUNT | PIX | TRANSFER | CASH
   sourceType  String    @default("BANK_ACCOUNT")
   // Tipo: SALARY | COMPANY_WITHDRAWAL | CLIENT | REIMBURSEMENT | SALE | LOAN_RECEIVED | OTHER
@@ -403,7 +426,7 @@ model Income {
   category    Category? @relation(fields: [categoryId], references: [id])
   notes       String?
   // Compatibilidade com seed/legado
-  date        DateTime?
+  date        DateTime? @db.Timestamptz(3)
   source      String?
 
   // ===== ERP de agência: classificação gerencial da RECEITA =====
@@ -411,6 +434,9 @@ model Income {
   revenueType     RevenueType? // MRR | TCV | ONE_TIME | SETUP | RECOVERY | OTHER
   competenceMonth Int? // competência (reconhecimento) — 1-12
   competenceYear  Int?
+  /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
+  /// a partir do par mês/ano acima; nunca escrever pela aplicação.
+  competence      String?
   clientId        String?
   client          Client?      @relation(fields: [clientId], references: [id])
   contractId      String?
@@ -423,8 +449,8 @@ model Income {
 
   ownerId   String?
   owner     User?    @relation("OwnerIncome", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([receivedAt])
   @@index([status])
@@ -433,6 +459,8 @@ model Income {
   @@index([billingId])
   @@index([paymentId])
   @@index([ownerId])
+  @@index([competence])
+  @@index([ownerId, competence])
 }
 
 model CashBox {
@@ -447,8 +475,8 @@ model CashBox {
   notes         String?
   ownerId       String?
   owner         User?    @relation("OwnerCashBox", fields: [ownerId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   movements CashBoxMovement[]
 
@@ -460,7 +488,7 @@ model PersonPayment {
   personId  String
   person    Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
   amount    Decimal  @db.Decimal(14, 2)
-  paidAt    DateTime @default(now())
+  paidAt    DateTime @default(now()) @db.Timestamptz(3)
   // PIX | TRANSFER | CASH | OTHER
   method    String   @default("PIX")
   accountId String?
@@ -468,8 +496,8 @@ model PersonPayment {
   notes     String?
   ownerId   String?
   owner     User?    @relation("OwnerPersonPayment", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([personId])
   @@index([paidAt])
@@ -483,11 +511,11 @@ model CashBoxMovement {
   // IN | OUT
   type        String
   amount      Decimal  @db.Decimal(14, 2)
-  date        DateTime @default(now())
+  date        DateTime @default(now()) @db.Timestamptz(3)
   description String?
   ownerId     String?
   owner       User?    @relation("OwnerCashMovement", fields: [ownerId], references: [id])
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([cashBoxId])
   @@index([date])
@@ -499,7 +527,7 @@ model CashBoxMovement {
 // despesa) e ações do checklist concluídas ("done"). Histórico auditável.
 model RoutineItemState {
   id          String   @id @default(cuid())
-  routineDate DateTime // dia da rotina (meia-noite local)
+  routineDate DateTime @db.Timestamptz(3) // dia da rotina (meia-noite local)
   itemType    String // "cobranca" | "pagamento" | "acao"
   itemKey     String // clientId | transactionId | chave estável da ação
   status      String // "removed" | "done"
@@ -507,7 +535,7 @@ model RoutineItemState {
   actorName   String? // quem executou a ação
   ownerId     String?
   owner       User?    @relation("OwnerRoutineItemState", fields: [ownerId], references: [id])
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([routineDate, itemType, itemKey])
   @@index([ownerId])
@@ -531,7 +559,7 @@ model ImportBatch {
   duplicates     Int      @default(0)
   ownerId        String?
   owner          User?    @relation("OwnerImportBatch", fields: [ownerId], references: [id])
-  createdAt      DateTime @default(now())
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
 
   transactions Transaction[]
 
@@ -547,8 +575,8 @@ model CategorizationRule {
   // condições
   descriptionContains String?
   cardId              String?
-  amountGreaterThan   Decimal?  @db.Decimal(14, 2)
-  amountLessThan      Decimal?  @db.Decimal(14, 2)
+  amountGreaterThan   Decimal? @db.Decimal(14, 2)
+  amountLessThan      Decimal? @db.Decimal(14, 2)
 
   // ações
   categoryId      String?
@@ -561,8 +589,8 @@ model CategorizationRule {
   ownerId String?
   owner   User?   @relation("OwnerRule", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
 }
@@ -577,7 +605,7 @@ model AISetting {
   model       String   @default("gpt-4o-mini")
   temperature Float    @default(0.3)
   enabled     Boolean  @default(false)
-  updatedAt   DateTime @default(now()) @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(3)
 }
 
 model AIConversation {
@@ -587,8 +615,8 @@ model AIConversation {
   // Dono da conversa (conta multiusuário). Cada usuário só vê o próprio histórico.
   ownerId   String?
   owner     User?       @relation("OwnerAIConversation", fields: [ownerId], references: [id])
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
 }
@@ -601,7 +629,7 @@ model AIMessage {
   content          String
   promptTokens     Int?
   completionTokens Int?
-  createdAt        DateTime       @default(now())
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
 
   @@index([conversationId])
 }
@@ -615,8 +643,8 @@ model AIMemory {
   // Dono da memória (conta multiusuário). Cada usuário tem a própria base.
   ownerId   String?
   owner     User?    @relation("OwnerAIMemory", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
 }
@@ -669,42 +697,42 @@ enum UpsellStatus {
 }
 
 model Client {
-  id           String       @id @default(cuid())
-  name         String // nome fantasia / como o cliente é chamado
-  legalName    String? // razão social
-  document     String? // CNPJ / CPF
-  email        String?
-  phone        String?
-  segment      String? // segmento / nicho de atuação
-  city         String?
-  state        String? // UF
+  id                  String          @id @default(cuid())
+  name                String // nome fantasia / como o cliente é chamado
+  legalName           String? // razão social
+  document            String? // CNPJ / CPF
+  email               String?
+  phone               String?
+  segment             String? // segmento / nicho de atuação
+  city                String?
+  state               String? // UF
   // Dados usados nos contratos gerados (pré-preenchimento de variáveis)
   address             String? // endereço completo do contratante
   legalRepresentative String? // nome do representante legal
-  origin       String? // origem comercial: indicação | tráfego | orgânico | ...
-  salesOwner   String? // responsável comercial (texto; sincronizado a partir de salesOwnerEmployee.name no save)
+  origin              String? // origem comercial: indicação | tráfego | orgânico | ...
+  salesOwner          String? // responsável comercial (texto; sincronizado a partir de salesOwnerEmployee.name no save)
   // Vínculo real com o colaborador (fonte da verdade do responsável comercial).
-  salesOwnerId       String?
-  salesOwnerEmployee Employee? @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
-  opsOwner     String? // responsável operacional
-  paymentDay   Int? // dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês quando o mês tem menos dias)
-  tags         String[]     @default([])
-  status       ClientStatus @default(ACTIVE)
+  salesOwnerId        String?
+  salesOwnerEmployee  Employee?       @relation("ClientSalesOwner", fields: [salesOwnerId], references: [id], onDelete: SetNull)
+  opsOwner            String? // responsável operacional
+  paymentDay          Int? // dia recorrente de pagamento MRR (1-31; ajustado ao último dia do mês quando o mês tem menos dias)
+  tags                String[]        @default([])
+  status              ClientStatus    @default(ACTIVE)
   // Modalidade de faturamento (MRR/TCV) — editável na linha, alimenta filtros,
   // dashboard e relatórios. Independente dos contratos (que guardam valores).
-  modality     ClientModality?
+  modality            ClientModality?
   // Mês de renovação (1-12) — editável na linha; alimenta KPIs de renovação.
-  renewalMonth Int?
+  renewalMonth        Int?
   // Valor mensal recorrente — usado SOMENTE em MRR (base da mensalidade).
-  monthlyValue Decimal?     @db.Decimal(14, 2)
+  monthlyValue        Decimal?        @db.Decimal(14, 2)
   // Valor TOTAL do contrato — usado SOMENTE em TCV. Referência editável no
   // nível do cliente; espelha Contract.totalValue da venda/renovação.
-  totalContractValue Decimal? @db.Decimal(14, 2)
+  totalContractValue  Decimal?        @db.Decimal(14, 2)
   // Prazo do contrato em meses — editável inline em Recebimentos/Carteira.
-  contractMonths Int?
-  startedAt    DateTime? // início da relação comercial
-  churnedAt    DateTime? // data de saída (preenchida quando CHURNED)
-  notes        String?
+  contractMonths      Int?
+  startedAt           DateTime?       @db.Timestamptz(3) // início da relação comercial
+  churnedAt           DateTime?       @db.Timestamptz(3) // data de saída (preenchida quando CHURNED)
+  notes               String?
 
   // ===== Inadimplência do mês: override MANUAL sobre o cálculo automático =====
   // O status Pago/Devendo é calculado a partir das cobranças do mês (Billing).
@@ -714,19 +742,19 @@ model Client {
   delinquencyOverride      DelinquencyStatus? // null = usar cálculo automático
   delinquencyOverrideMonth Int? // competência do override (1-12)
   delinquencyOverrideYear  Int?
-  delinquencyOverrideAt    DateTime? // data/hora do ajuste manual
+  delinquencyOverrideAt    DateTime?          @db.Timestamptz(3) // data/hora do ajuste manual
   delinquencyOverrideBy    String? // nome do usuário que ajustou
 
   // ===== Soft Delete (Fase 0 - Reorganização) =====
-  archivedAt DateTime? // soft delete: null = ativo, preenchido = arquivado
-  deletedAt  DateTime? // hard delete timestamp (para auditoria)
+  archivedAt DateTime? @db.Timestamptz(3) // soft delete: null = ativo, preenchido = arquivado
+  deletedAt  DateTime? @db.Timestamptz(3) // hard delete timestamp (para auditoria)
 
   // Dono do registro (conta multiusuário / agência).
   ownerId String?
   owner   User?   @relation("OwnerClient", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   // ===== ERP: espinha comercial =====
   contacts         ClientContact[]
@@ -766,20 +794,25 @@ model Client {
 // e o ajuste fica gravado naquele mês, sem apagar os ajustes de outros meses.
 // Substitui os campos delinquencyOverride* do Client (legados, backfillados).
 model ClientMonthDelinquency {
-  id       String            @id @default(cuid())
-  clientId String
-  client   Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  month    Int // 1-12 (competência)
-  year     Int
-  status   DelinquencyStatus // PAGO | DEVENDO
-  setBy    String? // quem ajustou
-  setAt    DateTime          @default(now())
-  ownerId  String?
-  owner    User?             @relation("OwnerClientMonthDelinquency", fields: [ownerId], references: [id])
+  id         String            @id @default(cuid())
+  clientId   String
+  client     Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  month      Int // 1-12 (competência)
+  year       Int
+  /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
+  /// a partir do par mês/ano acima; nunca escrever pela aplicação.
+  competence String?
+  status     DelinquencyStatus // PAGO | DEVENDO
+  setBy      String? // quem ajustou
+  setAt      DateTime          @default(now()) @db.Timestamptz(3)
+  ownerId    String?
+  owner      User?             @relation("OwnerClientMonthDelinquency", fields: [ownerId], references: [id])
 
   @@index([year, month])
   @@index([clientId, year, month])
   @@index([ownerId])
+  @@index([competence])
+  @@index([ownerId, competence])
 }
 
 // Registro de RENOVAÇÃO de cliente — histórico auditável de cada "Sim,
@@ -792,15 +825,15 @@ model ClientRenewal {
   clientId        String
   client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   contractId      String? // contrato estendido (null = renovação só pelo cadastro)
-  renewedAt       DateTime        @default(now())
+  renewedAt       DateTime        @default(now()) @db.Timestamptz(3)
   months          Int // prazo do novo ciclo
   totalValue      Decimal         @db.Decimal(14, 2) // valor do novo ciclo
   monthlyValue    Decimal?        @db.Decimal(14, 2) // mensal resultante (MRR)
   modality        ClientModality? // snapshot da modalidade na renovação
   paymentMethod   String? // pix | boleto | cartão | transferência | outro
   paymentMode     String? // à vista | parcelado | mensal
-  previousEndDate DateTime? // fim de vigência antes da renovação
-  newEndDate      DateTime? // novo fim de vigência
+  previousEndDate DateTime?       @db.Timestamptz(3) // fim de vigência antes da renovação
+  newEndDate      DateTime?       @db.Timestamptz(3) // novo fim de vigência
   billingId       String? // cobrança lançada nos recebimentos (se houver)
   billingMonth    Int? // competência escolhida para o lançamento (1-12)
   billingYear     Int?
@@ -810,7 +843,7 @@ model ClientRenewal {
   createdBy       String? // e-mail de quem registrou
   ownerId         String?
   owner           User?           @relation("OwnerClientRenewal", fields: [ownerId], references: [id])
-  createdAt       DateTime        @default(now())
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([renewedAt])
@@ -827,7 +860,7 @@ model ClientLoss {
   id             String          @id @default(cuid())
   clientId       String
   client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lostAt         DateTime        @default(now())
+  lostAt         DateTime        @default(now()) @db.Timestamptz(3)
   modality       ClientModality? // snapshot da modalidade na perda
   monthlyValue   Decimal?        @db.Decimal(14, 2) // MRR mensal perdido
   referenceValue Decimal?        @db.Decimal(14, 2) // TCV de referência (última adesão)
@@ -835,7 +868,7 @@ model ClientLoss {
   salesOwner     String? // snapshot do responsável na perda
   ownerId        String?
   owner          User?           @relation("OwnerClientLoss", fields: [ownerId], references: [id])
-  createdAt      DateTime        @default(now())
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([lostAt])
@@ -1014,8 +1047,8 @@ model ClientContact {
   notes     String?
   ownerId   String?
   owner     User?    @relation("OwnerClientContact", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([ownerId])
@@ -1034,8 +1067,8 @@ model Service {
   active        Boolean  @default(true)
   ownerId       String?
   owner         User?    @relation("OwnerService", fields: [ownerId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   contractServices ContractService[]
   billings         Billing[]
@@ -1064,8 +1097,8 @@ model Offer {
   notes          String?
   ownerId        String?
   owner          User?         @relation("OwnerOffer", fields: [ownerId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
   services OfferService[]
   upsells  Upsell[]
@@ -1090,15 +1123,15 @@ model Upsell {
   value           Decimal      @db.Decimal(14, 2) // valor potencial da venda
   responsible     String? // responsável pela oportunidade
   status          UpsellStatus @default(OPPORTUNITY)
-  expectedCloseAt DateTime? // data prevista de fechamento
-  closedAt        DateTime? // data real de fechamento (WON/LOST)
+  expectedCloseAt DateTime?    @db.Timestamptz(3) // data prevista de fechamento
+  closedAt        DateTime?    @db.Timestamptz(3) // data real de fechamento (WON/LOST)
   notes           String?
   incomeId        String? // receita gerada ao vender (conciliação — legado)
   billingId       String? // cobrança lançada nos recebimentos ao vender
   ownerId         String?
   owner           User?        @relation("OwnerUpsell", fields: [ownerId], references: [id])
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt @db.Timestamptz(3)
 
   services UpsellService[] // serviços da oportunidade (N:N com valor)
 
@@ -1119,7 +1152,7 @@ model UpsellService {
   unitPrice Decimal  @default(0) @db.Decimal(14, 2)
   ownerId   String?
   owner     User?    @relation("OwnerUpsellService", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([upsellId, serviceId])
   @@index([upsellId])
@@ -1136,7 +1169,7 @@ model OfferService {
   service   Service  @relation(fields: [serviceId], references: [id])
   ownerId   String?
   owner     User?    @relation("OwnerOfferService", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([offerId, serviceId])
   @@index([offerId])
@@ -1156,20 +1189,20 @@ model Contract {
   monthlyValue  Decimal        @default(0) @db.Decimal(14, 2) // base do MRR
   totalValue    Decimal        @default(0) @db.Decimal(14, 2) // TCV vendido
   setupFee      Decimal?       @db.Decimal(14, 2)
-  startDate     DateTime
-  endDate       DateTime?
-  renewalDate   DateTime? // próxima renovação
+  startDate     DateTime       @db.Timestamptz(3)
+  endDate       DateTime?      @db.Timestamptz(3)
+  renewalDate   DateTime?      @db.Timestamptz(3) // próxima renovação
   billingDay    Int            @default(5) // dia de cobrança (1-28)
   // Renovação/pagamento (preenchidos ao renovar na carteira)
   paymentMethod String? // pix | boleto | cartão | transferência | outro
   paymentMode   String? // à vista | parcelado | mensal
   autoRenew     Boolean        @default(false)
-  canceledAt    DateTime?
+  canceledAt    DateTime?      @db.Timestamptz(3)
   notes         String?
   ownerId       String?
   owner         User?          @relation("OwnerContract", fields: [ownerId], references: [id])
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
 
   services    ContractService[]
   billings    Billing[]
@@ -1195,7 +1228,7 @@ model ContractService {
   notes      String?
   ownerId    String?
   owner      User?    @relation("OwnerContractService", fields: [ownerId], references: [id])
-  createdAt  DateTime @default(now())
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([contractId, serviceId])
   @@index([contractId])
@@ -1219,15 +1252,18 @@ model Billing {
   description      String
   competenceMonth  Int // 1-12
   competenceYear   Int
+  /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
+  /// a partir do par mês/ano acima; nunca escrever pela aplicação.
+  competence       String?
   amount           Decimal          @db.Decimal(14, 2)
   paidTotal        Decimal          @default(0) @db.Decimal(14, 2)
-  dueDate          DateTime
-  paidAt           DateTime? // quitação total
+  dueDate          DateTime         @db.Timestamptz(3)
+  paidAt           DateTime?        @db.Timestamptz(3) // quitação total
   status           BillingStatus    @default(PENDING)
   revenueType      RevenueType      @default(MRR)
   collectionStatus CollectionStatus @default(NOT_CONTACTED)
   collector        String? // responsável pela cobrança
-  canceledAt       DateTime?
+  canceledAt       DateTime?        @db.Timestamptz(3)
   cancelReason     String? // motivo da remoção do ciclo do mês
   canceledBy       String? // e-mail de quem removeu
   notes            String?
@@ -1242,10 +1278,10 @@ model Billing {
   paidInDifferentMonth Boolean @default(false)
 
   extraRevenue ExtraRevenue? // receita extra automática gerada (recuperação)
-  ownerId          String?
-  owner            User?            @relation("OwnerBilling", fields: [ownerId], references: [id])
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  ownerId      String?
+  owner        User?         @relation("OwnerBilling", fields: [ownerId], references: [id])
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
 
   payments Payment[]
   history  CollectionHistory[]
@@ -1258,6 +1294,8 @@ model Billing {
   @@index([competenceYear, competenceMonth])
   @@index([collectionStatus])
   @@index([ownerId])
+  @@index([competence])
+  @@index([ownerId, competence])
 }
 
 // ===== Receita Extra (camada GERENCIAL do faturamento) ====================
@@ -1282,25 +1320,25 @@ enum ExtraRevenueOrigin {
 }
 
 model ExtraRevenue {
-  id              String             @id @default(cuid())
-  clientId        String?
-  client          Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  id                     String             @id @default(cuid())
+  clientId               String?
+  client                 Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
   // Cobrança original recuperada (única → idempotência da geração automática)
-  originBillingId String?            @unique
-  originBilling   Billing?           @relation(fields: [originBillingId], references: [id], onDelete: SetNull)
-  sourcePaymentId String? // pagamento que originou (rastreio)
-  type            ExtraRevenueType   @default(RECOVERY_OF_OVERDUE)
-  origin          ExtraRevenueOrigin @default(AUTOMATIC)
-  description     String
-  amount          Decimal            @db.Decimal(14, 2)
-  receivedAt      DateTime           @default(now())
+  originBillingId        String?            @unique
+  originBilling          Billing?           @relation(fields: [originBillingId], references: [id], onDelete: SetNull)
+  sourcePaymentId        String? // pagamento que originou (rastreio)
+  type                   ExtraRevenueType   @default(RECOVERY_OF_OVERDUE)
+  origin                 ExtraRevenueOrigin @default(AUTOMATIC)
+  description            String
+  amount                 Decimal            @db.Decimal(14, 2)
+  receivedAt             DateTime           @default(now()) @db.Timestamptz(3)
   // Competência ORIGINAL da cobrança recuperada (de onde o valor "veio")
   originalReferenceMonth Int?
   originalReferenceYear  Int?
-  ownerId   String?
-  owner     User?    @relation("OwnerExtraRevenue", fields: [ownerId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  ownerId                String?
+  owner                  User?              @relation("OwnerExtraRevenue", fields: [ownerId], references: [id])
+  createdAt              DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([receivedAt])
@@ -1314,7 +1352,7 @@ model Payment {
   billingId String
   billing   Billing       @relation(fields: [billingId], references: [id], onDelete: Cascade)
   amount    Decimal       @db.Decimal(14, 2)
-  paidAt    DateTime      @default(now())
+  paidAt    DateTime      @default(now()) @db.Timestamptz(3)
   method    PaymentMethod @default(PIX)
   status    PaymentStatus @default(CONFIRMED)
   accountId String? // conta bancária que recebeu
@@ -1322,7 +1360,7 @@ model Payment {
   notes     String?
   ownerId   String?
   owner     User?         @relation("OwnerPayment", fields: [ownerId], references: [id])
-  createdAt DateTime      @default(now())
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
 
   @@index([billingId])
   @@index([paidAt])
@@ -1340,13 +1378,13 @@ model CollectionHistory {
   status       CollectionStatus @default(CONTACTED)
   channel      String? // whatsapp | email | telefone | outro
   message      String? // texto enviado / resumo do contato
-  contactedAt  DateTime         @default(now())
-  nextActionAt DateTime? // próximo follow-up
+  contactedAt  DateTime         @default(now()) @db.Timestamptz(3)
+  nextActionAt DateTime?        @db.Timestamptz(3) // próximo follow-up
   actionType   String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
   createdBy    String? // user.email (quem fez a ação)
   ownerId      String?
   owner        User?            @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
-  createdAt    DateTime         @default(now())
+  createdAt    DateTime         @default(now()) @db.Timestamptz(3)
 
   @@index([billingId])
   @@index([clientId])
@@ -1368,13 +1406,13 @@ model Employee {
   active     Boolean      @default(true)
   personId   String? // reaproveita contato de Pessoas (opcional)
   person     Person?      @relation(fields: [personId], references: [id])
-  startedAt  DateTime?
-  endedAt    DateTime?
+  startedAt  DateTime?    @db.Timestamptz(3)
+  endedAt    DateTime?    @db.Timestamptz(3)
   notes      String?
   ownerId    String?
   owner      User?        @relation("OwnerEmployee", fields: [ownerId], references: [id])
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime     @updatedAt @db.Timestamptz(3)
 
   payrollItems      PayrollItem[]
   commissions       Commission[]
@@ -1386,16 +1424,19 @@ model Employee {
 
 // Folha de pagamento de um mês (run) — itens preservam o histórico.
 model Payroll {
-  id        String        @id @default(cuid())
-  month     Int // 1-12
-  year      Int
-  status    PayrollStatus @default(DRAFT)
-  paidAt    DateTime?
-  notes     String?
-  ownerId   String?
-  owner     User?         @relation("OwnerPayroll", fields: [ownerId], references: [id])
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id         String        @id @default(cuid())
+  month      Int // 1-12
+  year       Int
+  /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
+  /// a partir do par mês/ano acima; nunca escrever pela aplicação.
+  competence String?
+  status     PayrollStatus @default(DRAFT)
+  paidAt     DateTime?     @db.Timestamptz(3)
+  notes      String?
+  ownerId    String?
+  owner      User?         @relation("OwnerPayroll", fields: [ownerId], references: [id])
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime      @updatedAt @db.Timestamptz(3)
 
   items PayrollItem[]
 
@@ -1403,6 +1444,8 @@ model Payroll {
   @@index([year, month])
   @@index([status])
   @@index([ownerId])
+  @@index([competence])
+  @@index([ownerId, competence])
 }
 
 // Item da folha (salário, bônus, comissão, benefício, desconto).
@@ -1417,7 +1460,7 @@ model PayrollItem {
   notes      String?
   ownerId    String?
   owner      User?           @relation("OwnerPayrollItem", fields: [ownerId], references: [id])
-  createdAt  DateTime        @default(now())
+  createdAt  DateTime        @default(now()) @db.Timestamptz(3)
 
   @@index([payrollId])
   @@index([employeeId])
@@ -1438,13 +1481,16 @@ model Commission {
   amount      Decimal          @db.Decimal(14, 2)
   month       Int // competência 1-12
   year        Int
+  /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
+  /// a partir do par mês/ano acima; nunca escrever pela aplicação.
+  competence  String?
   status      CommissionStatus @default(PENDING)
-  paidAt      DateTime?
+  paidAt      DateTime?        @db.Timestamptz(3)
   notes       String?
   ownerId     String?
   owner       User?            @relation("OwnerCommission", fields: [ownerId], references: [id])
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
 
   @@index([employeeId])
   @@index([clientId])
@@ -1452,6 +1498,8 @@ model Commission {
   @@index([year, month])
   @@index([status])
   @@index([ownerId])
+  @@index([competence])
+  @@index([ownerId, competence])
 }
 
 // ===== Patrimônio ===================================================
@@ -1462,12 +1510,12 @@ model Asset {
   name       String
   type       AssetType @default(OTHER)
   value      Decimal   @db.Decimal(14, 2)
-  acquiredAt DateTime?
+  acquiredAt DateTime? @db.Timestamptz(3)
   notes      String?
   ownerId    String?
   owner      User?     @relation("OwnerAsset", fields: [ownerId], references: [id])
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
 
   @@index([type])
   @@index([ownerId])
@@ -1480,14 +1528,14 @@ model Liability {
   type           LiabilityType @default(OTHER)
   totalValue     Decimal       @db.Decimal(14, 2)
   remainingValue Decimal       @db.Decimal(14, 2)
-  dueDate        DateTime?
+  dueDate        DateTime?     @db.Timestamptz(3)
   installments   Int?
   monthlyPayment Decimal?      @db.Decimal(14, 2)
   notes          String?
   ownerId        String?
   owner          User?         @relation("OwnerLiability", fields: [ownerId], references: [id])
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
   loans Loan[]
 
@@ -1505,14 +1553,14 @@ model Loan {
   installments     Int        @default(1)
   installmentValue Decimal?   @db.Decimal(14, 2)
   remainingValue   Decimal?   @db.Decimal(14, 2)
-  firstDueDate     DateTime?
+  firstDueDate     DateTime?  @db.Timestamptz(3)
   liabilityId      String?
   liability        Liability? @relation(fields: [liabilityId], references: [id])
   notes            String?
   ownerId          String?
   owner            User?      @relation("OwnerLoan", fields: [ownerId], references: [id])
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime   @updatedAt @db.Timestamptz(3)
 
   @@index([liabilityId])
   @@index([ownerId])
@@ -1529,8 +1577,8 @@ model ImportTemplate {
   notes     String?
   ownerId   String?
   owner     User?        @relation("OwnerImportTemplate", fields: [ownerId], references: [id])
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime     @updatedAt @db.Timestamptz(3)
 
   @@index([entity])
   @@index([ownerId])
@@ -1544,7 +1592,7 @@ model ExportReport {
   format      String   @default("XLSX") // CSV | XLSX | PDF
   filters     Json? // filtros aplicados na geração
   fileName    String?
-  generatedAt DateTime @default(now())
+  generatedAt DateTime @default(now()) @db.Timestamptz(3)
   ownerId     String?
   owner       User?    @relation("OwnerExportReport", fields: [ownerId], references: [id])
 
@@ -1561,12 +1609,12 @@ model FinancialAlert {
   body       String?
   refType    String? // billing | contract | payroll | ...
   refId      String?
-  dueAt      DateTime?
-  readAt     DateTime?
-  resolvedAt DateTime?
+  dueAt      DateTime? @db.Timestamptz(3)
+  readAt     DateTime? @db.Timestamptz(3)
+  resolvedAt DateTime? @db.Timestamptz(3)
   ownerId    String?
   owner      User?     @relation("OwnerFinancialAlert", fields: [ownerId], references: [id])
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
 
   @@index([kind])
   @@index([dueAt])
@@ -1584,7 +1632,7 @@ model SavedView {
   createdBy  String? // userId do criador (visibilidade privada)
   ownerId    String?
   owner      User?          @relation("OwnerSavedView", fields: [ownerId], references: [id])
-  createdAt  DateTime       @default(now())
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
 
   @@index([ownerId, module])
   @@index([createdBy])
@@ -1597,13 +1645,13 @@ enum ViewVisibility {
 
 // Meta anual de faturamento (bloco META ANUAL do Painel Anual — planilha).
 model AnnualTarget {
-  id            String  @id @default(cuid())
+  id            String   @id @default(cuid())
   year          Int
-  revenueTarget Decimal @db.Decimal(14, 2)
+  revenueTarget Decimal  @db.Decimal(14, 2)
   ownerId       String?
-  owner         User?   @relation("OwnerAnnualTarget", fields: [ownerId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  owner         User?    @relation("OwnerAnnualTarget", fields: [ownerId], references: [id])
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([ownerId, year])
   @@index([ownerId])
@@ -1696,8 +1744,8 @@ model ContractTemplate {
   ownerId String?
   owner   User?   @relation("OwnerContractTemplate", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   generated GeneratedContract[]
   formLinks ContractFormLink[]
@@ -1717,7 +1765,7 @@ model GeneratedContract {
   name           String
   commercialType ContractCommercialType?
   amount         Decimal?                @db.Decimal(14, 2)
-  startDate      DateTime?
+  startDate      DateTime?               @db.Timestamptz(3)
   dueDay         Int?
 
   filledVariables   Json // { rawName: valor } usado na geração
@@ -1725,7 +1773,7 @@ model GeneratedContract {
   generatedFilePath String
 
   status      GeneratedContractStatus @default(GENERATED)
-  generatedAt DateTime                @default(now())
+  generatedAt DateTime                @default(now()) @db.Timestamptz(3)
 
   // Origem: preenchido via link público de formulário (null = wizard interno).
   formLinkId String?
@@ -1734,8 +1782,8 @@ model GeneratedContract {
   ownerId String?
   owner   User?   @relation("OwnerGeneratedContract", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([templateId])
   @@index([clientId])
@@ -1763,8 +1811,8 @@ model ContractFormLink {
 
   ownerId String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   generated GeneratedContract[]
 
@@ -1788,8 +1836,8 @@ model ClientDocument {
   ownerId String?
   owner   User?   @relation("OwnerClientDocument", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([ownerId])
@@ -1808,8 +1856,8 @@ model ClientNote {
   ownerId String?
   owner   User?   @relation("OwnerClientNote", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([ownerId])
