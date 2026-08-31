@@ -17,7 +17,16 @@ import { PASSOS, type PassoId, type PassoSetup } from "@/lib/setup-meta";
  * lista de vez.
  */
 
-export type EstadoPasso = PassoSetup & {
+/**
+ * O passo SEM o ícone.
+ *
+ * O ícone é um componente React, ou seja, uma FUNÇÃO — e função não
+ * atravessa a fronteira servidor→cliente do App Router. Mandá-lo junto
+ * derruba a home inteira em tempo de execução, com o build passando verde
+ * (o erro é de serialização, não de tipo). O cliente resolve o ícone pelo id,
+ * importando o mesmo catálogo neutro.
+ */
+export type EstadoPasso = Omit<PassoSetup, "icon"> & {
   feito: boolean;
   adiado: boolean;
   /** Quantos itens já existem (0 quando nada foi feito). */
@@ -83,7 +92,7 @@ export async function estadoDoSetup(): Promise<EstadoSetup> {
   const [guardado, qtd] = await Promise.all([lerGuardado(), contagens()]);
   const adiados = new Set(guardado.adiados ?? []);
 
-  const passos: EstadoPasso[] = PASSOS.map((p) => ({
+  const passos: EstadoPasso[] = PASSOS.map(({ icon: _icon, ...p }) => ({
     ...p,
     quantidade: qtd[p.id],
     feito: qtd[p.id] > 0,

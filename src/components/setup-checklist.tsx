@@ -9,7 +9,7 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 import {
   adiarPassoAction, encerrarSetupAction, retomarPassoAction,
 } from "@/lib/actions/setup";
-import { PASSO_FINAL } from "@/lib/setup-meta";
+import { PASSO_FINAL, passoPorId } from "@/lib/setup-meta";
 import type { EstadoSetup } from "@/lib/services/setup";
 
 /**
@@ -88,7 +88,9 @@ export function SetupChecklist({ estado }: { estado: EstadoSetup }) {
 
         <ol className="mt-3 divide-y divide-border-soft">
           {estado.passos.map((p) => {
-            const Icone = p.icon;
+            // O ícone é resolvido AQUI, no cliente, e não vem do servidor:
+            // componente React é função, e função não atravessa a fronteira.
+            const Icone = passoPorId(p.id).icon;
             const destaque = proximo?.id === p.id;
             return (
               <li
