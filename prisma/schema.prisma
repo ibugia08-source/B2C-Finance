@@ -41,6 +41,13 @@ model Workspace {
   outbox         OutboxEvent[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
+
+  /// Estado do SETUP GUIADO (F1.20 · 02 §3): só o que NÃO dá para deduzir do
+  /// dado — quais passos o dono adiou e quando ele encerrou a lista.
+  /// Se um passo está FEITO não se guarda aqui: pergunta-se ao banco. Uma
+  /// lista que diz "pronto" porque alguém clicou em "pronto" mente.
+  /// Formato: { "adiados": ["time"], "encerradoEm": "2026-09-01T..." }
+  setupState Json @default("{}")
 }
 
 // ===================================================================

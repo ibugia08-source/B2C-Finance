@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { SavedViews } from "@/components/saved-views";
 import { PageHeader } from "@/components/page-header";
+import { SetupChecklist } from "@/components/setup-checklist";
+import { mostrarSetup } from "@/lib/services/setup";
 import { formatBRL } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
@@ -205,6 +207,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const ehSegunda =
     new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "America/Sao_Paulo" })
       .format(new Date()) === "Mon";
+  const setup = await mostrarSetup();
   const saudacao = hourSP < 12 ? "Bom dia" : hourSP < 18 ? "Boa tarde" : "Boa noite";
   const firstName = (viewer.name ?? "").trim().split(/\s+/)[0] ?? "";
 
@@ -214,6 +217,13 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
         title={firstName ? `${saudacao}, ${firstName}` : saudacao}
         description={`O essencial do mês — números oficiais, alertas e tendência · ${period.label}`}
       />
+
+      {/* Primeiro uso (02 §3): a lista fica na home ATÉ o sistema estar
+          configurado, e some sozinha quando os cinco passos estiverem
+          feitos — sem exigir mais um clique de quem acabou de fazer cinco.
+          Virou caminho crítico com a decisão 19.32: o sistema entra em
+          produção vazio, e esta é a porta de entrada dos dados. */}
+      {setup ? <SetupChecklist estado={setup} /> : null}
 
       <div className="mb-3 print:hidden flex items-center justify-between gap-3 flex-wrap">
         <SavedViews module="dashboard" />

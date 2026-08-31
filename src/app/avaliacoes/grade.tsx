@@ -132,9 +132,9 @@ export function GradeAvaliacao({
   if (linhas.length === 0) {
     return (
       <EmptyState
-        icon={CircleAlert}
         title="Nenhum cliente ativo para avaliar"
-        description="A grade lista os clientes com relação ativa ou em implantação. Cadastre clientes na Carteira para começar."
+        description="A grade lista os clientes com relação ativa ou em implantação — ainda não há nenhum."
+        passo="clientes"
       />
     );
   }

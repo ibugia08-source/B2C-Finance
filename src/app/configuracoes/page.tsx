@@ -5,6 +5,8 @@ import { AppearanceCard } from "./appearance-card";
 import { CategoryDialog } from "./category-dialog";
 import { CategoriesList, type CategoryRow } from "./categories-list";
 import { requirePagePermission } from "@/lib/auth/viewer";
+import { SetupCard } from "./setup-card";
+import { estadoDoSetup } from "@/lib/services/setup";
 
 export default async function ConfiguracoesPage() {
   await requirePagePermission("configuracoes.visualizar");
@@ -30,6 +32,7 @@ export default async function ConfiguracoesPage() {
     usage: usageMap.get(c.id) ?? 0,
   }));
 
+  const setup = await estadoDoSetup();
   const despesa = rows.filter((c) => c.kind === "despesa").length;
   const receita = rows.filter((c) => c.kind === "receita").length;
   const mista = rows.filter((c) => c.kind === "mista").length;
@@ -41,6 +44,8 @@ export default async function ConfiguracoesPage() {
         description="Aparência do sistema e categorias de classificação."
         actions={<CategoryDialog />}
       />
+
+      <SetupCard encerrado={setup.encerrado} feitos={setup.feitos} total={setup.total} />
 
       <AppearanceCard />
 

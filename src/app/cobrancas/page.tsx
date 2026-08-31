@@ -884,16 +884,13 @@ export default async function RecebimentosPage({
         <CardContent className="p-0">
           {tableRows.length === 0 ? (
             <EmptyState
-              icon={HandCoins}
+              icon={stFilter || q ? HandCoins : undefined}
               title="Nada por aqui neste mês"
-              description={emptyMessage}
-              action={
-                !stFilter && !q ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/clientes">Abrir Clientes</Link>
-                  </Button>
-                ) : undefined
-              }
+              description={stFilter || q ? emptyMessage : undefined}
+              // Sem filtro nenhum, o mês vazio é sintoma de carteira vazia, e a
+              // saída é o passo 3 do setup. COM filtro, o vazio é do filtro —
+              // mandar importar clientes aí seria conselho errado.
+              passo={stFilter || q ? undefined : "clientes"}
             />
           ) : (
             <ReceivablesTable

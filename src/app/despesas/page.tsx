@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/empty-state";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
@@ -240,8 +241,11 @@ async function ExpensesTab({
               <TableBody>
                 {expenses.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
-                      Nenhuma despesa neste período. Adicione sua primeira despesa.
+                    <TableCell colSpan={7} className="p-0">
+                      <EmptyState
+                        title="Nenhuma despesa neste período"
+                        passo="despesas"
+                      />
                     </TableCell>
                   </TableRow>
                 )}
@@ -358,8 +362,8 @@ async function CardsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {cards.length === 0 && (
           <Card className="sm:col-span-2 lg:col-span-3">
-            <CardContent className="py-12 text-center text-muted-foreground">
-              Nenhuma conta/cartão cadastrado ainda.
+            <CardContent className="p-0">
+              <EmptyState title="Nenhuma conta ou cartão cadastrado" passo="contas" />
             </CardContent>
           </Card>
         )}
