@@ -67,6 +67,7 @@ export const NAV_AREAS: NavArea[] = [
     primary: true,
     pages: [
       { href: "/clientes", label: "Carteira", permission: "clientes.visualizar" },
+      { href: "/avaliacoes", label: "Avaliação mensal", permission: "clientes.visualizar" },
       { href: "/retencao", label: "Retenção", permission: "clientes.visualizar" },
     ],
   },

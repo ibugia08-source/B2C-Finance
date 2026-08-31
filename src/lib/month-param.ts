@@ -55,6 +55,7 @@ export const ROTAS_COM_MES = [
   "/folha",
   "/receitas",
   "/renovacoes",
+  "/avaliacoes",
 ];
 
 export function rotaTemMes(pathname: string): boolean {
