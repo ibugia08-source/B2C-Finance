@@ -85,8 +85,9 @@ model LegalEntity {
   createdAt     DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
 
-  agencies     Agency[]
-  TaxProvision TaxProvision[]
+  agencies       Agency[]
+  TaxProvision   TaxProvision[]
+  FiscalDocument FiscalDocument[]
 
   @@unique([workspaceId, cnpj])
   @@index([workspaceId])
@@ -188,6 +189,7 @@ model User {
   ownedImportedRecords    ImportedRecord[]     @relation("OwnerImportedRecord")
   ownedTaxProvisions      TaxProvision[]       @relation("OwnerTaxProvision")
   ownedBillingAdjustments BillingAdjustment[]  @relation("OwnerBillingAdjustment")
+  ownedFiscalDocuments    FiscalDocument[]     @relation("OwnerFiscalDocument")
   ownedIncomes            Income[]             @relation("OwnerIncome")
   ownedCashBoxes          CashBox[]            @relation("OwnerCashBox")
   ownedPeople             Person[]             @relation("OwnerPerson")
@@ -1212,9 +1214,10 @@ model Client {
   monthDelinquencies ClientMonthDelinquency[]
 
   // Histórico de renovações de contrato (um registro por "Sim, renovou")
-  renewals      ClientRenewal[]
-  relationships ClientAgencyRelationship[]
-  credits       CustomerCredit[]
+  renewals       ClientRenewal[]
+  relationships  ClientAgencyRelationship[]
+  credits        CustomerCredit[]
+  FiscalDocument FiscalDocument[]
 
   @@index([ownerId])
   @@index([status])
@@ -1742,10 +1745,11 @@ model Billing {
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
 
-  payments    Payment[]
-  history     CollectionHistory[]
-  adjustments BillingAdjustment[]
-  incomes     Income[] // recebimentos conciliados no caixa
+  payments        Payment[]
+  history         CollectionHistory[]
+  adjustments     BillingAdjustment[]
+  fiscalDocuments FiscalDocument[]
+  incomes         Income[] // recebimentos conciliados no caixa
 
   @@index([clientId])
   @@index([contractId])
@@ -3072,5 +3076,56 @@ model BillingAdjustment {
 
   @@index([billingId])
   @@index([type])
+  @@index([ownerId])
+}
+
+enum FiscalDocumentStatus {
+  DRAFT
+  ISSUED
+  CANCELLED
+  REPLACED
+}
+
+/// REGISTRO DE NOTA FISCAL (F3.6 · ref. 01 §4.7).
+///
+/// DECIDIDO 19.38 (31/08): a maioria dos serviços prestados NÃO gera nota, e
+/// a direção decidiu deixar isso em aberto, sem exigência de CNPJ. Por isso
+/// este modelo é um REGISTRO OPCIONAL do que foi emitido por fora, e não um
+/// emissor: nenhuma regra gera pendência, nada trava por falta de nota.
+///
+/// Registrar mesmo assim tem um uso concreto: quando o contador pergunta
+/// "qual nota corresponde a este recebimento?", a resposta existe. Sem isso,
+/// a conferência vira caça ao e-mail.
+model FiscalDocument {
+  id            String       @id @default(cuid())
+  legalEntityId String?
+  legalEntity   LegalEntity? @relation(fields: [legalEntityId], references: [id], onDelete: SetNull)
+  clientId      String?
+  client        Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  billingId     String?
+  billing       Billing?     @relation(fields: [billingId], references: [id], onDelete: SetNull)
+
+  /// NFSe, NFe, recibo... texto livre porque a realidade fiscal varia.
+  type      String  @default("NFSe")
+  number    String
+  series    String?
+  accessKey String?
+
+  issuedAt DateTime             @db.Timestamptz(3)
+  amount   Decimal              @db.Decimal(14, 2)
+  status   FiscalDocumentStatus @default(ISSUED)
+
+  cancelledAt DateTime? @db.Timestamptz(3)
+  notes       String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerFiscalDocument", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([billingId])
+  @@index([clientId])
+  @@index([issuedAt])
   @@index([ownerId])
 }
