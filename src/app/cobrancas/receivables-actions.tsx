@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition, useState } from "react";
 import { Trash2, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -183,7 +185,7 @@ export function InlineMoney({
       const res = await onSave(raw);
       if (!res.ok) {
         setShown(prev);
-        alert(res.error);
+        showUndoToast({ message: String(res.error) });
       } else {
         const parsed = Number(raw.replace(/\./g, "").replace(",", "."));
         if (Number.isFinite(parsed)) setShown(parsed);
@@ -233,16 +235,20 @@ export function DeletePaymentButton({
   primary?: boolean;
 }) {
   const [pending, start] = useTransition();
-  function run() {
+  async function run() {
     if (
-      !confirm(
-        `Excluir o(s) pagamento(s) de ${row.name} (${formatBRL(row.amountDue)})?\n\nA cobrança volta a ficar em aberto/vencida e os valores saem de "Recebido". Esta ação não pode ser desfeita.`
-      )
+      !(await confirmAction({
+        title: `Excluir o pagamento de ${row.name} (${formatBRL(row.amountDue)})?`,
+        description:
+          'A cobrança volta a ficar em aberto e o valor sai de "Recebido". Não dá para desfazer.',
+        confirmLabel: "Excluir pagamento",
+        destructive: true,
+      }))
     )
       return;
     start(async () => {
       const res = await deleteBillingPayments(row.billingId!);
-      if (!res.ok) alert(res.error);
+      if (!res.ok) showUndoToast({ message: String(res.error) });
     });
   }
   return primary ? (
@@ -280,11 +286,11 @@ export function RestoreButton({ billingId, name }: { billingId: string; name: st
       title="Recolocar no ciclo deste mês"
       aria-label={`Recolocar ${name} no ciclo deste mês`}
       disabled={pending}
-      onClick={() => {
-        if (!confirm(`Recolocar ${name} no ciclo deste mês?`)) return;
+      onClick={async () => {
+        if (!(await confirmAction({ title: `Recolocar ${name} no ciclo deste mês?` }))) return;
         start(async () => {
           const res = await restoreBilling(billingId);
-          if (!res.ok) alert(res.error);
+          if (!res.ok) showUndoToast({ message: String(res.error) });
         });
       }}
     >
@@ -406,7 +412,7 @@ export function BulkBar({
         year,
         reason
       );
-      if (!res.ok) alert(res.error);
+      if (!res.ok) showUndoToast({ message: String(res.error) });
       else onClear();
     });
   }
@@ -762,7 +768,7 @@ function BulkPayDialog({
                   setError(res.error ?? "Falha ao registrar os pagamentos.");
                   return;
                 }
-                if (res.warning) alert(res.warning);
+                if (res.warning) showUndoToast({ message: String(res.warning) });
                 onClose();
                 onDone();
               })

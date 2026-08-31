@@ -1,4 +1,5 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,7 +77,7 @@ export function UserDialog({
             try {
               const res = editing ? await updateUser(fd) : await createUser(fd);
               if (res && !res.ok) {
-                alert(res.error);
+                showUndoToast({ message: String(res.error) });
                 return;
               }
               setOpen(false);

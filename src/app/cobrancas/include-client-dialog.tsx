@@ -1,4 +1,5 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,7 +124,7 @@ export function IncludeClientDialog({
                 setError(res.error);
                 return;
               }
-              if (res.warning) alert(res.warning);
+              if (res.warning) showUndoToast({ message: String(res.warning) });
               setOpen(false);
             })
           }

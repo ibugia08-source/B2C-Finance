@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { ClientDialog } from "./client-dialog";
 import { ClientLossDialog } from "./loss-dialog";
@@ -94,12 +96,12 @@ export function ClientActions({
 
               {/* Delete */}
               <button
-                onClick={() => {
+                onClick={async () => {
                   setMenuOpen(false);
-                  if (!confirm(`Excluir o cliente "${client.name}"?`)) return;
+                  if (!(await confirmAction({ title: `Excluir o cliente "${client.name}"?`, destructive: true }))) return;
                   start(async () => {
                     const res = await deleteClient(client.id);
-                    if (!res.ok) alert(res.error);
+                    if (!res.ok) showUndoToast({ message: String(res.error) });
                   });
                 }}
                 disabled={pending}

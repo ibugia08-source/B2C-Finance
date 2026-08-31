@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { CategoryDialog } from "./category-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -21,8 +22,8 @@ export function CategoryRowActions({ category }: { category: any }) {
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm("Excluir esta categoria?")) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: "Excluir esta categoria?", destructive: true }))) return;
           start(() => deleteCategory(category.id));
         }}
       >

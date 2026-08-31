@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { OfferDialog } from "./offer-dialog";
 import { Pencil, Trash2, Power } from "lucide-react";
@@ -32,7 +34,7 @@ export function OfferActions({
         onClick={() =>
           start(async () => {
             const res = await toggleOfferActive(offer.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           })
         }
       >
@@ -43,11 +45,11 @@ export function OfferActions({
         size="icon"
         title="Excluir"
         disabled={pending}
-        onClick={() => {
-          if (!confirm(`Excluir a oferta "${offer.name}"?`)) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: `Excluir a oferta "${offer.name}"?`, destructive: true }))) return;
           start(async () => {
             const res = await deleteOffer(offer.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           });
         }}
       >

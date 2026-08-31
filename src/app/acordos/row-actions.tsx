@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -74,8 +75,8 @@ export function ContractActions({
             size="icon"
             title="Encerrar contrato"
             disabled={pending}
-            onClick={() => {
-              if (!confirm(`Encerrar o contrato "${contract.title}"?`)) return;
+            onClick={async () => {
+              if (!(await confirmAction({ title: `Encerrar o contrato "${contract.title}"?`, destructive: true }))) return;
               start(async () => {
                 const res = await endContract(contract.id);
                 if (!res.ok) setFeedback(res.error);
@@ -90,11 +91,14 @@ export function ContractActions({
           size="icon"
           title="Excluir"
           disabled={pending}
-          onClick={() => {
+          onClick={async () => {
             if (
-              !confirm(
-                `Excluir o contrato "${contract.title}"? (contratos com cobranças devem ser cancelados)`
-              )
+              !(await confirmAction({
+                title: `Excluir o contrato "${contract.title}"?`,
+                description: "Contratos que já têm cobranças devem ser cancelados, não excluídos.",
+                confirmLabel: "Excluir contrato",
+                destructive: true,
+              }))
             )
               return;
             start(async () => {

@@ -1,4 +1,5 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
 import * as React from "react";
 import { useState, useTransition } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -49,7 +50,7 @@ export function InlineSelect({
       const res = await action(next);
       if (!res.ok) {
         setCurrent(prev);
-        alert(res.error);
+        showUndoToast({ message: String(res.error) });
       } else {
         onDone?.(next);
       }

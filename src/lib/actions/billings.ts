@@ -9,7 +9,7 @@ import {
   RevenueType,
 } from "@prisma/client";
 import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
-import { parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
+import { formatBRL, parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 
@@ -162,7 +162,15 @@ export async function registerBillingPayment(
 
     revalidateBilling(result.clientId);
     revalidateFinance(); // pagamento gera Receita Extra (Income)
-    return { ok: true };
+    // F1.8 — o texto é o da Camada de Simplicidade (02 §1), palavra por
+    // palavra: nada de "excedente", "CustomerCredit" ou qualquer termo de
+    // arquitetura na tela.
+    return result.creditGenerated > 0
+      ? {
+          ok: true,
+          warning: `${formatBRL(result.creditGenerated)} ficaram como crédito para a próxima cobrança.`,
+        }
+      : { ok: true };
   } catch (e: any) {
     return {
       ok: false,

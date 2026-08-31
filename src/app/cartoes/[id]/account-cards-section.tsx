@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -139,8 +140,8 @@ function RowActions({ cardId, accountCard }: { cardId: string; accountCard: any 
         size="icon"
         variant="ghost"
         disabled={pending}
-        onClick={() => {
-          if (confirm(`Excluir o cartão "${accountCard.name}"?`)) {
+        onClick={async () => {
+          if (await confirmAction({ title: `Excluir o cartão "${accountCard.name}"?`, destructive: true })) {
             start(() => deleteAccountCard(accountCard.id));
           }
         }}

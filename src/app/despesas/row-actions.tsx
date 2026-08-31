@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { ExpenseDialog } from "./expense-dialog";
 import { Pencil, Trash2, CheckCircle2, CircleOff } from "lucide-react";
@@ -31,7 +33,7 @@ export function ExpenseActions({
           onClick={() =>
             start(async () => {
               const res = await setExpenseStatus(expense.id, "pago");
-              if (!res.ok) alert(res.error);
+              if (!res.ok) showUndoToast({ message: String(res.error) });
             })
           }
         >
@@ -54,11 +56,11 @@ export function ExpenseActions({
           size="icon"
           title="Encerrar recorrência (remove futuras não pagas)"
           disabled={pending}
-          onClick={() => {
-            if (!confirm("Encerrar a recorrência? As ocorrências futuras não pagas serão removidas.")) return;
+          onClick={async () => {
+            if (!(await confirmAction({ title: "Encerrar a recorrência? As ocorrências futuras não pagas serão removidas.", destructive: true }))) return;
             start(async () => {
               const res = await endRecurrence(expense.recurrenceGroupId);
-              if (!res.ok) alert(res.error);
+              if (!res.ok) showUndoToast({ message: String(res.error) });
             });
           }}
         >
@@ -70,29 +72,37 @@ export function ExpenseActions({
         size="icon"
         title="Excluir"
         disabled={pending}
-        onClick={() => {
+        onClick={async () => {
           if (isRecurring) {
-            const all = confirm(
-              "Despesa recorrente.\n\nOK = excluir TODA a recorrência (não pagas)\nCancelar = escolher só esta"
-            );
+            // O confirm nativo só tinha OK/Cancelar, então a pergunta virava
+            // um enigma ("OK = tudo, Cancelar = só esta"). Com rótulos de
+            // verdade, cada botão diz o que faz.
+            const all = await confirmAction({
+              title: "Excluir toda a recorrência?",
+              description:
+                "Esta despesa se repete. Você pode apagar todas as ocorrências ainda não pagas ou somente esta.",
+              confirmLabel: "Excluir todas",
+              cancelLabel: "Só esta",
+              destructive: true,
+            });
             if (all) {
               start(async () => {
                 const res = await deleteExpense(expense.id, "group");
-                if (!res.ok) alert(res.error);
+                if (!res.ok) showUndoToast({ message: String(res.error) });
               });
               return;
             }
-            if (!confirm("Excluir somente esta ocorrência?")) return;
+            if (!(await confirmAction({ title: "Excluir somente esta ocorrência?", destructive: true }))) return;
             start(async () => {
               const res = await deleteExpense(expense.id, "one");
-              if (!res.ok) alert(res.error);
+              if (!res.ok) showUndoToast({ message: String(res.error) });
             });
             return;
           }
-          if (!confirm("Excluir esta despesa?")) return;
+          if (!(await confirmAction({ title: "Excluir esta despesa?", destructive: true }))) return;
           start(async () => {
             const res = await deleteExpense(expense.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           });
         }}
       >

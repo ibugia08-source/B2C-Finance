@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useMemo, useState, useTransition } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,13 +94,13 @@ export function ReceivablesTab({
     setSelected(new Set());
   }
 
-  function deleteSelected() {
+  async function deleteSelected() {
     const count = selectedRows.length;
     const message =
       count === 1
         ? "Tem certeza que deseja excluir este recebimento?\n\nEssa ação atualizará os indicadores financeiros relacionados a este cliente."
         : `Tem certeza que deseja excluir os ${count} recebimentos selecionados?\n\nEssa ação atualizará os indicadores financeiros relacionados.`;
-    if (!confirm(message)) return;
+    if (!(await confirmAction({ title: message }))) return;
     start(async () => {
       const res =
         count === 1
@@ -108,10 +110,10 @@ export function ReceivablesTab({
               "Excluído (em massa) pela aba Recebimentos do cliente."
             );
       if (!res.ok) {
-        alert(res.error);
+        showUndoToast({ message: String(res.error) });
         return;
       }
-      if (res.warning) alert(res.warning);
+      if (res.warning) showUndoToast({ message: String(res.warning) });
       clearSelection();
     });
   }

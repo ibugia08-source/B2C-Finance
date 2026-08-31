@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { ServiceDialog } from "./service-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -21,11 +23,11 @@ export function ServiceActions({ service }: { service: any }) {
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm(`Excluir o serviço "${service.name}"?`)) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: `Excluir o serviço "${service.name}"?`, destructive: true }))) return;
           start(async () => {
             const res = await deleteService(service.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           });
         }}
       >

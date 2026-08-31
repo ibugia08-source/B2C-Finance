@@ -1,4 +1,5 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { formatBRL } from "@/lib/format";
@@ -32,7 +33,7 @@ export function InlineMoney({
       const res = await onSave(raw);
       if (!res.ok) {
         setShown(prev);
-        alert(res.error);
+        showUndoToast({ message: String(res.error) });
       } else {
         const parsed = raw
           ? Number(raw.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", "."))

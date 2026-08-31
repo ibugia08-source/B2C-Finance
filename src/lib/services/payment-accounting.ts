@@ -39,6 +39,8 @@ export type SettleResult =
       extraRevenueId: string | null;
       paymentId: string;
       clientId: string;
+      /** F1.8 — quanto do pagamento sobrou e virou crédito (0 = nada sobrou). */
+      creditGenerated: number;
     }
   | { ok: false; error: string };
 
@@ -86,14 +88,23 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
       if (billing.status === "CANCELED")
         throw new SettleError("Cobrança cancelada não recebe pagamento.");
 
-      const openAmount = n(billing.amount) - n(billing.paidTotal);
-      if (input.amount > openAmount + MONEY_EPSILON) {
-        throw new SettleError(
-          `Valor maior que o saldo em aberto (${openAmount.toFixed(2)}).`
-        );
+      const openAmount = Math.max(0, n(billing.amount) - n(billing.paidTotal));
+
+      // F1.8 — EXCEDENTE VIRA CRÉDITO (01 §3.12; 02 §1).
+      // O v1 RECUSAVA pagamento acima do saldo. A spec inverte: "aplica até
+      // o saldo e cria crédito". Recusar obrigava o operador a inventar um
+      // valor diferente do que o cliente realmente pagou — e aí o extrato
+      // deixava de bater com o sistema, que é o pior desfecho possível.
+      const aplicado = Math.min(input.amount, openAmount);
+      const excedente = Math.max(0, input.amount - openAmount);
+      if (aplicado <= MONEY_EPSILON && excedente <= MONEY_EPSILON) {
+        throw new SettleError("Informe um valor maior que zero.");
+      }
+      if (openAmount <= MONEY_EPSILON) {
+        throw new SettleError("Esta cobrança já está quitada. Registre o valor na próxima.");
       }
 
-      const fullyPaidPrevisto = n(billing.paidTotal) + input.amount >= n(billing.amount) - MONEY_EPSILON;
+      const fullyPaidPrevisto = n(billing.paidTotal) + aplicado >= n(billing.amount) - MONEY_EPSILON;
 
       // ===== Classificação do fechamento mensal =====
       const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
@@ -118,10 +129,48 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
         data: {
           paymentId: payment.id,
           billingId: billing.id,
-          amount: input.amount,
+          // Só o que coube nesta cobrança. O resto vira crédito abaixo —
+          // é a diferença entre "quanto entrou" (Payment) e "quanto desta
+          // cobrança foi quitado" (aplicação).
+          amount: aplicado,
           appliedAt: input.paidAt,
         },
       });
+
+      let creditGenerated = 0;
+      if (excedente > MONEY_EPSILON) {
+        // upsert não serve: a unique é (clientId, relationshipId) e
+        // relationshipId é nulável — Prisma exige valor não nulo na chave
+        // composta do where, e cobrança legada pode estar sem relação.
+        const existente = await tx.customerCredit.findFirst({
+          where: { clientId: billing.clientId, relationshipId: billing.relationshipId },
+          select: { id: true },
+        });
+        const credito = existente
+          ? await tx.customerCredit.update({
+              where: { id: existente.id },
+              data: { balance: { increment: excedente } },
+              select: { id: true },
+            })
+          : await tx.customerCredit.create({
+              data: {
+                clientId: billing.clientId,
+                relationshipId: billing.relationshipId,
+                balance: excedente,
+              },
+              select: { id: true },
+            });
+        await tx.customerCreditMovement.create({
+          data: {
+            creditId: credito.id,
+            kind: "IN",
+            amount: excedente,
+            sourcePaymentId: payment.id,
+            reason: `Pagamento acima do saldo de ${billing.description}`,
+          },
+        });
+        creditGenerated = excedente;
+      }
 
       const newPaidTotal = await recomputePaidTotal(tx, billing.id);
       const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
@@ -193,6 +242,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
         extraRevenueId: null,
         paymentId: payment.id,
         clientId: billing.clientId,
+        creditGenerated,
       };
     });
   } catch (e) {

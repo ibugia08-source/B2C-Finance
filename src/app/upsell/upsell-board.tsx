@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { formatBRL } from "@/lib/format";
 import Link from "next/link";
@@ -94,7 +95,7 @@ export function UpsellBoard({
         setItems((cur) =>
           cur.map((it) => (it.id === u.id ? { ...it, status: u.status } : it))
         );
-        alert(res.error);
+        showUndoToast({ message: String(res.error) });
         return;
       }
       const warning = (res as { warning?: string }).warning;
@@ -269,11 +270,11 @@ export function UpsellBoard({
                             size="icon"
                             className="h-7 w-7"
                             title="Excluir"
-                            onClick={() => {
-                              if (!confirm("Excluir esta oportunidade de upsell?")) return;
+                            onClick={async () => {
+                              if (!(await confirmAction({ title: "Excluir esta oportunidade de upsell?", destructive: true }))) return;
                               start(async () => {
                                 const res = await deleteUpsell(u.id);
-                                if (!res.ok) alert(res.error);
+                                if (!res.ok) showUndoToast({ message: String(res.error) });
                                 else router.refresh();
                               });
                             }}

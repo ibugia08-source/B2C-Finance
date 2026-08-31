@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2 } from "lucide-react";
@@ -39,11 +41,11 @@ export function UserRowActions({
           variant="ghost"
           size="icon"
           disabled={pending}
-          onClick={() => {
-            if (!confirm(`Excluir o usuário ${user.name}?`)) return;
+          onClick={async () => {
+            if (!(await confirmAction({ title: `Excluir o usuário ${user.name}?`, destructive: true }))) return;
             start(async () => {
               const res = await deleteUser(user.id);
-              if (res && !res.ok) alert(res.error);
+              if (res && !res.ok) showUndoToast({ message: String(res.error) });
             });
           }}
           title="Excluir"

@@ -44,6 +44,7 @@ describe("F1.4 — aplicação de pagamento", () => {
     const r = await asOwner(dono, async () =>
       settleBillingPayment({
         billingId: cob.id, amount: 1000, paidAt: new Date(2026, 2, 5), method: "PIX",
+        accountId: null, notes: null,
       })
     );
     expect(r.ok).toBe(true);
@@ -59,10 +60,10 @@ describe("F1.4 — aplicação de pagamento", () => {
     const cob = await createBilling(dono, cliente.id, { month: 4, year: 2026, amount: 1000 });
 
     const p1: any = await asOwner(dono, async () =>
-      settleBillingPayment({ billingId: cob.id, amount: 400, paidAt: new Date(2026, 3, 5), method: "PIX" })
+      settleBillingPayment({ billingId: cob.id, amount: 400, paidAt: new Date(2026, 3, 5), method: "PIX", accountId: null, notes: null })
     );
     await asOwner(dono, async () =>
-      settleBillingPayment({ billingId: cob.id, amount: 600, paidAt: new Date(2026, 3, 20), method: "PIX" })
+      settleBillingPayment({ billingId: cob.id, amount: 600, paidAt: new Date(2026, 3, 20), method: "PIX", accountId: null, notes: null })
     );
 
     let est = await asOwner(dono, async () => invariante(cob.id));
@@ -84,10 +85,10 @@ describe("F1.4 — aplicação de pagamento", () => {
     const cob = await createBilling(dono, cliente.id, { month: 5, year: 2026, amount: 800 });
 
     const p1: any = await asOwner(dono, async () =>
-      settleBillingPayment({ billingId: cob.id, amount: 300, paidAt: new Date(2026, 4, 3), method: "PIX" })
+      settleBillingPayment({ billingId: cob.id, amount: 300, paidAt: new Date(2026, 4, 3), method: "PIX", accountId: null, notes: null })
     );
     const p2: any = await asOwner(dono, async () =>
-      settleBillingPayment({ billingId: cob.id, amount: 500, paidAt: new Date(2026, 4, 9), method: "PIX" })
+      settleBillingPayment({ billingId: cob.id, amount: 500, paidAt: new Date(2026, 4, 9), method: "PIX", accountId: null, notes: null })
     );
 
     await asOwner(dono, async () => revertBillingPayment(p2.paymentId));
@@ -109,7 +110,7 @@ describe("F1.4 — aplicação de pagamento", () => {
     const fev = await createBilling(dono, cliente.id, { month: 2, year: 2026, amount: 500 });
 
     const r: any = await asOwner(dono, async () =>
-      settleBillingPayment({ billingId: jan.id, amount: 500, paidAt: new Date(2026, 0, 10), method: "PIX" })
+      settleBillingPayment({ billingId: jan.id, amount: 500, paidAt: new Date(2026, 0, 10), method: "PIX", accountId: null, notes: null })
     );
 
     // O mesmo pagamento cobre também fevereiro.

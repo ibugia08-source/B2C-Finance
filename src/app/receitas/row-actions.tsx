@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { IncomeDialog } from "./income-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -40,8 +41,8 @@ export function IncomeActions({
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm("Excluir receita?")) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: "Excluir receita?", destructive: true }))) return;
           start(() => deleteIncome(income.id));
         }}
       >

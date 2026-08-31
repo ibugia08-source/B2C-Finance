@@ -176,21 +176,32 @@ describe("settleBillingPayment — parcial e excedente", () => {
     expect(await readIncomes(b.id)).toHaveLength(2);
   });
 
-  it("RECUSA valor acima do saldo em aberto (comportamento atual do v1)", async () => {
+  // REGRA TROCADA NA F1.8. Este teste travava a recusa do v1 e está
+  // reescrito de propósito: 01 §3.12 e a Camada de Simplicidade (02 §1)
+  // mandam "aplicar até o saldo e criar crédito". A hierarquia da spec é
+  // explícita — regra de 01 vence código do v1. Recusar obrigava o
+  // operador a lançar um valor DIFERENTE do que o cliente pagou, e aí o
+  // extrato deixava de bater com o sistema, que é o pior desfecho.
+  it("ACEITA valor acima do saldo e transforma o excedente em crédito (F1.8)", async () => {
     const b = await createBilling(owner, clientId, {
       month: 8, year: 2026, amount: 1000, dueDate: new Date(2026, 7, 10),
     });
     const res = await settle(b.id, 1100, new Date(2026, 7, 5));
 
-    expect(res.ok).toBe(false);
-    if (res.ok) return;
-    expect(res.error).toMatch(/saldo em aberto/i);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.fullyPaid).toBe(true);
+    expect(res.creditGenerated).toBe(100);
 
-    // Nada foi gravado: sem pagamento, sem caixa, saldo intacto.
+    // A cobrança recebe só o que cabia nela; o resto virou crédito.
     const billing = await readBilling(b.id);
-    expect(Number(billing.paidTotal)).toBe(0);
-    expect(billing.status).toBe("PENDING");
-    expect(await readIncomes(b.id)).toHaveLength(0);
+    expect(Number(billing.paidTotal)).toBe(1000);
+    expect(billing.status).toBe("PAID");
+
+    // O caixa registra o que entrou de VERDADE: os 1100.
+    const incomes = await readIncomes(b.id);
+    expect(incomes).toHaveLength(1);
+    expect(Number(incomes[0].amount)).toBe(1100);
   });
 
   it("recusa pagamento em cobrança cancelada", async () => {

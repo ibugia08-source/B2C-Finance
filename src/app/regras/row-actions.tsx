@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { RuleDialog } from "./rule-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -23,8 +24,8 @@ export function RuleRowActions({ rule, categories, cards }: { rule: any; categor
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm("Excluir esta regra?")) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: "Excluir esta regra?", destructive: true }))) return;
           start(() => deleteRule(rule.id));
         }}
       >

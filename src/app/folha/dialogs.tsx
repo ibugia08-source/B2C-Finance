@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,11 +101,11 @@ export function EmployeeActions({ employee }: { employee: any }) {
         <Button variant="ghost" size="icon"><Pencil className="h-4 w-4" /></Button>
       } />
       <Button variant="ghost" size="icon" disabled={pending}
-        onClick={() => {
-          if (!confirm(`Excluir "${employee.name}"?`)) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: `Excluir "${employee.name}"?`, destructive: true }))) return;
           start(async () => {
             const res = await deleteEmployee(employee.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           });
         }}>
         <Trash2 className="h-4 w-4 text-destructive" />
@@ -236,11 +238,11 @@ export function DeleteCommissionButton({ id }: { id: string }) {
   const [pending, start] = useTransition();
   return (
     <Button variant="ghost" size="icon" disabled={pending}
-      onClick={() => {
-        if (!confirm("Excluir esta comissão pendente?")) return;
+      onClick={async () => {
+        if (!(await confirmAction({ title: "Excluir esta comissão pendente?", destructive: true }))) return;
         start(async () => {
           const res = await deleteCommission(id);
-          if (!res.ok) alert(res.error);
+          if (!res.ok) showUndoToast({ message: String(res.error) });
         });
       }}>
       <Trash2 className="h-4 w-4 text-destructive" />
@@ -323,11 +325,11 @@ export function DeleteItemButton({ id }: { id: string }) {
   const [pending, start] = useTransition();
   return (
     <Button variant="ghost" size="icon" disabled={pending}
-      onClick={() => {
-        if (!confirm("Remover este item da folha?")) return;
+      onClick={async () => {
+        if (!(await confirmAction({ title: "Remover este item da folha?", destructive: true }))) return;
         start(async () => {
           const res = await deletePayrollItem(id);
-          if (!res.ok) alert(res.error);
+          if (!res.ok) showUndoToast({ message: String(res.error) });
         });
       }}>
       <Trash2 className="h-4 w-4 text-destructive" />
@@ -339,8 +341,8 @@ export function PayrollStatusButtons({ runId, status }: { runId: string; status:
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function set(s: string, confirmMsg?: string) {
-    if (confirmMsg && !confirm(confirmMsg)) return;
+  async function set(s: string, confirmMsg?: string) {
+    if (confirmMsg && !(await confirmAction({ title: confirmMsg, destructive: true }))) return;
     start(async () => {
       setError(null);
       const res = await setPayrollStatus(runId, s);

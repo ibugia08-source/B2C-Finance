@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { CardDialog } from "./card-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -31,8 +32,8 @@ export function CardRowActions({
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm("Excluir este cartão?")) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: "Excluir este cartão?", destructive: true }))) return;
           start(() => deleteCard(card.id));
         }}
         title="Excluir"

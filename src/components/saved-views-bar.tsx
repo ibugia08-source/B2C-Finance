@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -31,11 +33,11 @@ export function SavedViewsBar({
     router.push(params ? `${pathname}?${params}` : pathname);
   }
 
-  function remove(view: SavedViewItem) {
-    if (!confirm(`Excluir a visão "${view.name}"?`)) return;
+  async function remove(view: SavedViewItem) {
+    if (!(await confirmAction({ title: `Excluir a visão "${view.name}"?`, destructive: true }))) return;
     start(async () => {
       const res = await deleteView(view.id);
-      if (!res.ok) alert(res.error);
+      if (!res.ok) showUndoToast({ message: String(res.error) });
       else router.refresh();
     });
   }

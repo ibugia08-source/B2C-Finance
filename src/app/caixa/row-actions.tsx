@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { CashBoxDialog } from "./cashbox-dialog";
 import { Pencil, Trash2 } from "lucide-react";
@@ -28,8 +29,8 @@ export function CashBoxActions({
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm("Excluir este caixa? As movimentações serão perdidas.")) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: "Excluir este caixa? As movimentações serão perdidas.", destructive: true }))) return;
           start(() => deleteCashBox(box.id));
         }}
       >
@@ -46,8 +47,8 @@ export function MovementDeleteButton({ id }: { id: string }) {
       variant="ghost"
       size="icon"
       disabled={pending}
-      onClick={() => {
-        if (!confirm("Excluir movimentação?")) return;
+      onClick={async () => {
+        if (!(await confirmAction({ title: "Excluir movimentação?", destructive: true }))) return;
         start(() => deleteCashMovement(id));
       }}
     >

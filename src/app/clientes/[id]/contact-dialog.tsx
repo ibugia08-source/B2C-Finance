@@ -1,4 +1,6 @@
 "use client";
+import { showUndoToast } from "@/components/undo-toast";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -129,11 +131,11 @@ export function ContactActions({ contact }: { contact: any }) {
         variant="ghost"
         size="icon"
         disabled={pending}
-        onClick={() => {
-          if (!confirm(`Excluir o contato "${contact.name}"?`)) return;
+        onClick={async () => {
+          if (!(await confirmAction({ title: `Excluir o contato "${contact.name}"?`, destructive: true }))) return;
           start(async () => {
             const res = await deleteClientContact(contact.id);
-            if (!res.ok) alert(res.error);
+            if (!res.ok) showUndoToast({ message: String(res.error) });
           });
         }}
       >

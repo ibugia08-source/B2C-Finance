@@ -10,6 +10,7 @@ import { CommandPalette } from "./command-palette";
 import { ShortcutsDialog } from "./shortcuts-dialog";
 import { GlobalShortcuts } from "./global-shortcuts";
 import { UndoToastHost } from "./undo-toast";
+import { ConfirmDialogHost } from "./ui/confirm-dialog";
 import type { UserLike } from "./nav-items";
 import type { ScopeOptions } from "@/lib/services/org-scope";
 
@@ -77,6 +78,7 @@ export function AppShell({
 
       <MobileNav user={user} />
       <UndoToastHost />
+      <ConfirmDialogHost />
 
       {/* Busca, paleta e atalhos: uma instância só, válida em toda tela. */}
       <CommandPalette user={user} />

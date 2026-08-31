@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,7 +68,7 @@ export function LossReasonDialog({
     }
     start(async () => {
       const res = await setClientLossReason(client.id, reason);
-      if (!res.ok) alert(res.error);
+      if (!res.ok) showUndoToast({ message: String(res.error) });
       onClose();
     });
   }
@@ -230,12 +231,19 @@ export function BulkActionBar({
   const [dialog, setDialog] = useState<BulkDialog>(null);
   const [pending, start] = useTransition();
 
-  function runDelete() {
-    if (!confirm(`Excluir ${count} cliente${count === 1 ? "" : "s"} selecionado${count === 1 ? "" : "s"}? Esta ação não pode ser desfeita.`))
+  async function runDelete() {
+    if (
+      !(await confirmAction({
+        title: `Excluir ${count} cliente${count === 1 ? "" : "s"} selecionado${count === 1 ? "" : "s"}?`,
+        description: "Não dá para desfazer.",
+        confirmLabel: "Excluir",
+        destructive: true,
+      }))
+    )
       return;
     start(async () => {
       const res = await bulkDeleteClients(ids);
-      if (!res.ok) alert(res.error);
+      if (!res.ok) showUndoToast({ message: String(res.error) });
       else onClear();
     });
   }
@@ -357,7 +365,7 @@ function BulkFieldDialog({
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function confirm() {
+  function submeter() {
     if (!allowEmpty && !value) {
       setError("Selecione um valor.");
       return;
@@ -390,7 +398,7 @@ function BulkFieldDialog({
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button onClick={confirm} disabled={pending}>
+          <Button onClick={submeter} disabled={pending}>
             {pending ? "Aplicando…" : "Aplicar"}
           </Button>
         </DialogFooter>

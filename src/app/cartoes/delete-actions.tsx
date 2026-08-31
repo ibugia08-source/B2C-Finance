@@ -1,4 +1,5 @@
 "use client";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
@@ -20,11 +21,15 @@ export function DeleteInvoiceButton({
       size="icon"
       disabled={pending}
       title="Excluir fatura e todas as suas transações"
-      onClick={() => {
+      onClick={async () => {
         if (
-          !confirm(
-            `Excluir a fatura ${label}?\n\nTodas as transações dessa fatura (e os valores a receber vinculados) serão apagados. Esta ação não pode ser desfeita.`
-          )
+          !(await confirmAction({
+            title: `Excluir a fatura ${label}?`,
+            description:
+              "Todas as transações dessa fatura e os valores a receber vinculados são apagados. Não dá para desfazer.",
+            confirmLabel: "Excluir fatura",
+            destructive: true,
+          }))
         )
           return;
         start(() => deleteInvoice(invoiceId));
@@ -50,11 +55,15 @@ export function DeleteBatchButton({
       size="icon"
       disabled={pending}
       title="Desfazer esta importação (apaga as transações importadas)"
-      onClick={() => {
+      onClick={async () => {
         if (
-          !confirm(
-            `Desfazer a importação "${label}"?\n\nTodas as transações importadas nesse lote serão apagadas e as faturas afetadas serão recalculadas. Esta ação não pode ser desfeita.`
-          )
+          !(await confirmAction({
+            title: `Desfazer a importação "${label}"?`,
+            description:
+              "As transações importadas nesse lote são apagadas e as faturas afetadas são recalculadas. Não dá para desfazer.",
+            confirmLabel: "Desfazer importação",
+            destructive: true,
+          }))
         )
           return;
         start(() => deleteImportBatch(batchId));
