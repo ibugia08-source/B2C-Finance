@@ -3,7 +3,9 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/empty-state";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
+import { avulsasDe } from "@/lib/snapshots/engine";
+import { Avulsas } from "./avulsas";
 import { SnapshotBanner, NaoExistiaNoPeriodo } from "@/components/snapshot-banner";
 import { areaDisponivel, conferirChecksum, lerFotografia } from "@/lib/snapshots/read";
 import { formatBRL, monthLabel } from "@/lib/format";
@@ -37,7 +39,7 @@ export default async function FotografiaPage({
 }: {
   searchParams?: { mes?: string };
 }) {
-  await requirePagePermission("fechamento.fechar");
+  const viewer = await requirePagePermission("fechamento.fechar");
 
   const hoje = new Date();
   const padrao = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
@@ -47,7 +49,11 @@ export default async function FotografiaPage({
       : `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, "0")}`;
   const [ano, mes] = competence.split("-").map(Number);
 
-  const foto = await lerFotografia(competence);
+  const [foto, avulsas] = await Promise.all([
+    lerFotografia(competence),
+    avulsasDe(competence),
+  ]);
+  const podeFotografar = can(viewer, "fechamento.fotografar");
 
   if (!foto) {
     return (
@@ -56,6 +62,7 @@ export default async function FotografiaPage({
           title="Fotografia do mês"
           description={`${monthLabel(new Date(ano, mes - 1, 1))} — como o mês ficou quando fechou`}
         />
+        <Avulsas competence={competence} lista={avulsas} podeCriar={podeFotografar} />
         <Card>
           <CardContent className="p-0">
             <EmptyState
@@ -101,6 +108,8 @@ export default async function FotografiaPage({
         fechadoEm={foto.fechadoEm}
         precisaRevalidar={foto.precisaRevalidar}
       />
+
+      <Avulsas competence={competence} lista={avulsas} podeCriar={podeFotografar} />
 
       <Card className="mb-4">
         <CardContent className="grid grid-cols-2 gap-x-6 gap-y-2 p-4 text-dense lg:grid-cols-4">

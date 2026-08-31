@@ -277,3 +277,18 @@ export async function snapshotDe(competence: Competence | string) {
     })
   );
 }
+
+/** Fotografias AVULSAS de uma competência (§5.7), da mais recente. */
+export async function avulsasDe(competence: Competence | string) {
+  const workspaceId = await currentWorkspaceId();
+  return runWithoutScope(async () =>
+    prisma.snapshot.findMany({
+      where: { workspaceId, competence, kind: "STANDALONE" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, name: true, closedBy: true, createdAt: true,
+        checksum: true, sourceCutoffAt: true,
+      },
+    })
+  );
+}

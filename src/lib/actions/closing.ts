@@ -99,3 +99,39 @@ export async function marcarReconferidoAction(competence: string, nota: string) 
   revalidatePath("/cobrancas");
   return r;
 }
+
+/**
+ * FOTOGRAFIA AVULSA (F2.9 · 01 §5.7).
+ *
+ * "Fotografia nomeada por permissão, SEM fechar período."
+ *
+ * Serve para congelar o mês antes de um gesto grande — uma renegociação, um
+ * write-off, uma correção em massa — e poder voltar e comparar. Ela NUNCA se
+ * passa por fechamento: nasce marcada STANDALONE e não vira a fotografia
+ * vigente do mês, que continua sendo a nativa.
+ */
+export async function criarFotografiaAvulsaAction(competence: string, nome: string) {
+  const v = await requirePermission("fechamento.fotografar");
+  const texto = (nome ?? "").trim();
+  if (texto.length < 3) {
+    return { ok: false as const, error: "Dê um nome à fotografia (pelo menos 3 caracteres)." };
+  }
+  const { gerarSnapshot } = await import("@/lib/snapshots/engine");
+  try {
+    const r = await gerarSnapshot(competence, {
+      kind: "STANDALONE",
+      name: texto,
+      closedBy: v.name ?? null,
+    });
+    revalidatePath("/fechamento/fotografia");
+    return { ok: true as const, id: r.id, checksum: r.checksum };
+  } catch (e: any) {
+    // O índice único recusa duas avulsas com o mesmo nome no mesmo mês — e
+    // isso é bom: duas "Antes da renegociação" seriam indistinguíveis na hora
+    // de comparar.
+    if (e?.code === "P2002") {
+      return { ok: false as const, error: "Já existe uma fotografia com esse nome neste mês." };
+    }
+    throw e;
+  }
+}

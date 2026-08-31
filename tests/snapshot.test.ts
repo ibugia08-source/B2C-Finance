@@ -4,7 +4,7 @@ import {
   prisma, runWithoutScope, type TestOwner,
 } from "./support/db";
 import { canonicalJson, checksumByArea, checksumOf, money } from "@/lib/snapshots/serialize";
-import { gerarSnapshot, montarAreas, snapshotDe } from "@/lib/snapshots/engine";
+import { avulsasDe, gerarSnapshot, montarAreas, snapshotDe } from "@/lib/snapshots/engine";
 import { fecharPeriodo, periodoDe, reabrirPeriodo } from "@/lib/services/closing-period";
 import { conferirIntegridade } from "@/lib/snapshots/integrity";
 import { currentWorkspaceId } from "@/lib/services/workspace";
@@ -274,5 +274,52 @@ describe("F2.8 — job de integridade", () => {
       conferirIntegridade({ competencias: ["2026-05"] })
     );
     expect(JSON.stringify(a.divergencias)).toBe(JSON.stringify(b.divergencias));
+  });
+});
+
+describe("F2.9 — fotografias avulsas (01 §5.7)", () => {
+  let dono: TestOwner;
+  beforeAll(async () => {
+    dono = await createOwner();
+  });
+  afterAll(async () => {
+    const ws = await currentWorkspaceId();
+    await runWithoutScope(async () => {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" DISABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.snapshot.deleteMany({ where: { workspaceId: ws } });
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" ENABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.closingPeriod.deleteMany({ where: { workspaceId: ws } });
+    });
+    await destroyOwner(dono);
+  });
+
+  it("congelar não fecha o mês nem vira a fotografia vigente", async () => {
+    await asOwner(dono, async () =>
+      gerarSnapshot("2026-08", { kind: "STANDALONE", name: "Antes da renegociação" })
+    );
+    const p = await asOwner(dono, async () => periodoDe("2026-08"));
+    expect(p.estado).toBe("OPEN");
+    expect(await asOwner(dono, async () => snapshotDe("2026-08"))).toBeNull();
+
+    const lista = await asOwner(dono, async () => avulsasDe("2026-08"));
+    expect(lista).toHaveLength(1);
+    expect(lista[0].name).toBe("Antes da renegociação");
+  });
+
+  it("duas avulsas com o mesmo nome no mesmo mês são recusadas", async () => {
+    // Duas "Antes da renegociação" seriam indistinguíveis na hora de comparar.
+    await expect(
+      asOwner(dono, async () =>
+        gerarSnapshot("2026-08", { kind: "STANDALONE", name: "Antes da renegociação" })
+      )
+    ).rejects.toThrow();
+  });
+
+  it("avulsa e nativa do mesmo mês convivem", async () => {
+    await asOwner(dono, async () => fecharPeriodo("2026-08", "Israel"));
+    const nativa = await asOwner(dono, async () => snapshotDe("2026-08"));
+    const avulsas = await asOwner(dono, async () => avulsasDe("2026-08"));
+    expect(nativa!.kind).toBe("NATIVE");
+    expect(avulsas).toHaveLength(1);
   });
 });
