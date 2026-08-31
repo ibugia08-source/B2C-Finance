@@ -214,6 +214,7 @@ model User {
   ownedRelationships ClientAgencyRelationship[] @relation("OwnerClientRelationship")
   ownedAvaliacoes    AvaliacaoMensal[]          @relation("OwnerAvaliacaoMensal")
   ownedOnboarding    OnboardingTask[]           @relation("OwnerOnboardingTask")
+  ownedTerms         CommercialTerm[]           @relation("OwnerCommercialTerm")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -1114,6 +1115,9 @@ model Client {
   // Mês de renovação (1-12) — editável na linha; alimenta KPIs de renovação.
   renewalMonth        Int?
   // Valor mensal recorrente — usado SOMENTE em MRR (base da mensalidade).
+  /// CACHE do valor atual (01 §4.4). A fonte temporal é CommercialTerm:
+  /// métrica histórica NUNCA lê este campo, porque reajuste o sobrescreve
+  /// e o passado se perde. Para "quanto valia em março?" use termAt().
   monthlyValue        Decimal?        @db.Decimal(14, 2)
   // Valor TOTAL do contrato — usado SOMENTE em TCV. Referência editável no
   // nível do cliente; espelha Contract.totalValue da venda/renovação.
@@ -1600,6 +1604,7 @@ model Contract {
   createdAt     DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
 
+  terms       CommercialTerm[]
   services    ContractService[]
   billings    Billing[]
   commissions Commission[]
@@ -2344,9 +2349,11 @@ model ClientAgencyRelationship {
   churnedAt DateTime? @db.Timestamptz(3)
   endedAt   DateTime? @db.Timestamptz(3)
 
-  /// Termo comercial vigente (F1.2). Sem relação declarada de propósito
-  /// enquanto o CommercialTerm não existe — vira FK na F1.2.
-  currentCommercialTermId String?
+  /// Termo comercial VIGENTE (F1.2). É cache de conveniência: a verdade é
+  /// a linha do tempo em CommercialTerm, e quem pergunta "quanto valia em
+  /// março?" tem de olhar a vigência, nunca este campo.
+  currentCommercialTermId String?         @unique
+  currentCommercialTerm   CommercialTerm? @relation("TermoVigente", fields: [currentCommercialTermId], references: [id], onDelete: SetNull)
 
   ownerId String?
   owner   User?   @relation("OwnerClientRelationship", fields: [ownerId], references: [id])
@@ -2358,6 +2365,7 @@ model ClientAgencyRelationship {
   collections CollectionHistory[]
   avaliacoes  AvaliacaoMensal[]
   onboarding  OnboardingTask[]
+  terms       CommercialTerm[] @relation("TermosDaRelacao")
 
   /// Um cliente tem no máximo UMA relação por agência: duas seriam duas
   /// carteiras do mesmo cliente na mesma agência, que é o bug, não o caso.
@@ -2431,6 +2439,52 @@ model OnboardingTask {
 
   @@index([relationshipId])
   @@index([dueAt])
+  @@index([ownerId])
+}
+
+// ===========================================================================
+// TERMO COMERCIAL (F1.2 · ref. 01 §4.4)
+//
+// "CommercialTerm (fonte temporal)". É a linha do tempo do que foi
+// combinado: modalidade, valor e prazo, cada versão com vigência.
+//
+// POR QUE ISSO EXISTE: no v1 o valor morava em Client.monthlyValue, um
+// campo só. Reajustar o cliente sobrescrevia o passado — e a partir daí
+// nenhuma métrica histórica sabia quanto ele valia em março. 01 §4.4 é
+// categórico: "Client.monthlyValue existe só como cache do valor atual;
+// métrica histórica NUNCA o usa".
+// ===========================================================================
+model CommercialTerm {
+  id             String                   @id @default(cuid())
+  relationshipId String
+  relationship   ClientAgencyRelationship @relation("TermosDaRelacao", fields: [relationshipId], references: [id], onDelete: Cascade)
+
+  modality           ClientModality
+  monthlyValue       Decimal? @db.Decimal(14, 2)
+  totalContractValue Decimal? @db.Decimal(14, 2)
+  contractMonths     Int?
+
+  /// Vigência. validTo nulo = termo em vigor.
+  validFrom DateTime  @db.Timestamptz(3)
+  validTo   DateTime? @db.Timestamptz(3)
+
+  contractId String?
+  contract   Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  /// Por que este termo nasceu: reajuste, renovação, upsell, migração.
+  reason String?
+
+  /// Lado inverso do cache de vigente na relação.
+  vigenteEm ClientAgencyRelationship? @relation("TermoVigente")
+
+  ownerId String?
+  owner   User?   @relation("OwnerCommercialTerm", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([relationshipId, validFrom])
+  @@index([validFrom])
   @@index([ownerId])
 }
 
