@@ -11,6 +11,7 @@ export const CLIENT_TABS = [
   { id: "cobrancas", label: "Cobranças", countKey: "cobrancas" },
   { id: "pagamentos", label: "Pagamentos", countKey: "pagamentos" },
   { id: "servicos", label: "Serviços" },
+  { id: "termos", label: "Preço e termos" },
   { id: "onboarding", label: "Onboarding", countKey: "onboarding" },
   { id: "historico", label: "Histórico", countKey: "historico" },
   { id: "contexto", label: "Contexto", countKey: "contexto" },

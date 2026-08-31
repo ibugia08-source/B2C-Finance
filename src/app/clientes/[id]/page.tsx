@@ -38,6 +38,7 @@ import { CONTRACT_STATUS_LABEL, contractStatusVariant } from "@/app/acordos/_met
 import { PAYMENT_METHOD_LABEL, COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
 import { resolveClientTab } from "./tabs-meta";
 import { OnboardingBoard } from "./onboarding-board";
+import { TermosTab } from "./termos-tab";
 import { carregarQuadro } from "@/lib/services/onboarding";
 import { prisma as db } from "@/lib/prisma";
 
@@ -174,6 +175,23 @@ export default async function ClientDetailPage({
     select: { id: true },
   });
   const quadroOnboarding = relacao ? await carregarQuadro(relacao.id) : null;
+
+  // F1.16 — histórico de preço e de gestores. Só passou a existir depois
+  // da F1.2/F1.3: antes o valor e o responsável eram campos do cliente, e
+  // a alteração SOBRESCREVIA o passado.
+  const [termosDb, gestoresDb] = relacao
+    ? await Promise.all([
+        db.commercialTerm.findMany({
+          where: { relationshipId: relacao.id },
+          orderBy: { validFrom: "desc" },
+        }),
+        db.clientManagerAssignment.findMany({
+          where: { relationshipId: relacao.id },
+          orderBy: { validFrom: "desc" },
+          include: { manager: { select: { name: true } } },
+        }),
+      ])
+    : [[], []];
 
   return (
     <div>
@@ -646,6 +664,31 @@ export default async function ClientDetailPage({
             </Card>
           </div>
         </TabsContent>
+        {/* ---------- Preço e termos ---------- */}
+        <TabsContent value="termos">
+          <TermosTab
+            termos={termosDb.map((t) => ({
+              id: t.id,
+              modality: String(t.modality),
+              monthlyValue: t.monthlyValue == null ? null : Number(t.monthlyValue),
+              totalContractValue:
+                t.totalContractValue == null ? null : Number(t.totalContractValue),
+              contractMonths: t.contractMonths,
+              validFrom: t.validFrom.toISOString(),
+              validTo: t.validTo ? t.validTo.toISOString() : null,
+              reason: t.reason,
+            }))}
+            gestores={gestoresDb.map((g) => ({
+              id: g.id,
+              nome: g.manager.name,
+              role: String(g.role),
+              validFrom: g.validFrom.toISOString(),
+              validTo: g.validTo ? g.validTo.toISOString() : null,
+              reason: g.reason,
+            }))}
+          />
+        </TabsContent>
+
         {/* ---------- Onboarding ---------- */}
         <TabsContent value="onboarding">
           <OnboardingBoard
