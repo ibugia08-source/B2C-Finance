@@ -70,6 +70,8 @@ export async function destroyOwner(owner: TestOwner) {
     await prisma.collectionHistory.deleteMany({ where: { ownerId: owner.id } });
     await prisma.billing.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientRenewal.deleteMany({ where: { ownerId: owner.id } });
+    // AuditLog é append-only por gatilho: não se apaga nem na limpeza de
+    // teste. Cada teste usa um dono novo, então não há vazamento entre eles.
     await prisma.customerCreditMovement.deleteMany({ where: { ownerId: owner.id } });
     await prisma.customerCredit.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientLoss.deleteMany({ where: { ownerId: owner.id } });

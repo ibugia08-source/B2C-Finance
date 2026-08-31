@@ -2671,3 +2671,74 @@ model CustomerCreditMovement {
   @@index([ownerId])
 }
 
+// ===========================================================================
+// TRILHA DE AUDITORIA (F1.9 · ref. 01 §4.10)
+//
+// "AuditLog append-only campo a campo nas entidades financeiras e de
+// carteira, com origem e motivo; helper único de escrita."
+//
+// CAMPO A CAMPO, e não um JSON do registro inteiro, porque a pergunta real
+// nunca é "como estava o cliente em março?" e sim "QUEM mudou o valor, QUANDO
+// e POR QUÊ?". Guardar o objeto todo obriga a diferenciar dois JSONs para
+// responder isso, e ninguém faz isso na hora da dúvida.
+//
+// APPEND-ONLY de verdade: a regra está no BANCO (trigger que recusa UPDATE e
+// DELETE), não na aplicação. Trilha que o próprio sistema pode reescrever não
+// é trilha — é rascunho.
+// ===========================================================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  REVERSE
+}
+
+/// De onde partiu a mudança. Import e job precisam ser distinguíveis de
+/// gente: metade das dúvidas de auditoria é "isso fui eu ou foi a planilha?".
+enum AuditOrigin {
+  UI
+  IMPORT
+  JOB
+  API
+  MIGRATION
+}
+
+model AuditLog {
+  id       String      @id @default(cuid())
+  /// Nome do model tocado ("Billing", "Client", "CommercialTerm"...).
+  entity   String
+  entityId String
+  action   AuditAction
+
+  /// Campo alterado. Nulo em CREATE/DELETE, onde a linha inteira é o fato.
+  field    String?
+  oldValue String?
+  newValue String?
+
+  origin AuditOrigin @default(UI)
+  /// Por quê. Obrigatório por REGRA DE NEGÓCIO em ajuste, estorno e write-off
+  /// (01 §4.10) — o helper cobra; o banco aceita nulo para o caso trivial.
+  reason String?
+
+  actorId    String?
+  actorEmail String?
+  /// Amarra as N linhas de uma mesma operação (T7 de observabilidade).
+  correlationId String?
+
+  /// SEM chave estrangeira para User, de propósito. Com FK, apagar um
+  /// usuário dispararia ON DELETE SET NULL — um UPDATE — e a trilha, que é
+  /// append-only, seria alterada por cascata. Pior: a linha perderia o dono
+  /// justamente no caso em que a auditoria mais importa. A coluna guarda o
+  /// id como foi registrado, e continua servindo ao escopo por dono.
+  ownerId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([actorEmail])
+  @@index([correlationId])
+  @@index([ownerId])
+}
+

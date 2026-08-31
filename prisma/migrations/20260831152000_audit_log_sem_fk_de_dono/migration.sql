@@ -1,0 +1,15 @@
+-- =====================================================================
+-- F1.9 (correção) — AuditLog.ownerId deixa de ter chave estrangeira
+--
+-- Com FK, apagar um usuário dispara ON DELETE SET NULL na trilha. Isso é
+-- um UPDATE, e o gatilho de append-only recusa — ou seja, a trilha
+-- passava a IMPEDIR a exclusão de qualquer usuário que já tivesse mexido
+-- em alguma coisa.
+--
+-- E o remédio de afrouxar o gatilho seria pior: a linha perderia o dono
+-- exatamente no caso em que a auditoria mais importa, que é quando
+-- alguém sai. A coluna continua guardando o id como foi registrado.
+--
+-- Encontrado pela suíte de testes, não em produção.
+-- =====================================================================
+ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS "AuditLog_ownerId_fkey";
