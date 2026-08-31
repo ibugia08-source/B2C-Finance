@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma, ManagerRole } from "@prisma/client";
+import type { ManagerRole } from "@prisma/client";
 
 /**
  * GESTORES POR VIGÊNCIA (F1.3 · ref. 01 §4.3).
@@ -55,7 +55,7 @@ export async function assignmentHistory(relationshipId: string, role?: ManagerRo
 
 /** Troca o titular de um papel, fechando o anterior no mesmo instante. */
 export async function assignManager(input: AssignInput) {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  return prisma.$transaction(async (tx) => {
     await tx.clientManagerAssignment.updateMany({
       where: { relationshipId: input.relationshipId, role: input.role, validTo: null },
       data: { validTo: input.validFrom },

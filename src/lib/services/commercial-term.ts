@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { Prisma, ClientModality } from "@prisma/client";
+import type { ClientModality } from "@prisma/client";
 
 /**
  * TERMO COMERCIAL — leitura e sucessão (F1.2 · ref. 01 §4.4).
@@ -61,7 +61,7 @@ export async function termHistory(relationshipId: string) {
  * que é pior que erro.
  */
 export async function openTerm(input: TermInput) {
-  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  return prisma.$transaction(async (tx) => {
     await tx.commercialTerm.updateMany({
       where: { relationshipId: input.relationshipId, validTo: null },
       data: { validTo: input.validFrom },
