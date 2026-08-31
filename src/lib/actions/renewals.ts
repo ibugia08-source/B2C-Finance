@@ -3,18 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission, can } from "@/lib/auth/viewer";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
 import { parseBRL, parseMonthParam, toNumber as n } from "@/lib/format";
-import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { getValidDueDateForMonth, addMonthsClamped } from "@/lib/financial/due-date";
 import { settleBillingPayment } from "@/lib/services/payment-accounting";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
-
-/** Soma meses com clamp de fim de mês (31/01 + 1m = 28/02, não 03/03). */
-function addMonthsClamped(base: Date, months: number): Date {
-  const y = base.getFullYear();
-  const m = base.getMonth() + months;
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  return new Date(y, m, Math.min(base.getDate(), lastDay));
-}
 
 /**
  * FLUXO COMPLETO DE RENOVAÇÃO — "Sim, renovou" da Gestão do Mês e do módulo

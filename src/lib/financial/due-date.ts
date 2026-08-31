@@ -36,3 +36,20 @@ export function getValidDueDateForMonth(
   const day = Math.min(clampedToRange, lastDayOfMonth(year, month));
   return new Date(year, month - 1, day);
 }
+
+/**
+ * Soma meses preservando o dia, com clamp no fim do mês (01 §3.4).
+ *
+ *   31/01 + 1 mês → 28/02 (29/02 em ano bissexto), nunca 03/03
+ *   31/03 + 1 mês → 30/04
+ *   15/01 + 12 meses → 15/01 do ano seguinte
+ *
+ * Ponto ÚNICO do clamp de renovação — a especificação exige que este cálculo
+ * não seja reescrito inline em nenhum fluxo.
+ */
+export function addMonthsClamped(base: Date, months: number): Date {
+  const y = base.getFullYear();
+  const m = base.getMonth() + months;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return new Date(y, m, Math.min(base.getDate(), lastDay));
+}
