@@ -37,6 +37,9 @@ import {
 import { CONTRACT_STATUS_LABEL, contractStatusVariant } from "@/app/acordos/_meta";
 import { PAYMENT_METHOD_LABEL, COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
 import { resolveClientTab } from "./tabs-meta";
+import { OnboardingBoard } from "./onboarding-board";
+import { carregarQuadro } from "@/lib/services/onboarding";
+import { prisma as db } from "@/lib/prisma";
 
 
 export default async function ClientDetailPage({
@@ -162,6 +165,15 @@ export default async function ClientDetailPage({
   // A aba ativa vem da URL (?tab=) — mesma resolução da TabsNavigation do
   // layout (fonte única em tabs-meta.ts, aliases antigos inclusos).
   const activeTab = resolveClientTab(searchParams?.tab);
+
+  // F1.18 — o onboarding pertence à RELAÇÃO cliente↔agência, não ao
+  // cliente: é ela que tem data de entrada e agência responsável.
+  const relacao = await db.clientAgencyRelationship.findFirst({
+    where: { clientId: client.id },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  const quadroOnboarding = relacao ? await carregarQuadro(relacao.id) : null;
 
   return (
     <div>
@@ -633,6 +645,14 @@ export default async function ClientDetailPage({
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+        {/* ---------- Onboarding ---------- */}
+        <TabsContent value="onboarding">
+          <OnboardingBoard
+            quadro={quadroOnboarding}
+            clientId={client.id}
+            podeEditar={can(viewer, "clientes.editar")}
+          />
         </TabsContent>
       </Tabs>
     </div>

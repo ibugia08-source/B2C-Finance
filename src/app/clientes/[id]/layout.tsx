@@ -77,6 +77,12 @@ export default async function ClientDetailLayout({
 
   const monthly = client.monthlyValue != null ? Number(client.monthlyValue) : 0;
 
+  // O contador do onboarding mostra o que FALTA, não o total: a aba
+  // existe para chamar atenção do que está pendente.
+  const onboardingPendentes = await prisma.onboardingTask.count({
+    where: { relationship: { clientId: params.id }, doneAt: null },
+  });
+
   const tabCounts: TabsCount = {
     contratos: contracts,
     cobrancas: billings,
@@ -84,6 +90,7 @@ export default async function ClientDetailLayout({
     documentos: generatedContracts + documents,
     contexto: notes,
     historico: history,
+    onboarding: onboardingPendentes,
   };
 
   return (

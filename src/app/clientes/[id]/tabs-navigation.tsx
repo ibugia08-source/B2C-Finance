@@ -11,6 +11,8 @@ export interface TabsCount {
   documentos?: number;
   contexto?: number;
   historico?: number;
+  /** Tarefas de onboarding PENDENTES — o número que interessa é o que falta. */
+  onboarding?: number;
 }
 
 export function TabsNavigation({

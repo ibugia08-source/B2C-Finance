@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ClientStatus, ClientModality } from "@prisma/client";
@@ -326,6 +327,41 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         },
       });
       id = created.id;
+
+      // F1.1 + F1.18 — todo cliente novo nasce com RELAÇÃO e com o
+      // onboarding aberto. "Cliente manual também inicia" (F1.18): o
+      // roteiro de implantação não é privilégio de quem entrou pelo
+      // funil comercial, senão metade da carteira fica sem implantação
+      // registrada e o board vira ficção.
+      //
+      // Sem a relação, a cobrança nasceria sem vínculo (o gatilho não
+      // teria o que preencher) e o cliente não apareceria na grade de
+      // avaliação. Falha aqui NÃO derruba o cadastro: cliente é o fato
+      // principal; relação e onboarding se reparam depois.
+      try {
+        const agencia = await runWithoutScope(async () =>
+          prisma.agency.findFirst({
+            where: { active: true },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            select: { id: true },
+          })
+        );
+        if (agencia) {
+          const rel = await prisma.clientAgencyRelationship.create({
+            data: {
+              clientId: id,
+              agencyId: agencia.id,
+              lifecycleStatus: parsed.status === "CHURNED" ? "CHURNED" : "ONBOARDING",
+              startedAt: parsed.startedAt ?? new Date(),
+            },
+            select: { id: true },
+          });
+          const { iniciarOnboarding } = await import("@/lib/services/onboarding");
+          await iniciarOnboarding(rel.id);
+        }
+      } catch {
+        /* cadastro já está gravado; a relação pode ser criada depois */
+      }
 
       // ===== Fechamento do contrato (venda) no cadastro =====
       // Com uma modalidade escolhida, cria o contrato e gera as cobranças.
