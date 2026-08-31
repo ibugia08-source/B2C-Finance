@@ -11,10 +11,10 @@ import {
   type DashAlert,
 } from "@/lib/services/dashboard-metrics";
 import {
-  getMonthlyCostPerClient,
   getMonthlyChurn,
   getNewClientsSummary,
 } from "@/lib/financial/calculations";
+import { computePeriodMetrics } from "@/lib/metrics/engine";
 import {
   getDashboardMainMetrics,
   getYearlySeries,
@@ -60,6 +60,9 @@ import {
  */
 
 type Search = Record<string, string | undefined>;
+
+/** Razão 0-1 do motor → inteiro em % para a interface; null continua null. */
+const pct = (v: number | null) => (v == null ? null : Math.round(v * 100));
 
 const HEALTH_STYLE: Record<string, { badge: any; bar: string }> = {
   excelente: { badge: "success", bar: "bg-emerald-500" },
@@ -161,14 +164,16 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
     hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
   }).format(new Date());
 
-  // ===== Indicadores gerenciais do mês (todas as divisões protegidas) =====
-  // Ticket médio geral = Faturamento total / clientes ativos (§2). Custo por
-  // cliente = Despesas / ativos. % Folha = Folha / Faturamento total. % Recorrência
-  // = MRR / Faturamento total. Todas com guarda de divisão por zero.
-  const ticketMedioGeral = clientsBlock.ativos > 0 ? previsto / clientsBlock.ativos : 0;
-  const custoPorCliente = getMonthlyCostPerClient(finance.despesas, clientsBlock.ativos);
-  const folhaPct = previsto > 0 ? Math.round((finance.folhaPeriodo / previsto) * 100) : 0;
-  const recorrenciaPct = previsto > 0 ? Math.round((M.mrr / previsto) * 100) : 0;
+  // ===== Indicadores gerenciais do mês =====
+  // Vêm do MOTOR DE MÉTRICAS por chave (01 §7; 03 §4.1): a tela não recalcula
+  // fórmula nem trata divisão por zero na mão — a política de nulo é do
+  // contrato da métrica, e null vira "—" na interface.
+  const metrics = await computePeriodMetrics(period);
+  const pctRealizacao = metrics.percentual_realizacao.value;
+  const ticketMedioGeral = metrics.ticket_medio.value;
+  const custoPorCliente = metrics.custo_por_cliente.value;
+  const folhaPct = pct(metrics.percentual_folha.value);
+  const recorrenciaPct = pct(metrics.percentual_recorrencia.value);
 
   // Comparativos secundários (vs mês anterior) para o grupo Receita.
   const prevHas = main.previousHasData;
@@ -179,7 +184,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
   const summary = buildDashboardSummary({
     previsto, recebido, emAberto, vencido,
     despesas: finance.despesas, resultado, margem: M.margem,
-    folhaPct, recorrenciaPct,
+    folhaPct: folhaPct ?? 0, recorrenciaPct: recorrenciaPct ?? 0,
   });
 
   // Saudação pessoal (horário de Brasília — o servidor roda em UTC).
@@ -377,9 +382,10 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           {/* Grupo: Receita */}
           <p className="text-xs font-medium text-foreground mb-2">Receita</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
-            <SecondaryStat label="% Realização" value={previsto > 0 ? `${Math.round((recebido / previsto) * 100)}%` : "—"}
-              help="Quanto do faturamento previsto do mês já virou dinheiro recebido — a régua central da gestão mensal."
-              tone={previsto <= 0 ? "default" : recebido / previsto >= 0.9 ? "pos" : recebido / previsto >= 0.6 ? "default" : "neg"} />
+            <SecondaryStat label="% Realização"
+              value={pctRealizacao == null ? "—" : `${Math.round(pctRealizacao * 100)}%`}
+              help={metrics.percentual_realizacao.spec.formulaDescription}
+              tone={pctRealizacao == null ? "default" : pctRealizacao >= 0.9 ? "pos" : pctRealizacao >= 0.6 ? "default" : "neg"} />
             <SecondaryStat label="Faturamento MRR" value={formatBRL(M.mrr)}
               help="Soma dos valores mensais dos clientes MRR ativos no mês."
               delta={mrrDelta}
@@ -396,12 +402,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
               detailTitle="Novos clientes do mês"
               detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
             <SecondaryStat label="Ticket médio geral"
-              value={clientsBlock.ativos > 0 ? formatBRL(ticketMedioGeral) : "—"}
-              help="Faturamento total dividido pela quantidade de clientes ativos no mês."
+              value={ticketMedioGeral == null ? "—" : formatBRL(ticketMedioGeral)}
+              help={metrics.ticket_medio.spec.formulaDescription}
               hint={`${clientsBlock.ativos} ativo(s)`} />
-            <SecondaryStat label="% Recorrência" value={`${recorrenciaPct}%`}
-              help="Percentual do faturamento que vem de MRR (MRR / Faturamento total). Mede a previsibilidade da receita."
-              tone={recorrenciaPct >= 60 ? "pos" : recorrenciaPct >= 40 ? "warn" : "neg"} />
+            <SecondaryStat label="% Recorrência" value={recorrenciaPct == null ? "—" : `${recorrenciaPct}%`}
+              help={metrics.percentual_recorrencia.spec.formulaDescription}
+              tone={recorrenciaPct == null ? "default" : recorrenciaPct >= 60 ? "pos" : recorrenciaPct >= 40 ? "warn" : "neg"} />
           </div>
 
           {/* Grupo: Clientes */}
@@ -432,12 +438,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           <p className="text-xs font-medium text-foreground mb-2">Eficiência</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-3">
             <SecondaryStat label="Custo por cliente"
-              value={clientsBlock.ativos > 0 ? formatBRL(custoPorCliente) : "—"}
-              help="Total de despesas dividido pela quantidade de clientes ativos no mês."
+              value={custoPorCliente == null ? "—" : formatBRL(custoPorCliente)}
+              help={metrics.custo_por_cliente.spec.formulaDescription}
               hint={`${clientsBlock.ativos} ativo(s)`} />
-            <SecondaryStat label="% Folha no faturamento" value={`${folhaPct}%`}
-              help="Quanto a folha representa sobre o faturamento total do mês."
-              tone={folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
+            <SecondaryStat label="% Folha no faturamento" value={folhaPct == null ? "—" : `${folhaPct}%`}
+              help={metrics.percentual_folha.spec.formulaDescription}
+              tone={folhaPct == null ? "default" : folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
             <SecondaryStat label="Margem operacional" value={`${margemPct}%`}
               help="Resultado do mês dividido pelo faturamento recebido."
               tone={margemPct >= 20 ? "pos" : margemPct >= 0 ? "warn" : "neg"} />

@@ -34,6 +34,7 @@ model Workspace {
 
   legalEntities  LegalEntity[]
   accounts       AccountingAccount[]
+  metrics        MetricDefinition[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
 }
@@ -381,6 +382,71 @@ model AccountingAccount {
   @@index([workspaceId, statementType])
   @@index([workspaceId, accountType])
   @@index([active])
+}
+
+// ===================================================================
+// REGISTRY DE MÉTRICAS (01 §7; 03 §4.1)
+//
+// Métrica é CONTRATO VERSIONADO: fórmula, fontes, grão, base temporal,
+// arredondamento e política de nulo ficam registrados aqui, com versão. O
+// código implementa; o registry documenta e versiona.
+//
+// Por que importa: quando a fórmula do CAC mudar em 2027, nasce a versão 2 —
+// e o snapshot de 2026 continua reportando a versão 1, sem reescrever o
+// passado (01 §2.21-2.22, cenário S22).
+// ===================================================================
+
+enum MetricGrain {
+  /// Um valor por competência (mês).
+  COMPETENCE
+  /// Um valor por período livre (intervalo de datas).
+  PERIOD
+  /// Estado atual, sem recorte temporal (ex.: caixa hoje).
+  POINT_IN_TIME
+  /// Um valor por cliente/relação.
+  CLIENT
+}
+
+enum MetricDateBasis {
+  /// Lê a competência (resultado/DRE).
+  COMPETENCE
+  /// Lê a data de caixa (entrada/saída de dinheiro).
+  CASH
+  /// Lê o estado atual das tabelas vivas.
+  CURRENT_STATE
+  /// Lê a fotografia do fechamento.
+  SNAPSHOT
+}
+
+model MetricDefinition {
+  id                 String          @id @default(cuid())
+  workspaceId        String?
+  workspace          Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Chave estável consumida pelo código (ex.: "faturamento_total").
+  key                String
+  name               String
+  description        String
+  /// Fórmula em português, como aparece no tooltip da interface.
+  formulaDescription String
+  grain              MetricGrain
+  dateBasis          MetricDateBasis
+  /// Entidades de origem, para rastrear o impacto de uma mudança de schema.
+  sourceEntities     String[]
+  /// Filtros implícitos da métrica (ex.: "status != CANCELED").
+  filters            String?
+  /// Política de arredondamento (01 §3.14).
+  rounding           String          @default("half-up 2 casas")
+  /// O que fazer quando o denominador é zero ou não há dado.
+  nullPolicy         String          @default("denominador zero → null (exibe —)")
+  version            Int             @default(1)
+  effectiveFrom      DateTime        @default(now()) @db.Timestamptz(3)
+  effectiveTo        DateTime?       @db.Timestamptz(3)
+  createdAt          DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, key, version])
+  @@index([workspaceId])
+  @@index([key])
 }
 
 model Category {

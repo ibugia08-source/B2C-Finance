@@ -15,6 +15,12 @@ import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
  * Dates viram ISO strings de forma estável. ATENÇÃO: o RESULTADO também é
  * serializado — campos Date voltam como string em cache hit; use apenas em
  * funções cujos consumidores tolerem isso (números/strings são o ideal).
+ *
+ * FORA DE UMA REQUEST (scripts de conferência, testes, jobs), o
+ * `unstable_cache` do Next lança "incrementalCache missing". Com
+ * B2C_DISABLE_CACHE=1 o helper executa a função direto, no escopo do dono —
+ * mesmo resultado, sem cache. É como a suíte de paridade consegue exercitar
+ * exatamente os serviços que a tela usa.
  */
 export function ownerCached<A extends unknown[], R>(
   keyBase: string,
@@ -26,5 +32,8 @@ export function ownerCached<A extends unknown[], R>(
     [keyBase],
     opts
   );
-  return async (...args: A) => cached(await resolveOwnerId(), ...args);
+  return async (...args: A) => {
+    if (process.env.B2C_DISABLE_CACHE === "1") return fn(...args);
+    return cached(await resolveOwnerId(), ...args);
+  };
 }

@@ -61,4 +61,7 @@ execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env });
 // seed faz parte do preparo do banco, não de um teste.
 execFileSync("npx", ["tsx", "prisma/seed-chart-of-accounts.ts"], { stdio: "inherit", env });
 
+// Registry de métricas: a suíte confere o contrato das métricas (01 §7).
+execFileSync("npx", ["tsx", "prisma/seed-metric-registry.ts"], { stdio: "inherit", env });
+
 console.log("✓ banco de testes pronto");

@@ -1,7 +1,6 @@
-import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
-import { unstable_cache } from "next/cache";
+import { ownerCached } from "@/lib/owner-cache";
 import type { Period } from "@/lib/period";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { toNumber as n } from "@/lib/format";
@@ -204,17 +203,14 @@ async function getDashboardMainMetricsImpl(period: Period): Promise<DashboardMai
  * e o cache servia zeros) e entra como argumento — logo, como parte da
  * chave: cada usuário tem sua própria entrada, sem vazamento entre contas.
  */
-const getDashboardMainMetricsCached = unstable_cache(
-  (ownerId: string | null, period: Period) =>
-    runWithOwner(ownerId, () => getDashboardMainMetricsImpl(period)),
-  ["dashboard-main-metrics"],
+// Usa o helper ÚNICO de cache por dono (03 §4: nunca duplicar helper). Ele
+// resolve o ownerId fora do callback e sabe rodar sem cache fora de uma
+// request (scripts de conferência e testes).
+export const getDashboardMainMetrics = ownerCached(
+  "dashboard-main-metrics",
+  (period: Period) => getDashboardMainMetricsImpl(period),
   { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] }
 );
-
-export async function getDashboardMainMetrics(period: Period): Promise<DashboardMainResult> {
-  const ownerId = await resolveOwnerId();
-  return getDashboardMainMetricsCached(ownerId, period);
-}
 
 // ===================================================================
 // Séries ANUAIS (12 meses do ano selecionado) — 3 gráficos principais

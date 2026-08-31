@@ -1,7 +1,6 @@
-import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
-import { unstable_cache } from "next/cache";
+import { ownerCached } from "@/lib/owner-cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { toNumber as n, MONTHS_PT } from "@/lib/format";
 import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
@@ -180,10 +179,13 @@ async function getPeriodRevenueImpl(
  * cache servia zeros) e entra como argumento — logo, como parte da chave:
  * cada usuário tem sua própria entrada, sem vazamento entre contas.
  */
-const getPeriodRevenueCached = unstable_cache(
-  (ownerId: string | null, start: Date, end: Date, filters: RevenueFilters) =>
-    runWithOwner(ownerId, () => getPeriodRevenueImpl(start, end, filters)),
-  ["period-revenue"],
+// Usa o helper ÚNICO de cache por dono (03 §4: nunca duplicar helper). Ele
+// resolve o ownerId fora do callback e sabe rodar sem cache fora de uma
+// request (scripts de conferência e testes).
+const getPeriodRevenueCached = ownerCached(
+  "period-revenue",
+  (start: Date, end: Date, filters: RevenueFilters) =>
+    getPeriodRevenueImpl(start, end, filters),
   { revalidate: 3600, tags: [CACHE_TAGS.REVENUE_METRICS] }
 );
 
@@ -192,8 +194,7 @@ export async function getPeriodRevenue(
   end: Date,
   filters: RevenueFilters = {}
 ): Promise<PeriodRevenue> {
-  const ownerId = await resolveOwnerId();
-  return getPeriodRevenueCached(ownerId, start, end, filters);
+  return getPeriodRevenueCached(start, end, filters);
 }
 
 // ===================================================================
