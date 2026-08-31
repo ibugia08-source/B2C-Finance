@@ -1688,10 +1688,24 @@ model Payment {
   accountId String? // conta bancária que recebeu
   account   Account?      @relation(fields: [accountId], references: [id])
   notes     String?
-  ownerId   String?
-  owner     User?         @relation("OwnerPayment", fields: [ownerId], references: [id])
-  createdAt DateTime      @default(now()) @db.Timestamptz(3)
 
+  // ===== Idempotência de pagamento EXTERNO (01 §3.3; 03 §4.3) =====
+  // Webhook de gateway reenvia o mesmo evento; a trava tem que estar no
+  // BANCO, não na aplicação (cenário S20: webhook duplicado aceita um único
+  // Payment). Nulo para pagamento lançado à mão — só o externo é chaveado.
+  /// Identificador do pagamento no sistema de origem (gateway, banco).
+  externalId     String?
+  /// Origem do pagamento externo ("stripe", "asaas", "ofx"...).
+  externalSource String?
+  /// Chave de deduplicação do evento externo, quando a origem fornece uma.
+  idempotencyKey String?
+
+  ownerId   String?
+  owner     User?    @relation("OwnerPayment", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([externalSource, externalId])
+  @@unique([idempotencyKey])
   @@index([billingId])
   @@index([paidAt])
   @@index([status])
