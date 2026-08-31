@@ -9,10 +9,12 @@ import { NAV_AREAS, type UserLike } from "@/components/nav-items";
  * lugar nenhum, então ele nunca mente sobre o que o sistema faz.
  *
  * REGRA que segurei de propósito: só entra comando que FUNCIONA hoje.
- * "Fechar competência" (F2.1), "comparar março x julho" (F2.5) e
- * "exportar DRE" (F3.2) estão na spec como exemplos, mas as telas ainda
- * não existem — registrá-los agora encheria a paleta de becos sem saída.
- * Eles entram quando as fases deles entrarem.
+ * "Comparar março x julho" (F2.5) e "exportar DRE" (F3.2) estão na spec
+ * como exemplos, mas as telas ainda não existem — registrá-los agora
+ * encheria a paleta de becos sem saída. Eles entram quando as fases deles
+ * entrarem. "Fechar competência" já FUNCIONA desde a F2.1, mas mora num
+ * botão do cabeçalho da Gestão do Mês; ele vira comando quando a F2.2
+ * trouxer a tela de checklist, que é onde um comando tem para onde levar.
  */
 
 export type CommandAction =

@@ -41,6 +41,7 @@ model Workspace {
   outbox         OutboxEvent[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
+  closingPeriods ClosingPeriod[]
 
   /// Estado do SETUP GUIADO (F1.20 · 02 §3): só o que NÃO dá para deduzir do
   /// dado — quais passos o dono adiou e quando ele encerrou a lista.
@@ -2810,4 +2811,65 @@ model ImportedRecord {
   @@index([entity, entityId])
   @@index([reviewStatus])
   @@index([ownerId])
+}
+
+/// Estados do período (01 §5.2). A UI mostra: Aberto, Em fechamento,
+/// Fechado, Reaberto — os nomes técnicos não aparecem em tela nenhuma.
+enum PeriodState {
+  OPEN
+  SOFT_CLOSED
+  CLOSED
+  REOPENED
+}
+
+/// FECHAMENTO DE COMPETÊNCIA (F2.1 · ref. 01 §5.2, 5.5; 03 §4.4).
+///
+/// UMA linha por competência e escopo, guardando o estado CORRENTE e a
+/// versão. O histórico de cada fechamento não mora aqui: mora na fotografia
+/// (F2.3) e na trilha de auditoria. "Agosto v1 preservado, agosto v2 novo"
+/// (§5.5) é sobre a FOTOGRAFIA — o período em si tem um estado só, o de agora.
+///
+/// Escopo já nasce preparado para o dia em que fechar por agência fizer
+/// sentido; hoje é sempre WORKSPACE, porque agência não é empresa (19.15) e
+/// fechar por agência sem CNPJ separado não significa nada.
+model ClosingPeriod {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// WORKSPACE | LEGAL_ENTITY | AGENCY
+  scopeType String @default("WORKSPACE")
+  /// String vazia = escopo do workspace inteiro. NÃO é nulo de propósito:
+  /// no Postgres NULL nunca é igual a NULL, então uma coluna nula dentro de
+  /// índice único NÃO impede duplicata — dois fechamentos do mesmo mês
+  /// conviveriam sem o banco reclamar.
+  scopeId   String @default("")
+
+  /// YYYY-MM. Mesmo formato explícito do resto do sistema (F0.4).
+  competence String
+
+  state   PeriodState @default(OPEN)
+  /// Sobe a cada ciclo reabre→fecha. A fotografia guarda a versão que a gerou.
+  version Int         @default(1)
+
+  /// Fechamentos POSTERIORES a uma reabertura ficam marcados: os números
+  /// deles foram calculados sobre um passado que mudou (§5.5). Nunca são
+  /// apagados — são marcados.
+  needsRevalidation Boolean @default(false)
+
+  softClosedAt DateTime? @db.Timestamptz(3)
+  softClosedBy String?
+  closedAt     DateTime? @db.Timestamptz(3)
+  closedBy     String?
+  reopenedAt   DateTime? @db.Timestamptz(3)
+  reopenedBy   String?
+  /// Reabrir SEM justificativa não existe (§5.5).
+  reopenReason String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([workspaceId, scopeType, scopeId, competence])
+  @@index([workspaceId, competence])
+  @@index([state])
 }

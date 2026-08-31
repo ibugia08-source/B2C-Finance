@@ -37,6 +37,16 @@ export type SettleOptions = {
   externalId?: string | null;
 };
 
+/**
+ * A competência que um recebimento afeta é a DO CAIXA (01 §5.6).
+ *
+ * Exportada para poder ser testada como regra, e não como coincidência de
+ * aritmética repetida dentro de um teste.
+ */
+export function competenciaDoCaixa(paidAt: Date) {
+  return toCompetence(paidAt.getFullYear(), paidAt.getMonth() + 1);
+}
+
 export async function settleBilling(
   input: SettleInput,
   opts: SettleOptions = {}
@@ -51,10 +61,16 @@ export async function settleBilling(
   });
   if (!billing) return { ok: false, error: "Cobrança não encontrada." };
 
-  // 2. Período — sempre permite até a F2.1 (ver a nota em guards.ts).
+  // 2. Período — e a competência que importa aqui é a DO CAIXA, não a da
+  //    cobrança (01 §5.6). Cliente que paga em outubro uma cobrança de
+  //    agosto, com agosto já fechado, é o caso mais comum da operação de
+  //    cobrança: o dinheiro entra em outubro, o razão posta em outubro e a
+  //    fotografia de agosto continua mostrando vencido, porque foi assim que
+  //    agosto fechou. Perguntar pela competência da COBRANÇA travaria essa
+  //    operação inteira todo dia 6.
   const periodo = await guardPeriod(
     "CUSTOMER_PAYMENT_RECEIVED",
-    toCompetence(billing.competenceYear, billing.competenceMonth)
+    competenciaDoCaixa(input.paidAt)
   );
   if (!periodo.ok) return periodo;
 

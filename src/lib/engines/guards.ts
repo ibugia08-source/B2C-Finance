@@ -31,20 +31,32 @@ export async function guardPermission(permission: string): Promise<Guard> {
 /**
  * 2. Período — a competência aceita o evento?
  *
- * ESTADO ATUAL: sempre permite. O ClosingPeriod nasce na F2.1 e é ele que
- * dá a resposta de verdade; até lá, competência nenhuma está fechada,
- * então "permitir" é a resposta CORRETA, não um atalho.
+ * LIGADA na F2.1. Até aqui devolvia sempre OK, porque competência nenhuma
+ * podia estar fechada — a guarda já existia e já era chamada de propósito,
+ * justamente para que a regra entrasse num lugar só e passasse a valer para
+ * todos os motores de uma vez. Foi o que aconteceu: nenhum motor mudou.
  *
- * A guarda já existe e já é chamada de propósito: quando a F2.1 chegar,
- * a regra entra AQUI, num lugar só, e passa a valer para todos os motores
- * de uma vez. Se ela nascesse junto com o ClosingPeriod, teria de ser
- * costurada em cada motor depois — e é assim que se esquece de um.
+ * `competence` é a competência em que o evento vai POSTAR, não a de origem
+ * do documento. Para um recebimento é o MÊS DO CAIXA — é essa distinção que
+ * faz 01 §5.6 funcionar: pagar em outubro uma cobrança de agosto fechado é
+ * normal e continua permitido.
+ *
+ * Import preguiçoso pelo mesmo motivo do de cima: a cadeia passa por
+ * currentWorkspaceId e não pode quebrar em job nem em teste.
  */
 export async function guardPeriod(
-  _eventType: string,
-  _competence: Competence
+  eventType: string,
+  competence: Competence
 ): Promise<Guard> {
-  return OK;
+  try {
+    const { assertPeriodAllows } = await import("@/lib/services/closing-period");
+    return await assertPeriodAllows(eventType, competence);
+  } catch {
+    // Sem workspace (script de manutenção, migração inicial), não há
+    // fechamento possível — e travar a operação por não conseguir LER o
+    // estado do período seria pior que o problema que a guarda evita.
+    return OK;
+  }
 }
 
 /**

@@ -1,4 +1,6 @@
 import { PageHeader } from "@/components/page-header";
+import { PeriodBadge } from "@/components/period-badge";
+import { periodoDe } from "@/lib/services/closing-period";
 import { MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
@@ -108,6 +110,12 @@ export default async function RecebimentosPage({
   };
   const monthStart = new Date(mes.year, mes.month - 1, 1);
   const monthEnd = new Date(mes.year, mes.month, 1);
+
+  // Estado do período (F2.1). Competência sem linha é ABERTA — não há
+  // semeadura, então isto é barato e é sempre a verdade.
+  const periodo = await periodoDe(`${mes.year}-${String(mes.month).padStart(2, "0")}`);
+  const podeFechar = can(viewer, "fechamento.fechar");
+  const podeReabrir = can(viewer, "fechamento.reabrir");
 
   // Gates por módulo de origem (padrão da Rotina): sem permissão, a seção
   // some E as queries dela são puladas.
@@ -730,7 +738,15 @@ export default async function RecebimentosPage({
         title="Gestão do Mês"
         description={`A aba de ${monthLabelStr}: clientes, entradas, contas e folha num lugar só`}
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* F1.15 + F2.1: sem isto, quem abre a tela não sabe se está
+                olhando um mês vivo ou um mês que já virou história — e edita
+                achando que pode. */}
+            <PeriodBadge
+              periodo={periodo}
+              podeFechar={podeFechar}
+              podeReabrir={podeReabrir}
+            />
             <PastDelinquencyDialog clients={allClientsBasic} />
             <BillingDialog
               clients={allClientsBasic}
