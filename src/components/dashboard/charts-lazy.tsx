@@ -16,3 +16,9 @@ export const CompositionDonut = dynamic(
   () => import("./composition-donut").then((m) => m.CompositionDonut),
   { ssr: false }
 );
+
+export const CombinedChart = dynamic(
+  () => import("./combined-chart").then((m) => m.CombinedChart),
+  { ssr: false }
+);
+

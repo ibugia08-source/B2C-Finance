@@ -1,5 +1,5 @@
 {
-  "total": 219,
+  "total": 209,
   "porArquivo": {
     "src/app/assistente/page.tsx": 4,
     "src/app/assistente/settings-dialog.tsx": 4,
@@ -19,7 +19,6 @@
     "src/app/contratos/[id]/variables-editor.tsx": 1,
     "src/app/contratos/page.tsx": 1,
     "src/app/contratos/template-upload-dialog.tsx": 2,
-    "src/app/dashboard/page.tsx": 10,
     "src/app/despesas/page.tsx": 7,
     "src/app/despesas/row-actions.tsx": 2,
     "src/app/f/[token]/public-form.tsx": 1,
