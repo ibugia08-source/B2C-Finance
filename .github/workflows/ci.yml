@@ -86,3 +86,9 @@ jobs:
       - name: Razão (débito = crédito e cobertura)
         run: npm run verify:ledger
 
+      # F2.8 — as fotografias dos meses fechados continuam batendo com os
+      # fatos que as geraram. Pega linha alterada depois do fechamento e
+      # fotografia escrita por fora do sistema.
+      - name: Integridade das fotografias
+        run: npm run verify:snapshots
+

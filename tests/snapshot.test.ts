@@ -6,6 +6,7 @@ import {
 import { canonicalJson, checksumByArea, checksumOf, money } from "@/lib/snapshots/serialize";
 import { gerarSnapshot, montarAreas, snapshotDe } from "@/lib/snapshots/engine";
 import { fecharPeriodo, periodoDe, reabrirPeriodo } from "@/lib/services/closing-period";
+import { conferirIntegridade } from "@/lib/snapshots/integrity";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 
 /**
@@ -192,5 +193,86 @@ describe("F2.3 — a fotografia", () => {
     // A vigente do mês continua sendo a nativa (que aqui não existe).
     void ws;
     expect(await asOwner(dono, async () => snapshotDe("2026-02"))).toBeNull();
+  });
+});
+
+describe("F2.8 — job de integridade", () => {
+  let dono: TestOwner;
+  beforeAll(async () => {
+    dono = await createOwner();
+  });
+  afterAll(async () => {
+    const ws = await currentWorkspaceId();
+    await runWithoutScope(async () => {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" DISABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.snapshot.deleteMany({ where: { workspaceId: ws } });
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" ENABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.closingPeriod.deleteMany({ where: { workspaceId: ws } });
+    });
+    await destroyOwner(dono);
+  });
+
+  it("mês fechado e intocado passa", async () => {
+    const cliente = await createMrrClient(dono, { name: "Integridade" });
+    await createBilling(dono, cliente.id, { month: 5, year: 2026, amount: 400 });
+    await asOwner(dono, async () => fecharPeriodo("2026-05", "Israel"));
+
+    const r = await asOwner(dono, async () =>
+      conferirIntegridade({ competencias: ["2026-05"] })
+    );
+    expect(r.fotografiasConferidas).toBe(1);
+    expect(r.divergencias).toHaveLength(0);
+  });
+
+  it("cobrança criada DEPOIS do fechamento NÃO é divergência (01 §5.6)", async () => {
+    // Pagamento e cobrança que entram depois são a operação funcionando.
+    // Acusar isso reprovaria o job toda vez que a cobrança fizesse o trabalho.
+    const cliente = await createMrrClient(dono, { name: "Depois do fechamento" });
+    await createBilling(dono, cliente.id, { month: 5, year: 2026, amount: 999 });
+
+    const r = await asOwner(dono, async () =>
+      conferirIntegridade({ competencias: ["2026-05"] })
+    );
+    expect(r.divergencias).toHaveLength(0);
+  });
+
+  it("linha ALTERADA depois do fechamento é apanhada", async () => {
+    // Este é o caso que o job existe para pegar: mexer no passado sem
+    // reabrir a competência.
+    const antes = await asOwner(dono, async () =>
+      prisma.billing.findFirst({
+        where: { competence: "2026-05", amount: 400 },
+        select: { id: true },
+      })
+    );
+    await asOwner(dono, async () =>
+      prisma.billing.update({ where: { id: antes!.id }, data: { amount: 4000 } })
+    );
+
+    const r = await asOwner(dono, async () =>
+      conferirIntegridade({ competencias: ["2026-05"] })
+    );
+    expect(r.divergencias).toHaveLength(1);
+    expect(r.divergencias[0].mudaramDesdeOFechamento).toContain("receber");
+    // Não foi adulteração da linha da fotografia: ela continua íntegra.
+    expect(r.divergencias[0].adulteradas).toHaveLength(0);
+    expect(r.ok).toBe(false);
+
+    // devolve o valor para não contaminar o teste seguinte
+    await asOwner(dono, async () =>
+      prisma.billing.update({ where: { id: antes!.id }, data: { amount: 400 } })
+    );
+  });
+
+  it("recalcular a mesma foto duas vezes dá o mesmo resultado", async () => {
+    // Se o recálculo não fosse determinístico, o job acusaria divergência
+    // todo dia e seria desligado na primeira semana.
+    const a = await asOwner(dono, async () =>
+      conferirIntegridade({ competencias: ["2026-05"] })
+    );
+    const b = await asOwner(dono, async () =>
+      conferirIntegridade({ competencias: ["2026-05"] })
+    );
+    expect(JSON.stringify(a.divergencias)).toBe(JSON.stringify(b.divergencias));
   });
 });

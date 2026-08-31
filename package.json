@@ -24,7 +24,8 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
-    "verify:ledger": "tsx scripts/verify-ledger.ts"
+    "verify:ledger": "tsx scripts/verify-ledger.ts",
+    "verify:snapshots": "tsx scripts/verify-snapshots.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

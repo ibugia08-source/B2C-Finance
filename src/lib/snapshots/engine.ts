@@ -34,16 +34,35 @@ const indisponivel = (motivo: string): AreaNaoDisponivel => ({ indisponivel: tru
 
 export type ConteudoSnapshot = Record<string, unknown>;
 
-/** Lê a realidade do mês e devolve o conteúdo por área, já normalizado. */
-export async function montarAreas(competence: Competence | string): Promise<ConteudoSnapshot> {
+/**
+ * Lê a realidade do mês e devolve o conteúdo por área, já normalizado.
+ *
+ * `ate` refaz a leitura COMO ELA ERA num instante passado, filtrando pelos
+ * fatos criados até lá. É o que permite ao job de integridade (F2.8)
+ * recalcular a fotografia e comparar o checksum — sem esse recorte, ele
+ * compararia o passado congelado com o presente vivo e acusaria divergência
+ * sempre, o que faria o alerta ser ignorado em uma semana.
+ *
+ * LIMITE HONESTO: o recorte pega fato CRIADO depois do corte, não fato
+ * EDITADO depois. Uma cobrança que existia no fechamento e teve o valor
+ * alterado em seguida continua entrando com o valor de agora. Detectar isso
+ * exigiria histórico por linha; quem responde por essa família de mudança é a
+ * trilha de auditoria, e o job diz isso no relatório em vez de fingir que
+ * cobre tudo.
+ */
+export async function montarAreas(
+  competence: Competence | string,
+  opts: { ate?: Date | null } = {}
+): Promise<ConteudoSnapshot> {
   const [ano, mes] = competence.split("-").map(Number);
   const inicio = new Date(ano, mes - 1, 1);
   const fim = new Date(ano, mes, 1);
+  const corteDaLeitura = opts.ate ? { createdAt: { lte: opts.ate } } : {};
 
   const [relacoes, termos, cobrancas, despesas, contas, reservas, folha, avaliacoes, metricas] =
     await Promise.all([
       prisma.clientAgencyRelationship.findMany({
-        where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] } },
+        where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] }, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: {
           id: true, clientId: true, lifecycleStatus: true, financialStatus: true,
@@ -52,7 +71,7 @@ export async function montarAreas(competence: Competence | string): Promise<Cont
         },
       }),
       prisma.commercialTerm.findMany({
-        where: { validTo: null },
+        where: { validTo: null, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: {
           id: true, relationshipId: true, modality: true, monthlyValue: true,
@@ -60,7 +79,7 @@ export async function montarAreas(competence: Competence | string): Promise<Cont
         },
       }),
       prisma.billing.findMany({
-        where: { competence },
+        where: { competence, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: {
           id: true, clientId: true, relationshipId: true, amount: true, paidTotal: true,
@@ -68,21 +87,22 @@ export async function montarAreas(competence: Competence | string): Promise<Cont
         },
       }),
       prisma.transaction.findMany({
-        where: { type: "despesa", date: { gte: inicio, lt: fim } },
+        where: { type: "despesa", date: { gte: inicio, lt: fim }, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: { id: true, amount: true, status: true, categoryId: true, date: true },
       }),
       prisma.account.findMany({
-        where: { active: true },
+        where: { active: true, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: { id: true, name: true, balance: true, type: true },
       }),
       prisma.cashBox.findMany({
+        where: { ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: { id: true, name: true, currentAmount: true, targetAmount: true },
       }),
       prisma.payroll.findMany({
-        where: { year: ano, month: mes },
+        where: { year: ano, month: mes, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: {
           id: true, status: true, paidAt: true,
@@ -90,7 +110,7 @@ export async function montarAreas(competence: Competence | string): Promise<Cont
         },
       }),
       prisma.avaliacaoMensal.findMany({
-        where: { competence },
+        where: { competence, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: {
           id: true, relationshipId: true, estabilidade: true, ads: true,
@@ -103,7 +123,11 @@ export async function montarAreas(competence: Competence | string): Promise<Cont
   // AGING do que estava em aberto no corte — a foto de §5.4 pede
   // "receber + aging", e recalcular aging depois daria outro número, porque
   // "vencido há quantos dias" depende de QUANDO se pergunta.
-  const corte = new Date();
+  // O "hoje" do aging é o INSTANTE DE CORTE, nunca o relógio da máquina.
+  // Com new Date() aqui, recalcular a fotografia amanhã daria outro aging e o
+  // checksum nunca fecharia — o job de integridade acusaria divergência todo
+  // dia e seria desligado na primeira semana.
+  const corte = opts.ate ?? new Date();
   const faixa = (dias: number) =>
     dias <= 15 ? "1-15" : dias <= 30 ? "16-30" : dias <= 60 ? "31-60" : "60+";
   const aging: Record<string, { qtd: number; valor: string }> = {
@@ -206,7 +230,7 @@ export async function gerarSnapshot(
   // fora fatos gravados durante a própria leitura.
   const sourceCutoffAt = new Date();
 
-  const areas = await montarAreas(competence);
+  const areas = await montarAreas(competence, { ate: sourceCutoffAt });
   const { porArea, total } = checksumByArea(areas);
 
   const row = await runWithoutScope(async () =>
