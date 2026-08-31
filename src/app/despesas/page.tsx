@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/record-card";
 import { cn } from "@/lib/utils";
 import { ExpenseDialog } from "./expense-dialog";
-import { MonthNav } from "@/components/month-nav";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
@@ -113,7 +112,6 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
 
       {aba !== "cartoes" && (
         <div className="mb-4 print:hidden">
-          <MonthNav month={ref.getMonth() + 1} year={ref.getFullYear()} />
         </div>
       )}
 

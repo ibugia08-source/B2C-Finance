@@ -14,7 +14,6 @@ import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
 import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
-import { MonthNav } from "@/components/month-nav";
 import { PageSizeSelect } from "./page-size-select";
 import { PAGE_SIZES, MONTH_LABEL } from "./_meta";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
@@ -353,7 +352,6 @@ export default async function ClientesPage({
           <div className="flex flex-wrap items-center gap-2">
             {/* Seletor da competência: ◀ [Mês][Ano] ▶ — tudo na página (lista,
                 inadimplência, vencimentos, KPIs e ajustes) pertence a este mês. */}
-            <MonthNav month={selMonth} year={selYear} />
             {canCreateClient && <ClientDialog />}
           </div>
         }

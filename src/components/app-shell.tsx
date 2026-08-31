@@ -6,23 +6,35 @@ import { MobileHeader } from "./mobile-header";
 import { MobileMenu } from "./mobile-menu";
 import { MobileNav } from "./mobile-nav";
 import { SiteHeader } from "./site-header";
+import { CommandPalette } from "./command-palette";
+import { ShortcutsDialog } from "./shortcuts-dialog";
+import { GlobalShortcuts } from "./global-shortcuts";
 import { UndoToastHost } from "./undo-toast";
 import type { UserLike } from "./nav-items";
+import type { ScopeOptions } from "@/lib/services/org-scope";
 
 // /f = formulário público de contratos (sem casca, como o login).
 const NO_SHELL = ["/login", "/f"];
 
 /**
- * CASCA DO B2C FINANCE 2 (30/08): barra superior + subnav do espaço ativo
- * (SiteHeader) — a sidebar deixou de existir. No mobile: linha de título
- * com hambúrguer (gaveta) + a mesma subnav + barra inferior de espaços.
+ * CASCA DO B2C FINANCE: barra global (SiteHeader) + conteúdo + navegação
+ * mobile. No mobile: linha de título com hambúrguer (gaveta) + a mesma
+ * subnav + barra inferior de espaços.
+ *
+ * A casca também hospeda os três serviços globais do F1.14 — paleta de
+ * comandos, mapa de atalhos e escutador de teclado. Eles ficam aqui, e
+ * não em cada página, porque precisam de UMA instância válida em toda
+ * tela: montá-los por página faria dois escutadores brigarem pela mesma
+ * tecla durante a transição de rota.
  */
 export function AppShell({
   children,
   user,
+  scopeOptions,
 }: {
   children: React.ReactNode;
   user: UserLike;
+  scopeOptions: ScopeOptions;
 }) {
   const path = usePathname() ?? "";
   const bare = NO_SHELL.some((p) => path === p || path.startsWith(p + "/"));
@@ -30,7 +42,7 @@ export function AppShell({
 
   return (
     <div className="app-shell flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b bg-card/85 backdrop-blur supports-[backdrop-filter]:bg-card/70">
+      <header className="sticky top-0 z-40 border-b bg-surface">
         <MobileHeader
           title="B2C Finance"
           user={user}
@@ -51,7 +63,7 @@ export function AppShell({
         />
         {/* useSearchParams (preserva ?mes=) exige Suspense em prerender. */}
         <Suspense fallback={null}>
-          <SiteHeader user={user} />
+          <SiteHeader user={user} scopeOptions={scopeOptions} />
         </Suspense>
       </header>
 
@@ -60,11 +72,16 @@ export function AppShell({
         // pb-24 no mobile abre espaço para a tab bar inferior.
         className="page-enter w-full min-w-0 flex-1 p-3 pb-24 sm:p-4 md:p-5 md:pb-6 lg:p-6"
       >
-        <div className="mx-auto w-full max-w-[1560px]">{children}</div>
+        <div className="mx-auto w-full max-w-content">{children}</div>
       </main>
 
       <MobileNav user={user} />
       <UndoToastHost />
+
+      {/* Busca, paleta e atalhos: uma instância só, válida em toda tela. */}
+      <CommandPalette user={user} />
+      <ShortcutsDialog user={user} />
+      <GlobalShortcuts user={user} />
     </div>
   );
 }

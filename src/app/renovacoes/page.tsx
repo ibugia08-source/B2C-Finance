@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
-import { MonthNav } from "@/components/month-nav";
 import { Card, CardContent } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, parseMonthParam, MONTHS_PT_SHORT } from "@/lib/format";
@@ -81,7 +80,6 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-        <MonthNav month={mes.month} year={mes.year} />
       </div>
 
       {/* ===== Resumo do mês ===== */}

@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/record-card";
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
-import { MonthNav } from "@/components/month-nav";
 import { requirePagePermission } from "@/lib/auth/viewer";
 
 type Search = {
@@ -152,7 +151,6 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
       />
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <MonthNav month={mesParam.month} year={mesParam.year} />
         <SavedViews module="receitas" />
       </div>
 

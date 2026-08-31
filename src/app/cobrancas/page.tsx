@@ -22,7 +22,6 @@ import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
 import { BillingDialog } from "./billing-dialog";
 import { IncludeClientDialog, type IncludeClientOption } from "./include-client-dialog";
-import { MonthNav } from "@/components/month-nav";
 import { CycleFilters } from "./cycle-filters";
 import { ClientSearch } from "./search-client";
 import { PastDelinquencyDialog } from "./past-delinquency-dialog";
@@ -760,7 +759,6 @@ export default async function RecebimentosPage({
 
       {/* ===== Barra superior: mês · busca ===== */}
       <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-        <MonthNav month={mes.month} year={mes.year} />
         <ClientSearch />
       </div>
 

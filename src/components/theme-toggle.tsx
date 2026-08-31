@@ -2,16 +2,9 @@
 import { useEffect, useState } from "react";
 import { Sun, Moon, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-type Theme = "light" | "dark" | "system";
-
-function applyTheme(theme: Theme) {
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", isDark);
-}
+// Fonte única do tema (F1.14): a paleta de comandos alterna o tema pelo
+// mesmo módulo, então não existem duas implementações para divergirem.
+import { applyTheme, getTheme, setTheme as persistTheme, type Theme } from "@/lib/theme";
 
 const OPTIONS: { key: Theme; icon: typeof Sun; label: string }[] = [
   { key: "light", icon: Sun, label: "Claro" },
@@ -27,28 +20,25 @@ export function ThemeToggle({
   /** "vertical" empilha os 3 botões — usado na sidebar recolhida (80px). */
   orientation?: "horizontal" | "vertical";
 }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("system");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const stored = (localStorage.getItem("theme") as Theme) || "dark";
+    const stored = getTheme();
     setTheme(stored);
     // Reage a mudanças do sistema quando no modo "Sistema"
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      if (((localStorage.getItem("theme") as Theme) || "system") === "system") {
-        applyTheme("system");
-      }
+      if (getTheme() === "system") applyTheme("system");
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
   function choose(t: Theme) {
-    localStorage.setItem("theme", t);
     setTheme(t);
-    applyTheme(t);
+    persistTheme(t);
   }
 
   return (

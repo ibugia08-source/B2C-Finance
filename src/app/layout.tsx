@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectivePermissions } from "@/lib/permissions";
+import { getScopeOptions } from "@/lib/services/org-scope";
 
 // Fontes auto-hospedadas via next/font: sem @import bloqueante, sem FOUT.
 // 02 §7.2 fixa duas famílias e só duas: Inter na interface e JetBrains Mono
@@ -40,10 +41,13 @@ export const viewport: Viewport = {
 // Aplica o tema ANTES da pintura (sem flash). O seletor de acento saiu no
 // F1.13 — acento único (02 §7.2) — e este script LIMPA o data-accent que
 // tenha ficado gravado em navegadores da versão anterior.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t?(t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches)):false;document.documentElement.classList.toggle('dark',d);document.documentElement.removeAttribute('data-accent');localStorage.removeItem('b2c:accent');}catch(e){document.documentElement.classList.remove('dark');}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.removeAttribute('data-accent');localStorage.removeItem('b2c:accent');}catch(e){document.documentElement.classList.remove('dark');}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cu = await getCurrentUser();
+  // Escopo organizacional da barra global — some sozinho quando há só
+  // uma entidade e uma agência (ver services/org-scope.ts).
+  const scopeOptions = await getScopeOptions();
   // Conjunto efetivo de permissões calculado no servidor → sidebar e menus
   // só exibem o que o usuário pode ver.
   const user = cu
@@ -60,7 +64,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <AppShell user={user}>{children}</AppShell>
+        <AppShell user={user} scopeOptions={scopeOptions}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );
