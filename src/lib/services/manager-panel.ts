@@ -2,6 +2,8 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { toCompetence, type Competence } from "@/lib/competence";
+import { isScoped, type DataScope } from "@/lib/scope";
+import { nomeDoEscopo, whereDaRelacao } from "@/lib/services/data-scope";
 
 /**
  * PAINEL DO GESTOR (F1.19 · ref. 02 §5.4).
@@ -10,17 +12,20 @@ import { toCompetence, type Competence } from "@/lib/competence";
  * renovações, evolução 6m, ações (avaliações pendentes, onboarding
  * vencido, renovações sem negociação)."
  *
- * ESCOPO — e a honestidade sobre ele: "dos seus" depende de saber quais
- * clientes são do gestor, o que hoje vem de ClientManagerAssignment
- * (F1.3). O vínculo entre o USUÁRIO que fez login e o COLABORADOR da
- * folha é feito por NOME, porque não existe campo ligando os dois. Quando
- * não há correspondência, o painel mostra a carteira INTEIRA e DIZ isso
- * no cabeçalho — mostrar tudo fingindo que é "o seu" seria pior que
- * mostrar tudo assumidamente.
+ * ESCOPO — RESOLVIDO pela DECISÃO 19.11 em 31/08.
  *
- * O recorte definitivo é a DECISÃO 19.11 (o gestor vê a carteira inteira
- * em leitura, ou só a dele?), e ela também decide se o fallback acima
- * deve virar uma tela vazia.
+ * A versão anterior deste arquivo casava o USUÁRIO logado com o COLABORADOR
+ * da folha PELO NOME, porque não havia campo ligando os dois, e caía para a
+ * carteira inteira quando não achava. Isso morreu aqui: a direção decidiu que
+ * o vínculo usuário↔pessoa da folha NÃO existe — Raiane e Bianca estão nos
+ * dois lugares e os registros são independentes de propósito.
+ *
+ * Casar por nome nunca foi um recorte de segurança, era um palpite: dois
+ * "Ana Paula" na folha, ou um usuário cadastrado como "ana@" com nome
+ * diferente do crachá, e o painel mostrava a carteira errada sem avisar.
+ *
+ * O recorte agora é o do usuário (lib/scope): a carteira inteira, ou UMA
+ * agência. Vem de campo gravado e conferido, não de coincidência de texto.
  */
 
 export type AcaoPendente = {
@@ -31,7 +36,7 @@ export type AcaoPendente = {
 };
 
 export type PainelGestor = {
-  /** Nome do colaborador casado, ou null se o painel está mostrando tudo. */
+  /** Nome da agência do recorte, ou null quando o painel mostra tudo. */
   escopoNome: string | null;
   escopoTotal: boolean;
   ativos: number;
@@ -49,32 +54,13 @@ export type PainelGestor = {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export async function carregarPainelGestor(
-  nomeUsuario: string | null,
+  scope: DataScope,
   hoje = new Date()
 ): Promise<PainelGestor> {
   const competence = toCompetence(hoje.getFullYear(), hoje.getMonth() + 1) as Competence;
 
-  // 1. Quem é este gestor na folha? Casamento por nome, sem inventar.
-  const colaborador = nomeUsuario
-    ? await prisma.employee.findFirst({
-        where: { name: { equals: nomeUsuario.trim(), mode: "insensitive" } },
-        select: { id: true, name: true },
-      })
-    : null;
-
-  // `as const` no array de papéis deixa o tipo readonly, que o Prisma
-  // recusa no filtro — o array mutável é o que ele espera.
-  const filtroEscopo: Prisma.ClientAgencyRelationshipWhereInput = colaborador
-    ? {
-        managers: {
-          some: {
-            managerId: colaborador.id,
-            validTo: null,
-            role: { in: ["MANAGER_1", "MANAGER_2"] },
-          },
-        },
-      }
-    : {};
+  const filtroEscopo: Prisma.ClientAgencyRelationshipWhereInput = whereDaRelacao(scope);
+  const escopoNome = await nomeDoEscopo(scope);
 
   const relacoes = await prisma.clientAgencyRelationship.findMany({
     where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] }, ...filtroEscopo },
@@ -167,8 +153,8 @@ export async function carregarPainelGestor(
   });
 
   return {
-    escopoNome: colaborador?.name ?? null,
-    escopoTotal: !colaborador,
+    escopoNome,
+    escopoTotal: !isScoped(scope),
     ativos: relacoes.length,
     criticos,
     emObservacao,

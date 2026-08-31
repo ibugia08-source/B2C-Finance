@@ -100,6 +100,8 @@ model Agency {
   updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
 
   relationships ClientAgencyRelationship[]
+  /// Usuários cujo recorte de dados é esta agência (03 §1.1).
+  scopedUsers   User[]                     @relation("ScopedUsers")
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
@@ -152,6 +154,18 @@ model User {
   // Ajustes finos de permissão por usuário (diferenças vs. o padrão do papel).
   permissions UserPermission[]
 
+  // ===== Recorte de dados (03 §1.1) =====
+  // DECIDIDO 19.11 (31/08): só DOIS recortes existem — a carteira inteira do
+  // workspace, ou UMA agência. O escopo "meus clientes" da spec caiu porque
+  // depende de ligar o usuário do login à pessoa da folha, e a direção decidiu
+  // que esse vínculo NÃO existe. Sem ele, "meus" só poderia ser adivinhado por
+  // nome, que é exatamente o tipo de regra inventada que o plano proíbe.
+  // A agência é a unidade certa para isso: ela existe justamente para dizer
+  // quais clientes são de quem (19.15).
+  dataScope     String  @default("WORKSPACE") /// WORKSPACE | AGENCY
+  scopeAgencyId String?
+  scopeAgency   Agency? @relation("ScopedUsers", fields: [scopeAgencyId], references: [id], onDelete: SetNull)
+
   // ===== Multiusuário: dados privados de cada conta (owner) =====
   workspace          Workspace?           @relation("OwnerWorkspace")
   ownedLedgerTx      LedgerTransaction[]  @relation("OwnerLedgerTransaction")
@@ -201,24 +215,24 @@ model User {
   ownedClientNotes        ClientNote[]        @relation("OwnerClientNote")
 
   // ===== Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra =====
-  ownedClientLosses             ClientLoss[]             @relation("OwnerClientLoss")
-  ownedOffers                   Offer[]                  @relation("OwnerOffer")
-  ownedOfferServices            OfferService[]           @relation("OwnerOfferService")
-  ownedUpsells                  Upsell[]                 @relation("OwnerUpsell")
-  ownedUpsellServices           UpsellService[]          @relation("OwnerUpsellService")
-  ownedExtraRevenues            ExtraRevenue[]           @relation("OwnerExtraRevenue")
-  ownedRoutineItemStates        RoutineItemState[]       @relation("OwnerRoutineItemState")
-  ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
-  ownedClientRenewals           ClientRenewal[]          @relation("OwnerClientRenewal")
+  ownedClientLosses             ClientLoss[]               @relation("OwnerClientLoss")
+  ownedOffers                   Offer[]                    @relation("OwnerOffer")
+  ownedOfferServices            OfferService[]             @relation("OwnerOfferService")
+  ownedUpsells                  Upsell[]                   @relation("OwnerUpsell")
+  ownedUpsellServices           UpsellService[]            @relation("OwnerUpsellService")
+  ownedExtraRevenues            ExtraRevenue[]             @relation("OwnerExtraRevenue")
+  ownedRoutineItemStates        RoutineItemState[]         @relation("OwnerRoutineItemState")
+  ownedClientMonthDelinquencies ClientMonthDelinquency[]   @relation("OwnerClientMonthDelinquency")
+  ownedClientRenewals           ClientRenewal[]            @relation("OwnerClientRenewal")
   // F1.1 — escopo por dono nas entidades novas.
-  ownedRelationships ClientAgencyRelationship[] @relation("OwnerClientRelationship")
-  ownedAvaliacoes    AvaliacaoMensal[]          @relation("OwnerAvaliacaoMensal")
-  ownedOnboarding    OnboardingTask[]           @relation("OwnerOnboardingTask")
-  ownedTerms         CommercialTerm[]           @relation("OwnerCommercialTerm")
-  ownedAssignments   ClientManagerAssignment[]  @relation("OwnerManagerAssignment")
-  ownedApplications  PaymentApplication[]       @relation("OwnerPaymentApplication")
-  ownedCredits       CustomerCredit[]           @relation("OwnerCustomerCredit")
-  ownedCreditMoves   CustomerCreditMovement[]   @relation("OwnerCreditMovement")
+  ownedRelationships            ClientAgencyRelationship[] @relation("OwnerClientRelationship")
+  ownedAvaliacoes               AvaliacaoMensal[]          @relation("OwnerAvaliacaoMensal")
+  ownedOnboarding               OnboardingTask[]           @relation("OwnerOnboardingTask")
+  ownedTerms                    CommercialTerm[]           @relation("OwnerCommercialTerm")
+  ownedAssignments              ClientManagerAssignment[]  @relation("OwnerManagerAssignment")
+  ownedApplications             PaymentApplication[]       @relation("OwnerPaymentApplication")
+  ownedCredits                  CustomerCredit[]           @relation("OwnerCustomerCredit")
+  ownedCreditMoves              CustomerCreditMovement[]   @relation("OwnerCreditMovement")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -1178,15 +1192,15 @@ model Client {
   monthDelinquencies ClientMonthDelinquency[]
 
   // Histórico de renovações de contrato (um registro por "Sim, renovou")
-  renewals ClientRenewal[]
+  renewals      ClientRenewal[]
+  relationships ClientAgencyRelationship[]
+  credits       CustomerCredit[]
 
   @@index([ownerId])
   @@index([status])
   @@index([modality])
   @@index([renewalMonth])
   @@index([salesOwnerId])
-  relationships ClientAgencyRelationship[]
-  credits       CustomerCredit[]
 }
 
 // Override MANUAL de inadimplência POR COMPETÊNCIA (mês/ano) — histórico
@@ -1257,13 +1271,13 @@ model ClientRenewal {
 // modalidade, responsável e motivo. Histórico: um cliente pode ter várias
 // perdas (saiu, voltou, saiu de novo).
 model ClientLoss {
-  id             String          @id @default(cuid())
+  id             String                    @id @default(cuid())
   clientId       String
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lostAt         DateTime        @default(now()) @db.Timestamptz(3)
+  client         Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lostAt         DateTime                  @default(now()) @db.Timestamptz(3)
   modality       ClientModality? // snapshot da modalidade na perda
-  monthlyValue   Decimal?        @db.Decimal(14, 2) // MRR mensal perdido
-  referenceValue Decimal?        @db.Decimal(14, 2) // TCV de referência (última adesão)
+  monthlyValue   Decimal?                  @db.Decimal(14, 2) // MRR mensal perdido
+  referenceValue Decimal?                  @db.Decimal(14, 2) // TCV de referência (última adesão)
   reason         String? // motivo da perda (opcional)
   salesOwner     String? // snapshot do responsável na perda
   // 01 §4.3: "ClientLoss pertence à relação". Nulo só no legado
@@ -1271,8 +1285,8 @@ model ClientLoss {
   relationshipId String?
   relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
   ownerId        String?
-  owner          User?           @relation("OwnerClientLoss", fields: [ownerId], references: [id])
-  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
+  owner          User?                     @relation("OwnerClientLoss", fields: [ownerId], references: [id])
+  createdAt      DateTime                  @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([relationshipId])
@@ -1648,50 +1662,50 @@ model ContractService {
 // Distinta de CreditCardInvoice (fatura do cartão da agência) e de
 // Income (receita efetivamente RECEBIDA / caixa).
 model Billing {
-  id               String           @id @default(cuid())
-  clientId         String
-  client           Client           @relation(fields: [clientId], references: [id])
-  contractId       String?
-  contract         Contract?        @relation(fields: [contractId], references: [id])
-  serviceId        String? // serviço principal, quando aplicável
-  service          Service?         @relation(fields: [serviceId], references: [id])
-  description      String
-  competenceMonth  Int // 1-12
-  competenceYear   Int
+  id              String        @id @default(cuid())
+  clientId        String
+  client          Client        @relation(fields: [clientId], references: [id])
+  contractId      String?
+  contract        Contract?     @relation(fields: [contractId], references: [id])
+  serviceId       String? // serviço principal, quando aplicável
+  service         Service?      @relation(fields: [serviceId], references: [id])
+  description     String
+  competenceMonth Int // 1-12
+  competenceYear  Int
   /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
   /// a partir do par mês/ano acima; nunca escrever pela aplicação.
-  competence       String?
-  amount           Decimal          @db.Decimal(14, 2)
-  paidTotal        Decimal          @default(0) @db.Decimal(14, 2)
-  dueDate          DateTime         @db.Timestamptz(3)
-  paidAt           DateTime?        @db.Timestamptz(3) // quitação total
-  status           BillingStatus    @default(PENDING)
-  revenueType      RevenueType      @default(MRR)
+  competence      String?
+  amount          Decimal       @db.Decimal(14, 2)
+  paidTotal       Decimal       @default(0) @db.Decimal(14, 2)
+  dueDate         DateTime      @db.Timestamptz(3)
+  paidAt          DateTime?     @db.Timestamptz(3) // quitação total
+  status          BillingStatus @default(PENDING)
+  revenueType     RevenueType   @default(MRR)
 
   // ===== F1.4 — Billing 2.0 (01 §4.5) =====
   /// O QUE está sendo cobrado. revenueType continua para não quebrar as
   /// métricas do v1; billingKind é o vocabulário da spec e inclui os casos
   /// que revenueType não sabia nomear (upsell, renegociação).
-  billingKind     BillingKind     @default(MRR)
+  billingKind        BillingKind               @default(MRR)
   /// REVENUE reconhece receita; SETTLEMENT_ONLY só liquida dívida antiga —
   /// cobrar uma renegociação NÃO cria faturamento novo, senão o mesmo
   /// dinheiro seria contado duas vezes.
-  recognitionMode RecognitionMode @default(REVENUE)
+  recognitionMode    RecognitionMode           @default(REVENUE)
   /// Parcelamento de TCV (F1.7): todas as parcelas do mesmo contrato
   /// compartilham o grupo, e a numeração diz qual é qual.
   installmentGroupId String?
   installmentNumber  Int?
   /// A cobrança pertence à RELAÇÃO cliente↔agência (01 §4.5). Nulo só no
   /// legado anterior ao backfill.
-  relationshipId String?
-  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
-  applications   PaymentApplication[]
-  collectionStatus CollectionStatus @default(NOT_CONTACTED)
-  collector        String? // responsável pela cobrança
-  canceledAt       DateTime?        @db.Timestamptz(3)
-  cancelReason     String? // motivo da remoção do ciclo do mês
-  canceledBy       String? // e-mail de quem removeu
-  notes            String?
+  relationshipId     String?
+  relationship       ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  applications       PaymentApplication[]
+  collectionStatus   CollectionStatus          @default(NOT_CONTACTED)
+  collector          String? // responsável pela cobrança
+  canceledAt         DateTime?                 @db.Timestamptz(3)
+  cancelReason       String? // motivo da remoção do ciclo do mês
+  canceledBy         String? // e-mail de quem removeu
+  notes              String?
 
   // ===== Fechamento mensal (regra contábil B2C) =====
   // isLate: quitada DEPOIS do vencimento mas DENTRO do mês de competência
@@ -1816,23 +1830,23 @@ model Payment {
 
 // Histórico de cobrança (interações com o cliente — nunca sobrescrever).
 model CollectionHistory {
-  id           String           @id @default(cuid())
-  billingId    String
-  billing      Billing          @relation(fields: [billingId], references: [id], onDelete: Cascade)
-  clientId     String?
-  client       Client?          @relation(fields: [clientId], references: [id])
-  status       CollectionStatus @default(CONTACTED)
-  channel      String? // whatsapp | email | telefone | outro
-  message      String? // texto enviado / resumo do contato
-  contactedAt  DateTime         @default(now()) @db.Timestamptz(3)
-  nextActionAt DateTime?        @db.Timestamptz(3) // próximo follow-up
-  actionType   String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
-  createdBy    String? // user.email (quem fez a ação)
+  id             String                    @id @default(cuid())
+  billingId      String
+  billing        Billing                   @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?                   @relation(fields: [clientId], references: [id])
+  status         CollectionStatus          @default(CONTACTED)
+  channel        String? // whatsapp | email | telefone | outro
+  message        String? // texto enviado / resumo do contato
+  contactedAt    DateTime                  @default(now()) @db.Timestamptz(3)
+  nextActionAt   DateTime?                 @db.Timestamptz(3) // próximo follow-up
+  actionType     String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
+  createdBy      String? // user.email (quem fez a ação)
   relationshipId String?
   relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
-  ownerId      String?
-  owner        User?            @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
-  createdAt    DateTime         @default(now()) @db.Timestamptz(3)
+  ownerId        String?
+  owner          User?                     @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
+  createdAt      DateTime                  @default(now()) @db.Timestamptz(3)
 
   @@index([billingId])
   @@index([clientId])
@@ -1866,7 +1880,7 @@ model Employee {
   assignments       ClientManagerAssignment[]
   payrollItems      PayrollItem[]
   commissions       Commission[]
-  salesOwnedClients Client[]      @relation("ClientSalesOwner")
+  salesOwnedClients Client[]                  @relation("ClientSalesOwner")
 
   @@index([active])
   @@index([ownerId])
@@ -2397,7 +2411,7 @@ model ClientAgencyRelationship {
   collections CollectionHistory[]
   avaliacoes  AvaliacaoMensal[]
   onboarding  OnboardingTask[]
-  terms       CommercialTerm[] @relation("TermosDaRelacao")
+  terms       CommercialTerm[]          @relation("TermosDaRelacao")
   managers    ClientManagerAssignment[]
   billings    Billing[]
   credits     CustomerCredit[]
@@ -2457,12 +2471,12 @@ model OnboardingTask {
   title       String
   description String?
   /// Ordem no board do cliente.
-  position Int @default(0)
+  position    Int       @default(0)
   /// Dias após a entrada (7, 30, 90) — a data efetiva sai de startedAt.
-  offsetDays Int?
-  dueAt      DateTime? @db.Timestamptz(3)
-  doneAt     DateTime? @db.Timestamptz(3)
-  doneBy     String?
+  offsetDays  Int?
+  dueAt       DateTime? @db.Timestamptz(3)
+  doneAt      DateTime? @db.Timestamptz(3)
+  doneBy      String?
   /// Chave do template que originou a tarefa (rastreia o padrão aplicado).
   templateKey String?
 
@@ -2495,8 +2509,8 @@ model CommercialTerm {
   relationship   ClientAgencyRelationship @relation("TermosDaRelacao", fields: [relationshipId], references: [id], onDelete: Cascade)
 
   modality           ClientModality
-  monthlyValue       Decimal? @db.Decimal(14, 2)
-  totalContractValue Decimal? @db.Decimal(14, 2)
+  monthlyValue       Decimal?       @db.Decimal(14, 2)
+  totalContractValue Decimal?       @db.Decimal(14, 2)
   contractMonths     Int?
 
   /// Vigência. validTo nulo = termo em vigor.
@@ -2721,8 +2735,8 @@ model AuditLog {
   /// (01 §4.10) — o helper cobra; o banco aceita nulo para o caso trivial.
   reason String?
 
-  actorId    String?
-  actorEmail String?
+  actorId       String?
+  actorEmail    String?
   /// Amarra as N linhas de uma mesma operação (T7 de observabilidade).
   correlationId String?
 
@@ -2741,4 +2755,3 @@ model AuditLog {
   @@index([correlationId])
   @@index([ownerId])
 }
-

@@ -22,6 +22,16 @@ export default async function UsuariosPage() {
     prisma.person.findMany({ orderBy: { name: "asc" } }),
   ]);
 
+  // Agências do workspace: destino possível do recorte de dados (F1.10).
+  // A lista some quando só existe uma — recorte com uma agência só é o mesmo
+  // que não recortar, e a opção só confundiria.
+  const agencias = await prisma.agency.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const agenciasParaRecorte = agencias.length > 1 ? agencias : [];
+
   const rows: UserRow[] = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -31,6 +41,9 @@ export default async function UsuariosPage() {
     personId: u.person?.id ?? null,
     personName: u.person?.name ?? null,
     permissions: u.permissions,
+    dataScope: u.dataScope,
+    scopeAgencyId: u.scopeAgencyId,
+    scopeAgencyName: agencias.find((a) => a.id === u.scopeAgencyId)?.name ?? null,
   }));
 
   const admins = rows.filter((u) => u.role === "ADMIN").length;
@@ -49,7 +62,11 @@ export default async function UsuariosPage() {
         description="Equipe, papéis e permissões de acesso à plataforma."
         actions={
           canCreate ? (
-            <UserDialog people={peopleAll} canManagePermissions={canManagePermissions} />
+            <UserDialog
+              people={peopleAll}
+              agencies={agenciasParaRecorte}
+              canManagePermissions={canManagePermissions}
+            />
           ) : undefined
         }
       />
@@ -64,6 +81,7 @@ export default async function UsuariosPage() {
       <UsersList
         users={rows}
         people={peopleAll}
+        agencies={agenciasParaRecorte}
         canEdit={canEdit}
         canDelete={canDelete}
         canManagePermissions={canManagePermissions}

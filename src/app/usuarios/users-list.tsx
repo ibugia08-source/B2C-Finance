@@ -28,6 +28,10 @@ export type UserRow = {
   personName: string | null;
   /** Ajustes finos de permissão (diferenças vs. o padrão do papel). */
   permissions: { permission: string; enabled: boolean }[];
+  /** Recorte de dados (F1.10): WORKSPACE | AGENCY. */
+  dataScope: string;
+  scopeAgencyId: string | null;
+  scopeAgencyName: string | null;
 };
 
 const roleLabel = (r: string) => ROLE_LABEL[r as Role] ?? r;
@@ -35,12 +39,14 @@ const roleLabel = (r: string) => ROLE_LABEL[r as Role] ?? r;
 export function UsersList({
   users,
   people,
+  agencies = [],
   canEdit,
   canDelete,
   canManagePermissions,
 }: {
   users: UserRow[];
   people: any[];
+  agencies?: { id: string; name: string }[];
   canEdit: boolean;
   canDelete: boolean;
   canManagePermissions: boolean;
@@ -131,6 +137,11 @@ export function UsersList({
                     <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
                       {roleLabel(u.role)}
                     </Badge>
+                    {u.scopeAgencyName ? (
+                      <span className="ml-1.5 text-caption text-muted-foreground">
+                        só {u.scopeAgencyName}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <Badge variant={u.active ? "success" : "outline"}>
@@ -151,6 +162,7 @@ export function UsersList({
                     <UserRowActions
                       user={u}
                       people={people}
+                      agencies={agencies}
                       canEdit={canEdit}
                       canDelete={canDelete}
                       canManagePermissions={canManagePermissions}
@@ -187,6 +199,11 @@ export function UsersList({
                     <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
                       {roleLabel(u.role)}
                     </Badge>
+                    {u.scopeAgencyName ? (
+                      <span className="ml-1.5 text-caption text-muted-foreground">
+                        só {u.scopeAgencyName}
+                      </span>
+                    ) : null}
                   </Field>
                   <Field label="Pessoa vinculada">
                     {u.personName ? (
@@ -203,6 +220,7 @@ export function UsersList({
                   <UserRowActions
                     user={u}
                     people={people}
+                    agencies={agencies}
                     canEdit={canEdit}
                     canDelete={canDelete}
                     canManagePermissions={canManagePermissions}

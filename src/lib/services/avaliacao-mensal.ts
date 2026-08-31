@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { addMonths, type Competence } from "@/lib/competence";
 import { toNumber as n } from "@/lib/format";
 import type { LinhaAvaliacao, SalvarAvaliacao } from "@/lib/avaliacao-meta";
+import type { DataScope } from "@/lib/scope";
+import { escopoAtual, whereDaRelacao } from "@/lib/services/data-scope";
 
 // Reexportados para quem já importa do serviço; a definição mora no
 // módulo neutro, que o componente de cliente pode importar sem arrastar
@@ -25,12 +27,18 @@ export { ADS_STATUS, ESTABILIDADE, RISCO, UPSELL } from "@/lib/avaliacao-meta";
  * marcada como sugestão, e a escolha do gestor prevalece.
  */
 
-export async function carregarGrade(competence: Competence): Promise<LinhaAvaliacao[]> {
+export async function carregarGrade(
+  competence: Competence,
+  scope?: DataScope
+): Promise<LinhaAvaliacao[]> {
   const anterior = addMonths(competence, -1);
   const hoje = new Date();
+  // F1.10: a grade obedece ao recorte do usuário. Quem tem recorte de agência
+  // avalia a carteira daquela agência e só ela.
+  const recorte = whereDaRelacao(scope ?? (await escopoAtual()));
 
   const relacoes = await prisma.clientAgencyRelationship.findMany({
-    where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] } },
+    where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] }, ...recorte },
     select: {
       id: true,
       clientId: true,

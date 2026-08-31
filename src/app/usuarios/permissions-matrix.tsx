@@ -9,6 +9,8 @@ import {
   ROLE_PERMISSIONS,
   ROLE_DESCRIPTION,
   ALL_PERMISSION_IDS,
+  ADMIN_ONLY_PERMISSIONS,
+  PERMISSOES_DO_DONO,
   type Role,
 } from "@/lib/permissions";
 
@@ -57,6 +59,9 @@ export function PermissionsMatrix({
   }
 
   function toggle(id: string) {
+    // Regra do motor não é permissão de usuário: mexer nela muda como o
+    // sistema CALCULA, e isso é só do Admin (03 §1.2).
+    if (ADMIN_ONLY_PERMISSIONS.has(id)) return;
     const effective = overrides[id] ?? roleDefaults.has(id);
     const next = !effective;
     const map = { ...overrides };
@@ -92,20 +97,47 @@ export function PermissionsMatrix({
             <legend className="mb-1.5 text-sm font-medium">{mod.label}</legend>
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {mod.permissions.map((p) => {
-                const effective = overrides[p.id] ?? roleDefaults.has(p.id);
+                const soDoAdmin = ADMIN_ONLY_PERMISSIONS.has(p.id);
+                const doDono = PERMISSOES_DO_DONO.has(p.id);
+                const effective = soDoAdmin
+                  ? false
+                  : overrides[p.id] ?? roleDefaults.has(p.id);
                 const changed = p.id in overrides;
                 return (
                   <label
                     key={p.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-muted/50"
+                    title={
+                      soDoAdmin
+                        ? "Só o Administrador. Isto muda como o sistema calcula, não o que a pessoa vê."
+                        : doDono
+                          ? "Nenhum papel recebe isto por padrão — conceder é uma escolha sua, um usuário por vez."
+                          : undefined
+                    }
+                    className={
+                      soDoAdmin
+                        ? "flex items-center gap-2 rounded-md px-1.5 py-1 text-sm opacity-60"
+                        : "flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm hover:bg-muted/50"
+                    }
                   >
-                    <Checkbox checked={effective} onChange={() => toggle(p.id)} />
+                    <Checkbox
+                      checked={effective}
+                      disabled={soDoAdmin}
+                      onChange={() => toggle(p.id)}
+                    />
                     <span className={changed ? "font-medium" : undefined}>{p.label}</span>
-                    {p.sensitive && (
+                    {soDoAdmin ? (
+                      <Badge variant="outline" className="ml-auto shrink-0 text-[10px] px-1.5 py-0">
+                        Só Admin
+                      </Badge>
+                    ) : doDono ? (
+                      <Badge variant="outline" className="ml-auto shrink-0 text-[10px] px-1.5 py-0">
+                        Só o dono
+                      </Badge>
+                    ) : p.sensitive ? (
                       <Badge variant="outline" className="ml-auto shrink-0 text-[10px] px-1.5 py-0">
                         Sensível
                       </Badge>
-                    )}
+                    ) : null}
                   </label>
                 );
               })}

@@ -10,12 +10,14 @@ import { deleteUser } from "@/lib/actions/users";
 export function UserRowActions({
   user,
   people,
+  agencies = [],
   canEdit,
   canDelete,
   canManagePermissions,
 }: {
   user: any;
   people: any[];
+  agencies?: { id: string; name: string }[];
   canEdit: boolean;
   canDelete: boolean;
   canManagePermissions: boolean;
@@ -27,6 +29,7 @@ export function UserRowActions({
       {canEdit && (
         <UserDialog
           people={people}
+          agencies={agencies}
           initial={user}
           canManagePermissions={canManagePermissions}
           trigger={

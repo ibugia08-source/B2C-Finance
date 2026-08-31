@@ -58,3 +58,17 @@ export function sameCacheScope(a: CacheScope, b: CacheScope): boolean {
   const pb = scopeKeyParts(b);
   return pa.length === pb.length && pa.every((v, i) => v === pb[i]);
 }
+
+/**
+ * NOTA SOBRE O `userScope` DE 03 §1.4 (F1.10).
+ *
+ * A spec pede userScope na chave. Ele está lá por consequência: o USUÁRIO já
+ * compõe a chave, e o recorte é atributo do usuário — dois usuários com
+ * recortes diferentes nunca caem na mesma entrada.
+ *
+ * Ler o recorte aqui para colocá-lo explicitamente na chave custaria UMA
+ * CONSULTA AO BANCO por chamada de cache, e esta função roda em toda query da
+ * extensão do Prisma. Seria trocar o problema por um pior. Se um dia a chave
+ * for afrouxada para agrupar usuários, `scopeFingerprint` (lib/scope) já
+ * existe para entrar aqui.
+ */

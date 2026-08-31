@@ -28,11 +28,14 @@ import {
 
 export function UserDialog({
   people,
+  agencies = [],
   initial,
   trigger,
   canManagePermissions = true,
 }: {
   people: any[];
+  /** Agências do workspace — destino possível do recorte de dados. */
+  agencies?: { id: string; name: string }[];
   initial?: any;
   trigger?: React.ReactNode;
   /** Sem usuarios.alterar_permissoes → papel e matriz ficam travados. */
@@ -41,6 +44,7 @@ export function UserDialog({
   const [open, setOpen] = useState(false);
   const editing = !!initial?.id;
   const [role, setRole] = useState<Role>((initial?.role as Role) ?? "FINANCEIRO");
+  const [dataScope, setDataScope] = useState<string>(initial?.dataScope ?? "WORKSPACE");
   const [overrides, setOverrides] = useState<OverrideMap>(() =>
     overridesFromRows(initial?.permissions)
   );
@@ -54,6 +58,7 @@ export function UserDialog({
     setOpen(next);
     if (next) {
       setRole((initial?.role as Role) ?? "FINANCEIRO");
+      setDataScope(initial?.dataScope ?? "WORKSPACE");
       setOverrides(overridesFromRows(initial?.permissions));
     }
   }
@@ -149,6 +154,38 @@ export function UserDialog({
                 <option value="false">Inativo</option>
               </Select>
             </div>
+            {role !== "ADMIN" && agencies.length > 0 ? (
+              <>
+                <div>
+                  <Label>Quais clientes este usuário enxerga</Label>
+                  <Select
+                    name="dataScope"
+                    value={dataScope}
+                    disabled={!canManagePermissions}
+                    onChange={(e) => setDataScope(e.target.value)}
+                  >
+                    <option value="WORKSPACE">Todos os clientes</option>
+                    <option value="AGENCY">Só os de uma agência</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Agência</Label>
+                  <Select
+                    name="scopeAgencyId"
+                    defaultValue={initial?.scopeAgencyId ?? ""}
+                    disabled={!canManagePermissions || dataScope !== "AGENCY"}
+                    required={dataScope === "AGENCY"}
+                  >
+                    <option value="">— escolha a agência</option>
+                    {agencies.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </>
+            ) : null}
             <div className="col-span-2">
               <Label>Pessoa vinculada (opcional)</Label>
               <Select name="personId" defaultValue={initial?.personId ?? ""}>

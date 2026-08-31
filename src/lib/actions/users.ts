@@ -35,6 +35,36 @@ const UpdateSchema = z.object({
   personId: z.string().nullable().optional(),
 });
 
+
+/**
+ * Recorte de dados (F1.10 · 03 §1.1). Espelha em Zod a mesma coerência que o
+ * banco garante por CHECK: AGENCY exige agência, WORKSPACE proíbe.
+ * Os dois níveis existem de propósito — a mensagem amigável vem daqui, e o
+ * banco é quem realmente impede, inclusive contra escrita fora da tela.
+ */
+const EscopoSchema = z
+  .object({
+    dataScope: z.enum(["WORKSPACE", "AGENCY"]).default("WORKSPACE"),
+    scopeAgencyId: z.string().nullable().optional(),
+  })
+  .refine((v) => v.dataScope === "WORKSPACE" || !!v.scopeAgencyId, {
+    message: "Escolha a agência que este usuário enxerga.",
+    path: ["scopeAgencyId"],
+  });
+
+/** Lê o recorte do formulário, já normalizado (ADMIN é sempre total). */
+function lerEscopo(formData: FormData, role: string) {
+  if (role === "ADMIN") return { dataScope: "WORKSPACE" as const, scopeAgencyId: null };
+  const parsed = EscopoSchema.parse({
+    dataScope: String(formData.get("dataScope") || "WORKSPACE"),
+    scopeAgencyId: (formData.get("scopeAgencyId") as string) || null,
+  });
+  return {
+    dataScope: parsed.dataScope,
+    scopeAgencyId: parsed.dataScope === "AGENCY" ? parsed.scopeAgencyId! : null,
+  };
+}
+
 /** Raiz do workspace do viewer (dono dos dados que ele enxerga). */
 function workspaceRootOf(viewer: Viewer): string {
   return viewer.workspaceOwnerId ?? viewer.id;
@@ -98,6 +128,7 @@ export async function createUser(formData: FormData): Promise<ActionResult> {
         passwordHash,
         role: parsed.role,
         active: parsed.active,
+        ...lerEscopo(formData, parsed.role),
         // Membro da equipe enxerga os dados do dono da conta do criador.
         workspaceOwnerId: workspaceRootOf(viewer),
       },
@@ -192,7 +223,12 @@ export async function updateUser(formData: FormData): Promise<ActionResult> {
       email: parsed.email,
       active: parsed.active,
     };
-    if (canManagePerms) data.role = parsed.role;
+    if (canManagePerms) {
+      data.role = parsed.role;
+      // O recorte anda junto do papel: quem não pode mexer em permissão também
+      // não pode alargar o que o outro enxerga.
+      Object.assign(data, lerEscopo(formData, parsed.role));
+    }
     if (parsed.password) {
       data.passwordHash = await bcrypt.hash(parsed.password, 10);
     }

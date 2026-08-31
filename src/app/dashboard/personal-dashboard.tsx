@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/empty-state";
 import { getViewer } from "@/lib/auth/viewer";
 import { formatBRL } from "@/lib/format";
 import { carregarPainelGestor, type AcaoPendente } from "@/lib/services/manager-panel";
+import { escopoAtual } from "@/lib/services/data-scope";
 
 /**
  * PAINEL DO GESTOR (F1.19 · ref. 02 §5.4).
@@ -24,7 +25,7 @@ import { carregarPainelGestor, type AcaoPendente } from "@/lib/services/manager-
 export async function PersonalDashboard() {
   const viewer = await getViewer("/dashboard");
   const firstName = viewer.name?.split(" ")[0] ?? "";
-  const p = await carregarPainelGestor(viewer.name ?? null);
+  const p = await carregarPainelGestor(await escopoAtual());
 
   return (
     <div>
