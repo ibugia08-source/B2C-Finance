@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthLabel } from "@/lib/format";
+import { formatBRL, formatDateBR, monthLabel, toNumber as n } from "@/lib/format";
 import {
   totalReceitasMes,
   totalDespesasMes,
@@ -85,7 +85,7 @@ export async function buildFinancialSnapshot(ref = new Date()) {
   const topCategorias = catRows
     .map((r) => ({
       categoria: r.categoryId ? catName.get(r.categoryId) ?? "—" : "Sem categoria",
-      total: r._sum.amount ?? 0,
+      total: n(r._sum.amount),
       qtde: r._count._all,
     }))
     .sort((a, b) => b.total - a.total)
@@ -97,7 +97,7 @@ export async function buildFinancialSnapshot(ref = new Date()) {
       where: { belongsTo: b, type: "despesa", status: { not: "cancelado" }, date: { gte: start, lt: end } },
       _sum: { amount: true },
     });
-    porPertence[b] = r._sum.amount ?? 0;
+    porPertence[b] = n(r._sum.amount);
   }
 
   return {
@@ -125,7 +125,7 @@ export async function buildFinancialSnapshot(ref = new Date()) {
       referencia: `${String(i.referenceMonth).padStart(2, "0")}/${i.referenceYear}`,
       vencimento: formatDateBR(i.dueDate),
       total: i.total,
-      emAberto: i.total - i.paid,
+      emAberto: n(i.total) - n(i.paid),
       status: i.status,
     })),
     quemMeDeve: devedores.map((d: any) => ({ pessoa: d.name, total: d.total })),

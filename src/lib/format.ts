@@ -1,7 +1,18 @@
 /**
+ * Valor monetário como ele chega do banco: desde F0.3 (01 §3.14) TODO campo
+ * de dinheiro é `Decimal(14,2)`, e o Prisma devolve um objeto Decimal — nunca
+ * um number. Os formatadores abaixo aceitam os dois (mais string, que é como
+ * o Decimal se serializa) para que nenhuma tela precise converter na mão.
+ */
+export type Money = number | string | { toString(): string } | null | undefined;
+
+/**
  * Conversor canônico Decimal/unknown → number (null/undefined → 0).
  * Substitui as N cópias locais de `const n = (v) => ...` nos services —
  * novas implementações devem importar DAQUI.
+ *
+ * ATENÇÃO: converter para number é para EXIBIR e COMPARAR. Soma e produto de
+ * dinheiro que vão voltar ao banco devem preservar a precisão decimal.
  */
 export const toNumber = (v: unknown): number => (v == null ? 0 : Number(v));
 
@@ -30,13 +41,13 @@ export const BRL = new Intl.NumberFormat("pt-BR", {
   minimumFractionDigits: 2,
 });
 
-export function formatBRL(value: number | null | undefined): string {
+export function formatBRL(value: Money): string {
   if (value == null || isNaN(Number(value))) return "R$ 0,00";
   return BRL.format(Number(value));
 }
 
 /** Moeda sem centavos (tabelas densas: Painel Anual, meta anual). */
-export function formatBRL0(value: number | null | undefined): string {
+export function formatBRL0(value: Money): string {
   const v = Number(value ?? 0);
   if (isNaN(v)) return "R$ 0";
   return v.toLocaleString("pt-BR", {
@@ -50,7 +61,7 @@ export function formatBRL0(value: number | null | undefined): string {
  * Moeda compacta para eixos de gráfico: R$ 1,5 mil / R$ 12 mil / R$ 1,2 mi.
  * Mantém legibilidade sem poluir o eixo Y com valores longos.
  */
-export function formatBRLShort(value: number | null | undefined): string {
+export function formatBRLShort(value: Money): string {
   const v = Number(value ?? 0);
   if (isNaN(v)) return "R$ 0";
   const abs = Math.abs(v);
@@ -64,7 +75,7 @@ export function formatBRLShort(value: number | null | undefined): string {
  * Valor numérico → string para <input> de moeda ("1234,56"); nulo → "".
  * Fonte única das cópias locais de `fmt` nos dialogs de formulário.
  */
-export function formatDecimalInput(v: number | string | null | undefined): string {
+export function formatDecimalInput(v: Money): string {
   return v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 }
 

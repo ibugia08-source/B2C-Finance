@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange, monthLabel } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, monthLabel, toNumber as n } from "@/lib/format";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import {
   limitesUsadosPorCartao,
@@ -195,12 +195,12 @@ async function ExpensesTab({
     }),
   ]);
 
-  const totalMes = monthAgg.reduce((s, e) => s + e.amount, 0);
-  const totalPago = monthAgg.filter((e) => e.status === "pago").reduce((s, e) => s + e.amount, 0);
+  const totalMes = monthAgg.reduce((s, e) => s + n(e.amount), 0);
+  const totalPago = monthAgg.filter((e) => e.status === "pago").reduce((s, e) => s + n(e.amount), 0);
   const vencidas = monthAgg.filter(
     (e) => e.status !== "pago" && e.dueDate && e.dueDate < today
   );
-  const totalVencido = vencidas.reduce((s, e) => s + e.amount, 0);
+  const totalVencido = vencidas.reduce((s, e) => s + n(e.amount), 0);
   const totalPendente = totalMes - totalPago - totalVencido;
   const cardName = new Map(cards.map((c) => [c.id, c.name]));
 
@@ -367,8 +367,8 @@ async function CardsTab() {
         )}
         {cards.map((c) => {
           const used = usedByCard.get(c.id) ?? 0;
-          const available = Math.max(0, c.limitTotal - used);
-          const pct = c.limitTotal > 0 ? (used / c.limitTotal) * 100 : 0;
+          const available = Math.max(0, n(c.limitTotal) - used);
+          const pct = n(c.limitTotal) > 0 ? (used / n(c.limitTotal)) * 100 : 0;
           return (
             <Card key={c.id}>
               <CardHeader>

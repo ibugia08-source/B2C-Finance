@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 import type { CreditCard } from "@prisma/client";
 
 /**
@@ -105,7 +106,7 @@ export async function recalcInvoiceTotal(invoiceId: string) {
   });
   let total = 0;
   for (const t of byType) {
-    const sum = t._sum.amount ?? 0;
+    const sum = n(t._sum.amount);
     total += t.type === "despesa" ? sum : -sum;
   }
   await prisma.creditCardInvoice.update({

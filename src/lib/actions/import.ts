@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { toNumber as n } from "@/lib/format";
 import { revalidateFinance } from "@/lib/revalidate";
 import { parseFile, type ParseDiagnostics, type ParsedRow } from "@/lib/services/parseImport";
 import {
@@ -278,7 +279,7 @@ export async function deleteImportBatch(id: string) {
       prisma.creditCardInvoice.findUnique({ where: { id: invId } }),
     ]);
     if (!inv) continue;
-    if (remaining === 0 && inv.paid <= 0) {
+    if (remaining === 0 && n(inv.paid) <= 0) {
       await prisma.creditCardInvoice.delete({ where: { id: invId } });
     } else {
       await recalcInvoiceTotal(invId);

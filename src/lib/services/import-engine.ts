@@ -368,10 +368,12 @@ export async function commitAnalyzedRows(
     };
   });
 
+  // amount é Decimal desde F0.3 (01 §3.14) — o tipo acompanha o banco;
+  // quem precisar de number converte com toNumber no ponto de uso.
   let created: {
     id: string;
     responsibleId: string | null;
-    amount: number;
+    amount: Prisma.Decimal;
     date: Date;
     status: string;
   }[] = [];

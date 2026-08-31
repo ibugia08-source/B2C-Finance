@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/stat-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange, parseMonthParam } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, parseMonthParam, toNumber as n } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
@@ -127,13 +127,13 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
   const totalExtra = extraRevenues.reduce((s, e) => s + Number(e.amount), 0);
   const totalRecebido = monthIncomes
     .filter((i) => i.status === "RECEIVED")
-    .reduce((s, i) => s + i.amount, 0);
+    .reduce((s, i) => s + n(i.amount), 0);
   const totalPrevisto = monthIncomes
     .filter((i) => i.status === "EXPECTED")
-    .reduce((s, i) => s + i.amount, 0);
+    .reduce((s, i) => s + n(i.amount), 0);
   const totalAtrasado = monthIncomes
     .filter((i) => i.status === "LATE")
-    .reduce((s, i) => s + i.amount, 0);
+    .reduce((s, i) => s + n(i.amount), 0);
 
   return (
     <div>
