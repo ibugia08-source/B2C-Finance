@@ -11,6 +11,12 @@
 import { loadEnv } from "./env";
 import { assertNotProduction } from "./guard";
 loadEnv();
+// Fora de uma request o unstable_cache do Next lança "incrementalCache
+// missing". O helper ownerCached respeita esta variável e executa direto,
+// no escopo do dono — é assim que o script exercita EXATAMENTE os mesmos
+// serviços que a tela usa. Definir aqui evita ter de lembrar na linha de
+// comando (e o esquecimento parecia falha do motor, não do script).
+process.env.B2C_DISABLE_CACHE = "1";
 assertNotProduction("scripts/verify-metric-parity.ts");
 
 const ANO = parseInt(process.argv[2] ?? "2026", 10);

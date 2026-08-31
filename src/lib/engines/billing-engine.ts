@@ -5,6 +5,8 @@ import { post } from "@/lib/accounting/engine";
 import { publish } from "@/lib/outbox";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { toNumber as n } from "@/lib/format";
+import { randomUUID } from "crypto";
+import { splitTcv } from "@/lib/services/tcv-installments";
 import { contextFromRequest } from "./context";
 import { guardPeriod, guardPermission } from "./guards";
 import type { EngineResult } from "./payment-engine";
@@ -131,4 +133,77 @@ export async function cancelBilling(
   });
 
   return { ok: true, clientId: cob.clientId };
+}
+
+/**
+ * Gera as N cobranças de uma venda TCV parcelada (F1.7 · ref. 01 §3.7).
+ *
+ * Todas nascem no MESMO installmentGroup e numeradas — é isso que permite
+ * responder "esta é a 2 de 6" na tela e, mais tarde, cancelar ou
+ * renegociar o grupo inteiro sem caçar linha por linha.
+ *
+ * TCV VENDIDO x TCV FATURADO: o valor integral pertence ao mês da VENDA
+ * (métrica tcv_vendido); cada parcela pertence à sua competência (métrica
+ * tcv_faturado). São números diferentes de propósito, e confundi-los é o
+ * erro que faz o mês da venda parecer três vezes maior do que foi.
+ */
+export async function generateTcvInstallments(input: {
+  clientId: string;
+  contractId?: string | null;
+  serviceId?: string | null;
+  description: string;
+  total: number;
+  installments: number;
+  firstDueDate: Date;
+  firstCompetence: { year: number; month: number };
+  reason?: string | null;
+}): Promise<EngineResult<{ groupId: string; parcelas: { id: string; numero: number; amount: number }[] }>> {
+  const perm = await guardPermission("recebimentos.gerar_cobranca");
+  if (!perm.ok) return perm;
+
+  let parcelas;
+  try {
+    parcelas = splitTcv(input.total, input.installments, input.firstDueDate, input.firstCompetence);
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Parcelamento inválido." };
+  }
+
+  // A guarda de período vale para a competência de CADA parcela: uma venda
+  // parcelada pode alcançar um mês já fechado.
+  for (const p of parcelas) {
+    const g = await guardPeriod("REVENUE_RECOGNIZED", toCompetence(p.competenceYear, p.competenceMonth));
+    if (!g.ok) return g;
+  }
+
+  const ctx = await contextFromRequest({ reason: input.reason });
+  const groupId = randomUUID();
+
+  const criadas = await prisma.$transaction(async (tx) => {
+    const out: { id: string; numero: number; amount: number }[] = [];
+    for (const p of parcelas) {
+      const b = await tx.billing.create({
+        data: {
+          clientId: input.clientId,
+          contractId: input.contractId ?? null,
+          serviceId: input.serviceId ?? null,
+          description: `${input.description} (${p.numero}/${input.installments})`,
+          competenceMonth: p.competenceMonth,
+          competenceYear: p.competenceYear,
+          amount: p.amount,
+          dueDate: p.dueDate,
+          revenueType: "TCV",
+          billingKind: "TCV",
+          recognitionMode: "REVENUE",
+          installmentGroupId: groupId,
+          installmentNumber: p.numero,
+        },
+        select: { id: true },
+      });
+      await auditEvent(tx as any, "Billing", b.id, "CREATE", ctx);
+      out.push({ id: b.id, numero: p.numero, amount: p.amount });
+    }
+    return out;
+  });
+
+  return { ok: true, groupId, parcelas: criadas };
 }

@@ -27,7 +27,8 @@ export type MetricValue = {
 
 /** Todas as métricas de período que o motor sabe calcular hoje. */
 export type PeriodMetricKey =
-  | "faturamento_total" | "mrr_oficial" | "tcv_faturado" | "receita_extra_reconhecida"
+  | "faturamento_total" | "mrr_oficial" | "tcv_faturado" | "tcv_vendido"
+  | "receita_extra_reconhecida"
   | "faturamento_esperado" | "recebido_competencia" | "em_aberto" | "vencido"
   | "resultado_mes" | "margem_gerencial" | "percentual_recorrencia" | "percentual_realizacao"
   | "clientes_ativos" | "novos_clientes" | "churn_quantidade" | "churn_valor" | "churn_rate"
@@ -45,9 +46,10 @@ export async function computePeriodMetrics(
   // garante paridade exata na troca dos cálculos inline pelo motor.
   const executivo = await getExecutiveDashboard({ period });
   const main = await getDashboardMainMetrics(period);
-  const [churn, novos] = await Promise.all([
+  const [churn, novos, tcvVendido] = await Promise.all([
     getMonthlyChurn(period.start, period.end),
     getNewClientsSummary(period.start, period.end),
+    somaTcvVendido(period),
   ]);
 
   const M = main.current;
@@ -59,6 +61,11 @@ export async function computePeriodMetrics(
     faturamento_total: M.faturamentoTotal,
     mrr_oficial: M.mrr,
     tcv_faturado: M.tcv,
+    // TCV VENDIDO x FATURADO (01 §3.7) são números DIFERENTES de propósito:
+    // vendido é o valor integral no mês da venda; faturado é a parcela da
+    // competência. À vista coincidem; parcelado, não — e confundi-los faz o
+    // mês da venda parecer N vezes maior do que foi.
+    tcv_vendido: tcvVendido,
     receita_extra_reconhecida: M.extraManual,
     faturamento_esperado: M.faturamentoTotal,
     recebido_competencia: M.recebido,
@@ -112,3 +119,22 @@ function wrap(key: string, value: number | null): MetricValue {
 
 export { METRIC_REGISTRY, getMetricSpec, METRIC_REGISTRY_VERSION };
 export type { MetricSpec };
+
+/**
+ * TCV VENDIDO (01 §7.1, §3.2): valor INTEGRAL dos contratos TCV fechados no
+ * período. Nunca rateado — o contrato vale o que vale no mês em que foi
+ * assinado, independentemente de em quantas parcelas será cobrado.
+ */
+async function somaTcvVendido(period: Period): Promise<number> {
+  const { prisma } = await import("@/lib/prisma");
+  const { toNumber } = await import("@/lib/format");
+  const agg = await prisma.contract.aggregate({
+    where: {
+      type: "TCV",
+      status: { not: "CANCELED" },
+      startDate: { gte: period.start, lt: period.end },
+    },
+    _sum: { totalValue: true },
+  });
+  return toNumber(agg._sum.totalValue);
+}
