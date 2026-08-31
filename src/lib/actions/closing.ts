@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/viewer";
 import {
-  fecharPeriodo, iniciarFechamento, reabrirParaOperacao, reabrirPeriodo,
+  fecharPeriodo, iniciarFechamento, marcarReconferido, reabrirParaOperacao,
+  reabrirPeriodo,
 } from "@/lib/services/closing-period";
 
 /**
@@ -82,4 +83,19 @@ export async function reabrirPeriodoAction(competence: string, motivo: string) {
     /** Quantos meses posteriores ficaram marcados para reconferência. */
     marcados: r.marcados,
   };
+}
+
+/**
+ * "Conferi e continua valendo" (F2.6 · 01 §5.5).
+ *
+ * Guardada por `fechamento.fechar` e não por `reabrir`: quem reconfere é quem
+ * fecha o mês, não quem tem poder de reescrever o passado.
+ */
+export async function marcarReconferidoAction(competence: string, nota: string) {
+  const v = await requirePermission("fechamento.fechar");
+  const r = await marcarReconferido(competence, nota, v.name ?? null);
+  if (!r.ok) return r;
+  revalidatePath("/fechamento");
+  revalidatePath("/cobrancas");
+  return r;
 }

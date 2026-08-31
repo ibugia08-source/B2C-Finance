@@ -3,7 +3,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
-import { periodoDe } from "@/lib/services/closing-period";
+import { motivosDeReconferencia, periodoDe } from "@/lib/services/closing-period";
+import { Reconferir } from "./reconferir";
 import { resumoDoFechamento } from "@/lib/services/closing-checklist";
 import { monthLabel } from "@/lib/format";
 import { PeriodBadge } from "@/components/period-badge";
@@ -39,9 +40,10 @@ export default async function FechamentoPage({
       : `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, "0")}`;
   const [ano, mes] = competence.split("-").map(Number);
 
-  const [periodo, resumo] = await Promise.all([
+  const [periodo, resumo, motivos] = await Promise.all([
     periodoDe(competence),
     resumoDoFechamento(competence),
+    motivosDeReconferencia(competence),
   ]);
 
   const podeFechar = can(viewer, "fechamento.fechar");
@@ -73,6 +75,10 @@ export default async function FechamentoPage({
           {monthLabel(seguinte)} →
         </Link>
       </div>
+
+      {motivos.length > 0 ? (
+        <Reconferir competence={competence} motivos={motivos} />
+      ) : null}
 
       <RotinaMensal competence={competence} estado={periodo.estado} />
 

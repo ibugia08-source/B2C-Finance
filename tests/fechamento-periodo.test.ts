@@ -5,8 +5,8 @@ import {
 } from "./support/db";
 import { permiteEvento, categoriaDe, ROTULO_DO_PERIODO } from "@/lib/periods/events";
 import {
-  assertPeriodAllows, fecharPeriodo, iniciarFechamento, periodoDe,
-  reabrirParaOperacao, reabrirPeriodo,
+  assertPeriodAllows, fecharPeriodo, iniciarFechamento, marcarReconferido,
+  motivosDeReconferencia, periodoDe, reabrirParaOperacao, reabrirPeriodo,
 } from "@/lib/services/closing-period";
 import { settleBillingPayment } from "@/lib/services/payment-accounting";
 import { competenciaDoCaixa } from "@/lib/engines/payment-engine";
@@ -211,5 +211,69 @@ describe("F2.1 — §5.6: fechar o mês NÃO trava a cobrança", () => {
     const g = await guardPeriod("CUSTOMER_PAYMENT_RECEIVED", competenciaDoCaixa(new Date(2026, 6, 20)));
     expect(g.ok).toBe(false);
     if (!g.ok) expect(g.error).toMatch(/fechado/i);
+  });
+});
+
+describe("F2.6 — reabertura completa: rastro e reconferência", () => {
+  let dono: TestOwner;
+  beforeAll(async () => {
+    dono = await createOwner();
+  });
+  afterAll(async () => {
+    const ws = await currentWorkspaceId();
+    await runWithoutScope(async () => {
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" DISABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.snapshot.deleteMany({ where: { workspaceId: ws } });
+      await prisma.$executeRawUnsafe(`ALTER TABLE "Snapshot" ENABLE TRIGGER b2c_snapshot_imutavel`);
+      await prisma.closingPeriod.deleteMany({ where: { workspaceId: ws } });
+    });
+    await destroyOwner(dono);
+  });
+
+  it("a marca vem com o rastro: qual mês, que versão, quem e por quê", async () => {
+    await asOwner(dono, async () => fecharPeriodo("2026-01", "Israel"));
+    await asOwner(dono, async () => fecharPeriodo("2026-02", "Israel"));
+
+    await asOwner(dono, async () =>
+      reabrirPeriodo("2026-01", "nota de janeiro lançada em fevereiro", "Israel")
+    );
+
+    const motivos = await asOwner(dono, async () => motivosDeReconferencia("2026-02"));
+    expect(motivos).toHaveLength(1);
+    expect(motivos[0].dependsOnCompetence).toBe("2026-01");
+    expect(motivos[0].originVersion).toBe(2);
+    expect(motivos[0].reason).toMatch(/nota de janeiro/);
+    expect(motivos[0].markedBy).toBe("Israel");
+  });
+
+  it("reconferir exige dizer o que foi conferido", async () => {
+    const curto = await asOwner(dono, async () =>
+      marcarReconferido("2026-02", "ok", "Israel")
+    );
+    expect(curto.ok).toBe(false);
+  });
+
+  it("reconferido tira a marca e fecha o rastro sem apagá-lo", async () => {
+    const r = await asOwner(dono, async () =>
+      marcarReconferido("2026-02", "refiz o resultado e bate com o fechamento", "Israel")
+    );
+    expect(r.ok).toBe(true);
+
+    const p = await asOwner(dono, async () => periodoDe("2026-02"));
+    expect(p.precisaRevalidar).toBe(false);
+
+    // A marca sai; o RASTRO fica, com quem conferiu e o quê.
+    const abertos = await asOwner(dono, async () => motivosDeReconferencia("2026-02"));
+    expect(abertos).toHaveLength(0);
+
+    const ws = await currentWorkspaceId();
+    const todos = await runWithoutScope(async () =>
+      prisma.snapshotDependency.findMany({
+        where: { snapshot: { workspaceId: ws, competence: "2026-02" } },
+      })
+    );
+    expect(todos).toHaveLength(1);
+    expect(todos[0].clearedBy).toBe("Israel");
+    expect(todos[0].clearNote).toMatch(/refiz o resultado/);
   });
 });

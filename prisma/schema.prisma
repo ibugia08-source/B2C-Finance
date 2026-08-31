@@ -2930,6 +2930,9 @@ model Snapshot {
   checksum       String
   checksumByArea Json
 
+  /// Rastro de por que esta fotografia foi marcada para reconferência (§5.5).
+  dependencies SnapshotDependency[]
+
   /// Marcada quando um período ANTERIOR é reaberto (§5.5).
   needsRevalidation Boolean @default(false)
 
@@ -2938,4 +2941,35 @@ model Snapshot {
   @@unique([workspaceId, scopeType, scopeId, competence, version, kind, name])
   @@index([workspaceId, competence])
   @@index([kind])
+}
+
+/// POR QUE ESTA FOTOGRAFIA PRECISA SER RECONFERIDA (F2.6 · ref. 01 §5.5).
+///
+/// Marcar setembro como "reconferir" sem dizer por quê transforma o aviso em
+/// ruído: em três meses ninguém lembra qual reabertura o causou, e o time
+/// aprende a ignorar a marca. Cada linha aqui responde "quem mexeu no meu
+/// passado, quando, e com que justificativa".
+///
+/// Não é fila de aprovação: a direção decidiu em 31/08 (19.35/19.36) que fila
+/// de aprovação não existe no sistema. Isto é RASTRO.
+model SnapshotDependency {
+  id         String   @id @default(cuid())
+  snapshotId String
+  snapshot   Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  /// A competência REABERTA que invalidou esta fotografia.
+  dependsOnCompetence String
+  /// Versão para a qual a competência de origem foi: agosto v1 -> v2.
+  originVersion       Int
+  reason              String
+  markedBy            String?
+  markedAt            DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Quem conferiu depois e disse que continua valendo.
+  clearedBy String?
+  clearedAt DateTime? @db.Timestamptz(3)
+  clearNote String?
+
+  @@index([snapshotId])
+  @@index([dependsOnCompetence])
 }

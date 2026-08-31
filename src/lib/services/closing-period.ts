@@ -216,10 +216,29 @@ export async function reabrirPeriodo(
     // As FOTOGRAFIAS posteriores também são marcadas — elas é que serão
     // lidas nos painéis daqueles meses (§2.4). Marcar só o período deixaria
     // a fotografia de setembro sendo mostrada como confiável.
-    await prisma.snapshot.updateMany({
+    const posteriores = await prisma.snapshot.findMany({
       where: { workspaceId, competence: { gt: competence } },
+      select: { id: true },
+    });
+    await prisma.snapshot.updateMany({
+      where: { id: { in: posteriores.map((p) => p.id) } },
       data: { needsRevalidation: true },
     });
+
+    // E cada marca ganha o RASTRO de por que existe (F2.6). Uma fotografia
+    // marcada sem motivo vira ruído: em três meses ninguém lembra qual
+    // reabertura a causou, e o time aprende a ignorar a marca.
+    if (posteriores.length) {
+      await prisma.snapshotDependency.createMany({
+        data: posteriores.map((p) => ({
+          snapshotId: p.id,
+          dependsOnCompetence: competence,
+          originVersion: atual.versao + 1,
+          reason: texto,
+          markedBy: quem,
+        })),
+      });
+    }
     return r.count;
   });
 
@@ -232,6 +251,61 @@ export async function reabrirPeriodo(
     needsRevalidation: false,
   });
   return { ok: true, periodo, marcados };
+}
+
+/**
+ * RECONFERIDO: alguém olhou o mês marcado e disse que continua valendo
+ * (F2.6 · §5.5).
+ *
+ * Sem este gesto a marca nunca sai, e um aviso que nunca sai é um aviso que
+ * ninguém lê. Exige nota de propósito — "conferi e está certo" é uma
+ * afirmação de responsabilidade, não um clique de limpar.
+ */
+export async function marcarReconferido(
+  competence: string,
+  nota: string,
+  quem: string | null
+): Promise<{ ok: true; fotografias: number } | { ok: false; error: string }> {
+  const texto = (nota ?? "").trim();
+  if (texto.length < 10) {
+    return { ok: false, error: "Escreva o que você conferiu (pelo menos 10 caracteres)." };
+  }
+  const workspaceId = await currentWorkspaceId();
+  const n = await runWithoutScope(async () => {
+    const fotos = await prisma.snapshot.findMany({
+      where: { workspaceId, competence, needsRevalidation: true },
+      select: { id: true },
+    });
+    await prisma.snapshot.updateMany({
+      where: { id: { in: fotos.map((f) => f.id) } },
+      data: { needsRevalidation: false },
+    });
+    await prisma.snapshotDependency.updateMany({
+      where: { snapshotId: { in: fotos.map((f) => f.id) }, clearedAt: null },
+      data: { clearedAt: new Date(), clearedBy: quem, clearNote: texto },
+    });
+    await prisma.closingPeriod.updateMany({
+      where: { workspaceId, scopeType: "WORKSPACE", scopeId: "", competence },
+      data: { needsRevalidation: false },
+    });
+    return fotos.length;
+  });
+  return { ok: true, fotografias: n };
+}
+
+/** Por que esta competência está marcada para reconferência (§5.5). */
+export async function motivosDeReconferencia(competence: string) {
+  const workspaceId = await currentWorkspaceId();
+  return runWithoutScope(async () =>
+    prisma.snapshotDependency.findMany({
+      where: { snapshot: { workspaceId, competence }, clearedAt: null },
+      orderBy: { markedAt: "desc" },
+      select: {
+        dependsOnCompetence: true, originVersion: true, reason: true,
+        markedBy: true, markedAt: true,
+      },
+    })
+  );
 }
 
 /** Volta ao normal (desfaz um "em fechamento" iniciado por engano). */
