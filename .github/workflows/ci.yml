@@ -79,3 +79,10 @@ jobs:
 
       - name: Testes
         run: npm test
+
+      # F1.6 — o razão tem de fechar e, quando ligado, cobrir os fatos.
+      # Um razão balanceado e VAZIO passa no balanço e não serve para nada:
+      # é a bandeira desligada por engano, e esta etapa pega isso.
+      - name: Razão (débito = crédito e cobertura)
+        run: npm run verify:ledger
+

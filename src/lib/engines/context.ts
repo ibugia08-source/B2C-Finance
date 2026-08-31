@@ -31,17 +31,25 @@ export async function contextFromRequest(
 ): Promise<EngineContext> {
   // Import PREGUIÇOSO de propósito: getCurrentUser usa o cache() do React,
   // que só existe dentro de uma request. Importar no topo quebraria todo
-  // módulo que apenas passa por aqui — inclusive os motores, em teste e em
-  // job, onde não há request nenhuma.
-  const { getCurrentUser } = await import("@/lib/auth/current-user");
-  const u = await getCurrentUser();
-  return {
-    actorId: u?.id ?? null,
-    actorEmail: u?.email ?? null,
-    origin: opts.origin ?? "UI",
-    reason: opts.reason ?? null,
-    correlationId: newCorrelationId(),
-  };
+  // módulo que apenas passa por aqui.
+  //
+  // E FORA de uma request — job, script, teste — a chamada em si lança.
+  // Um motor de domínio não pode quebrar por não haver usuário logado:
+  // ele degrada para contexto de sistema, que é a verdade do caso (não
+  // houve pessoa). O fato continua auditado, com actor nulo e origem JOB.
+  try {
+    const { getCurrentUser } = await import("@/lib/auth/current-user");
+    const u = await getCurrentUser();
+    return {
+      actorId: u?.id ?? null,
+      actorEmail: u?.email ?? null,
+      origin: opts.origin ?? "UI",
+      reason: opts.reason ?? null,
+      correlationId: newCorrelationId(),
+    };
+  } catch {
+    return systemContext(opts.origin ?? "JOB", opts.reason);
+  }
 }
 
 /** Contexto de job, import ou teste — sem pessoa por trás. */
