@@ -177,27 +177,28 @@ model User {
   scopeAgency   Agency? @relation("ScopedUsers", fields: [scopeAgencyId], references: [id], onDelete: SetNull)
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
-  workspace            Workspace?           @relation("OwnerWorkspace")
-  ownedLedgerTx        LedgerTransaction[]  @relation("OwnerLedgerTransaction")
-  ownedAccounts        Account[]            @relation("OwnerAccount")
-  ownedCards           CreditCard[]         @relation("OwnerCreditCard")
-  ownedAccountCards    AccountCard[]        @relation("OwnerAccountCard")
-  ownedTransactions    Transaction[]        @relation("OwnerTransaction")
-  ownedInvoices        CreditCardInvoice[]  @relation("OwnerInvoice")
-  ownedImportBatches   ImportBatch[]        @relation("OwnerImportBatch")
-  ownedImportedRecords ImportedRecord[]     @relation("OwnerImportedRecord")
-  ownedTaxProvisions   TaxProvision[]       @relation("OwnerTaxProvision")
-  ownedIncomes         Income[]             @relation("OwnerIncome")
-  ownedCashBoxes       CashBox[]            @relation("OwnerCashBox")
-  ownedPeople          Person[]             @relation("OwnerPerson")
-  ownedReceivables     Receivable[]         @relation("OwnerReceivable")
-  ownedPayments        PersonPayment[]      @relation("OwnerPersonPayment")
-  ownedRules           CategorizationRule[] @relation("OwnerRule")
-  ownedInstallments    Installment[]        @relation("OwnerInstallment")
-  ownedCashMovements   CashBoxMovement[]    @relation("OwnerCashMovement")
-  ownedConversations   AIConversation[]     @relation("OwnerAIConversation")
-  ownedMemories        AIMemory[]           @relation("OwnerAIMemory")
-  ownedClients         Client[]             @relation("OwnerClient")
+  workspace               Workspace?           @relation("OwnerWorkspace")
+  ownedLedgerTx           LedgerTransaction[]  @relation("OwnerLedgerTransaction")
+  ownedAccounts           Account[]            @relation("OwnerAccount")
+  ownedCards              CreditCard[]         @relation("OwnerCreditCard")
+  ownedAccountCards       AccountCard[]        @relation("OwnerAccountCard")
+  ownedTransactions       Transaction[]        @relation("OwnerTransaction")
+  ownedInvoices           CreditCardInvoice[]  @relation("OwnerInvoice")
+  ownedImportBatches      ImportBatch[]        @relation("OwnerImportBatch")
+  ownedImportedRecords    ImportedRecord[]     @relation("OwnerImportedRecord")
+  ownedTaxProvisions      TaxProvision[]       @relation("OwnerTaxProvision")
+  ownedBillingAdjustments BillingAdjustment[]  @relation("OwnerBillingAdjustment")
+  ownedIncomes            Income[]             @relation("OwnerIncome")
+  ownedCashBoxes          CashBox[]            @relation("OwnerCashBox")
+  ownedPeople             Person[]             @relation("OwnerPerson")
+  ownedReceivables        Receivable[]         @relation("OwnerReceivable")
+  ownedPayments           PersonPayment[]      @relation("OwnerPersonPayment")
+  ownedRules              CategorizationRule[] @relation("OwnerRule")
+  ownedInstallments       Installment[]        @relation("OwnerInstallment")
+  ownedCashMovements      CashBoxMovement[]    @relation("OwnerCashMovement")
+  ownedConversations      AIConversation[]     @relation("OwnerAIConversation")
+  ownedMemories           AIMemory[]           @relation("OwnerAIMemory")
+  ownedClients            Client[]             @relation("OwnerClient")
 
   // ===== ERP de agência (fundação) =====
   ownedClientContacts      ClientContact[]     @relation("OwnerClientContact")
@@ -1741,9 +1742,10 @@ model Billing {
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
 
-  payments Payment[]
-  history  CollectionHistory[]
-  incomes  Income[] // recebimentos conciliados no caixa
+  payments    Payment[]
+  history     CollectionHistory[]
+  adjustments BillingAdjustment[]
+  incomes     Income[] // recebimentos conciliados no caixa
 
   @@index([clientId])
   @@index([contractId])
@@ -3022,5 +3024,53 @@ model TaxProvision {
 
   @@unique([legalEntityId, competence])
   @@index([competence])
+  @@index([ownerId])
+}
+
+/// Tipo de ajuste numa cobrança (01 §4.7).
+enum BillingAdjustmentType {
+  DISCOUNT
+  FEE
+  INTEREST
+  WRITE_OFF
+  CORRECTION
+}
+
+/// AJUSTE DE COBRANÇA (F3.8 · ref. 01 §4.7).
+///
+/// DECIDIDO 19.35/19.36 (31/08): NÃO existem tetos nem fila de aprovação.
+/// Quem tem a permissão faz, e fica registrado. Por isso não há `approvedBy`
+/// nem estado de aprovação aqui — um campo que nunca é preenchido é pior que
+/// campo nenhum: dá a impressão de que existe um controle que não existe.
+///
+/// O que FICA é o essencial: o valor ORIGINAL preservado, o motivo
+/// obrigatório e quem fez. Ajuste sem valor original é uma cobrança que mudou
+/// de preço sem ninguém conseguir dizer de quanto para quanto.
+model BillingAdjustment {
+  id        String                @id @default(cuid())
+  billingId String
+  billing   Billing               @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  type      BillingAdjustmentType
+
+  /// Sempre positivo; o sinal vem do tipo.
+  amount          Decimal @db.Decimal(14, 2)
+  /// O valor da cobrança ANTES deste ajuste.
+  originalAmount  Decimal @db.Decimal(14, 2)
+  /// O valor depois. Guardado, não recalculado: a sequência tem de ser lida
+  /// anos depois sem depender de reprocessar nada.
+  resultingAmount Decimal @db.Decimal(14, 2)
+
+  /// Obrigatório — write-off sem motivo é dinheiro que some da carteira.
+  reason      String
+  requestedBy String?
+  effectiveAt DateTime @default(now()) @db.Timestamptz(3)
+
+  ownerId String?
+  owner   User?   @relation("OwnerBillingAdjustment", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([billingId])
+  @@index([type])
   @@index([ownerId])
 }
