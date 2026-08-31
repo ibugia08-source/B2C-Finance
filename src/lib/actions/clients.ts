@@ -14,7 +14,63 @@ import { getValidDueDateForMonth } from "@/lib/financial/due-date";
  */
 export type ActionResult =
   | { ok: true; id?: string; warning?: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code?: "DUPLICADO_NOME" };
+
+/**
+ * DEDUPLICAÇÃO DO CADASTRO (F1.16 · ref. 02 §4.1: "Cadastro deduplica no Client").
+ *
+ * Duas travas com severidades diferentes, de propósito:
+ *  · DOCUMENTO igual é bloqueio duro. Dois CNPJs iguais são a mesma
+ *    empresa — não existe caso legítimo, e deixar passar cria a carteira
+ *    duplicada que a migração depois tem de desfazer à mão.
+ *  · NOME igual é bloqueio COM SAÍDA. "Padaria Central" pode mesmo ser
+ *    duas empresas diferentes, então avisamos, mostramos qual já existe e
+ *    deixamos confirmar. Bloquear de vez seria decidir pelo usuário algo
+ *    que só ele sabe.
+ *
+ * A comparação de nome ignora acento, caixa e espaço repetido — "Ótica
+ * São Paulo" e "otica sao  paulo" são a mesma coisa para uma pessoa, e
+ * precisam ser para o sistema também.
+ */
+const soDigitos = (v: string) => v.replace(/\D+/g, "");
+
+const chaveNome = (v: string) =>
+  v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+async function acharDuplicado(
+  nome: string,
+  documento: string | null,
+  permitirNomeRepetido: boolean
+): Promise<ActionResult | null> {
+  const doc = documento ? soDigitos(documento) : "";
+  if (doc.length >= 11) {
+    const comDoc = await prisma.client.findMany({
+      where: { document: { not: null } },
+      select: { id: true, name: true, document: true },
+    });
+    const igual = comDoc.find((c) => soDigitos(c.document ?? "") === doc);
+    if (igual) {
+      return {
+        ok: false,
+        error: `Esse CNPJ/CPF já está cadastrado em "${igual.name}". Abra o cliente existente em vez de criar outro.`,
+      };
+    }
+  }
+
+  if (!permitirNomeRepetido) {
+    const alvo = chaveNome(nome);
+    const todos = await prisma.client.findMany({ select: { id: true, name: true } });
+    const igual = todos.find((c) => chaveNome(c.name) === alvo);
+    if (igual) {
+      return {
+        ok: false,
+        code: "DUPLICADO_NOME",
+        error: `Já existe um cliente chamado "${igual.name}". Se for o mesmo, abra o que já existe; se forem empresas diferentes, confirme abaixo.`,
+      };
+    }
+  }
+  return null;
+}
 
 const ClientSchema = z
   .object({
@@ -255,6 +311,14 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         },
       });
     } else {
+      // Deduplicação antes de criar (02 §4.1).
+      const duplicado = await acharDuplicado(
+        parsed.name,
+        parsed.document,
+        clean(formData.get("permitirDuplicado")) === "1"
+      );
+      if (duplicado) return duplicado;
+
       const created = await prisma.client.create({
         data: {
           ...base,

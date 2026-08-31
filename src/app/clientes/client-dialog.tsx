@@ -145,6 +145,10 @@ export function ClientDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  // Cadastro deduplica (02 §4.1). Nome repetido não é erro definitivo:
+  // pode haver duas empresas com o mesmo nome. Quando o servidor devolve
+  // DUPLICADO_NOME, oferecemos confirmar em vez de barrar de vez.
+  const [nomeDuplicado, setNomeDuplicado] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const [pending, start] = useTransition();
   const isNew = !initial?.id;
@@ -188,7 +192,7 @@ export function ClientDialog({
     };
   }, [open, isNew, loaded, initial?.id]);
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(e: React.FormEvent<HTMLFormElement>, permitirDuplicado = false) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const raw = Object.fromEntries(
@@ -210,11 +214,14 @@ export function ClientDialog({
       const out = new FormData();
       if (initial?.id) out.set("id", initial.id);
       for (const [k, v] of Object.entries(parsed.data)) out.set(k, v);
+      if (permitirDuplicado) out.set("permitirDuplicado", "1");
       const res = await saveClient(out);
       if (res.ok) {
         setOpen(false);
+        setNomeDuplicado(false);
       } else {
         setServerError(res.error);
+        setNomeDuplicado(res.code === "DUPLICADO_NOME");
       }
     });
   }
@@ -456,7 +463,21 @@ export function ClientDialog({
           </details>
 
           {serverError && (
-            <p className="col-span-full text-sm text-destructive">{serverError}</p>
+            <div className="col-span-full">
+              <p className="text-body text-destructive">{serverError}</p>
+              {nomeDuplicado && (
+                <button
+                  type="button"
+                  className="mt-1.5 rounded-pill border border-warning/40 bg-warning-soft px-3 py-1 text-caption font-medium text-foreground transition-colors duration-fast hover:bg-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(ev) => {
+                    const form = (ev.currentTarget as HTMLElement).closest("form");
+                    if (form) onSubmit({ preventDefault() {}, currentTarget: form } as any, true);
+                  }}
+                >
+                  São empresas diferentes — cadastrar mesmo assim
+                </button>
+              )}
+            </div>
           )}
 
           <DialogFooter className="col-span-full">
