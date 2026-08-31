@@ -30,3 +30,15 @@ backups/
 # Documentação consolidada gerada (derivada de docs/*.md — não versionar)
 docs/B2C-Finance-Documentacao-Consolidada.md
 docs/B2C-Finance-Documentacao-Consolidada.html
+
+# ===== Duplicatas do iCloud Drive =====
+# O sincronismo cria cópias "arquivo 2.ext" ao resolver conflitos. Elas nunca
+# devem entrar no repositório: são idênticas ao original e poluem todo diff.
+*\ 2.ts
+*\ 2.tsx
+*\ 2.js
+*\ 2.mjs
+*\ 2.md
+*\ 2.sql
+*\ 2.json
+*\ 2.css
