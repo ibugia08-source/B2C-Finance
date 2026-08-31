@@ -178,29 +178,30 @@ model User {
   scopeAgency   Agency? @relation("ScopedUsers", fields: [scopeAgencyId], references: [id], onDelete: SetNull)
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
-  workspace               Workspace?           @relation("OwnerWorkspace")
-  ownedLedgerTx           LedgerTransaction[]  @relation("OwnerLedgerTransaction")
-  ownedAccounts           Account[]            @relation("OwnerAccount")
-  ownedCards              CreditCard[]         @relation("OwnerCreditCard")
-  ownedAccountCards       AccountCard[]        @relation("OwnerAccountCard")
-  ownedTransactions       Transaction[]        @relation("OwnerTransaction")
-  ownedInvoices           CreditCardInvoice[]  @relation("OwnerInvoice")
-  ownedImportBatches      ImportBatch[]        @relation("OwnerImportBatch")
-  ownedImportedRecords    ImportedRecord[]     @relation("OwnerImportedRecord")
-  ownedTaxProvisions      TaxProvision[]       @relation("OwnerTaxProvision")
-  ownedBillingAdjustments BillingAdjustment[]  @relation("OwnerBillingAdjustment")
-  ownedFiscalDocuments    FiscalDocument[]     @relation("OwnerFiscalDocument")
-  ownedIncomes            Income[]             @relation("OwnerIncome")
-  ownedCashBoxes          CashBox[]            @relation("OwnerCashBox")
-  ownedPeople             Person[]             @relation("OwnerPerson")
-  ownedReceivables        Receivable[]         @relation("OwnerReceivable")
-  ownedPayments           PersonPayment[]      @relation("OwnerPersonPayment")
-  ownedRules              CategorizationRule[] @relation("OwnerRule")
-  ownedInstallments       Installment[]        @relation("OwnerInstallment")
-  ownedCashMovements      CashBoxMovement[]    @relation("OwnerCashMovement")
-  ownedConversations      AIConversation[]     @relation("OwnerAIConversation")
-  ownedMemories           AIMemory[]           @relation("OwnerAIMemory")
-  ownedClients            Client[]             @relation("OwnerClient")
+  workspace               Workspace?               @relation("OwnerWorkspace")
+  ownedLedgerTx           LedgerTransaction[]      @relation("OwnerLedgerTransaction")
+  ownedAccounts           Account[]                @relation("OwnerAccount")
+  ownedCards              CreditCard[]             @relation("OwnerCreditCard")
+  ownedAccountCards       AccountCard[]            @relation("OwnerAccountCard")
+  ownedTransactions       Transaction[]            @relation("OwnerTransaction")
+  ownedInvoices           CreditCardInvoice[]      @relation("OwnerInvoice")
+  ownedImportBatches      ImportBatch[]            @relation("OwnerImportBatch")
+  ownedImportedRecords    ImportedRecord[]         @relation("OwnerImportedRecord")
+  ownedTaxProvisions      TaxProvision[]           @relation("OwnerTaxProvision")
+  ownedBillingAdjustments BillingAdjustment[]      @relation("OwnerBillingAdjustment")
+  ownedFiscalDocuments    FiscalDocument[]         @relation("OwnerFiscalDocument")
+  ownedRenegotiations     RenegotiationAgreement[] @relation("OwnerRenegotiation")
+  ownedIncomes            Income[]                 @relation("OwnerIncome")
+  ownedCashBoxes          CashBox[]                @relation("OwnerCashBox")
+  ownedPeople             Person[]                 @relation("OwnerPerson")
+  ownedReceivables        Receivable[]             @relation("OwnerReceivable")
+  ownedPayments           PersonPayment[]          @relation("OwnerPersonPayment")
+  ownedRules              CategorizationRule[]     @relation("OwnerRule")
+  ownedInstallments       Installment[]            @relation("OwnerInstallment")
+  ownedCashMovements      CashBoxMovement[]        @relation("OwnerCashMovement")
+  ownedConversations      AIConversation[]         @relation("OwnerAIConversation")
+  ownedMemories           AIMemory[]               @relation("OwnerAIMemory")
+  ownedClients            Client[]                 @relation("OwnerClient")
 
   // ===== ERP de agência (fundação) =====
   ownedClientContacts      ClientContact[]     @relation("OwnerClientContact")
@@ -1218,6 +1219,7 @@ model Client {
   relationships  ClientAgencyRelationship[]
   credits        CustomerCredit[]
   FiscalDocument FiscalDocument[]
+  renegotiations RenegotiationAgreement[]
 
   @@index([ownerId])
   @@index([status])
@@ -1359,6 +1361,10 @@ enum BillingStatus {
   PAID // quitada
   OVERDUE // vencida
   CANCELED // cancelada
+  /// Saldo migrado para um acordo de reparcelamento (01 §3.13). NÃO é
+  /// cancelada nem paga: a dívida existe, mudou de lugar. Tratá-la como paga
+  /// faria o recebido do mês subir sem ninguém ter pago nada.
+  RENEGOTIATED
 }
 
 enum PaymentStatus {
@@ -1745,11 +1751,17 @@ model Billing {
   createdAt    DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
 
-  payments        Payment[]
-  history         CollectionHistory[]
-  adjustments     BillingAdjustment[]
-  fiscalDocuments FiscalDocument[]
-  incomes         Income[] // recebimentos conciliados no caixa
+  payments         Payment[]
+  history          CollectionHistory[]
+  adjustments      BillingAdjustment[]
+  fiscalDocuments  FiscalDocument[]
+  /// Acordo em que esta cobrança ANTIGA foi renegociada (§3.13).
+  renegotiatedInId String?
+  renegotiatedIn   RenegotiationAgreement? @relation("AcordoOrigem", fields: [renegotiatedInId], references: [id], onDelete: SetNull)
+  /// Acordo do qual esta cobrança é PARCELA.
+  settlementOfId   String?
+  settlementOf     RenegotiationAgreement? @relation("AcordoParcelas", fields: [settlementOfId], references: [id], onDelete: SetNull)
+  incomes          Income[] // recebimentos conciliados no caixa
 
   @@index([clientId])
   @@index([contractId])
@@ -2432,14 +2444,15 @@ model ClientAgencyRelationship {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  losses      ClientLoss[]
-  collections CollectionHistory[]
-  avaliacoes  AvaliacaoMensal[]
-  onboarding  OnboardingTask[]
-  terms       CommercialTerm[]          @relation("TermosDaRelacao")
-  managers    ClientManagerAssignment[]
-  billings    Billing[]
-  credits     CustomerCredit[]
+  losses                 ClientLoss[]
+  collections            CollectionHistory[]
+  avaliacoes             AvaliacaoMensal[]
+  onboarding             OnboardingTask[]
+  terms                  CommercialTerm[]          @relation("TermosDaRelacao")
+  managers               ClientManagerAssignment[]
+  billings               Billing[]
+  credits                CustomerCredit[]
+  RenegotiationAgreement RenegotiationAgreement[]
 
   /// Um cliente tem no máximo UMA relação por agência: duas seriam duas
   /// carteiras do mesmo cliente na mesma agência, que é o bug, não o caso.
@@ -3127,5 +3140,52 @@ model FiscalDocument {
   @@index([billingId])
   @@index([clientId])
   @@index([issuedAt])
+  @@index([ownerId])
+}
+
+/// ACORDO DE REPARCELAMENTO (F3.7 · ref. 01 §3.13).
+///
+/// "NÃO cria nova receita." A frase é a regra inteira e a mais fácil de
+/// violar: as parcelas novas parecem cobranças normais e, se entrarem como
+/// receita, o faturamento do mês salta com dinheiro que já tinha sido
+/// faturado meses atrás. Por isso elas nascem SETTLEMENT_ONLY.
+///
+/// O acordo guarda o SALDO ORIGINAL. Sem ele, "quanto este cliente devia
+/// antes de renegociar?" vira uma reconstrução manual em cima de cobranças
+/// que já mudaram de estado.
+model RenegotiationAgreement {
+  id             String                    @id @default(cuid())
+  relationshipId String?
+  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  clientId       String
+  client         Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  /// Quanto estava em aberto quando o acordo foi fechado.
+  originalBalance   Decimal @db.Decimal(14, 2)
+  /// Quanto o cliente vai pagar no total, já com desconto e juros.
+  negotiatedBalance Decimal @db.Decimal(14, 2)
+  discountAmount    Decimal @default(0) @db.Decimal(14, 2)
+  interestAmount    Decimal @default(0) @db.Decimal(14, 2)
+
+  installments Int
+  signedAt     DateTime @db.Timestamptz(3)
+  /// ACTIVE | FULFILLED | BROKEN | CANCELED
+  status       String   @default("ACTIVE")
+  notes        String?
+  createdBy    String?
+
+  /// As cobranças ANTIGAS que entraram no acordo.
+  originalBillings Billing[] @relation("AcordoOrigem")
+  /// As parcelas NOVAS, todas SETTLEMENT_ONLY.
+  newBillings      Billing[] @relation("AcordoParcelas")
+
+  ownerId String?
+  owner   User?   @relation("OwnerRenegotiation", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([clientId])
+  @@index([status])
   @@index([ownerId])
 }

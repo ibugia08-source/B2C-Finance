@@ -26,6 +26,7 @@ const OWNED_MODELS = new Set<string>([
   "TaxProvision",
   "BillingAdjustment",
   "FiscalDocument",
+  "RenegotiationAgreement",
   "CategorizationRule",
   "AIConversation",
   "AIMemory",
