@@ -48,8 +48,17 @@ for (const role of ["anon", "authenticated"]) {
 }
 await db.end();
 
-execFileSync("npx", ["prisma", "migrate", "deploy"], {
-  stdio: "inherit",
-  env: { ...process.env, POSTGRES_PRISMA_URL: DB_URL, POSTGRES_URL_NON_POOLING: DB_URL },
-});
+const env = {
+  ...process.env,
+  POSTGRES_PRISMA_URL: DB_URL,
+  POSTGRES_URL_NON_POOLING: DB_URL,
+  APP_ENV: "local",
+  ALLOW_DESTRUCTIVE: "true",
+};
+execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env });
+
+// Plano de contas: a suíte verifica a NATUREZA das contas (03 §2.2), então o
+// seed faz parte do preparo do banco, não de um teste.
+execFileSync("npx", ["tsx", "prisma/seed-chart-of-accounts.ts"], { stdio: "inherit", env });
+
 console.log("✓ banco de testes pronto");

@@ -33,6 +33,7 @@ model Workspace {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   legalEntities  LegalEntity[]
+  accounts       AccountingAccount[]
   agencies       Agency[]
   economicGroups EconomicGroup[]
 }
@@ -314,16 +315,88 @@ model AccountCard {
   @@index([ownerId])
 }
 
+// ===================================================================
+// PLANO DE CONTAS GERENCIAL-CONTÁBIL (03 §2.2)
+//
+// A interface continua falando em grupos amigáveis; o motor precisa da
+// NATUREZA de cada conta. É isso que impede empréstimo, fatura de cartão e
+// transferência de virarem despesa duplicada — e é o que faz a DRE somar só
+// o que é resultado (statementType = PNL).
+//
+// Category (v1) continua existindo e ganha o vínculo `accountId`: cada
+// categoria da interface aponta para a conta contábil correspondente. As
+// telas seguem usando Category; o AccountingEngine usa a conta.
+// ===================================================================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+}
+
+enum StatementType {
+  /// Balanço patrimonial — NÃO entra na DRE.
+  BALANCE_SHEET
+  /// Resultado (DRE).
+  PNL
+}
+
+model AccountingAccount {
+  id          String              @id @default(cuid())
+  workspaceId String
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Código hierárquico: "4", "4.1", "4.1.01".
+  code        String
+  name        String
+  /// Grupo raiz para agrupamento amigável na interface.
+  group       String
+  parentId    String?
+  parent      AccountingAccount?  @relation("AccountTree", fields: [parentId], references: [id])
+  children    AccountingAccount[] @relation("AccountTree")
+
+  accountType      AccountType
+  normalBalance    NormalBalance
+  statementType    StatementType
+  /// Só contas FOLHA recebem lançamento; as sintéticas apenas agregam.
+  isPostingAccount Boolean       @default(true)
+
+  /// Conta temporária de migração/importação (03 §2.2): gera alerta, tem
+  /// limite máximo no fechamento e não pode ser destino permanente de regra.
+  isUnclassified Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  categories Category[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId])
+  @@index([workspaceId, statementType])
+  @@index([workspaceId, accountType])
+  @@index([active])
+}
+
 model Category {
-  id        String     @id @default(cuid())
-  name      String     @unique
+  id        String             @id @default(cuid())
+  name      String             @unique
   color     String?
-  kind      String     @default("despesa") // despesa | receita | mista
+  kind      String             @default("despesa") // despesa | receita | mista
+  /// Conta contábil correspondente (03 §2.2). A interface usa a categoria;
+  /// o AccountingEngine usa a conta.
+  accountId String?
+  account   AccountingAccount? @relation(fields: [accountId], references: [id])
   parentId  String?
-  parent    Category?  @relation("CategoryParent", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryParent")
-  createdAt DateTime   @default(now()) @db.Timestamptz(3)
-  updatedAt DateTime   @updatedAt @db.Timestamptz(3)
+  parent    Category?          @relation("CategoryParent", fields: [parentId], references: [id])
+  children  Category[]         @relation("CategoryParent")
+  createdAt DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime           @updatedAt @db.Timestamptz(3)
 
   transactions Transaction[]
   rules        CategorizationRule[]
