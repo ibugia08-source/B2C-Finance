@@ -75,6 +75,10 @@ const OWNED_MODELS = new Set<string>([
   "CommercialTerm",
   // F1.3 — vigência de gestores.
   "ClientManagerAssignment",
+  // F1.4 — aplicação de pagamento e crédito do cliente.
+  "PaymentApplication",
+  "CustomerCredit",
+  "CustomerCreditMovement",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

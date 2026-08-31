@@ -42,6 +42,28 @@ export type SettleResult =
     }
   | { ok: false; error: string };
 
+/**
+ * paidTotal DERIVADO das aplicações (F1.4 · ref. 01 §4.5).
+ *
+ * A coluna continua existindo — a listagem do mês precisa do saldo sem
+ * juntar tabela —, mas ela deixou de ser a VERDADE: a verdade é a soma das
+ * PaymentApplication. Somar e subtrair na mão é o que produz saldo que não
+ * fecha depois de um estorno no meio de dois parciais.
+ *
+ * Recebe o cliente da transação de propósito: recalcular fora dela leria um
+ * estado que ainda pode ser desfeito.
+ */
+async function recomputePaidTotal(
+  tx: { paymentApplication: { aggregate: (a: any) => Promise<any> } },
+  billingId: string
+): Promise<number> {
+  const soma = await tx.paymentApplication.aggregate({
+    where: { billingId },
+    _sum: { amount: true },
+  });
+  return n(soma._sum.amount);
+}
+
 /** Erro de negócio do fechamento — vira `{ ok:false }`, nunca 500. */
 class SettleError extends Error {}
 
@@ -71,8 +93,7 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
         );
       }
 
-      const newPaidTotal = n(billing.paidTotal) + input.amount;
-      const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
+      const fullyPaidPrevisto = n(billing.paidTotal) + input.amount >= n(billing.amount) - MONEY_EPSILON;
 
       // ===== Classificação do fechamento mensal =====
       const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
@@ -91,13 +112,27 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
         },
       });
 
+      // F1.4 — a APLICAÇÃO é o fato que liga dinheiro e cobrança (01 §4.5).
+      // paidTotal deixou de ser somado na mão: agora é derivado daqui.
+      await tx.paymentApplication.create({
+        data: {
+          paymentId: payment.id,
+          billingId: billing.id,
+          amount: input.amount,
+          appliedAt: input.paidAt,
+        },
+      });
+
+      const newPaidTotal = await recomputePaidTotal(tx, billing.id);
+      const fullyPaid = newPaidTotal >= n(billing.amount) - MONEY_EPSILON;
+
       // Conciliação caixa ↔ competência (Income vinculado à cobrança E ao
       // pagamento — a reversão apaga por paymentId, nunca por coincidência
       // de valor/data). RECOVERY é SÓ pagamento em mês posterior à
       // competência; atraso dentro do próprio mês é isLate, não recuperação.
       await tx.income.create({
         data: {
-          description: `${billing.description} (${fullyPaid ? "quitação" : "parcial"})`,
+          description: `${billing.description} (${fullyPaidPrevisto ? "quitação" : "parcial"})`,
           amount: input.amount,
           receivedAt: input.paidAt,
           sourceType:
@@ -177,17 +212,16 @@ export async function revertBillingPayment(paymentId: string): Promise<
   if (!payment) return { ok: false, error: "Pagamento não encontrado." };
 
   const b = payment.billing;
-  const newPaidTotal = Math.max(0, n(b.paidTotal) - n(payment.amount));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const status =
-    newPaidTotal <= MONEY_EPSILON ? (b.dueDate < today ? "OVERDUE" : "PENDING") : "PARTIAL";
 
   // Transação interativa: pagamento, Income de conciliação, saldo/status da
   // cobrança E a Receita Extra automática são revertidos de forma atômica —
   // uma falha em qualquer passo desfaz tudo (antes, a Receita Extra ficava
   // fora da transação e podia divergir em caso de erro no meio).
   await prisma.$transaction(async (tx) => {
+    // A aplicação some junto com o pagamento (onDelete: Cascade), e é isso
+    // que faz o paidTotal recalculado abaixo já vir sem ela.
     await tx.payment.delete({ where: { id: paymentId } });
     // Conciliação: apaga pelo vínculo direto (paymentId). Fallback legado
     // (Incomes anteriores ao vínculo): coincidência de valor/data, limitado a
@@ -206,6 +240,10 @@ export async function revertBillingPayment(paymentId: string): Promise<
       });
       if (legacy) await tx.income.delete({ where: { id: legacy.id } });
     }
+    const newPaidTotal = await recomputePaidTotal(tx, b.id);
+    const status =
+      newPaidTotal <= MONEY_EPSILON ? (b.dueDate < today ? "OVERDUE" : "PENDING") : "PARTIAL";
+
     await tx.billing.update({
       where: { id: b.id },
       data: {

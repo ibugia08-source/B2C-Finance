@@ -216,6 +216,9 @@ model User {
   ownedOnboarding    OnboardingTask[]           @relation("OwnerOnboardingTask")
   ownedTerms         CommercialTerm[]           @relation("OwnerCommercialTerm")
   ownedAssignments   ClientManagerAssignment[]  @relation("OwnerManagerAssignment")
+  ownedApplications  PaymentApplication[]       @relation("OwnerPaymentApplication")
+  ownedCredits       CustomerCredit[]           @relation("OwnerCustomerCredit")
+  ownedCreditMoves   CustomerCreditMovement[]   @relation("OwnerCreditMovement")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -1183,6 +1186,7 @@ model Client {
   @@index([renewalMonth])
   @@index([salesOwnerId])
   relationships ClientAgencyRelationship[]
+  credits       CustomerCredit[]
 }
 
 // Override MANUAL de inadimplência POR COMPETÊNCIA (mês/ano) — histórico
@@ -1663,6 +1667,25 @@ model Billing {
   paidAt           DateTime?        @db.Timestamptz(3) // quitação total
   status           BillingStatus    @default(PENDING)
   revenueType      RevenueType      @default(MRR)
+
+  // ===== F1.4 — Billing 2.0 (01 §4.5) =====
+  /// O QUE está sendo cobrado. revenueType continua para não quebrar as
+  /// métricas do v1; billingKind é o vocabulário da spec e inclui os casos
+  /// que revenueType não sabia nomear (upsell, renegociação).
+  billingKind     BillingKind     @default(MRR)
+  /// REVENUE reconhece receita; SETTLEMENT_ONLY só liquida dívida antiga —
+  /// cobrar uma renegociação NÃO cria faturamento novo, senão o mesmo
+  /// dinheiro seria contado duas vezes.
+  recognitionMode RecognitionMode @default(REVENUE)
+  /// Parcelamento de TCV (F1.7): todas as parcelas do mesmo contrato
+  /// compartilham o grupo, e a numeração diz qual é qual.
+  installmentGroupId String?
+  installmentNumber  Int?
+  /// A cobrança pertence à RELAÇÃO cliente↔agência (01 §4.5). Nulo só no
+  /// legado anterior ao backfill.
+  relationshipId String?
+  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  applications   PaymentApplication[]
   collectionStatus CollectionStatus @default(NOT_CONTACTED)
   collector        String? // responsável pela cobrança
   canceledAt       DateTime?        @db.Timestamptz(3)
@@ -1695,6 +1718,8 @@ model Billing {
   @@index([dueDate])
   @@index([competenceYear, competenceMonth])
   @@index([collectionStatus])
+  @@index([relationshipId])
+  @@index([installmentGroupId])
   @@index([ownerId])
   @@index([competence])
   @@index([ownerId, competence])
@@ -1771,6 +1796,11 @@ model Payment {
   externalSource String?
   /// Chave de deduplicação do evento externo, quando a origem fornece uma.
   idempotencyKey String?
+
+  /// Aplicações deste pagamento em cobranças (01 §4.5). Um pagamento pode
+  /// quitar várias cobranças; billingId acima é a cobrança de ORIGEM, mantida
+  /// para o caminho 1:1 do v1 continuar funcionando.
+  applications PaymentApplication[]
 
   ownerId   String?
   owner     User?    @relation("OwnerPayment", fields: [ownerId], references: [id])
@@ -2369,6 +2399,8 @@ model ClientAgencyRelationship {
   onboarding  OnboardingTask[]
   terms       CommercialTerm[] @relation("TermosDaRelacao")
   managers    ClientManagerAssignment[]
+  billings    Billing[]
+  credits     CustomerCredit[]
 
   /// Um cliente tem no máximo UMA relação por agência: duas seriam duas
   /// carteiras do mesmo cliente na mesma agência, que é o bug, não o caso.
@@ -2535,6 +2567,107 @@ model ClientManagerAssignment {
 
   @@index([relationshipId, role, validFrom])
   @@index([managerId])
+  @@index([ownerId])
+}
+
+// ===========================================================================
+// BILLING 2.0 — APLICAÇÃO DE PAGAMENTO E CRÉDITO (F1.4 · ref. 01 §4.5, §3.12)
+// ===========================================================================
+
+/// O QUE está sendo cobrado (01 §4.5). Convive com RevenueType, que o v1
+/// usa nas métricas: este é o vocabulário da spec, aquele é o do legado.
+enum BillingKind {
+  MRR
+  TCV
+  SETUP
+  ONE_TIME
+  UPSELL
+  RENEGOTIATION
+}
+
+/// Cobrança que RECONHECE receita x cobrança que só LIQUIDA dívida antiga.
+/// Renegociação é SETTLEMENT_ONLY: o faturamento já foi reconhecido quando a
+/// dívida nasceu, e contá-lo de novo dobraria a receita (01 §3.13).
+enum RecognitionMode {
+  REVENUE
+  SETTLEMENT_ONLY
+}
+
+/// Liga pagamento e cobrança com o VALOR aplicado (01 §4.5). É o que permite
+/// um pagamento só quitar várias cobranças — e é por isso que paidTotal
+/// passou a ser derivado daqui em vez de somado na mão.
+model PaymentApplication {
+  id        String  @id @default(cuid())
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  billingId String
+  billing   Billing @relation(fields: [billingId], references: [id], onDelete: Cascade)
+
+  amount    Decimal  @db.Decimal(14, 2)
+  appliedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  ownerId String?
+  owner   User?   @relation("OwnerPaymentApplication", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Um pagamento aplica no máximo uma vez em cada cobrança: duas linhas
+  /// seriam a mesma aplicação contada em dobro.
+  @@unique([paymentId, billingId])
+  @@index([billingId])
+  @@index([ownerId])
+}
+
+enum CreditMovementKind {
+  IN
+  OUT
+}
+
+/// Crédito do cliente (01 §3.12): pagamento a maior não é erro nem receita —
+/// vira saldo a favor, para abater cobrança futura.
+model CustomerCredit {
+  id             String                    @id @default(cuid())
+  clientId       String
+  client         Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  relationshipId String?
+  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+
+  /// Saldo atual. Derivado dos movimentos, materializado para leitura.
+  balance Decimal @default(0) @db.Decimal(14, 2)
+
+  movements CustomerCreditMovement[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerCustomerCredit", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// Um saldo por cliente por relação.
+  @@unique([clientId, relationshipId])
+  @@index([ownerId])
+}
+
+/// Cada entrada e cada uso do crédito, com a origem. Sem isto o saldo seria
+/// um número sem história — e crédito sem história é reclamação garantida.
+model CustomerCreditMovement {
+  id       String             @id @default(cuid())
+  creditId String
+  credit   CustomerCredit     @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  kind     CreditMovementKind
+  amount   Decimal            @db.Decimal(14, 2)
+
+  /// De onde veio (pagamento a maior) ou onde foi usado (cobrança abatida).
+  sourcePaymentId String?
+  targetBillingId String?
+  reason          String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerCreditMovement", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([creditId])
   @@index([ownerId])
 }
 

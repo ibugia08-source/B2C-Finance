@@ -63,12 +63,15 @@ export async function destroyOwner(owner: TestOwner) {
       await prisma.collectionHistory.deleteMany({
         where: { billingId: { in: billingIds } },
       });
+      await prisma.paymentApplication.deleteMany({ where: { billingId: { in: billingIds } } });
       await prisma.payment.deleteMany({ where: { billingId: { in: billingIds } } });
     }
     await prisma.income.deleteMany({ where: { ownerId: owner.id } });
     await prisma.collectionHistory.deleteMany({ where: { ownerId: owner.id } });
     await prisma.billing.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientRenewal.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.customerCreditMovement.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.customerCredit.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientLoss.deleteMany({ where: { ownerId: owner.id } });
     // F1.1 — o que pertence à relação sai antes dela, e ela antes do cliente.
     await prisma.onboardingTask.deleteMany({ where: { ownerId: owner.id } });
