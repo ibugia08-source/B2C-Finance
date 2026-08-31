@@ -18,15 +18,45 @@ export async function iniciarFechamentoAction(competence: string) {
   const v = await requirePermission("fechamento.fechar");
   const p = await iniciarFechamento(competence, v.name ?? null);
   revalidatePath("/cobrancas");
+  revalidatePath("/fechamento");
   return { ok: true as const, estado: p.estado, rotulo: p.rotulo };
 }
 
 export async function fecharPeriodoAction(competence: string) {
   const v = await requirePermission("fechamento.fechar");
+
+  // O QUE ESTAVA PENDENTE FICA REGISTRADO NO FECHAMENTO.
+  //
+  // Nenhum item do checklist BLOQUEIA fechar: 01 §5.3 lista os dezesseis e
+  // não diz quais impedem, e inventar essa regra seria inventar regra
+  // financeira. Mas fechar sem deixar rastro do que faltava transformaria a
+  // lista em decoração — daqui a seis meses ninguém saberia se o mês fechou
+  // limpo ou fechou com doze pendências em aberto.
+  const { resumoDoFechamento, pendenciasEmTexto } = await import(
+    "@/lib/services/closing-checklist"
+  );
+  const resumo = await resumoDoFechamento(competence);
+
   const p = await fecharPeriodo(competence, v.name ?? null);
+
+  const { auditEvent } = await import("@/lib/audit");
+  const { prisma } = await import("@/lib/prisma");
+  await auditEvent(prisma as any, "ClosingPeriod", competence, "CREATE", {
+    origin: "UI",
+    actorId: v.id,
+    actorEmail: v.email ?? null,
+    reason: `Fechamento de ${competence}. ${pendenciasEmTexto(resumo.itens)}`,
+  });
+
   revalidatePath("/cobrancas");
   revalidatePath("/dashboard");
-  return { ok: true as const, estado: p.estado, rotulo: p.rotulo };
+  revalidatePath("/fechamento");
+  return {
+    ok: true as const,
+    estado: p.estado,
+    rotulo: p.rotulo,
+    pendencias: resumo.pendentes,
+  };
 }
 
 export async function voltarParaOperacaoAction(competence: string) {
@@ -34,6 +64,7 @@ export async function voltarParaOperacaoAction(competence: string) {
   void v;
   const p = await reabrirParaOperacao(competence);
   revalidatePath("/cobrancas");
+  revalidatePath("/fechamento");
   return { ok: true as const, estado: p.estado, rotulo: p.rotulo };
 }
 
@@ -43,6 +74,7 @@ export async function reabrirPeriodoAction(competence: string, motivo: string) {
   if (!r.ok) return r;
   revalidatePath("/cobrancas");
   revalidatePath("/dashboard");
+  revalidatePath("/fechamento");
   return {
     ok: true as const,
     estado: r.periodo.estado,
