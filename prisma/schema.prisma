@@ -99,6 +99,8 @@ model Agency {
   createdAt     DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
 
+  relationships ClientAgencyRelationship[]
+
   @@unique([workspaceId, slug])
   @@index([workspaceId])
   @@index([legalEntityId])
@@ -208,6 +210,10 @@ model User {
   ownedRoutineItemStates        RoutineItemState[]       @relation("OwnerRoutineItemState")
   ownedClientMonthDelinquencies ClientMonthDelinquency[] @relation("OwnerClientMonthDelinquency")
   ownedClientRenewals           ClientRenewal[]          @relation("OwnerClientRenewal")
+  // F1.1 — escopo por dono nas entidades novas.
+  ownedRelationships ClientAgencyRelationship[] @relation("OwnerClientRelationship")
+  ownedAvaliacoes    AvaliacaoMensal[]          @relation("OwnerAvaliacaoMensal")
+  ownedOnboarding    OnboardingTask[]           @relation("OwnerOnboardingTask")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -1171,6 +1177,7 @@ model Client {
   @@index([modality])
   @@index([renewalMonth])
   @@index([salesOwnerId])
+  relationships ClientAgencyRelationship[]
 }
 
 // Override MANUAL de inadimplência POR COMPETÊNCIA (mês/ano) — histórico
@@ -1250,11 +1257,16 @@ model ClientLoss {
   referenceValue Decimal?        @db.Decimal(14, 2) // TCV de referência (última adesão)
   reason         String? // motivo da perda (opcional)
   salesOwner     String? // snapshot do responsável na perda
+  // 01 §4.3: "ClientLoss pertence à relação". Nulo só no legado
+  // anterior ao backfill da F1.1.
+  relationshipId String?
+  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
   ownerId        String?
   owner          User?           @relation("OwnerClientLoss", fields: [ownerId], references: [id])
   createdAt      DateTime        @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
+  @@index([relationshipId])
   @@index([lostAt])
   @@index([ownerId])
 }
@@ -1780,12 +1792,15 @@ model CollectionHistory {
   nextActionAt DateTime?        @db.Timestamptz(3) // próximo follow-up
   actionType   String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
   createdBy    String? // user.email (quem fez a ação)
+  relationshipId String?
+  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
   ownerId      String?
   owner        User?            @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
   createdAt    DateTime         @default(now()) @db.Timestamptz(3)
 
   @@index([billingId])
   @@index([clientId])
+  @@index([relationshipId])
   @@index([contactedAt])
   @@index([ownerId])
 }
@@ -2260,3 +2275,162 @@ model ClientNote {
   @@index([clientId])
   @@index([ownerId])
 }
+
+// ===========================================================================
+// RELAÇÃO CLIENTE ↔ AGÊNCIA (F1.1 · ref. 01 §4.3 e §3.9)
+//
+// O Client vira MESTRE: identidade, documento, contatos. Tudo que é
+// operacional — status, gestores, contratos, cobranças, avaliações,
+// onboarding — passa a pertencer à RELAÇÃO com uma agência.
+//
+// Por que isso importa: o mesmo cliente pode estar ativo em duas agências
+// com contratos, gestores e cobranças distintos (01 §4.3). Com agencia_id
+// no Client isso obrigaria a cadastrar a mesma empresa duas vezes, que é
+// exatamente a duplicação que o dedupe da F1.16 combate.
+// ===========================================================================
+
+/// 01 §3.9 — quatro dimensões INDEPENDENTES. Um cliente pode estar ACTIVE
+/// no ciclo de vida e OVERDUE no financeiro ao mesmo tempo; misturar as
+/// duas coisas num status só foi a origem de metade das ambiguidades do v1.
+enum LifecycleStatus {
+  PROSPECT
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  CHURNED
+  INACTIVE
+}
+
+/// Derivado das cobranças — guardado como CACHE para a listagem não ter de
+/// recalcular por linha. A verdade continua sendo o Billing.
+enum FinancialStatus {
+  REGULAR
+  DUE_SOON
+  OVERDUE
+  DELINQUENT
+  WRITE_OFF
+}
+
+/// Também cache, derivado do termo comercial vigente e da renovação.
+enum RenewalStatus {
+  NOT_APPLICABLE
+  UPCOMING
+  NEGOTIATING
+  RENEWED
+  LOST
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  EXCEPTION
+}
+
+model ClientAgencyRelationship {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id])
+
+  lifecycleStatus  LifecycleStatus  @default(ACTIVE)
+  financialStatus  FinancialStatus  @default(REGULAR)
+  renewalStatus    RenewalStatus    @default(NOT_APPLICABLE)
+  onboardingStatus OnboardingStatus @default(NOT_STARTED)
+
+  startedAt DateTime? @db.Timestamptz(3)
+  pausedAt  DateTime? @db.Timestamptz(3)
+  churnedAt DateTime? @db.Timestamptz(3)
+  endedAt   DateTime? @db.Timestamptz(3)
+
+  /// Termo comercial vigente (F1.2). Sem relação declarada de propósito
+  /// enquanto o CommercialTerm não existe — vira FK na F1.2.
+  currentCommercialTermId String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerClientRelationship", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  losses      ClientLoss[]
+  collections CollectionHistory[]
+  avaliacoes  AvaliacaoMensal[]
+  onboarding  OnboardingTask[]
+
+  /// Um cliente tem no máximo UMA relação por agência: duas seriam duas
+  /// carteiras do mesmo cliente na mesma agência, que é o bug, não o caso.
+  @@unique([clientId, agencyId])
+  @@index([clientId])
+  @@index([agencyId])
+  @@index([lifecycleStatus])
+  @@index([financialStatus])
+  @@index([ownerId])
+}
+
+/// AVALIAÇÃO MENSAL (F1.17 · ref. 01 §4.13, 02 §4.1).
+/// Fotografia do mês feita pelo gestor. Copia os gestores vigentes para
+/// virar registro histórico, mas NÃO é fonte de vigência (01 §4.3) — quem
+/// manda nisso é ClientManagerAssignment (F1.3).
+model AvaliacaoMensal {
+  id             String                   @id @default(cuid())
+  relationshipId String
+  relationship   ClientAgencyRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+
+  /// Competência YYYY-MM (01 §3.15).
+  competence String
+
+  estabilidade String? // ex.: estavel | oscilando | caindo
+  ads          String? // ex.: rodando | pausado | sem verba
+  risco        String? // ex.: baixo | medio | alto
+  upsell       String? // ex.: sem | mapeado | proposto
+  observacao   String?
+
+  /// Snapshot dos gestores no momento da avaliação.
+  gestores String[] @default([])
+
+  confirmedAt DateTime? @db.Timestamptz(3)
+  confirmedBy String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerAvaliacaoMensal", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// Idempotência de 03 §4.3: uma avaliação por relação por competência.
+  @@unique([relationshipId, competence])
+  @@index([competence])
+  @@index([ownerId])
+}
+
+/// ONBOARDING (F1.18 · ref. 01 §4.11, 02 §4.2). Prazos D+7/30/90.
+model OnboardingTask {
+  id             String                   @id @default(cuid())
+  relationshipId String
+  relationship   ClientAgencyRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  /// Ordem no board do cliente.
+  position Int @default(0)
+  /// Dias após a entrada (7, 30, 90) — a data efetiva sai de startedAt.
+  offsetDays Int?
+  dueAt      DateTime? @db.Timestamptz(3)
+  doneAt     DateTime? @db.Timestamptz(3)
+  doneBy     String?
+  /// Chave do template que originou a tarefa (rastreia o padrão aplicado).
+  templateKey String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerOnboardingTask", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([relationshipId])
+  @@index([dueAt])
+  @@index([ownerId])
+}
+

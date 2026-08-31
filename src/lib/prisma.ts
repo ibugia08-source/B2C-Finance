@@ -64,6 +64,13 @@ const OWNED_MODELS = new Set<string>([
   "ClientMonthDelinquency",
   // Histórico de renovações de contrato
   "ClientRenewal",
+  // ===== F1.1: relação cliente ↔ agência e o que pertence a ela =====
+  // Sem entrar aqui, a leitura NÃO seria escopada por dono e um usuário
+  // veria a carteira do outro. LegalEntity/Agency ficam DE FORA de
+  // propósito: são do workspace, não de um dono.
+  "ClientAgencyRelationship",
+  "AvaliacaoMensal",
+  "OnboardingTask",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

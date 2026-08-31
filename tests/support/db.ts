@@ -70,6 +70,10 @@ export async function destroyOwner(owner: TestOwner) {
     await prisma.billing.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientRenewal.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientLoss.deleteMany({ where: { ownerId: owner.id } });
+    // F1.1 — o que pertence à relação sai antes dela, e ela antes do cliente.
+    await prisma.onboardingTask.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.avaliacaoMensal.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.clientAgencyRelationship.deleteMany({ where: { ownerId: owner.id } });
     await prisma.contractService.deleteMany({
       where: { contract: { ownerId: owner.id } },
     });
@@ -129,6 +133,36 @@ export async function createBilling(
         status: "PENDING",
       },
       select: { id: true, amount: true },
+    })
+  );
+}
+
+/** Agência semeada pela migration da F0.5 (B2C Gestão). */
+export async function defaultAgency(): Promise<{ id: string; name: string }> {
+  // Agency é do WORKSPACE, não de um dono: consulta fora do escopo.
+  const a = await runWithoutScope(async () =>
+    prisma.agency.findFirst({ orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true } })
+  );
+  if (!a) throw new Error("Nenhuma agência semeada — rode as migrations no banco de teste.");
+  return a;
+}
+
+/** Relação cliente ↔ agência (F1.1). */
+export async function createRelationship(
+  owner: TestOwner,
+  clientId: string,
+  opts: { agencyId?: string; lifecycleStatus?: any; startedAt?: Date } = {}
+) {
+  const agencyId = opts.agencyId ?? (await defaultAgency()).id;
+  return asOwner(owner, async () =>
+    prisma.clientAgencyRelationship.create({
+      data: {
+        clientId,
+        agencyId,
+        lifecycleStatus: opts.lifecycleStatus ?? "ACTIVE",
+        startedAt: opts.startedAt ?? new Date(2026, 0, 1),
+      },
+      select: { id: true, clientId: true, agencyId: true },
     })
   );
 }
