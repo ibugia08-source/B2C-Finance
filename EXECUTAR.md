@@ -33,6 +33,12 @@ Objetivo: rede de proteção antes de mexer no que funciona.
 
 GATE F0: F0.2 e F0.7 verdes com paridade; dry-run F0.11 rodando; nenhuma DECISÃO da fase pendente.
 
+**AVALIAÇÃO DO GATE F0 (2026-08-31) — 2 de 3 critérios cumpridos; portão FECHADO.**
+- [x] F0.2 verde: 112 testes passando em banco dedicado.
+- [x] F0.7 com paridade: 216 comparações em 12 meses de dados reais, 0 divergências.
+- [x] Dry-run F0.11 rodando: relatório dos 9 saldos de abertura gerado.
+- [ ] **DECISÃO 19.32 PENDENTE** — data oficial de cutover. Sem ela o portão não abre e a Fase 1 não começa (§6.4 do arquivo 03 também exige 6.2 com dono e prazo, 6.3 com parâmetros ou default aprovado, matriz validada com o contador e saldos iniciais documentados).
+
 -
 
 ## FASE 1 - FUNDAÇÃO FINANCEIRA E MULTIAGÊNCIA
