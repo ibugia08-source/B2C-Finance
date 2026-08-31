@@ -110,19 +110,46 @@ export async function runOutboxWorker(
   opts: { limit?: number; now?: Date } = {}
 ): Promise<WorkerResult> {
   const limit = opts.limit ?? 25;
-  const agora = opts.now ?? new Date();
   const resultado: WorkerResult = { processados: 0, entregues: 0, reagendados: 0, deadLetter: 0 };
 
+  // Elegibilidade avaliada pelo BANCO, na MESMA consulta, COM TOLERÂNCIA.
+  //
+  // O carimbo de `nextAttemptAt` vem do relógio da APLICAÇÃO (o Prisma
+  // resolve `now()` no cliente, com precisão de milissegundo) e a comparação
+  // usa o relógio do BANCO. Os dois não coincidem: medido aqui, uma linha
+  // gravada em .148000 contra um NOW() de .147966 — o carimbo nasce 34
+  // microssegundos NO FUTURO e o evento fica invisível até a rodada seguinte.
+  // Reproduzido em 4 de 30 ciclos.
+  //
+  // A tolerância de 1 segundo mata a classe inteira do problema, inclusive a
+  // defasagem real entre servidores em produção, que é muito maior que
+  // microssegundos. É inofensiva: o menor recuo entre tentativas é 1 minuto.
+  //
+  // `opts.now` continua para os testes fixarem o relógio.
   const lote = await runWithoutScope(async () =>
-    prisma.outboxEvent.findMany({
-      where: { status: "PENDING", nextAttemptAt: { lte: agora } },
-      orderBy: { nextAttemptAt: "asc" },
-      take: limit,
-      select: {
-        id: true, eventType: true, channel: true,
-        sourceType: true, sourceId: true, payload: true, attempts: true,
-      },
-    })
+    opts.now
+      ? prisma.outboxEvent.findMany({
+          where: { status: "PENDING", nextAttemptAt: { lte: opts.now } },
+          orderBy: { nextAttemptAt: "asc" },
+          take: limit,
+          select: {
+            id: true, eventType: true, channel: true,
+            sourceType: true, sourceId: true, payload: true, attempts: true,
+          },
+        })
+      : prisma.$queryRaw<
+          {
+            id: string; eventType: string; channel: string;
+            sourceType: string; sourceId: string; payload: unknown; attempts: number;
+          }[]
+        >`
+          SELECT "id", "eventType", "channel", "sourceType", "sourceId", "payload", "attempts"
+            FROM "OutboxEvent"
+           WHERE "status" = 'PENDING'::"OutboxStatus"
+             AND "nextAttemptAt" <= NOW() + INTERVAL '1 second' 
+           ORDER BY "nextAttemptAt" ASC
+           LIMIT ${limit}
+        `
   );
 
   for (const evento of lote) {
@@ -154,8 +181,10 @@ export async function runOutboxWorker(
             ...(esgotou
               ? { status: "DEAD_LETTER" as const }
               : {
+                  // Reagendamento é sempre no FUTURO (≥ 1 minuto): aqui o
+                  // relógio da aplicação basta, milissegundos não pesam.
                   status: "PENDING" as const,
-                  nextAttemptAt: new Date(agora.getTime() + backoffMs(tentativa)),
+                  nextAttemptAt: new Date((opts.now ?? new Date()).getTime() + backoffMs(tentativa)),
                 }),
           },
         })
