@@ -27,7 +27,7 @@ export type ImportSummary = {
   headerErrors: string[];
   erros: RowError[]; // até 100
   preview: { headers: string[]; rows: string[][] }; // primeiras 10 válidas
-  confirmed: { imported: number; batchId: string } | null;
+  confirmed: { imported: number; batchId: string; paraRevisar: number } | null;
 };
 export type ImportResult = ImportSummary | { ok: false; error: string };
 
@@ -98,23 +98,87 @@ export async function runImport(fd: FormData): Promise<ImportResult> {
       ),
     };
 
-    // 4. confirmação: cria em massa + registra o lote (auditoria)
+    // 4. confirmação: LOTE PRIMEIRO, depois os registros.
+    //
+    // A ordem importa e antes estava invertida: o lote era criado DEPOIS da
+    // gravação, com batchId vazio (`def.create(..., "")`), então a linha da
+    // planilha nunca ficava ligada ao registro criado. Sem essa ligação a
+    // proveniência de 03 §3.3 não existe — "veio do arquivo X" é tudo o que
+    // se sabe, e a pergunta que se faz de verdade ("de onde saiu ESTE
+    // cliente?") continua sem resposta.
     let confirmed: ImportSummary["confirmed"] = null;
+    let paraRevisar = 0;
     if (confirm) {
       if (validas === 0) return { ok: false, error: "Nenhuma linha válida para importar." };
-      const imported = await def.create(prepared.map((p) => p.data), "");
+
       const batch = await prisma.importBatch.create({
         data: {
           source: "xlsx",
           module: def.key,
           fileName: file.name,
           total,
-          imported,
+          imported: 0,
           duplicates: duplicadas,
           errors: comErro,
         },
       });
-      confirmed = { imported, batchId: batch.id };
+
+      let imported = 0;
+      const proveniencia: {
+        entity: string;
+        entityId: string | null;
+        sourceRow: number;
+        raw: any;
+        confidence: number;
+        reviewStatus: string;
+        reviewReason: string | null;
+      }[] = [];
+
+      if (def.createEach) {
+        const criados = await def.createEach(prepared.map((p) => p.data), batch.id);
+        criados.forEach((c, i) => {
+          const p = prepared[i];
+          if (c.id) imported++;
+          const motivo = c.observacao ?? def.revisar?.(p.data) ?? null;
+          const revisar = !c.id || !!motivo;
+          if (revisar) paraRevisar++;
+          proveniencia.push({
+            entity: def.key,
+            entityId: c.id,
+            sourceRow: p.linha,
+            raw: p.data,
+            confidence: !c.id ? 0 : motivo ? 50 : 100,
+            reviewStatus: revisar ? "PENDENTE" : "OK",
+            reviewReason: !c.id ? (c.observacao ?? "não foi gravado") : motivo,
+          });
+        });
+      } else {
+        // Módulos que ainda gravam em massa: a proveniência guarda o lote, a
+        // linha e o conteúdo cru, mas NÃO o id do registro — createMany não
+        // devolve ids. É menos do que 03 §3.3 pede, e está declarado aqui em
+        // vez de parecer completo.
+        imported = await def.create(prepared.map((p) => p.data), batch.id);
+        for (const p of prepared) {
+          const motivo = def.revisar?.(p.data) ?? null;
+          if (motivo) paraRevisar++;
+          proveniencia.push({
+            entity: def.key,
+            entityId: null,
+            sourceRow: p.linha,
+            raw: p.data,
+            confidence: motivo ? 50 : 100,
+            reviewStatus: motivo ? "PENDENTE" : "OK",
+            reviewReason: motivo,
+          });
+        }
+      }
+
+      await prisma.importedRecord.createMany({
+        data: proveniencia.map((r) => ({ ...r, batchId: batch.id })),
+      });
+      await prisma.importBatch.update({ where: { id: batch.id }, data: { imported } });
+
+      confirmed = { imported, batchId: batch.id, paraRevisar };
       revalidateFinance();
     }
 

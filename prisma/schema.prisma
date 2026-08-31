@@ -174,25 +174,26 @@ model User {
   scopeAgency   Agency? @relation("ScopedUsers", fields: [scopeAgencyId], references: [id], onDelete: SetNull)
 
   // ===== Multiusuário: dados privados de cada conta (owner) =====
-  workspace          Workspace?           @relation("OwnerWorkspace")
-  ownedLedgerTx      LedgerTransaction[]  @relation("OwnerLedgerTransaction")
-  ownedAccounts      Account[]            @relation("OwnerAccount")
-  ownedCards         CreditCard[]         @relation("OwnerCreditCard")
-  ownedAccountCards  AccountCard[]        @relation("OwnerAccountCard")
-  ownedTransactions  Transaction[]        @relation("OwnerTransaction")
-  ownedInvoices      CreditCardInvoice[]  @relation("OwnerInvoice")
-  ownedImportBatches ImportBatch[]        @relation("OwnerImportBatch")
-  ownedIncomes       Income[]             @relation("OwnerIncome")
-  ownedCashBoxes     CashBox[]            @relation("OwnerCashBox")
-  ownedPeople        Person[]             @relation("OwnerPerson")
-  ownedReceivables   Receivable[]         @relation("OwnerReceivable")
-  ownedPayments      PersonPayment[]      @relation("OwnerPersonPayment")
-  ownedRules         CategorizationRule[] @relation("OwnerRule")
-  ownedInstallments  Installment[]        @relation("OwnerInstallment")
-  ownedCashMovements CashBoxMovement[]    @relation("OwnerCashMovement")
-  ownedConversations AIConversation[]     @relation("OwnerAIConversation")
-  ownedMemories      AIMemory[]           @relation("OwnerAIMemory")
-  ownedClients       Client[]             @relation("OwnerClient")
+  workspace            Workspace?           @relation("OwnerWorkspace")
+  ownedLedgerTx        LedgerTransaction[]  @relation("OwnerLedgerTransaction")
+  ownedAccounts        Account[]            @relation("OwnerAccount")
+  ownedCards           CreditCard[]         @relation("OwnerCreditCard")
+  ownedAccountCards    AccountCard[]        @relation("OwnerAccountCard")
+  ownedTransactions    Transaction[]        @relation("OwnerTransaction")
+  ownedInvoices        CreditCardInvoice[]  @relation("OwnerInvoice")
+  ownedImportBatches   ImportBatch[]        @relation("OwnerImportBatch")
+  ownedImportedRecords ImportedRecord[]     @relation("OwnerImportedRecord")
+  ownedIncomes         Income[]             @relation("OwnerIncome")
+  ownedCashBoxes       CashBox[]            @relation("OwnerCashBox")
+  ownedPeople          Person[]             @relation("OwnerPerson")
+  ownedReceivables     Receivable[]         @relation("OwnerReceivable")
+  ownedPayments        PersonPayment[]      @relation("OwnerPersonPayment")
+  ownedRules           CategorizationRule[] @relation("OwnerRule")
+  ownedInstallments    Installment[]        @relation("OwnerInstallment")
+  ownedCashMovements   CashBoxMovement[]    @relation("OwnerCashMovement")
+  ownedConversations   AIConversation[]     @relation("OwnerAIConversation")
+  ownedMemories        AIMemory[]           @relation("OwnerAIMemory")
+  ownedClients         Client[]             @relation("OwnerClient")
 
   // ===== ERP de agência (fundação) =====
   ownedClientContacts      ClientContact[]     @relation("OwnerClientContact")
@@ -978,6 +979,7 @@ model ImportBatch {
   createdAt      DateTime @default(now()) @db.Timestamptz(3)
 
   transactions Transaction[]
+  records      ImportedRecord[]
 
   @@index([ownerId])
 }
@@ -2760,5 +2762,52 @@ model AuditLog {
   @@index([createdAt])
   @@index([actorEmail])
   @@index([correlationId])
+  @@index([ownerId])
+}
+
+/// PROVENIÊNCIA DE IMPORTAÇÃO + FILA DE REVISÃO (F1.21 · ref. 03 §3.3).
+///
+/// Uma linha por linha de planilha, para qualquer módulo. Uma tabela só, e
+/// não quatro colunas em cada modelo importável, por três razões práticas:
+/// funciona para módulo que ainda não existe; guarda a LINHA CRUA, que é o
+/// que um humano precisa para conferir; e a fila de revisão é uma consulta
+/// nela, não um modelo à parte.
+///
+/// Sem migração do v1 (decisão 19.32), sourceSystem é sempre PLANILHA hoje —
+/// o campo fica porque a origem volta a importar quando entrar integração.
+model ImportedRecord {
+  id      String      @id @default(cuid())
+  batchId String
+  batch   ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  /// Módulo: clientes | contratos | cobrancas | despesas | ...
+  entity   String
+  /// Registro criado. NULO quando a linha parou na fila de revisão.
+  entityId String?
+
+  /// Linha na planilha (1 = primeira linha de dados, sem contar o cabeçalho).
+  sourceRow    Int
+  sourceSystem String @default("PLANILHA")
+
+  /// 0 a 100. Quanto o sistema confia que esta linha virou o registro certo.
+  confidence Int @default(100)
+
+  /// A linha como veio, para conferência humana.
+  raw Json
+
+  /// OK | PENDENTE | RESOLVIDO | DESCARTADO
+  reviewStatus String    @default("OK")
+  reviewReason String?
+  resolvedAt   DateTime? @db.Timestamptz(3)
+  resolvedBy   String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerImportedRecord", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([batchId])
+  @@index([entity, entityId])
+  @@index([reviewStatus])
   @@index([ownerId])
 }

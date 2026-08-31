@@ -22,6 +22,7 @@ const OWNED_MODELS = new Set<string>([
   "Person",
   "PersonPayment",
   "ImportBatch",
+  "ImportedRecord",
   "CategorizationRule",
   "AIConversation",
   "AIMemory",

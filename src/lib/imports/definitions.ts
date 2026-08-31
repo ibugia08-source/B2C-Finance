@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { abrirVidaDoCliente } from "@/lib/services/client-lifecycle";
 import { parseCompetence, type ImportColumn, type ValidatedRow } from "./engine";
 import { toNumber as n } from "@/lib/format";
 
@@ -55,6 +56,32 @@ export type ImportDef = {
   existingKeys: () => Promise<Set<string>>;
   /** cria os registros (apenas na confirmação) */
   create: (rows: Record<string, unknown>[], batchId: string) => Promise<number>;
+
+  /**
+   * F1.21 — criação LINHA A LINHA devolvendo o id de cada uma.
+   *
+   * Quando existe, substitui `create`. É o que permite ligar a linha da
+   * planilha ao registro criado, que é a proveniência que 03 §3.3 pede: sem
+   * o id, "importado do arquivo X" é tudo o que se sabe, e a pergunta real
+   * ("de onde veio ESTE cliente?") continua sem resposta.
+   *
+   * Também é onde mora o que o registro precisa ALÉM da linha — no caso de
+   * cliente, a relação com a agência, o termo de preço e o onboarding.
+   */
+  createEach?: (
+    rows: Record<string, unknown>[],
+    batchId: string
+  ) => Promise<{ id: string | null; observacao?: string | null }[]>;
+
+  /**
+   * Motivo pelo qual a linha merece conferência humana, ou null.
+   *
+   * Diferente de ERRO: a linha entra, mas entra marcada. É a "fila de revisão
+   * para ambíguos" de 03 §3.3 — recusar a linha faria a pessoa perder o
+   * trabalho de 300 linhas por causa de 4; deixar passar calado faria o dado
+   * duvidoso virar número oficial.
+   */
+  revisar?: (data: Record<string, unknown>) => string | null;
 };
 
 // ---- opções compartilhadas ----------------------------------------
@@ -182,6 +209,38 @@ export const IMPORT_DEFS: ImportDef[] = [
     create: async (rows) => {
       const r = await prisma.client.createMany({ data: rows as any[] });
       return r.count;
+    },
+    // F1.21: cliente importado nasce COMPLETO. Antes disto a planilha usava
+    // createMany e pulava a relação com a agência, o termo de preço e o
+    // onboarding — 100 clientes importados nasciam pela metade, calados, e o
+    // caminho errado era justamente o mais usado.
+    createEach: async (rows) => {
+      const out: { id: string | null; observacao?: string | null }[] = [];
+      for (const data of rows) {
+        try {
+          const c = await prisma.client.create({ data: data as any, select: { id: true } });
+          const vida = await abrirVidaDoCliente(c.id, {
+            status: (data.status as string) ?? "ACTIVE",
+            monthlyValue: (data.monthlyValue as number) ?? null,
+            modality: "MRR",
+          });
+          out.push({
+            id: c.id,
+            observacao: vida.faltou.length ? vida.faltou.join("; ") : null,
+          });
+        } catch {
+          out.push({ id: null, observacao: "não foi possível gravar o cliente" });
+        }
+      }
+      return out;
+    },
+    revisar: (d) => {
+      const ativo = d.status === "ACTIVE" || d.status == null;
+      if (ativo && !(Number(d.monthlyValue) > 0))
+        return "cliente ativo sem valor mensal — não gera cobrança nem entra no MRR";
+      if (ativo && d.paymentDay == null)
+        return "sem dia de pagamento — a cobrança do mês não sabe quando vence";
+      return null;
     },
   },
 

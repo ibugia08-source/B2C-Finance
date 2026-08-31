@@ -7,6 +7,7 @@ import { ClientStatus, ClientModality } from "@prisma/client";
 import { requirePermission, tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
+import { abrirVidaDoCliente } from "@/lib/services/client-lifecycle";
 
 /**
  * Resultado padrão das mutations (Etapa 1). Toda ação retorna um objeto
@@ -338,30 +339,16 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       // teria o que preencher) e o cliente não apareceria na grade de
       // avaliação. Falha aqui NÃO derruba o cadastro: cliente é o fato
       // principal; relação e onboarding se reparam depois.
-      try {
-        const agencia = await runWithoutScope(async () =>
-          prisma.agency.findFirst({
-            where: { active: true },
-            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-            select: { id: true },
-          })
-        );
-        if (agencia) {
-          const rel = await prisma.clientAgencyRelationship.create({
-            data: {
-              clientId: id,
-              agencyId: agencia.id,
-              lifecycleStatus: parsed.status === "CHURNED" ? "CHURNED" : "ONBOARDING",
-              startedAt: parsed.startedAt ?? new Date(),
-            },
-            select: { id: true },
-          });
-          const { iniciarOnboarding } = await import("@/lib/services/onboarding");
-          await iniciarOnboarding(rel.id);
-        }
-      } catch {
-        /* cadastro já está gravado; a relação pode ser criada depois */
-      }
+      // A sequência mora em services/client-lifecycle porque a importação por
+      // planilha precisa exatamente da mesma — e não passava por aqui (F1.21).
+      await abrirVidaDoCliente(id, {
+        status: parsed.status,
+        startedAt: parsed.startedAt ?? undefined,
+        modality: modality === "MRR" || modality === "TCV" ? modality : null,
+        monthlyValue: parsed.monthlyValue ?? null,
+        totalContractValue: parsed.totalContractValue ?? null,
+        contractMonths: parsed.contractMonths ?? null,
+      });
 
       // ===== Fechamento do contrato (venda) no cadastro =====
       // Com uma modalidade escolhida, cria o contrato e gera as cobranças.
