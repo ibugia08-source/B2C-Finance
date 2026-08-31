@@ -1,0 +1,81 @@
+name: CI (lint + tokens + build + testes)
+
+# Portão de qualidade de TODO ramo de trabalho (03 §4.6: "build:ci e testes
+# verdes"). O deploy continua sendo da integração Git da Vercel — este
+# workflow não publica nada.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  qualidade:
+    runs-on: ubuntu-latest
+
+    # Banco real para a suíte: os testes financeiros exercitam constraints,
+    # gatilhos e transações — mock não provaria nada disso.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: b2cdev
+          POSTGRES_PASSWORD: b2cdev
+          POSTGRES_DB: b2c_finance_test
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: local
+      ALLOW_DESTRUCTIVE: 'true'
+      SESSION_SECRET: ci-secret-nao-usado-em-runtime-32-caracteres
+      POSTGRES_PRISMA_URL: postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_test
+      POSTGRES_URL_NON_POOLING: postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # As roles que a migration de segurança espera existem no Supabase,
+      # não num Postgres novo (mesma pegadinha do banco local).
+      - name: Preparar roles do banco
+        run: |
+          PGPASSWORD=b2cdev psql -h 127.0.0.1 -p 55432 -U b2cdev -d b2c_finance_test \
+            -c "DO \$\$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+                END \$\$;"
+
+      - name: Migrations e seeds do banco de testes
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed-chart-of-accounts.ts
+          npx tsx prisma/seed-metric-registry.ts
+          npx tsx prisma/seed-posting-rules.ts
+
+      - name: Lint
+        run: npm run lint
+
+      # 02 §7.10: cor crua de Tailwind não cresce. A linha de base fotografa
+      # o legado; só o que é NOVO reprova.
+      - name: Tokens de design
+        run: npm run lint:tokens
+
+      - name: Build
+        run: npm run build:ci
+        env:
+          NODE_ENV: production
+
+      - name: Testes
+        run: npm test

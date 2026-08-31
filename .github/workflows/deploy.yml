@@ -1,10 +1,10 @@
-name: CI (lint + build check)
+name: Build check (main)
 
+# O portão de qualidade completo (lint + tokens + build + testes) vive em
+# ci.yml e roda em main e dev. Aqui fica só a checagem de build da main,
+# mantida por ser o que a Vercel também executa antes de publicar.
 on:
   push:
-    branches:
-      - main
-  pull_request:
     branches:
       - main
 
