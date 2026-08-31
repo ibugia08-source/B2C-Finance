@@ -141,7 +141,34 @@ export async function iniciarFechamento(competence: string, quem: string | null)
   });
 }
 
+/**
+ * Fecha a competência E GERA A FOTOGRAFIA (F2.3 · 01 §5.4: "ClosingEngine
+ * gera no CLOSED").
+ *
+ * A fotografia nasce JUNTO do fechamento, não depois, e é por isso que o
+ * `sourceCutoffAt` dela vale alguma coisa: gerada num segundo passo, ela
+ * retrataria um mês que já podia ter mudado entre os dois momentos.
+ *
+ * Se a geração falhar, o fechamento NÃO acontece — um mês marcado como
+ * fechado sem fotografia é o pior dos dois mundos: bloqueia lançamento e não
+ * guarda como o mês ficou.
+ */
 export async function fecharPeriodo(competence: string, quem: string | null) {
+  const atual = await periodoDe(competence);
+  const { gerarSnapshot, snapshotDe } = await import("@/lib/snapshots/engine");
+
+  // Fechar duas vezes na MESMA versão não gera duas fotografias: o índice
+  // único já recusaria, mas errar com "constraint violada" numa tela de
+  // fechamento é resposta de banco, não de produto. Duplo clique é silencioso.
+  const ja = await snapshotDe(competence);
+  if (!ja || ja.version !== atual.versao) {
+    await gerarSnapshot(competence, {
+      version: atual.versao,
+      kind: "NATIVE",
+      closedBy: quem,
+    });
+  }
+
   return upsertPeriodo(competence, {
     state: "CLOSED",
     closedAt: new Date(),
@@ -184,6 +211,13 @@ export async function reabrirPeriodo(
         competence: { gt: competence },
         state: "CLOSED",
       },
+      data: { needsRevalidation: true },
+    });
+    // As FOTOGRAFIAS posteriores também são marcadas — elas é que serão
+    // lidas nos painéis daqueles meses (§2.4). Marcar só o período deixaria
+    // a fotografia de setembro sendo mostrada como confiável.
+    await prisma.snapshot.updateMany({
+      where: { workspaceId, competence: { gt: competence } },
       data: { needsRevalidation: true },
     });
     return r.count;

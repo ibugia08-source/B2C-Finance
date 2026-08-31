@@ -42,6 +42,7 @@ model Workspace {
   agencies       Agency[]
   economicGroups EconomicGroup[]
   closingPeriods ClosingPeriod[]
+  snapshots      Snapshot[]
 
   /// Estado do SETUP GUIADO (F1.20 · 02 §3): só o que NÃO dá para deduzir do
   /// dado — quais passos o dono adiou e quando ele encerrou a lista.
@@ -2872,4 +2873,69 @@ model ClosingPeriod {
   @@unique([workspaceId, scopeType, scopeId, competence])
   @@index([workspaceId, competence])
   @@index([state])
+}
+
+/// Origem da fotografia (01 §5.4, §5.7).
+enum SnapshotKind {
+  /// Gerada pelo fechamento da competência.
+  NATIVE
+  /// Avulsa, nomeada, sem fechar período.
+  STANDALONE
+  /// Reconstruída de importação — nunca se passa por fechamento nativo.
+  REBUILT_FROM_MIGRATION
+}
+
+/// FOTOGRAFIA DO PERÍODO (F2.3 · ref. 01 §5.4).
+///
+/// Guarda o mês inteiro por ÁREA, com metadados suficientes para responder,
+/// meses depois, "com que régua este número foi medido?": versão do formato,
+/// versão do dicionário de métricas, instante de corte da fonte e checksum.
+///
+/// O checksum é por ÁREA além do total de propósito: quando a conferência
+/// periódica acusa divergência, "algo mudou no mês" é inútil; "a carteira
+/// mudou e o resto não" aponta para onde olhar.
+model Snapshot {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  scopeType String @default("WORKSPACE")
+  scopeId   String @default("")
+
+  competence String
+  /// Versão do fechamento que gerou esta fotografia (ClosingPeriod.version).
+  version    Int          @default(1)
+  kind       SnapshotKind @default(NATIVE)
+  /// Nome dado pelo usuário, só nas avulsas (§5.7). String vazia e NÃO nula,
+  /// porque entra no índice único: no Postgres NULL nunca é igual a NULL, e
+  /// com nulo duas fotografias nativas do mesmo fechamento conviveriam.
+  name       String       @default("")
+
+  /// Formato da serialização. Muda quando a estrutura das áreas muda.
+  schemaVersion         Int      @default(1)
+  /// Versão do dicionário de métricas vigente na hora (01 §7).
+  metricRegistryVersion Int
+  /// Instante até o qual os fatos foram lidos. Recálculo posterior usa isto.
+  sourceCutoffAt        DateTime @db.Timestamptz(3)
+  systemVersion         String?
+
+  closedBy String?
+  closedAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Conteúdo por área, serializado de forma determinística.
+  areas            Json
+  /// O layout vigente na hora (§5.4) — a fotografia se explica sozinha.
+  layoutDefinition Json?
+
+  checksum       String
+  checksumByArea Json
+
+  /// Marcada quando um período ANTERIOR é reaberto (§5.5).
+  needsRevalidation Boolean @default(false)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([workspaceId, scopeType, scopeId, competence, version, kind, name])
+  @@index([workspaceId, competence])
+  @@index([kind])
 }

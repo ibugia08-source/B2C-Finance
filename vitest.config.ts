@@ -31,6 +31,11 @@ export default defineConfig({
       POSTGRES_URL_NON_POOLING:
         "postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_test",
       SESSION_SECRET: "test-secret-para-a-suite-de-protecao-32-chars",
+      // O cache de leitura usa unstable_cache do Next, que exige uma request
+      // por baixo — fora dela ele estoura com "incrementalCache missing".
+      // Desligado na suíte de propósito: teste tem de medir o CÁLCULO, não o
+      // que ficou guardado de uma execução anterior.
+      B2C_DISABLE_CACHE: "1",
     },
   },
 });
