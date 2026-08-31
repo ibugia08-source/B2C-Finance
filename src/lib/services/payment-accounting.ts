@@ -1,4 +1,10 @@
 import { MONEY_EPSILON } from "@/lib/billing-status";
+import { auditEvent, auditUpdate } from "@/lib/audit";
+import { publish } from "@/lib/outbox";
+import { post } from "@/lib/accounting/engine";
+import { currentWorkspaceId } from "@/lib/services/workspace";
+import { toCompetence } from "@/lib/competence";
+import { systemContext, type EngineContext } from "@/lib/engines/context";
 import { prisma } from "@/lib/prisma";
 import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { toNumber as n } from "@/lib/format";
@@ -69,8 +75,13 @@ async function recomputePaidTotal(
 /** Erro de negócio do fechamento — vira `{ ok:false }`, nunca 500. */
 class SettleError extends Error {}
 
-export async function settleBillingPayment(input: SettleInput): Promise<SettleResult> {
+export async function settleBillingPayment(
+  input: SettleInput,
+  ctx: EngineContext = systemContext("UI")
+): Promise<SettleResult> {
   try {
+    // Resolvido FORA da transação: é leitura de configuração, não do fato.
+    const workspaceId = await currentWorkspaceId();
     // TRANSAÇÃO ÚNICA (auditoria 2026-08-13): Payment + Income de conciliação
     // + saldo/status da cobrança são gravados de forma atômica. A releitura do
     // saldo acontece DENTRO da transação e o update é guardado pelo paidTotal
@@ -231,6 +242,53 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
         },
       });
 
+      // ===== Fim do pipeline de 03 §4.1 =====
+      // "... -> Payment -> PaymentApplication -> AccountingEngine ->
+      //  AuditLog -> OutboxEvent -> commit". Os três passos abaixo rodam
+      // DENTRO da transação de propósito: postar o razão ou notificar
+      // depois do commit abriria uma janela em que o dinheiro existe e o
+      // lançamento (ou o aviso) não.
+      const competencia = toCompetence(billing.competenceYear, billing.competenceMonth);
+
+      // Razão: hoje a bandeira ledger_enabled está DESLIGADA, então o motor
+      // valida a regra e não escreve. Ligar é a F1.6 — e quando ligar, o
+      // lançamento já nasce dentro desta transação.
+      const contabil = await post(
+        {
+          eventType: "CUSTOMER_PAYMENT_RECEIVED",
+          sourceType: "Payment",
+          sourceId: payment.id,
+          competence: competencia,
+          amount: input.amount,
+          postedAt: input.paidAt,
+          context: { workspaceId, ownerId: billing.ownerId, clientId: billing.clientId },
+        },
+        tx as any
+      );
+      if (!contabil.ok) throw new SettleError(contabil.error);
+
+      await auditEvent(tx as any, "Payment", payment.id, "CREATE", ctx);
+      await auditUpdate(
+        tx as any, "Billing", billing.id,
+        { paidTotal: n(billing.paidTotal), status: billing.status },
+        { paidTotal: newPaidTotal, status: fullyPaid ? "PAID" : "PARTIAL" },
+        ctx
+      );
+
+      await publish(tx as any, {
+        workspaceId,
+        eventType: "pagamento.registrado",
+        channel: "crm",
+        sourceType: "Payment",
+        sourceId: payment.id,
+        payload: {
+          billingId: billing.id,
+          clientId: billing.clientId,
+          amount: input.amount,
+          fullyPaid,
+        },
+      });
+
       // Receita Extra automática foi REMOVIDA (regra atual: Receita Extra é
       // apenas manual). O pagamento em mês posterior fica registrado pelas
       // flags e conta como recuperação na camada de recebimentos.
@@ -251,10 +309,17 @@ export async function settleBillingPayment(input: SettleInput): Promise<SettleRe
   }
 }
 
-/** Reverte um pagamento (exclusão): saldo, status, flags e Receita Extra. */
-export async function revertBillingPayment(paymentId: string): Promise<
-  { ok: true; clientId: string } | { ok: false; error: string }
-> {
+/**
+ * Reverte um pagamento (exclusão): saldo, status, flags e Receita Extra.
+ *
+ * 01 §4.10: estorno é REVERSÃO com motivo, nunca edição destrutiva
+ * silenciosa. Por isso a trilha registra REVERSE — e o motor cobra o
+ * motivo antes de chegar aqui.
+ */
+export async function revertBillingPayment(
+  paymentId: string,
+  ctx: EngineContext = systemContext("UI")
+): Promise<{ ok: true; clientId: string } | { ok: false; error: string }> {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
     include: { billing: true },
@@ -304,6 +369,15 @@ export async function revertBillingPayment(paymentId: string): Promise<
         paidInDifferentMonth: false,
       },
     });
+
+    // Trilha do estorno, dentro da transação (03 §4.1).
+    await auditEvent(tx as any, "Payment", paymentId, "REVERSE", ctx);
+    await auditUpdate(
+      tx as any, "Billing", b.id,
+      { paidTotal: n(b.paidTotal), status: b.status },
+      { paidTotal: newPaidTotal, status },
+      ctx
+    );
 
     // Reverte a Receita Extra automática correspondente (pagamento feito em
     // mês posterior à competência).

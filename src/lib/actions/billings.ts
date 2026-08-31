@@ -152,12 +152,11 @@ export async function registerBillingPayment(
       notes: clean(formData.get("notes")),
     });
 
-    // Núcleo contábil compartilhado (fechamento mensal + Receita Extra
-    // automática idempotente) — mesma função testada pelos cenários.
-    const { settleBillingPayment } = await import(
-      "@/lib/services/payment-accounting"
-    );
-    const result = await settleBillingPayment(parsed);
+    // 03 §4.1: nenhuma action toca fato contábil direto. A permissão, a
+    // guarda de período e a de idempotência ficam no motor — aqui só chega
+    // o que já passou por elas.
+    const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
+    const result = await settleViaEngine(parsed);
     if (!result.ok) return result;
 
     revalidateBilling(result.clientId);
@@ -210,10 +209,8 @@ export async function quickSettleBilling(billingId: string): Promise<ActionResul
     const nowKey = now.getFullYear() * 12 + now.getMonth();
     const paidAt = compKey < nowKey ? b.dueDate : now;
 
-    const { settleBillingPayment } = await import(
-      "@/lib/services/payment-accounting"
-    );
-    const res = await settleBillingPayment({
+    const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
+    const res = await settleViaEngine({
       billingId: b.id,
       amount: open,
       paidAt,
@@ -254,10 +251,10 @@ export async function undoQuickSettle(paymentId: string): Promise<ActionResult> 
           "Janela de desfazer expirou — exclua o pagamento na ficha do cliente (aba Pagamentos).",
       };
 
-    const { revertBillingPayment } = await import(
-      "@/lib/services/payment-accounting"
-    );
-    const res = await revertBillingPayment(paymentId);
+    const { revertPayment } = await import("@/lib/engines/payment-engine");
+    // O motivo é obrigatório na trilha (01 §4.10). Aqui ele é conhecido: o
+    // usuário clicou "Desfazer" no toast do próprio gesto, dentro da janela.
+    const res = await revertPayment(paymentId, "Desfazer do gesto de 1 clique");
     if (!res.ok) return res;
 
     revalidateBilling(res.clientId);
@@ -422,8 +419,8 @@ export async function includeClientInMonth(formData: FormData): Promise<ActionRe
     // Pagamento no mesmo passo (histórico): data livre, núcleo contábil cuida
     // de atraso/mês diferente e do Income de conciliação.
     if (parsed.paid) {
-      const { settleBillingPayment } = await import("@/lib/services/payment-accounting");
-      const result = await settleBillingPayment({
+      const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
+      const result = await settleViaEngine({
         billingId,
         amount: parsed.paidAmount ?? parsed.amount,
         paidAt: parsed.paidAt ?? parsed.dueDate,
@@ -504,11 +501,13 @@ export async function registerBillingPaymentsBulk(
     }
     const skipped = billings.length - payable.length;
 
-    const { settleBillingPayment } = await import("@/lib/services/payment-accounting");
+    // Pagamento em massa: cada linha passa pelo motor, com as mesmas
+    // guardas. Uma falha não derruba as outras — o resumo diz quantas.
+    const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
     const affectedClients = new Set<string>();
     const failures: string[] = [];
     for (const b of payable) {
-      const result = await settleBillingPayment({
+      const result = await settleViaEngine({
         billingId: b.id,
         amount: n(b.amount) - n(b.paidTotal),
         paidAt: opts.mode === "due" ? b.dueDate : singleDate!,

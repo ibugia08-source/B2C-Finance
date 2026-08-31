@@ -87,7 +87,19 @@ export function idempotencyKeyOf(fact: Pick<PostingFact, "eventType" | "sourceTy
  * Posta um fato no razão. Devolve `posted:false` (sem erro) quando a bandeira
  * está desligada ou o fato já foi postado — as duas situações são normais.
  */
-export async function post(fact: PostingFact): Promise<PostingResult> {
+/**
+ * Cliente de transação — o que $transaction entrega ao callback.
+ * O motor aceita um para poder postar DENTRO da transação do fato, como o
+ * pipeline de 03 §4.1 exige ("... -> AccountingEngine -> AuditLog ->
+ * OutboxEvent -> commit"). Postar depois do commit deixaria uma janela em
+ * que o dinheiro existe e o lançamento não.
+ */
+type TxClient = {
+  ledgerTransaction: { create: (a: any) => Promise<any>; findFirst: (a: any) => Promise<any> };
+  ledgerEntry: { createMany: (a: any) => Promise<any> };
+};
+
+export async function post(fact: PostingFact, tx?: TxClient): Promise<PostingResult> {
   try {
     const { context } = fact;
     const valor = new Prisma.Decimal(fact.amount as any);
@@ -126,9 +138,9 @@ export async function post(fact: PostingFact): Promise<PostingResult> {
     if (!await isLedgerEnabled(context.workspaceId))
       return { ok: true, posted: false, reason: "flag_desligada" };
 
-    const criada = await runWithoutScope(async () =>
-      prisma.$transaction(async (tx) => {
-        const transacao = await tx.ledgerTransaction.create({
+    // Com `tx`, escreve na transação de quem chamou; sem, abre a própria.
+    const escrever = async (db: TxClient) => {
+        const transacao = await db.ledgerTransaction.create({
           data: {
             workspaceId: context.workspaceId,
             eventType: fact.eventType,
@@ -142,7 +154,7 @@ export async function post(fact: PostingFact): Promise<PostingResult> {
           },
           select: { id: true },
         });
-        await tx.ledgerEntry.createMany({
+        await db.ledgerEntry.createMany({
           data: [
             {
               ledgerTransactionId: transacao.id,
@@ -165,8 +177,11 @@ export async function post(fact: PostingFact): Promise<PostingResult> {
           ],
         });
         return transacao;
-      })
-    );
+    };
+
+    const criada = tx
+      ? await escrever(tx)
+      : await runWithoutScope(async () => prisma.$transaction(async (t) => escrever(t as any)));
 
     return { ok: true, posted: true, ledgerTransactionId: criada.id };
   } catch (e) {

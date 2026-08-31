@@ -4,7 +4,7 @@ import { requirePermission, can } from "@/lib/auth/viewer";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
 import { parseBRL, parseMonthParam, toNumber as n } from "@/lib/format";
 import { getValidDueDateForMonth, addMonthsClamped } from "@/lib/financial/due-date";
-import { settleBillingPayment } from "@/lib/services/payment-accounting";
+import { settleBilling as settleViaEngine } from "@/lib/engines/payment-engine";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
 
@@ -297,7 +297,7 @@ export async function renewClientFlow(
           const payAmount =
             payStatus === "parcial" ? Math.min(parseBRL(paidRaw), open) : open;
           if (payAmount > 0) {
-            const settled = await settleBillingPayment({
+            const settled = await settleViaEngine({
               billingId,
               amount: payAmount,
               paidAt: today,

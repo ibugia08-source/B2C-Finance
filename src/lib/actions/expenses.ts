@@ -247,9 +247,12 @@ export async function setExpenseStatus(
   id: string,
   status: (typeof STATUS)[number]
 ): Promise<ActionResult> {
-  await requirePermission("despesas.marcar_como_paga");
   try {
-    await prisma.transaction.updateMany({ where: { id }, data: { status } });
+    // 03 §4.1: a action não escreve o fato — o motor escreve, com a
+    // permissão, a guarda de período, a trilha e o aviso no mesmo lugar.
+    const { setExpenseStatus: viaEngine } = await import("@/lib/engines/expense-engine");
+    const res = await viaEngine(id, status);
+    if (!res.ok) return res;
     revalidateFinance();
     return { ok: true };
   } catch (e: any) {

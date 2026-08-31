@@ -162,10 +162,10 @@ export async function setMonthChargeStatus(
       if (b.status === "PAID") return { ok: true };
       const open = n(b.amount) - n(b.paidTotal);
       if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
-      const { settleBillingPayment } = await import(
-        "@/lib/services/payment-accounting"
+      const { settleBilling: settleViaEngine } = await import(
+        "@/lib/engines/payment-engine"
       );
-      const res = await settleBillingPayment({
+      const res = await settleViaEngine({
         billingId: b.id,
         amount: open,
         paidAt: new Date(),
@@ -315,10 +315,10 @@ export async function setClientMonthPayment(
       const nowKey = now.getFullYear() * 12 + now.getMonth();
       const paidAt = compKey < nowKey ? billing.dueDate : now;
 
-      const { settleBillingPayment } = await import(
-        "@/lib/services/payment-accounting"
+      const { settleBilling: settleViaEngine } = await import(
+        "@/lib/engines/payment-engine"
       );
-      const res = await settleBillingPayment({
+      const res = await settleViaEngine({
         billingId: billing.id,
         amount: open,
         paidAt,
@@ -483,11 +483,9 @@ export async function deleteBillingPayments(billingId: string): Promise<ActionRe
     if (payments.length === 0)
       return { ok: false, error: "Esta cobrança não tem pagamentos registrados." };
 
-    const { revertBillingPayment } = await import(
-      "@/lib/services/payment-accounting"
-    );
+    const { revertPayment } = await import("@/lib/engines/payment-engine");
     for (const p of payments) {
-      const res = await revertBillingPayment(p.id);
+      const res = await revertPayment(p.id, "Exclusão dos pagamentos da cobrança");
       if (!res.ok) return res;
     }
     await prisma.collectionHistory.create({
