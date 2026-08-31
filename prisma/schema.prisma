@@ -215,6 +215,7 @@ model User {
   ownedAvaliacoes    AvaliacaoMensal[]          @relation("OwnerAvaliacaoMensal")
   ownedOnboarding    OnboardingTask[]           @relation("OwnerOnboardingTask")
   ownedTerms         CommercialTerm[]           @relation("OwnerCommercialTerm")
+  ownedAssignments   ClientManagerAssignment[]  @relation("OwnerManagerAssignment")
 }
 
 // Diferenças de permissão de UM usuário vs. o padrão do papel dele.
@@ -1832,6 +1833,7 @@ model Employee {
   createdAt  DateTime     @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime     @updatedAt @db.Timestamptz(3)
 
+  assignments       ClientManagerAssignment[]
   payrollItems      PayrollItem[]
   commissions       Commission[]
   salesOwnedClients Client[]      @relation("ClientSalesOwner")
@@ -2366,6 +2368,7 @@ model ClientAgencyRelationship {
   avaliacoes  AvaliacaoMensal[]
   onboarding  OnboardingTask[]
   terms       CommercialTerm[] @relation("TermosDaRelacao")
+  managers    ClientManagerAssignment[]
 
   /// Um cliente tem no máximo UMA relação por agência: duas seriam duas
   /// carteiras do mesmo cliente na mesma agência, que é o bug, não o caso.
@@ -2485,6 +2488,53 @@ model CommercialTerm {
 
   @@index([relationshipId, validFrom])
   @@index([validFrom])
+  @@index([ownerId])
+}
+
+// ===========================================================================
+// VIGÊNCIA DE GESTORES (F1.3 · ref. 01 §4.3)
+//
+// "ClientManagerAssignment: relationshipId, managerId, role, validFrom,
+// validTo, changedBy, reason. A AvaliacaoMensal copia gestores para
+// fotografia, mas NÃO é fonte de vigência."
+//
+// Mesma doença que o valor tinha antes da F1.2: no v1 o responsável era um
+// campo no Client, então trocar de gestor apagava quem cuidava do cliente
+// no ano passado — e com isso qualquer apuração de comissão ou de carteira
+// por gestor passava a mentir sobre o passado.
+// ===========================================================================
+
+enum ManagerRole {
+  MANAGER_1
+  MANAGER_2
+  COMMERCIAL_ORIGIN
+  SDR_ORIGIN
+}
+
+model ClientManagerAssignment {
+  id             String                   @id @default(cuid())
+  relationshipId String
+  relationship   ClientAgencyRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  managerId      String
+  manager        Employee                 @relation(fields: [managerId], references: [id], onDelete: Cascade)
+
+  role ManagerRole
+
+  validFrom DateTime  @db.Timestamptz(3)
+  validTo   DateTime? @db.Timestamptz(3)
+
+  /// Quem mexeu e por quê — a atribuição é dado de gestão, não detalhe.
+  changedBy String?
+  reason    String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerManagerAssignment", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([relationshipId, role, validFrom])
+  @@index([managerId])
   @@index([ownerId])
 }
 

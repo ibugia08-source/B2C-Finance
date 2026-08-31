@@ -73,6 +73,8 @@ const OWNED_MODELS = new Set<string>([
   "OnboardingTask",
   // F1.2 — a linha do tempo do valor combinado.
   "CommercialTerm",
+  // F1.3 — vigência de gestores.
+  "ClientManagerAssignment",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

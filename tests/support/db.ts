@@ -73,6 +73,7 @@ export async function destroyOwner(owner: TestOwner) {
     // F1.1 — o que pertence à relação sai antes dela, e ela antes do cliente.
     await prisma.onboardingTask.deleteMany({ where: { ownerId: owner.id } });
     await prisma.avaliacaoMensal.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.clientManagerAssignment.deleteMany({ where: { ownerId: owner.id } });
     await prisma.commercialTerm.deleteMany({ where: { ownerId: owner.id } });
     // O cache aponta para o termo; zerar antes evita a FK travar a limpeza.
     await prisma.clientAgencyRelationship.updateMany({
@@ -86,6 +87,7 @@ export async function destroyOwner(owner: TestOwner) {
     });
     await prisma.contract.deleteMany({ where: { ownerId: owner.id } });
     await prisma.clientContact.deleteMany({ where: { client: { ownerId: owner.id } } });
+    await prisma.employee.deleteMany({ where: { ownerId: owner.id } });
     await prisma.client.deleteMany({ where: { ownerId: owner.id } });
     await prisma.user.deleteMany({ where: { id: owner.id } });
   });
