@@ -99,6 +99,14 @@ export default async function FotografiaPage({
       <PageHeader
         title="Fotografia do mês"
         description={`${monthLabel(new Date(ano, mes - 1, 1))} — como o mês ficou quando fechou`}
+        actions={
+          <Link
+            href={`/fechamento/fotografia/documento?mes=${competence}`}
+            className="inline-flex h-9 items-center rounded-input border border-border px-3.5 text-sm font-medium hover:bg-surface-raised"
+          >
+            Documento em PDF
+          </Link>
+        }
       />
 
       <SnapshotBanner

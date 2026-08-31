@@ -22,6 +22,13 @@ import { scopeKeyParts, scopeFromSession, type CacheScope } from "@/lib/cache-sc
  * B2C_DISABLE_CACHE=1 o helper executa a função direto, no escopo do dono —
  * mesmo resultado, sem cache. É como a suíte de paridade consegue exercitar
  * exatamente os serviços que a tela usa.
+ *
+ * E SEM a variável também: o helper CAI PARA A EXECUÇÃO DIRETA quando o
+ * cache não existe, em vez de estourar. Isso apareceu na F2.10, ao fechar um
+ * mês por script: o motor de fotografia lê métricas, métricas passam por
+ * aqui, e o fechamento inteiro quebrava fora de uma request. Um serviço de
+ * domínio não pode depender de haver um servidor HTTP por perto — a mesma
+ * correção que a F1.6 fez no contexto dos motores.
  */
 export function ownerCached<A extends unknown[], R>(
   keyBase: string,
@@ -40,7 +47,17 @@ export function ownerCached<A extends unknown[], R>(
   return async (...args: A) => {
     if (process.env.B2C_DISABLE_CACHE === "1") return fn(...args);
     const scope = await currentCacheScope();
-    return cached(scopeKeyParts(scope), scope.ownerId, ...args);
+    try {
+      return await cached(scopeKeyParts(scope), scope.ownerId, ...args);
+    } catch (e: any) {
+      // Só o caso "não há cache aqui". Qualquer outro erro é da FUNÇÃO e tem
+      // de subir: engolir tudo transformaria um defeito de cálculo em número
+      // silenciosamente errado.
+      if (typeof e?.message === "string" && e.message.includes("incrementalCache")) {
+        return fn(...args);
+      }
+      throw e;
+    }
   };
 }
 

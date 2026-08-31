@@ -1,0 +1,240 @@
+/*
+ * TEMA DOCUMENTO (F2.10 · ref. 02 §7.8).
+ *
+ * Duas regras que valem mais que o resto do arquivo:
+ *
+ *  1. O DOURADO SÓ EXISTE NA CAPA. 02 §7.1 proíbe dourado em tela de
+ *     trabalho; aqui ele é permitido, e mesmo assim só nos valores de
+ *     destaque da capa. No miolo não aparece nenhuma vez.
+ *  2. O RODAPÉ REPETE EM TODA PÁGINA com a versão e o checksum. É o que faz
+ *     o documento valer como prova: dois PDFs do mesmo mês com checksums
+ *     diferentes são dois fechamentos diferentes, e dá para saber qual é qual
+ *     sem abrir o sistema.
+ *
+ * Cores em literal, e não em token: este arquivo é o único do produto que
+ * NÃO segue o tema do usuário. Um documento impresso não tem modo escuro, e
+ * a capa navy tem de sair navy no papel de qualquer pessoa.
+ */
+
+.doc {
+  --doc-navy: #0d1b2e;
+  --doc-navy-2: #12263f;
+  --doc-gold: #f5c518;
+  --doc-tinta: #14181d;
+  --doc-tinta-fraca: #5b6470;
+  --doc-linha: #d8dde3;
+  --doc-zebra: rgba(13, 27, 46, 0.03); /* zebra 3% (§7.8) */
+  background: #fff;
+  color: var(--doc-tinta);
+  font-size: 11pt;
+  line-height: 1.45;
+}
+
+.doc-so-tela {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0 1rem;
+}
+.doc-dica {
+  font-size: 0.75rem;
+  color: var(--doc-tinta-fraca);
+}
+
+/* ===================== CAPA ===================== */
+.doc-capa {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(160deg, var(--doc-navy) 0%, var(--doc-navy-2) 100%);
+  color: #fff;
+  padding: 3.5rem 3rem;
+  min-height: 62vh;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Grão: ruído fino em SVG embutido — sem arquivo externo, sem requisição. */
+.doc-capa-grao {
+  position: absolute;
+  inset: 0;
+  opacity: 0.16;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='120' height='120' filter='url(%23n)' opacity='0.5'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+/* Quadrados sobrepostos: a marca do território institucional. */
+.doc-capa-quadrados {
+  position: absolute;
+  top: -3rem;
+  right: -3rem;
+  width: 22rem;
+  height: 22rem;
+}
+.doc-capa-quadrados span {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+}
+.doc-capa-quadrados span:nth-child(1) { inset: 0 0 6rem 6rem; }
+.doc-capa-quadrados span:nth-child(2) { inset: 3rem 3rem 3rem 3rem; }
+.doc-capa-quadrados span:nth-child(3) { inset: 6rem 6rem 0 0; border-color: rgba(245, 197, 24, 0.22); }
+
+.doc-capa-marca {
+  position: absolute;
+  right: 2.5rem;
+  bottom: 1.5rem;
+  font-size: 7rem;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  color: rgba(255, 255, 255, 0.05);
+  line-height: 1;
+}
+
+.doc-capa-conteudo { position: relative; z-index: 1; }
+
+.doc-capa-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.68);
+  margin-bottom: 0.5rem;
+}
+
+/* Título condensado (§7.8). */
+.doc-capa-titulo {
+  font-size: 3.1rem;
+  line-height: 1.02;
+  font-weight: 700;
+  font-stretch: condensed;
+  letter-spacing: -0.02em;
+  text-transform: capitalize;
+  margin: 0;
+}
+
+.doc-capa-sub {
+  margin-top: 0.4rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.85rem;
+}
+
+.doc-capa-destaques {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  margin: 2.25rem 0 0;
+}
+.doc-capa-destaques dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.6);
+}
+/* O dourado vive AQUI e em nenhum outro lugar do documento. */
+.doc-capa-destaques dd {
+  margin: 0.25rem 0 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--doc-gold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===================== MIOLO ===================== */
+.doc-miolo { padding: 2rem 0 0; }
+
+.doc-cabecalho {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--doc-linha);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--doc-tinta-fraca);
+  text-transform: capitalize;
+}
+
+.doc-miolo h2 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--doc-tinta-fraca);
+  margin: 1.75rem 0 0.6rem;
+  font-weight: 600;
+}
+
+.doc-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.doc-tabela th {
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--doc-tinta-fraca);
+  border-bottom: 1px solid var(--doc-linha);
+  padding: 0.35rem 0.5rem;
+  font-weight: 600;
+}
+.doc-tabela td {
+  padding: 0.34rem 0.5rem;
+  border-bottom: 1px solid rgba(216, 221, 227, 0.6);
+}
+.doc-tabela tbody tr:nth-child(even) { background: var(--doc-zebra); }
+.doc-tabela .num { text-align: right; }
+.doc-mono { font-family: ui-monospace, "JetBrains Mono", monospace; font-size: 0.72rem; }
+
+.doc-nota {
+  font-size: 0.78rem;
+  color: var(--doc-tinta-fraca);
+  margin-top: 0.5rem;
+}
+
+.doc-rodape {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--doc-linha);
+  margin-top: 2rem;
+  padding-top: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--doc-tinta-fraca);
+}
+
+/* ===================== IMPRESSÃO ===================== */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 14mm 18mm;
+  }
+  /* O documento não segue o tema do usuário: um PDF não tem modo escuro. */
+  :root, html, body { background: #fff !important; }
+  .doc-so-tela { display: none !important; }
+
+  .doc-capa {
+    border-radius: 0;
+    min-height: 245mm;
+    margin: -14mm -14mm 0;
+    padding: 40mm 24mm;
+    break-after: page;
+    /* Sem isto o navegador imprime a capa branca e o documento perde a
+       identidade inteira. */
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .doc-cabecalho { position: running(cabecalho); }
+
+  /* Rodapé repetido em toda página, com versão e checksum (§7.8). */
+  .doc-rodape {
+    position: fixed;
+    bottom: -12mm;
+    left: 0;
+    right: 0;
+  }
+
+  .doc-tabela { break-inside: auto; }
+  .doc-tabela tr { break-inside: avoid; break-after: auto; }
+  .doc-miolo h2 { break-after: avoid; }
+}
