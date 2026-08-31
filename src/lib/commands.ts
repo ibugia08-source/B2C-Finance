@@ -9,12 +9,10 @@ import { NAV_AREAS, type UserLike } from "@/components/nav-items";
  * lugar nenhum, então ele nunca mente sobre o que o sistema faz.
  *
  * REGRA que segurei de propósito: só entra comando que FUNCIONA hoje.
- * "Comparar março x julho" (F2.5) e "exportar DRE" (F3.2) estão na spec
- * como exemplos, mas as telas ainda não existem — registrá-los agora
- * encheria a paleta de becos sem saída. Eles entram quando as fases deles
- * entrarem. "Fechar competência" já FUNCIONA desde a F2.1, mas mora num
- * botão do cabeçalho da Gestão do Mês; ele vira comando quando a F2.2
- * trouxer a tela de checklist, que é onde um comando tem para onde levar.
+ * "Exportar DRE" (F3.2) está na spec como exemplo, mas a tela ainda não
+ * existe — registrá-lo agora encheria a paleta de becos sem saída. Ele
+ * entra quando a fase dele entrar. "Fechar competência" (F2.2) e
+ * "comparar março x julho" (F2.5) já têm tela e já estão aqui.
  */
 
 export type CommandAction =
@@ -50,6 +48,12 @@ const FIXOS: Command[] = [
   { id: "pagamento.registrar", label: "Registrar pagamento", group: "Ações",
     permission: "recebimentos.registrar_pagamento", href: "/cobrancas",
     keywords: "receber baixa quitar pagar" },
+  { id: "fechamento.abrir", label: "Fechar competência", group: "Ações",
+    permission: "fechamento.fechar", href: "/fechamento",
+    keywords: "fechamento mes checklist encerrar competencia" },
+  { id: "comparativo.abrir", label: "Comparar dois meses", group: "Ações",
+    permission: "relatorios.visualizar", href: "/comparativo",
+    keywords: "comparar variacao delta lado a lado" },
 
   { id: "mes.anterior", label: "Mês anterior", group: "Período", action: "mesAnterior", shortcut: "[" },
   { id: "mes.seguinte", label: "Mês seguinte", group: "Período", action: "mesSeguinte", shortcut: "]" },
