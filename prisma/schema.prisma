@@ -85,7 +85,8 @@ model LegalEntity {
   createdAt     DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
 
-  agencies Agency[]
+  agencies     Agency[]
+  TaxProvision TaxProvision[]
 
   @@unique([workspaceId, cnpj])
   @@index([workspaceId])
@@ -185,6 +186,7 @@ model User {
   ownedInvoices        CreditCardInvoice[]  @relation("OwnerInvoice")
   ownedImportBatches   ImportBatch[]        @relation("OwnerImportBatch")
   ownedImportedRecords ImportedRecord[]     @relation("OwnerImportedRecord")
+  ownedTaxProvisions   TaxProvision[]       @relation("OwnerTaxProvision")
   ownedIncomes         Income[]             @relation("OwnerIncome")
   ownedCashBoxes       CashBox[]            @relation("OwnerCashBox")
   ownedPeople          Person[]             @relation("OwnerPerson")
@@ -896,6 +898,12 @@ model CashBox {
   owner         User?    @relation("OwnerCashBox", fields: [ownerId], references: [id])
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  /// DECIDIDO 19.34 (31/08): a restrição é POR RESERVA, e impostos e 13º
+  /// nascem restritos. Reserva restrita NÃO conta na liquidez disponível —
+  /// aquele dinheiro tem dono e data, e mostrá-lo como disponível é o que
+  /// faz alguém aprovar uma despesa contra o imposto do mês seguinte.
+  restricted Boolean @default(false)
 
   movements CashBoxMovement[]
 
@@ -2972,4 +2980,47 @@ model SnapshotDependency {
 
   @@index([snapshotId])
   @@index([dependsOnCompetence])
+}
+
+/// PROVISÃO TRIBUTÁRIA (F3.3 · ref. 01 §3.8).
+///
+/// Provisão e reserva são EVENTOS INDEPENDENTES, e confundi-los é o erro que
+/// esta tabela existe para impedir: a provisão RECONHECE a obrigação (vira
+/// despesa e passivo); a reserva SEGREGA caixa (não é despesa nenhuma).
+/// Quem faz as duas como se fossem uma conta o imposto duas vezes.
+///
+/// O sistema SUGERE a transferência para a reserva e NUNCA a executa (§3.8):
+/// mover dinheiro entre contas é decisão de quem assina, não efeito colateral
+/// de um cálculo.
+model TaxProvision {
+  id            String      @id @default(cuid())
+  legalEntityId String
+  legalEntity   LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+
+  competence String
+  /// Faturamento que serviu de base — gravado, não recalculado depois.
+  baseAmount Decimal @db.Decimal(14, 2)
+  /// Alíquota efetiva aplicada, em porcentagem (ex.: 6.00).
+  rate       Decimal @db.Decimal(6, 4)
+  amount     Decimal @db.Decimal(14, 2)
+
+  /// Como a base foi apurada, para a conferência do contador.
+  basis String @default("FATURAMENTO")
+
+  /// A provisão virou lançamento no razão?
+  postedAt         DateTime? @db.Timestamptz(3)
+  /// Quanto o sistema sugeriu guardar na reserva, e se alguém executou.
+  reserveSuggested Decimal?  @db.Decimal(14, 2)
+  reserveDoneAt    DateTime? @db.Timestamptz(3)
+  reserveDoneBy    String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerTaxProvision", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([legalEntityId, competence])
+  @@index([competence])
+  @@index([ownerId])
 }

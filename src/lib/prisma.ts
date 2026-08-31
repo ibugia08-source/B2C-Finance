@@ -23,6 +23,7 @@ const OWNED_MODELS = new Set<string>([
   "PersonPayment",
   "ImportBatch",
   "ImportedRecord",
+  "TaxProvision",
   "CategorizationRule",
   "AIConversation",
   "AIMemory",
@@ -152,6 +153,17 @@ function makeClient() {
         if (CREATE_MANY.has(operation)) {
           const rows = Array.isArray(a.data) ? a.data : [a.data];
           a.data = rows.map((d: any) => injectOwnerData(d ?? {}, ownerId));
+          return query(a);
+        }
+
+        // UPSERT cria pelo ramo `create`, e ele também precisa do dono.
+        //
+        // Achado pelo teste da F3.3, e não era um detalhe de teste: sem isto,
+        // o registro nasce SEM DONO — invisível para quem o criou (a leitura
+        // filtra por ownerId) e invisível para todo mundo. O sintoma é o pior
+        // possível: gravar dá certo, e o dado some.
+        if (operation === "upsert") {
+          a.create = injectOwnerData(a.create ?? {}, ownerId);
           return query(a);
         }
 

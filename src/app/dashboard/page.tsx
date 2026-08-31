@@ -323,8 +323,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
           title="Liquidez disponível"
           value={formatBRL(liquidez.disponivel)}
           basis="caixa"
-          hint={`Projeção 30 dias: ${formatBRL(liquidez.projecao30d)}`}
-          help="Saldo somado das contas bancárias e das reservas, hoje. A projeção de 30 dias acrescenta as cobranças que vencem no período e subtrai as contas a pagar do mesmo prazo. Nenhuma reserva é tratada como restrita ainda — essa configuração chega junto com o Fluxo de Caixa."
+          hint={
+            liquidez.reservado > 0
+              ? `${formatBRL(liquidez.reservado)} reservados · projeção 30d: ${formatBRL(liquidez.projecao30d)}`
+              : `Projeção 30 dias: ${formatBRL(liquidez.projecao30d)}`
+          }
+          help="Contas e reservas de hoje, MENOS as reservas restritas (impostos e 13º por padrão) — aquele dinheiro tem dono e data, e mostrá-lo como disponível é o que faz alguém aprovar uma despesa contra o imposto do mês seguinte. A projeção de 30 dias acrescenta as cobranças que vencem no período e subtrai as contas a pagar do mesmo prazo."
           tone={liquidez.projecao30d < 0 ? "neg" : liquidez.disponivel > 0 ? "pos" : "default"}
           detailTitle="Liquidez disponível e projeção de 30 dias"
           detail={
@@ -333,7 +337,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
                 items={liquidez.itens.map((i) => ({
                   name: i.label,
                   value: i.value,
-                  sub: i.tipo === "conta" ? "conta" : "reserva",
+                  sub: i.restrita
+                    ? "reserva restrita — fora do disponível"
+                    : i.tipo === "conta"
+                      ? "conta"
+                      : "reserva",
                 }))}
                 total={liquidez.disponivel}
                 totalLabel="Disponível hoje"

@@ -8,12 +8,14 @@ import { toNumber as n } from "@/lib/format";
  *
  * "Liquidez disponível + projeção 30d."
  *
- * ATENÇÃO AO ESCOPO: a versão COMPLETA desta métrica é da F3.11, que
- * depende da DECISÃO 19.34 (quais reservas contam como restritas e
- * portanto saem da liquidez). Enquanto 19.34 estiver aberta, este
- * serviço soma contas + reservas SEM excluir nenhuma, e devolve a
- * composição para a interface DIZER exatamente o que entrou. Não
- * inventamos regra de restrição: mostramos a conta aberta.
+ * DECIDIDO 19.34 (31/08), e é o que esta métrica passou a fazer: a restrição
+ * é POR RESERVA, e impostos e 13º nascem restritos.
+ *
+ * RESERVA RESTRITA NÃO ENTRA NA LIQUIDEZ. Aquele dinheiro tem dono e tem
+ * data: mostrá-lo como disponível é exatamente o que faz alguém aprovar uma
+ * despesa contra o imposto do mês seguinte, e descobrir no dia do vencimento.
+ * O card mostra o disponível; a composição continua mostrando tudo, com as
+ * restritas marcadas, para a conta continuar aberta.
  *
  * A projeção de 30 dias é igualmente conservadora e explícita:
  *   entradas = cobranças em aberto que vencem nos próximos 30 dias
@@ -24,9 +26,16 @@ import { toNumber as n } from "@/lib/format";
 export type Liquidez = {
   contas: number;
   reservas: number;
+  /** Parte das reservas que é RESTRITA e sai do disponível (19.34). */
+  reservado: number;
   disponivel: number;
-  /** Composição para o detalhe do card. */
-  itens: { label: string; value: number; tipo: "conta" | "reserva" }[];
+  /** Composição para o detalhe do card — mostra tudo, marcando as restritas. */
+  itens: {
+    label: string;
+    value: number;
+    tipo: "conta" | "reserva";
+    restrita: boolean;
+  }[];
   entradas30d: number;
   saidas30d: number;
   projecao30d: number;
@@ -38,7 +47,9 @@ async function getLiquidezImpl(hojeISO: string): Promise<Liquidez> {
 
   const [contas, reservas, aReceber, aPagar] = await Promise.all([
     prisma.account.findMany({ select: { name: true, balance: true } }),
-    prisma.cashBox.findMany({ select: { name: true, currentAmount: true } }),
+    prisma.cashBox.findMany({
+      select: { name: true, currentAmount: true, restricted: true },
+    }),
     prisma.billing.findMany({
       where: {
         status: { notIn: ["PAID", "CANCELED"] },
@@ -58,20 +69,33 @@ async function getLiquidezImpl(hojeISO: string): Promise<Liquidez> {
 
   const somaContas = contas.reduce((s, c) => s + n(c.balance), 0);
   const somaReservas = reservas.reduce((s, r) => s + n(r.currentAmount), 0);
+  const somaRestritas = reservas
+    .filter((r) => r.restricted)
+    .reduce((s, r) => s + n(r.currentAmount), 0);
   const entradas30d = aReceber.reduce(
     (s, b) => s + Math.max(0, n(b.amount) - n(b.paidTotal)),
     0
   );
   const saidas30d = aPagar.reduce((s, t) => s + n(t.amount), 0);
-  const disponivel = somaContas + somaReservas;
+  // 01 §7.2: "Liquidez disponível = total - reservado". O card principal usa
+  // esta, nunca o saldo bruto.
+  const disponivel = somaContas + somaReservas - somaRestritas;
 
   return {
     contas: somaContas,
     reservas: somaReservas,
+    reservado: somaRestritas,
     disponivel,
     itens: [
-      ...contas.map((c) => ({ label: c.name, value: n(c.balance), tipo: "conta" as const })),
-      ...reservas.map((r) => ({ label: r.name, value: n(r.currentAmount), tipo: "reserva" as const })),
+      ...contas.map((c) => ({
+        label: c.name, value: n(c.balance), tipo: "conta" as const, restrita: false,
+      })),
+      ...reservas.map((r) => ({
+        label: r.name,
+        value: n(r.currentAmount),
+        tipo: "reserva" as const,
+        restrita: r.restricted,
+      })),
     ],
     entradas30d,
     saidas30d,
