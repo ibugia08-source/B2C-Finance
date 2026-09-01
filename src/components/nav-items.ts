@@ -57,6 +57,7 @@ export const NAV_AREAS: NavArea[] = [
     pages: [
       { href: "/dashboard", label: "Visão geral", permission: "dashboard.visualizar" },
       { href: "/rotina", label: "Rotina do dia", permission: "rotina.visualizar" },
+      { href: "/rotina/semana", label: "Rotina da semana", permission: "rotina.visualizar" },
       { href: "/assistente", label: "Assistente IA", permission: "assistente.visualizar" },
     ],
   },
