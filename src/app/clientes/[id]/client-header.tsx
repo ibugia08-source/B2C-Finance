@@ -8,6 +8,7 @@ import { StatCard } from "@/components/metric-card";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import type { ClientRiskProfile } from "@/lib/services/client-metrics";
 import { ClientStatusSelect } from "../status-select";
+import { LifecycleActions } from "./lifecycle-actions";
 import { ClientDialog } from "../client-dialog";
 import { UpsellDialog } from "@/app/upsell/upsell-dialog";
 import {
@@ -73,6 +74,7 @@ export function ClientHeader({ client, summary, monthly, risk, upsell }: ClientH
           .join(" · ")}
         actions={
           <div className="flex items-center gap-2">
+            <LifecycleActions clientId={client.id} status={client.status} />
             <ClientStatusSelect clientId={client.id} status={client.status} />
             <ClientDialog
               initial={{

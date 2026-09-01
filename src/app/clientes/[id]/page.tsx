@@ -37,6 +37,8 @@ import {
 import { CONTRACT_STATUS_LABEL, contractStatusVariant } from "@/app/acordos/_meta";
 import { PAYMENT_METHOD_LABEL, COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
 import { resolveClientTab } from "./tabs-meta";
+import { linhaDoTempo } from "@/lib/services/client-timeline";
+import { TimelineTab } from "./timeline-tab";
 import { OnboardingBoard } from "./onboarding-board";
 import { TermosTab } from "./termos-tab";
 import { carregarQuadro } from "@/lib/services/onboarding";
@@ -606,6 +608,15 @@ export default async function ClientDetailPage({
         </TabsContent>
 
         {/* ---------- Contexto do Cliente ---------- */}
+        <TabsContent value="linha-do-tempo">
+          <TimelineTab
+            eventos={(await linhaDoTempo(client.id)).map((e) => ({
+              ...e,
+              quando: e.quando.toISOString(),
+            }))}
+          />
+        </TabsContent>
+
         <TabsContent value="contexto">
           <div className="space-y-4">
             <Card>

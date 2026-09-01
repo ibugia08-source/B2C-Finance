@@ -14,6 +14,7 @@ export const CLIENT_TABS = [
   { id: "termos", label: "Preço e termos" },
   { id: "onboarding", label: "Onboarding", countKey: "onboarding" },
   { id: "historico", label: "Histórico", countKey: "historico" },
+  { id: "linha-do-tempo", label: "Linha do tempo" },
   { id: "contexto", label: "Contexto", countKey: "contexto" },
 ] as const;
 
