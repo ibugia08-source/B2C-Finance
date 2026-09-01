@@ -13,6 +13,8 @@ import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { getRetentionPanel } from "@/lib/services/retention-metrics";
+import { previsaoDeChurn } from "@/lib/services/churn-signals";
+import { serieDeNrr } from "@/lib/services/nrr";
 import { ROW_OVERDUE, ROW_SOON } from "@/lib/status-meta";
 import { HeartCrack, ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -38,6 +40,19 @@ export default async function RetencaoPage({
       : now.getFullYear();
 
   const panel = await getRetentionPanel(year);
+  // F5.4 — NRR pelas vigências dos termos e previsão de churn por sinais.
+  const competenciaFinal =
+    year === now.getFullYear()
+      ? `${year}-${String(now.getMonth() + 1).padStart(2, "0")}`
+      : `${year}-12`;
+  const [previsao, nrrSerie] = await Promise.all([
+    previsaoDeChurn(now),
+    serieDeNrr(competenciaFinal, 6),
+  ]);
+  // TODO sinal aceso aparece — inclusive quem só tem o tempo de casa (o
+  // antigo "zona de risco" vive aqui dentro como sinal, não como lista à parte).
+  const emRisco = previsao.filter((c) => c.pontos > 0);
+  const semLeitura = previsao.filter((c) => c.semLeitura).length;
   // Perdas recentes (lista auditável — mesma fonte do painel)
   const recentLosses = await prisma.clientLoss.findMany({
     orderBy: { lostAt: "desc" },
@@ -175,24 +190,80 @@ export default async function RetencaoPage({
         </CardContent>
       </Card>
 
-      {/* ===== Zona de risco ===== */}
+      {/* ===== NRR — retenção líquida de receita (F5.4) ===== */}
       <div className="mb-2">
         <h2 className="font-display text-lg font-semibold tracking-[-0.01em]">
-          Zona de risco — clientes com 2 a 6 meses de casa
+          Retenção líquida de receita (NRR)
         </h2>
         <p className="text-xs text-muted-foreground">
-          A faixa de vida onde {panel.lifetime.n > 0
-            ? `${Math.round(((panel.lifetime.ate3 + panel.lifetime.de4a6) / Math.max(1, panel.lifetime.n)) * 100)}% das perdas históricas aconteceram`
-            : "historicamente a base se perde"} — priorize contato e entrega de valor aqui
+          O que aconteceu com a receita da base que JÁ existia: reajustes para
+          cima (expansão), para baixo (contração) e saídas. Lê o valor vigente
+          de cada mês — cliente novo no mês fica fora da conta. Por competência.
         </p>
       </div>
       <Card className="mb-6">
         <CardContent className="p-0">
-          {panel.riskClients.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Mês</TableHead>
+                  <TableHead className="text-right">Base inicial</TableHead>
+                  <TableHead className="text-right">Expansão</TableHead>
+                  <TableHead className="text-right">Contração</TableHead>
+                  <TableHead className="text-right">Saídas</TableHead>
+                  <TableHead className="text-right">NRR</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {nrrSerie.map((m) => (
+                  <TableRow key={m.competence}>
+                    <TableCell className="font-medium">{m.competence}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatBRL(m.inicial)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {m.expansao > 0 ? `+${formatBRL(m.expansao)}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {m.contracao > 0 ? `−${formatBRL(m.contracao)}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {m.churn > 0 ? `−${formatBRL(m.churn)}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {m.nrr == null ? (
+                        <span className="text-muted-foreground" title={m.motivoDoNulo ?? undefined}>—</span>
+                      ) : (
+                        `${(m.nrr * 100).toFixed(1).replace(".", ",")}%`
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ===== Previsão de churn por sinais (F5.4) ===== */}
+      <div className="mb-2">
+        <h2 className="font-display text-lg font-semibold tracking-[-0.01em]">
+          Quem olhar hoje — sinais de churn
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Régua declarada, não estatística: atraso, resultados, anúncios e
+          tempo de casa somam pontos, e a nota mostra sempre o porquê.
+          {semLeitura > 0
+            ? ` ${semLeitura} ${semLeitura === 1 ? "cliente está" : "clientes estão"} sem avaliação recente — sinal de processo, não de saúde.`
+            : ""}
+        </p>
+      </div>
+      <Card className="mb-6">
+        <CardContent className="p-0">
+          {emRisco.length === 0 ? (
             <EmptyState
               icon={HeartCrack}
-              title="Nenhum cliente na zona de risco"
-              description="Nenhum cliente ativo está na faixa de 2 a 6 meses de vida."
+              title="Nenhum cliente com sinais acesos"
+              description="Nenhum cliente ativo soma pontos de atenção hoje. Os sinais leem atraso, avaliação mensal e tempo de casa."
             />
           ) : (
             <div className="overflow-x-auto">
@@ -200,35 +271,50 @@ export default async function RetencaoPage({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Segmento</TableHead>
-                    <TableHead>Responsável</TableHead>
-                    <TableHead className="text-right">Idade</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Nível</TableHead>
+                    <TableHead>Sinais</TableHead>
+                    <TableHead className="text-right">Valor mensal</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {panel.riskClients.map((c) => (
-                    <TableRow key={c.id} className={c.ageMonths <= 4 ? ROW_SOON : ""}>
+                  {emRisco.slice(0, 20).map((c) => (
+                    <TableRow
+                      key={c.relationshipId}
+                      className={c.nivel === "ALTO" ? ROW_OVERDUE : c.nivel === "ATENCAO" ? ROW_SOON : ""}
+                    >
                       <TableCell className="font-medium">
-                        <Link href={`/clientes/${c.id}`} className="hover:underline">
-                          {c.name}
+                        <Link href={`/clientes/${c.clientId}`} className="hover:underline">
+                          {c.cliente}
                         </Link>
+                        {c.semLeitura ? (
+                          <Badge variant="outline" className="ml-1.5">sem avaliação</Badge>
+                        ) : null}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{c.segment ?? "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.salesOwner ?? "—"}</TableCell>
-                      <TableCell className="text-right tabular-nums">
-                        {c.ageMonths.toFixed(1).replace(".", ",")} m
+                      <TableCell>
+                        <Badge
+                          variant={
+                            c.nivel === "ALTO"
+                              ? "destructive"
+                              : c.nivel === "ATENCAO"
+                                ? "warning"
+                                : "secondary"
+                          }
+                        >
+                          {c.nivel === "ALTO" ? "Alto" : c.nivel === "ATENCAO" ? "Atenção" : "Observação"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[360px]">
+                        <span className="text-dense text-muted-foreground">
+                          {c.sinais.map((x) => x.sinal).join(" · ")}
+                        </span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatBRL(c.monthlyValue)}
-                        {c.modality === "TCV" && (
-                          <Badge variant="secondary" className="ml-1.5">TCV</Badge>
-                        )}
+                        {c.valorMensal > 0 ? formatBRL(c.valorMensal) : "—"}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/clientes/${c.id}?tab=contexto`}>Abrir ficha</Link>
+                          <Link href={`/clientes/${c.clientId}?tab=contexto`}>Abrir ficha</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
