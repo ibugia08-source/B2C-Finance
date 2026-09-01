@@ -50,6 +50,14 @@ model Workspace {
   /// lista que diz "pronto" porque alguém clicou em "pronto" mente.
   /// Formato: { "adiados": ["time"], "encerradoEm": "2026-09-01T..." }
   setupState Json @default("{}")
+
+  /// Parâmetros comerciais (F4.6 · 01 §7.5). Hoje guarda a BASE DE VALORAÇÃO
+  /// do MRR no ROAS, que a spec chama de "parâmetro obrigatório": sem ela o
+  /// ROAS não é calculado, porque valorizar uma mensalidade de R$ 2.000 pelo
+  /// primeiro mês ou pelo contrato de 12 meses dá dois números que diferem
+  /// por doze vezes — e os dois se chamariam "ROAS".
+  /// Formato: { "baseDeValoracaoMrr": "PRIMEIRO_MES" | "CONTRATO" }
+  commercialSettings Json @default("{}")
 }
 
 // ===================================================================
