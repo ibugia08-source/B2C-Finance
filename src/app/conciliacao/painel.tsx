@@ -10,7 +10,8 @@ import { askReason } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
 import {
-  conciliarAction, ignorarLinhaAction, importarExtratoAction, reabrirLinhaAction,
+  conciliarAction, conciliarAutomaticamenteAction, ignorarLinhaAction,
+  importarExtratoAction, reabrirLinhaAction,
   sugestoesAction,
 } from "@/lib/actions/conciliacao";
 import type {
@@ -112,6 +113,31 @@ export function PainelDeConciliacao({
           </button>
         ))}
       </div>
+
+      {podeConciliar && contaAtual ? (
+        <div className="mb-3">
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await conciliarAutomaticamenteAction(contaAtual, competence);
+                showUndoToast({
+                  message:
+                    r.conciliadas > 0
+                      ? `${r.conciliadas} de ${r.examinadas} ${r.examinadas === 1 ? "linha resolvida" : "linhas resolvidas"} sozinhas — o resto ficou para você, com o motivo.`
+                      : r.examinadas === 0
+                        ? "Nenhuma linha pendente nesta conta."
+                        : "Nenhuma linha tinha resposta óbvia — todas precisam de decisão humana.",
+                });
+                router.refresh();
+              })
+            }
+          >
+            Conciliar automaticamente
+          </Button>
+        </div>
+      ) : null}
 
       {podeConciliar ? (
         <form

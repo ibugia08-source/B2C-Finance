@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
-import type { Competence } from "@/lib/competence";
+import { competenceOf, type Competence } from "@/lib/competence";
 import { hashDaLinha, lerExtrato, type LinhaDeExtrato } from "@/lib/reconciliation/parse";
 import type { ReconciliationState } from "@prisma/client";
 
@@ -393,6 +393,165 @@ export async function conciliar(
         : null,
   });
   return { ok: true, ...r };
+}
+
+// ---------------------------------------------------------------------------
+// F5.3 — conciliação automática e entrada Open Finance
+// ---------------------------------------------------------------------------
+
+export type ResultadoAutomatico = {
+  examinadas: number;
+  conciliadas: number;
+  /** O que ficou para gente, com o porquê — a fila mostra, nunca esconde. */
+  deixadas: { entryId: string; descricao: string; motivo: string }[];
+};
+
+/**
+ * CONCILIAÇÃO AUTOMÁTICA (F5.3 · ref. 02 §4.4; 03 roadmap Fase 5).
+ *
+ * Só concilia sozinha quando a resposta é ÓBVIA: exatamente UM candidato,
+ * mesmo valor, no máximo 3 dias de distância (confiança ≥ 85). DOIS
+ * candidatos é decisão humana — o automático que escolhe "o mais provável"
+ * entre dois lançamentos iguais é o automático que concilia o lançamento
+ * errado e deixa o certo sobrando no fim do mês, com a diferença apontando
+ * para o lugar errado. Diferença de valor idem. E a regra de sempre continua:
+ * NUNCA cria lançamento — linha sem par continua sem par, à vista.
+ */
+export async function conciliarAutomaticamente(
+  accountId: string,
+  competence: Competence
+): Promise<ResultadoAutomatico> {
+  const linhas = await linhasDaConta(accountId, competence);
+  const pendentes = linhas.filter((l) => l.state === "UNMATCHED");
+  const out: ResultadoAutomatico = { examinadas: pendentes.length, conciliadas: 0, deixadas: [] };
+
+  for (const l of pendentes) {
+    const sugestoes = await sugerirMatches(l.id);
+    if (sugestoes.length === 0) {
+      out.deixadas.push({ entryId: l.id, descricao: l.description, motivo: "Nenhum lançamento parecido no sistema." });
+      continue;
+    }
+    if (sugestoes.length > 1) {
+      out.deixadas.push({
+        entryId: l.id, descricao: l.description,
+        motivo: `${sugestoes.length} lançamentos possíveis — escolha humana.`,
+      });
+      continue;
+    }
+    const s = sugestoes[0];
+    if (s.confidence < 85) {
+      out.deixadas.push({ entryId: l.id, descricao: l.description, motivo: `Candidato distante demais (${s.motivo}).` });
+      continue;
+    }
+    const r = await conciliar({
+      entryId: l.id,
+      alvos: [{ targetType: s.targetType, targetId: s.targetId, amount: s.amount, confidence: s.confidence }],
+    });
+    if (r.ok && r.state === "MATCHED") out.conciliadas += 1;
+    else
+      out.deixadas.push({
+        entryId: l.id, descricao: l.description,
+        motivo: r.ok ? `Sobrou diferença de ${r.diferenca.toFixed(2)}.` : r.error,
+      });
+  }
+  return out;
+}
+
+export type MovimentoDoBanco = {
+  /** Id do movimento NA ORIGEM (Open Finance sempre tem). */
+  externalId: string | null;
+  postedAt: Date;
+  /** Sinal do banco: positivo entrou, negativo saiu. */
+  amount: number;
+  description: string;
+  balanceAfter: number | null;
+};
+
+/**
+ * ENTRADA DE MOVIMENTOS SEM ARQUIVO (F5.3 — Open Finance).
+ *
+ * O mesmo caminho da importação de extrato, sem o arquivo: dedupe pelo MESMO
+ * hash (reconexão de banco reenvia a mesma janela de dias — é o caso normal,
+ * não a exceção), extrato com origem marcada, e a conciliação automática
+ * rodando em seguida nas competências afetadas. O que ela não resolver cai
+ * na trilha de conciliação do Modo Fila, como sempre.
+ */
+export async function registrarMovimentosDoBanco(
+  accountId: string,
+  movimentos: MovimentoDoBanco[],
+  origem = "openfinance"
+): Promise<
+  | { ok: true; statementId: string | null; importadas: number; duplicadas: number; conciliadas: number }
+  | { ok: false; error: string }
+> {
+  const conta = await prisma.account.findUnique({ where: { id: accountId }, select: { id: true } });
+  if (!conta) return { ok: false, error: "Conta não encontrada." };
+
+  const validos = movimentos.filter(
+    (m) => Number.isFinite(m.amount) && m.amount !== 0 && !Number.isNaN(m.postedAt.getTime())
+  );
+  if (validos.length === 0) return { ok: false, error: "Nenhum movimento legível no lote." };
+
+  const comHash = validos.map((m) => ({ ...m, hash: hashDaLinha(accountId, m) }));
+  const existentes = new Set(
+    (
+      await prisma.bankStatementEntry.findMany({
+        where: { accountId, hash: { in: comHash.map((l) => l.hash) } },
+        select: { hash: true },
+      })
+    ).map((e) => e.hash)
+  );
+  const vistos = new Set<string>();
+  const novas = comHash.filter((l) => {
+    if (existentes.has(l.hash) || vistos.has(l.hash)) return false;
+    vistos.add(l.hash);
+    return true;
+  });
+
+  let statementId: string | null = null;
+  if (novas.length > 0) {
+    const datas = novas.map((m) => m.postedAt.getTime());
+    const statement = await prisma.bankStatement.create({
+      data: {
+        accountId,
+        fileName: `${origem} · ${new Intl.DateTimeFormat("pt-BR").format(new Date())}`,
+        format: origem.toUpperCase(),
+        periodStart: new Date(Math.min(...datas)),
+        periodEnd: new Date(Math.max(...datas)),
+      },
+      select: { id: true },
+    });
+    statementId = statement.id;
+    await prisma.bankStatementEntry.createMany({
+      data: novas.map((l) => ({
+        statementId: statement.id,
+        accountId,
+        externalId: l.externalId,
+        hash: l.hash,
+        postedAt: l.postedAt,
+        amount: l.amount,
+        description: l.description,
+        balanceAfter: l.balanceAfter,
+      })),
+    });
+  }
+
+  // A conciliação automática roda por competência afetada — inclusive quando
+  // nada novo entrou: o par pode ter sido lançado DEPOIS da última entrada.
+  const competencias = [...new Set(validos.map((m) => competenceOf(m.postedAt)))];
+  let conciliadas = 0;
+  for (const c of competencias) {
+    const r = await conciliarAutomaticamente(accountId, c as Competence);
+    conciliadas += r.conciliadas;
+  }
+
+  return {
+    ok: true,
+    statementId,
+    importadas: novas.length,
+    duplicadas: validos.length - novas.length,
+    conciliadas,
+  };
 }
 
 /**

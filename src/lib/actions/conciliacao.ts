@@ -2,9 +2,10 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/viewer";
 import {
-  conciliar, ignorarLinha, importarExtrato, reabrirLinha, sugerirMatches,
-  type AlvoDeMatch,
+  conciliar, conciliarAutomaticamente, ignorarLinha, importarExtrato, reabrirLinha,
+  sugerirMatches, type AlvoDeMatch,
 } from "@/lib/services/reconciliation";
+import type { Competence } from "@/lib/competence";
 
 /**
  * Ações da conciliação (F3.5 · 02 §4.4).
@@ -73,4 +74,17 @@ export async function reabrirLinhaAction(entryId: string) {
 function revalidar() {
   revalidatePath("/conciliacao");
   revalidatePath("/fechamento");
+}
+
+/**
+ * F5.3 — o botão "Conciliar automaticamente". Só resolve o óbvio (um
+ * candidato, mesmo valor, até 3 dias); o ambíguo continua na tela, com o
+ * motivo de ter ficado.
+ */
+export async function conciliarAutomaticamenteAction(accountId: string, competence: string) {
+  await requirePermission("conciliacao.conciliar");
+  const r = await conciliarAutomaticamente(accountId, competence as Competence);
+  revalidatePath("/conciliacao");
+  revalidatePath("/fila");
+  return r;
 }
