@@ -233,6 +233,7 @@ model User {
   ownedContractServices    ContractService[]   @relation("OwnerContractService")
   ownedBillings            Billing[]           @relation("OwnerBilling")
   ownedGatewayCharges      GatewayCharge[]     @relation("OwnerGatewayCharge")
+  ownedScheduledReports    ScheduledReport[]   @relation("OwnerScheduledReport")
   ownedBillingPayments     Payment[]           @relation("OwnerPayment")
   ownedEmployees           Employee[]          @relation("OwnerEmployee")
   ownedPayrolls            Payroll[]           @relation("OwnerPayroll")
@@ -3816,6 +3817,33 @@ model GatewayCharge {
 
   @@index([billingId])
   @@index([status])
+}
+
+/// F5.7 — envio agendado de relatório por e-mail.
+///
+/// O agendamento guarda a INTENÇÃO; quem executa é o script de rotina
+/// (relatorios:agendados), que publica o e-mail no Outbox — a entrega segue
+/// as regras de lá (recuo, dead-letter, espera por provedor).
+model ScheduledReport {
+  id        String  @id @default(cuid())
+  /// key do relatório no registry (ex.: "margem-totalmente-alocada").
+  reportKey String
+  /// SEMANAL (semana anterior, seg-dom) | MENSAL (competência anterior).
+  frequency String
+  /// Destinatários, um e-mail por linha.
+  recipients String[]
+  enabled    Boolean  @default(true)
+  /// Última janela coberta — o guarda contra envio dobrado no mesmo período.
+  lastRunAt DateTime? @db.Timestamptz(3)
+  createdBy String?
+
+  ownerId   String?
+  owner     User?    @relation("OwnerScheduledReport", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([enabled])
+  @@index([ownerId])
 }
 
 model WebhookInbox {

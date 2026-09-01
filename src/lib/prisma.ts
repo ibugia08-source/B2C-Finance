@@ -103,6 +103,8 @@ const OWNED_MODELS = new Set<string>([
   "CommercialGoal",
   // F5.2 — links de pagamento do gateway.
   "GatewayCharge",
+  // F5.7 — agendamento de relatórios.
+  "ScheduledReport",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

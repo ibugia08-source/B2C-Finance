@@ -26,7 +26,8 @@
     "postinstall": "prisma generate",
     "verify:ledger": "tsx scripts/verify-ledger.ts",
     "verify:snapshots": "tsx scripts/verify-snapshots.ts",
-    "outbox:worker": "tsx scripts/outbox-worker.ts"
+    "outbox:worker": "tsx scripts/outbox-worker.ts",
+    "relatorios:agendados": "tsx scripts/relatorios-agendados.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
