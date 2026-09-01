@@ -191,6 +191,9 @@ model User {
   ownedBillingAdjustments BillingAdjustment[]      @relation("OwnerBillingAdjustment")
   ownedAllocations        Allocation[]             @relation("OwnerAllocation")
   ownedAllocationRules    AllocationRule[]         @relation("OwnerAllocationRule")
+  ownedBankStatements     BankStatement[]          @relation("OwnerBankStatement")
+  ownedStatementEntries   BankStatementEntry[]     @relation("OwnerStatementEntry")
+  ownedReconMatches       ReconciliationMatch[]    @relation("OwnerReconciliationMatch")
   ownedFiscalDocuments    FiscalDocument[]         @relation("OwnerFiscalDocument")
   ownedRenegotiations     RenegotiationAgreement[] @relation("OwnerRenegotiation")
   ownedIncomes            Income[]                 @relation("OwnerIncome")
@@ -308,12 +311,14 @@ model Account {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  transactions    Transaction[]
-  incomes         Income[]
-  cashBoxes       CashBox[]
-  cards           CreditCard[]
-  personPayments  PersonPayment[]
-  billingPayments Payment[]
+  transactions     Transaction[]
+  incomes          Income[]
+  cashBoxes        CashBox[]
+  cards            CreditCard[]
+  personPayments   PersonPayment[]
+  billingPayments  Payment[]
+  statements       BankStatement[]
+  statementEntries BankStatementEntry[]
 
   @@index([ownerId])
 }
@@ -3295,5 +3300,135 @@ model AllocationRule {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([active, priority])
+  @@index([ownerId])
+}
+
+// ============================================================================
+// F3.5 — CONCILIAÇÃO BANCÁRIA (ref. 01 §4.7; 02 §4.4)
+// ============================================================================
+
+/// Situação de uma linha do extrato. Os cinco estados de 01 §4.7.
+enum ReconciliationState {
+  UNMATCHED
+  MATCHED
+  PARTIAL
+  IGNORED
+  REVIEW
+}
+
+/// Um arquivo de extrato importado (OFX ou CSV), com o período que ele cobre.
+///
+/// 01 §4.7 fala em "BankAccount (da LegalEntity)"; aqui a conta bancária é o
+/// `Account` que o sistema inteiro já usa — transações, pagamentos e reservas
+/// apontam para ele. Criar um BankAccount paralelo daria DUAS verdades para o
+/// mesmo saldo, que é o problema que a conciliação existe para resolver.
+model BankStatement {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  fileName String
+  /// OFX | CSV
+  format   String
+
+  periodStart    DateTime @db.Timestamptz(3)
+  periodEnd      DateTime @db.Timestamptz(3)
+  /// Saldos declarados pelo banco, quando o arquivo traz. Guardados para a
+  /// conferência de ponta: se o saldo final do extrato não bate com o saldo
+  /// do sistema, faltou lançamento — e é isso que a tela mostra.
+  openingBalance Decimal? @db.Decimal(14, 2)
+  closingBalance Decimal? @db.Decimal(14, 2)
+
+  entries BankStatementEntry[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerBankStatement", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId])
+  @@index([periodStart])
+  @@index([ownerId])
+}
+
+/// Uma linha do extrato do banco. É FATO EXTERNO: nunca é editada pelo
+/// produto, só casada, ignorada ou marcada para revisão.
+model BankStatementEntry {
+  id          String        @id @default(cuid())
+  statementId String
+  statement   BankStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  accountId   String
+  account     Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  /// FITID do OFX, quando existe.
+  externalId String?
+  /// Deduplicação determinística (conta + data + valor + descrição). O mesmo
+  /// arquivo importado duas vezes não cria linha nova — reimportar extrato é
+  /// rotina, e duplicar movimento bancário faria a conciliação acusar
+  /// diferença onde não há.
+  hash       String
+
+  postedAt     DateTime @db.Timestamptz(3)
+  /// Sinal do BANCO: positivo entrou, negativo saiu.
+  amount       Decimal  @db.Decimal(14, 2)
+  description  String
+  balanceAfter Decimal? @db.Decimal(14, 2)
+
+  /// SEMPRE derivado das linhas de match (nunca escrito à mão pela tela).
+  state ReconciliationState @default(UNMATCHED)
+  /// Por que esta linha está em revisão, ou por que foi ignorada.
+  note  String?
+
+  matches ReconciliationMatch[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerStatementEntry", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([accountId, hash])
+  @@index([statementId])
+  @@index([state])
+  @@index([postedAt])
+  @@index([ownerId])
+}
+
+/// A ligação entre uma linha do banco e um fato do sistema.
+///
+/// Suporta os três formatos de 01 §4.7 sem tabela extra: 1:N (uma linha do
+/// banco com vários matches), N:1 (várias linhas apontando para o mesmo fato)
+/// e PARCIAL (a soma dos matches não fecha o valor da linha).
+model ReconciliationMatch {
+  id      String             @id @default(cuid())
+  entryId String
+  entry   BankStatementEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  /// PAYMENT | TRANSACTION | INCOME | CASHBOX_MOVEMENT. Sem chave estrangeira
+  /// porque o alvo é polimórfico, como no rateio.
+  targetType String
+  targetId   String
+
+  /// Quanto DESTA linha do banco corresponde a este fato — com sinal.
+  ///
+  /// O sinal importa e é o que faz o cenário S18 funcionar: venda de 1.000
+  /// com taxa de 30 chega no banco como 970, e os dois matches são +1.000
+  /// (a receita) e −30 (a tarifa). A soma dá exatamente 970, sem inventar
+  /// diferença nenhuma.
+  amount Decimal @db.Decimal(14, 2)
+
+  /// 0-100. Quanto o sistema confia na sugestão; match confirmado por gente
+  /// não depende disso.
+  confidence  Int       @default(0)
+  confirmedAt DateTime? @db.Timestamptz(3)
+  confirmedBy String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerReconciliationMatch", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([entryId, targetType, targetId])
+  @@index([targetType, targetId])
   @@index([ownerId])
 }

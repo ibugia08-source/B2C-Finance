@@ -89,6 +89,10 @@ const OWNED_MODELS = new Set<string>([
   // F3.4 — rateio e suas regras.
   "Allocation",
   "AllocationRule",
+  // F3.5 — conciliação bancária.
+  "BankStatement",
+  "BankStatementEntry",
+  "ReconciliationMatch",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

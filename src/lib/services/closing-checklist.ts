@@ -5,6 +5,7 @@ import { ledgerHealth } from "@/lib/accounting/health";
 import { toNumber as n } from "@/lib/format";
 import { resumoDoRateio } from "@/lib/services/allocation";
 import { sugerirProvisoes } from "@/lib/services/tax-provision";
+import { MINIMO_CONCILIADO, resumoDaConciliacao } from "@/lib/services/reconciliation";
 import type { Competence } from "@/lib/competence";
 
 /**
@@ -21,9 +22,8 @@ import type { Competence } from "@/lib/competence";
  * fecharia o mês confiando numa conferência que não aconteceu.
  *
  * A lista de não medidos ENCOLHE conforme as fases entregam. Na F3.4 saíram
- * quatro: rateio (item 9), provisão e reserva (10 e 11, entregues na F3.3) e
- * fiscal (12, entregue na F3.6). Sobram dois: conciliação bancária (F3.5) e
- * vendas vinculadas ao funil (Fase 4).
+ * quatro (rateio, provisão, reserva e fiscal) e na F3.5 saiu a conciliação
+ * bancária. Sobra UM: vendas ganhas vinculadas ao funil, que chega na Fase 4.
  *
  * NENHUM ITEM BLOQUEIA O FECHAMENTO por decisão explícita: a spec lista os
  * dezesseis e NÃO diz quais impedem fechar. Inventar essa regra seria
@@ -82,6 +82,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
     saude,
     rateio,
     provisoes,
+    conciliacao,
     notasEmRascunho,
   ] = await Promise.all([
     // 1. MRR ativo sem cobrança na competência.
@@ -127,6 +128,8 @@ export async function montarChecklist(competence: Competence | string): Promise<
     resumoDoRateio(competence as Competence),
     // 10 e 11. Provisão e reserva por entidade (F3.3).
     sugerirProvisoes(competence),
+    // 8. Conciliação bancária (F3.5).
+    resumoDaConciliacao(competence as Competence),
     // 12. Notas paradas em rascunho (F3.6).
     prisma.fiscalDocument.count({
       where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
@@ -221,8 +224,27 @@ export async function montarChecklist(competence: Competence | string): Promise<
         : `${semGestor} ${semGestor === 1 ? "cliente ativo está" : "clientes ativos estão"} sem gestor responsável.`,
       href: "/clientes",
     },
-    naoMedido(8, "conciliacao", "Conciliação bancária no mínimo por conta", "Financeiro",
-      "A conciliação bancária chega na Fase 3 (F3.5). Até lá este item não é medido — e é dito, em vez de aparecer verde."),
+    {
+      id: "conciliacao", numero: 8,
+      titulo: "Conciliação bancária no mínimo por conta",
+      dono: "Financeiro",
+      // DECIDIDO 19.37: conta COM movimento se concilia até o dia 5; conta
+      // PARADA só tem o saldo confirmado. Por isso conta sem movimento nem
+      // extrato não entra na conta de pendências — cobrar conciliação de uma
+      // conta que não movimentou é a linha vermelha que ensina a ignorar a
+      // lista inteira.
+      situacao: conciliacao.pendentes === 0 ? "OK" : "PENDENTE",
+      quantidade: conciliacao.pendentes,
+      detalhe:
+        conciliacao.contas.length === 0
+          ? "Nenhuma conta cadastrada."
+          : conciliacao.pendentes === 0
+            ? conciliacao.percentualGeral === null
+              ? "Nenhuma conta teve movimento no mês."
+              : `${conciliacao.percentualGeral}% das linhas de extrato do mês estão resolvidas.`
+            : `${conciliacao.pendentes} ${conciliacao.pendentes === 1 ? "conta está" : "contas estão"} sem extrato ou abaixo de ${MINIMO_CONCILIADO}% conciliado.`,
+      href: `/conciliacao${q}`,
+    },
     {
       id: "rateios", numero: 9,
       titulo: "Rateios obrigatórios concluídos ou aceitos",
