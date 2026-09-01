@@ -79,6 +79,7 @@ export const NAV_AREAS: NavArea[] = [
     primary: true,
     pages: [
       { href: "/cobrancas", label: "Mês (Recebimentos)", permission: "recebimentos.visualizar" },
+      { href: "/fila", label: "Modo Fila", permission: "recebimentos.visualizar" },
       { href: "/inadimplencia", label: "Inadimplência", permission: "recebimentos.ver_inadimplencia" },
       { href: "/despesas", label: "Contas a Pagar", permission: "despesas.visualizar" },
       { href: "/folha", label: "Folha", permission: "folha.visualizar" },

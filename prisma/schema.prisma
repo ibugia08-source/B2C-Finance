@@ -1205,8 +1205,19 @@ model Client {
   billings         Billing[]
   commissions      Commission[]
   collectionEvents CollectionHistory[]
-  incomes          Income[]
-  expenses         Transaction[]
+
+  // ===== F3.9 — silêncios da régua de cobrança (02 §4.3) =====
+  /// O cliente pediu para não receber cobrança automática. Não impede
+  /// cobrar: impede a RÉGUA de gerar a tarefa sozinha.
+  collectionOptOut       Boolean       @default(false)
+  /// Silêncio TEMPORÁRIO (negociação em curso, cliente viajando, luto).
+  collectionSilenceUntil DateTime?     @db.Timestamptz(3)
+  /// Bloqueio manual por decisão da casa — enquanto tiver texto, está
+  /// bloqueado. Exigir o motivo é o ponto: cliente que some da fila sem
+  /// explicação é cliente que ninguém cobra e ninguém percebe.
+  collectionBlockReason  String?
+  incomes                Income[]
+  expenses               Transaction[]
 
   // ===== Dossiê documental =====
   generatedContracts GeneratedContract[]
@@ -1886,6 +1897,11 @@ model CollectionHistory {
   contactedAt    DateTime                  @default(now()) @db.Timestamptz(3)
   nextActionAt   DateTime?                 @db.Timestamptz(3) // próximo follow-up
   actionType     String? // PAYMENT_REGISTERED, STATUS_CHANGED, DELETED, etc. (audit)
+  /// F3.9 — etapa da régua que gerou este contato ("D-3", "D0", "D+3",
+  /// "D+7", "D+15"). Nulo em contato manual. A unique lá embaixo é a
+  /// idempotência da régua: a mesma etapa não dispara duas vezes na mesma
+  /// cobrança, nem que o job rode três vezes no mesmo dia (03 §4.3).
+  reguaStep      String?
   createdBy      String? // user.email (quem fez a ação)
   relationshipId String?
   relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
@@ -1893,6 +1909,7 @@ model CollectionHistory {
   owner          User?                     @relation("OwnerCollectionHistory", fields: [ownerId], references: [id])
   createdAt      DateTime                  @default(now()) @db.Timestamptz(3)
 
+  @@unique([billingId, reguaStep])
   @@index([billingId])
   @@index([clientId])
   @@index([relationshipId])
