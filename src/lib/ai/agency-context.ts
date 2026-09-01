@@ -199,5 +199,124 @@ export async function buildAgencySnapshotText(): Promise<string> {
     L.push("ALERTAS DO SISTEMA: " + alerts.map((a) => `[${a.severity}] ${a.title} — ${a.detail}`).join("; ") + ".");
   }
 
+  // ===== F5.6 — retrato ampliado: agências, fechamento, avaliação =====
+  L.push(await retratoAmpliado());
+
+  return L.join("\n");
+}
+
+/**
+ * RETRATO AMPLIADO (F5.6 · ref. 03 roadmap Fase 5).
+ *
+ * As três dimensões que faltavam ao Assistente, cada uma com a MESMA regra
+ * do v1: só FATO do banco, nada estimado. O guardrail não muda — muda o
+ * quanto ele enxerga:
+ *
+ *  - AGÊNCIAS: a operação por agência (o retrato antigo somava tudo).
+ *  - FECHAMENTO: estado do período e pendências do checklist — a resposta a
+ *    "posso fechar setembro?" deixa de ser "não tenho esse dado".
+ *  - AVALIAÇÃO: cobertura das avaliações mensais e os sinais de churn da
+ *    F5.4, com os motivos — os clientes que o gestor precisa olhar hoje.
+ */
+async function retratoAmpliado(): Promise<string> {
+  const hoje = new Date();
+  const competencia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+  const anterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  const compAnterior = `${anterior.getFullYear()}-${String(anterior.getMonth() + 1).padStart(2, "0")}`;
+
+  const L: string[] = [];
+
+  // --- Agências ---
+  try {
+    const { runWithoutScope } = await import("@/lib/auth/owner-scope");
+    const agencias = await runWithoutScope(async () =>
+      prisma.agency.findMany({ select: { id: true, name: true } })
+    );
+    if (agencias.length > 0) {
+      const relacoes = await prisma.clientAgencyRelationship.findMany({
+        where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] } },
+        select: {
+          agencyId: true,
+          lifecycleStatus: true,
+          currentCommercialTerm: { select: { monthlyValue: true } },
+        },
+      });
+      const porAgencia = new Map<string, { ativos: number; onboarding: number; pausados: number; mrr: number }>();
+      for (const r of relacoes) {
+        const v = porAgencia.get(r.agencyId) ?? { ativos: 0, onboarding: 0, pausados: 0, mrr: 0 };
+        if (r.lifecycleStatus === "ACTIVE") v.ativos += 1;
+        else if (r.lifecycleStatus === "ONBOARDING") v.onboarding += 1;
+        else v.pausados += 1;
+        v.mrr += Number(r.currentCommercialTerm?.monthlyValue ?? 0);
+        porAgencia.set(r.agencyId, v);
+      }
+      L.push(
+        "POR AGÊNCIA: " +
+          agencias
+            .map((a) => {
+              const v = porAgencia.get(a.id) ?? { ativos: 0, onboarding: 0, pausados: 0, mrr: 0 };
+              return `${a.name}: ${v.ativos} ativos, ${v.onboarding} em implantação, ${v.pausados} pausados, MRR vigente ${formatBRL(v.mrr)}`;
+            })
+            .join("; ") +
+          "."
+      );
+    }
+  } catch {
+    /* sem bloco de agências não se quebra o retrato inteiro */
+  }
+
+  // --- Fechamento ---
+  try {
+    const { periodosDe } = await import("@/lib/services/closing-period");
+    const { resumoDoFechamento } = await import("@/lib/services/closing-checklist");
+    const periodos = await periodosDe([compAnterior, competencia]);
+    const linhas: string[] = [];
+    for (const c of [compAnterior, competencia]) {
+      const info = periodos.get(c);
+      linhas.push(`${c}: ${info?.rotulo ?? "Aberto"}${info?.precisaRevalidar ? " (precisa reconferir)" : ""}`);
+    }
+    const resumo = await resumoDoFechamento(compAnterior);
+    const pendentes = resumo.itens.filter((i) => i.situacao === "PENDENTE");
+    linhas.push(
+      `checklist de ${compAnterior}: ${resumo.ok} ok, ${resumo.pendentes} pendentes` +
+        (pendentes.length
+          ? ` (${pendentes.slice(0, 6).map((i) => i.titulo).join("; ")})`
+          : "")
+    );
+    L.push("FECHAMENTO: " + linhas.join(" | ") + ".");
+  } catch {
+    /* idem */
+  }
+
+  // --- Avaliação e sinais de churn ---
+  try {
+    const { previsaoDeChurn } = await import("@/lib/services/churn-signals");
+    const lista = await previsaoDeChurn(hoje);
+    if (lista.length > 0) {
+      const semLeitura = lista.filter((c) => c.semLeitura).length;
+      const acesos = lista.filter((c) => c.nivel !== "BAIXO").slice(0, 6);
+      L.push(
+        `AVALIAÇÕES MENSAIS: ${lista.length - semLeitura} de ${lista.length} clientes com leitura recente` +
+          (semLeitura > 0 ? `; ${semLeitura} SEM avaliação (processo em atraso)` : "") +
+          "."
+      );
+      if (acesos.length > 0) {
+        L.push(
+          "SINAIS DE CHURN (régua declarada, não estatística): " +
+            acesos
+              .map(
+                (c) =>
+                  `${c.cliente} [${c.nivel}] ${c.sinais.map((s) => s.sinal).join(", ")}` +
+                  (c.valorMensal > 0 ? ` (${formatBRL(c.valorMensal)}/mês em jogo)` : "")
+              )
+              .join("; ") +
+            "."
+        );
+      }
+    }
+  } catch {
+    /* idem */
+  }
+
   return L.join("\n");
 }
