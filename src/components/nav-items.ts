@@ -106,6 +106,8 @@ export const NAV_AREAS: NavArea[] = [
     pages: [
       { href: "/funil", label: "Funil de vendas", permission: "comercial.visualizar" },
       { href: "/atividade", label: "Atividade do dia", permission: "comercial.visualizar" },
+      { href: "/funil/closer", label: "Painel do closer", permission: "comercial.visualizar" },
+      { href: "/configuracoes/metas", label: "Metas comerciais", permission: "comercial.visualizar" },
       { href: "/funil/leads", label: "Leads", permission: "comercial.visualizar" },
       { href: "/upsell", label: "Upsell", permission: "upsell.visualizar" },
       { href: "/renovacoes", label: "Renovações", permission: "clientes.visualizar" },

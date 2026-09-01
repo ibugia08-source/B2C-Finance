@@ -2,6 +2,9 @@ import { PageHeader } from "@/components/page-header";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { prisma } from "@/lib/prisma";
 import { painelDoSdr } from "@/lib/services/sdr-activity";
+import { leadsParaRetomar } from "@/lib/services/commercial-goals";
+import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
 import { ContadorDeAtividade } from "./contador";
 
 /**
@@ -51,7 +54,10 @@ export default async function AtividadePage({
     ? searchParams.sdr
     : (viewer.name ?? nomes[0] ?? "Sem nome");
 
-  const painel = await painelDoSdr(sdr);
+  const [painel, retomar] = await Promise.all([
+    painelDoSdr(sdr),
+    leadsParaRetomar(sdr),
+  ]);
 
   return (
     <div>
@@ -68,6 +74,38 @@ export default async function AtividadePage({
         nomes={nomes}
         podeRegistrar={can(viewer, "comercial.operar")}
       />
+
+      {/* Retomadas (02 §5.4): lead trabalhado e depois esquecido é o
+          desperdício mais comum de um funil — o custo de aquisição já foi
+          pago e o contato ainda está morno. */}
+      <h2 className="mb-2 mt-6 text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Para retomar
+      </h2>
+      <Card>
+        <CardContent className="p-0">
+          {retomar.length === 0 ? (
+            <p className="px-3.5 py-6 text-center text-dense text-muted-foreground">
+              Nenhum lead seu está há mais de uma semana sem contato.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border-soft">
+              {retomar.slice(0, 12).map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+                  <span className="min-w-0 truncate text-dense">{l.nome}</span>
+                  <span className="shrink-0 text-caption text-muted-foreground">
+                    {l.diasSemToque} dias sem contato
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <p className="mt-2 text-caption text-muted-foreground">
+        <Link href="/funil/leads" className="text-brand hover:underline">
+          Abrir a lista de leads
+        </Link>
+      </p>
     </div>
   );
 }
