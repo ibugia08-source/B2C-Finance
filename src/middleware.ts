@@ -119,6 +119,26 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Webhook de entrada (F4.8): provedor externo não faz login. Quem
+  // autentica é a ASSINATURA HMAC do corpo, conferida na própria rota em
+  // tempo constante — e ela é bem mais forte que uma sessão, porque prova a
+  // posse do segredo A CADA requisição.
+  //
+  // Sem esta exceção o middleware redirecionaria o POST para /login e o
+  // AvanceCRM receberia um 307 no lugar do 200: ele reenviaria para sempre e
+  // nenhum evento entraria.
+  if (pathname.startsWith("/api/webhooks/")) {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+    if (isLoginRateLimited(ip)) {
+      return new NextResponse("Muitas requisições.", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
+    }
+    return NextResponse.next();
+  }
+
   // Tentativas de login (POST) limitadas por IP.
   if (pathname === "/login" && req.method === "POST") {
     const ip =

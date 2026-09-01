@@ -191,9 +191,37 @@ export async function fecharVenda(
   const m = await moverEtapa(o.id, "GANHA", { quando: agora });
   if (!m.ok) pendencias.push(`a etapa não foi atualizada: ${m.error}`);
 
-  await prisma.opportunity.update({
-    where: { id: o.id },
-    data: { createdClientId: clientId, createdContractId: contrato.id },
+  // 7. OUTBOX na MESMA transação do último fato (03 §4.2). O CRM é avisado
+  //    depois, pelo worker, com recuo e dead-letter: se o AvanceCRM estiver
+  //    fora do ar, a venda continua fechada aqui — que é o que importa.
+  const { publish } = await import("@/lib/outbox");
+  const { currentWorkspaceId } = await import("@/lib/services/workspace");
+  const workspaceId = await currentWorkspaceId().catch(() => null);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.opportunity.update({
+      where: { id: o.id },
+      data: { createdClientId: clientId, createdContractId: contrato.id },
+    });
+    if (workspaceId) {
+      await publish(tx as any, {
+        workspaceId,
+        eventType: "SALE_WON",
+        channel: "crm",
+        sourceType: "Opportunity",
+        sourceId: o.id,
+        // Conteúdo MÍNIMO (03 §4.2): o suficiente para o CRM reconhecer a
+        // venda, e nada além. Valor de contrato não vai — o CRM não precisa.
+        payload: {
+          opportunityId: o.id,
+          clientId,
+          contractId: contrato.id,
+          titulo: o.title,
+          closer: o.closer,
+          modalidade: o.modality,
+        },
+      });
+    }
   });
 
   return {

@@ -43,6 +43,7 @@ model Workspace {
   economicGroups EconomicGroup[]
   closingPeriods ClosingPeriod[]
   snapshots      Snapshot[]
+  webhookInbox   WebhookInbox[]
 
   /// Estado do SETUP GUIADO (F1.20 · 02 §3): só o que NÃO dá para deduzir do
   /// dado — quais passos o dono adiou e quando ele encerrou a lista.
@@ -3775,4 +3776,38 @@ model CommercialGoal {
   @@unique([competence, scopeType, scopeId, metric])
   @@index([competence])
   @@index([ownerId])
+}
+
+/// Evento recebido de um sistema externo (F4.8 · ref. 03 §4.2, §4.3).
+///
+/// O par (source, eventId) é ÚNICO, e é isso que resolve o cenário S20: o
+/// webhook reenviado — que todo provedor faz, por design, quando não recebe
+/// 200 a tempo — bate na constraint e é reconhecido como repetido em vez de
+/// virar um segundo fato.
+///
+/// A trava está no BANCO e não na aplicação de propósito: duas entregas
+/// simultâneas do mesmo evento passariam por qualquer checagem em memória.
+model WebhookInbox {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  /// Sistema de origem ("avancecrm").
+  source    String
+  /// Identificador do evento NA ORIGEM.
+  eventId   String
+  eventType String
+  payload   Json
+
+  /// RECEIVED | PROCESSED | IGNORED | FAILED
+  status      String    @default("RECEIVED")
+  /// Por que foi ignorado ou o que falhou.
+  note        String?
+  receivedAt  DateTime  @default(now()) @db.Timestamptz(3)
+  processedAt DateTime? @db.Timestamptz(3)
+
+  @@unique([source, eventId])
+  @@index([workspaceId, status])
+  @@index([eventType])
+  @@index([receivedAt])
 }
