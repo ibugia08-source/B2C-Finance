@@ -102,6 +102,18 @@ async function isSessionValid(token: string | undefined): Promise<boolean> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // T7 — correlationId por requisição: carimbado aqui, lido pelo contexto
+  // dos motores e gravado no AuditLog. "O que aconteceu nesse clique?" vira
+  // uma busca por um id. Se o proxy da frente já mandou um, respeita.
+  const correlationId = req.headers.get("x-correlation-id") ?? crypto.randomUUID();
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-correlation-id", correlationId);
+  const seguir = () => {
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    res.headers.set("x-correlation-id", correlationId);
+    return res;
+  };
+
   // Formulário público de contratos (/f/{token}): acessível SEM sessão.
   // O token opaco na URL é a credencial; POSTs (respostas) passam pelo mesmo
   // rate limit por IP do login.
@@ -116,7 +128,7 @@ export async function middleware(req: NextRequest) {
         });
       }
     }
-    return NextResponse.next();
+    return seguir();
   }
 
   // Webhook de entrada (F4.8): provedor externo não faz login. Quem
@@ -136,7 +148,7 @@ export async function middleware(req: NextRequest) {
         headers: { "Retry-After": "60" },
       });
     }
-    return NextResponse.next();
+    return seguir();
   }
 
   // Tentativas de login (POST) limitadas por IP.
@@ -161,7 +173,7 @@ export async function middleware(req: NextRequest) {
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    return seguir();
   }
 
   // Demais rotas: exige sessão
@@ -172,7 +184,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next();
+  return seguir();
 }
 
 export const config = {

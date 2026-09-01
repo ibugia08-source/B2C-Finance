@@ -27,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 const TRILHAS: Trilha[] = ["cobranca", "conciliacao", "importacao"];
 
-export default async function FilaPage({
+async function FilaPageInner({
   searchParams,
 }: {
   searchParams?: { trilha?: string };
@@ -100,4 +100,12 @@ export default async function FilaPage({
       )}
     </div>
   );
+}
+
+// T7 — o p95 desta tela é medido contra o orçamento de 03 §4.7.
+export default async function FilaPage(
+  ...args: Parameters<typeof FilaPageInner>
+) {
+  const { medir } = await import("@/lib/observability");
+  return medir("page:fila", () => FilaPageInner(...args));
 }

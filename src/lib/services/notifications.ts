@@ -139,6 +139,24 @@ async function achadosDoDia(hoje: Date): Promise<Achado[]> {
       count: onboardingVencido,
     });
   }
+  // T7 — orçamento de experiência estourado (03 §4.7). Fonte: as medições
+  // em memória do processo; só alerta com amostra suficiente.
+  const { resumoDeMedicoes } = await import("@/lib/observability");
+  const estourados = resumoDeMedicoes().filter((m) => m.estourado);
+  if (estourados.length > 0) {
+    out.push({
+      event: "p95_estourado",
+      title: "Telas acima do orçamento de tempo",
+      detail: estourados
+        .map((m) => `${m.chave}: p95 ${m.p95}ms (teto ${m.orcamentoMs}ms)`)
+        .join("; "),
+      link: "/configuracoes/observabilidade",
+      severity: "alta",
+      permissao: "configuracoes.visualizar",
+      count: estourados.length,
+    });
+  }
+
   if (deadLetter > 0) {
     out.push({
       event: "envio_falhou",

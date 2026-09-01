@@ -98,7 +98,7 @@ function legacyStatus(sp: Search): string {
 /** Status "devendo" (vencido automático ou inadimplente manual). */
 const OWING: string[] = ["OVERDUE", "DELINQUENT"];
 
-export default async function RecebimentosPage({
+async function RecebimentosPageInner({
   searchParams,
 }: {
   searchParams: Search;
@@ -1059,4 +1059,12 @@ export default async function RecebimentosPage({
       </div>
     </div>
   );
+}
+
+// T7 — o p95 desta tela é medido contra o orçamento de 03 §4.7.
+export default async function RecebimentosPage(
+  ...args: Parameters<typeof RecebimentosPageInner>
+) {
+  const { medir } = await import("@/lib/observability");
+  return medir("page:cobrancas", () => RecebimentosPageInner(...args));
 }

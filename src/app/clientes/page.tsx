@@ -36,7 +36,7 @@ type Search = {
   porPagina?: string; // 20 | 40 | 100 linhas por página
 };
 
-export default async function ClientesPage({
+async function ClientesPageInner({
   searchParams,
 }: {
   searchParams: Search;
@@ -450,4 +450,12 @@ export default async function ClientesPage({
       </div>
     </div>
   );
+}
+
+// T7 — o p95 desta tela é medido contra o orçamento de 03 §4.7.
+export default async function ClientesPage(
+  ...args: Parameters<typeof ClientesPageInner>
+) {
+  const { medir } = await import("@/lib/observability");
+  return medir("page:clientes", () => ClientesPageInner(...args));
 }

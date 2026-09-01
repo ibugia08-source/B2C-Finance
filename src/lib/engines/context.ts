@@ -40,12 +40,21 @@ export async function contextFromRequest(
   try {
     const { getCurrentUser } = await import("@/lib/auth/current-user");
     const u = await getCurrentUser();
+    // T7 — o id da REQUISIÇÃO (carimbado no middleware) amarra tudo o que o
+    // mesmo clique tocou. Sem header (teste, chamada direta), gera um.
+    let correlationId: string | null = null;
+    try {
+      const { headers } = await import("next/headers");
+      correlationId = headers().get("x-correlation-id");
+    } catch {
+      /* fora de request */
+    }
     return {
       actorId: u?.id ?? null,
       actorEmail: u?.email ?? null,
       origin: opts.origin ?? "UI",
       reason: opts.reason ?? null,
-      correlationId: newCorrelationId(),
+      correlationId: correlationId ?? newCorrelationId(),
     };
   } catch {
     return systemContext(opts.origin ?? "JOB", opts.reason);

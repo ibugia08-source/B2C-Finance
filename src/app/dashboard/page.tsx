@@ -82,7 +82,7 @@ const SEVERITY_DOT: Record<DashAlert["severity"], string> = {
   low: "bg-info",
 };
 
-export default async function DashboardPage({ searchParams }: { searchParams?: Search }) {
+async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   const viewer = await requirePagePermission("dashboard.visualizar", "/dashboard");
 
   // Sem permissão de ver os números financeiros (resultado, margem, caixa):
@@ -585,4 +585,12 @@ export default async function DashboardPage({ searchParams }: { searchParams?: S
       </details>
     </div>
   );
+}
+
+// T7 — o p95 desta tela é medido contra o orçamento de 03 §4.7.
+export default async function DashboardPage(
+  ...args: Parameters<typeof DashboardPageInner>
+) {
+  const { medir } = await import("@/lib/observability");
+  return medir("page:dashboard", () => DashboardPageInner(...args));
 }

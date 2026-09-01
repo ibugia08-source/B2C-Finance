@@ -20,7 +20,10 @@ export async function marcarEnviadaAction(
   mensagem?: string
 ) {
   await requirePermission("recebimentos.gerar_cobranca");
-  const r = await registrarEnvioDaRegua(billingId, etapa, { mensagem });
+  const { medir } = await import("@/lib/observability");
+  const r = await medir("action:fila.marcar-enviada", () =>
+    registrarEnvioDaRegua(billingId, etapa, { mensagem })
+  );
   revalidatePath("/fila");
   revalidatePath("/cobrancas");
   return r;
@@ -37,7 +40,10 @@ export async function enviarPeloSistemaAction(
   mensagem: string
 ) {
   await requirePermission("recebimentos.gerar_cobranca");
-  const r = await despacharPelaRegua(billingId, etapa, mensagem);
+  const { medir } = await import("@/lib/observability");
+  const r = await medir("action:fila.enviar", () =>
+    despacharPelaRegua(billingId, etapa, mensagem)
+  );
   revalidatePath("/fila");
   revalidatePath("/cobrancas");
   return r;
