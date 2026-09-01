@@ -104,6 +104,8 @@ export const NAV_AREAS: NavArea[] = [
     icon: Handshake,
     primary: true,
     pages: [
+      { href: "/funil", label: "Funil de vendas", permission: "comercial.visualizar" },
+      { href: "/funil/leads", label: "Leads", permission: "comercial.visualizar" },
       { href: "/upsell", label: "Upsell", permission: "upsell.visualizar" },
       { href: "/renovacoes", label: "Renovações", permission: "clientes.visualizar" },
       { href: "/contratos", label: "Contratos", permission: "contratos.visualizar" },
