@@ -2016,32 +2016,41 @@ model PayrollItem {
 
 // Comissão de colaborador (por cliente/contrato, com competência).
 model Commission {
-  id          String           @id @default(cuid())
-  employeeId  String
-  employee    Employee         @relation(fields: [employeeId], references: [id])
-  clientId    String?
-  client      Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  contractId  String?
-  contract    Contract?        @relation(fields: [contractId], references: [id])
-  basisAmount Decimal?         @db.Decimal(14, 2) // base de cálculo
-  rate        Decimal?         @db.Decimal(7, 4) // percentual (0–1)
-  amount      Decimal          @db.Decimal(14, 2)
-  month       Int // competência 1-12
-  year        Int
+  id            String           @id @default(cuid())
+  employeeId    String
+  employee      Employee         @relation(fields: [employeeId], references: [id])
+  clientId      String?
+  client        Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contractId    String?
+  contract      Contract?        @relation(fields: [contractId], references: [id])
+  /// F4.7 — a venda que originou a comissão, quando houver.
+  ///
+  /// Só PROVENIÊNCIA: o valor continua sendo digitado à mão (decisão 19.14).
+  /// Guardar de qual venda a comissão veio é o que permite responder "esta
+  /// venda já foi comissionada?" sem ninguém ter de lembrar — e é o único
+  /// automatismo que a decisão permite, porque não calcula nada.
+  opportunityId String?
+  opportunity   Opportunity?     @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  basisAmount   Decimal?         @db.Decimal(14, 2) // base de cálculo
+  rate          Decimal?         @db.Decimal(7, 4) // percentual (0–1)
+  amount        Decimal          @db.Decimal(14, 2)
+  month         Int // competência 1-12
+  year          Int
   /// Competência canônica YYYY-MM (01 §3.15) — preenchida por gatilho
   /// a partir do par mês/ano acima; nunca escrever pela aplicação.
-  competence  String?
-  status      CommissionStatus @default(PENDING)
-  paidAt      DateTime?        @db.Timestamptz(3)
-  notes       String?
-  ownerId     String?
-  owner       User?            @relation("OwnerCommission", fields: [ownerId], references: [id])
-  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime         @updatedAt @db.Timestamptz(3)
+  competence    String?
+  status        CommissionStatus @default(PENDING)
+  paidAt        DateTime?        @db.Timestamptz(3)
+  notes         String?
+  ownerId       String?
+  owner         User?            @relation("OwnerCommission", fields: [ownerId], references: [id])
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
 
   @@index([employeeId])
   @@index([clientId])
   @@index([contractId])
+  @@index([opportunityId])
   @@index([year, month])
   @@index([status])
   @@index([ownerId])
@@ -3634,6 +3643,7 @@ model Opportunity {
 
   events       PipelineEvent[]
   interactions Interaction[]
+  commissions  Commission[]
 
   ownerId String?
   owner   User?   @relation("OwnerOpportunity", fields: [ownerId], references: [id])

@@ -3,10 +3,11 @@ import { PageHeader } from "@/components/page-header";
 import { MetricCard } from "@/components/metric-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { requirePagePermission } from "@/lib/auth/viewer";
+import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { painelDoCloser } from "@/lib/services/commercial-goals";
+import { vendasSemComissao, competenciaDeHoje } from "@/lib/services/commissions";
 import { SeletorDeCloser } from "./seletor";
 
 /**
@@ -49,7 +50,14 @@ export default async function CloserPage({
       ? searchParams.closer
       : (viewer.name ?? nomes[0] ?? "Sem nome");
 
-  const p = await painelDoCloser(closer);
+  const competence = competenciaDeHoje();
+  const [p, semComissao] = await Promise.all([
+    painelDoCloser(closer),
+    can(viewer, "folha.visualizar")
+      ? vendasSemComissao(competence)
+      : Promise.resolve([]),
+  ]);
+  const minhasSemComissao = semComissao.filter((v) => v.closer === closer);
 
   return (
     <div>
@@ -114,7 +122,7 @@ export default async function CloserPage({
       </h2>
       <Card>
         <CardContent className="p-0">
-          {p.paradas.length === 0 && p.semHandoff.length === 0 ? (
+          {p.paradas.length === 0 && p.semHandoff.length === 0 && minhasSemComissao.length === 0 ? (
             <p className="px-3.5 py-6 text-center text-dense text-muted-foreground">
               Nada parado e nenhuma venda pendente de entrega.
             </p>
@@ -128,6 +136,17 @@ export default async function CloserPage({
                   </span>
                   <Link href="/funil" className="shrink-0 text-dense text-brand hover:underline">
                     entregar
+                  </Link>
+                </li>
+              ))}
+              {minhasSemComissao.map((v) => (
+                <li key={v.opportunityId} className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+                  <span className="min-w-0 truncate">
+                    {v.titulo}
+                    <Badge variant="outline" className="ml-2">comissão não lançada</Badge>
+                  </span>
+                  <Link href="/folha" className="shrink-0 text-dense text-brand hover:underline">
+                    lançar
                   </Link>
                 </li>
               ))}
