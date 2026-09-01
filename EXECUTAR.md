@@ -112,6 +112,32 @@ GATE F2: S4, S6, S10, S17, S22, S27.
 
 GATE F3: S7, S9, S14, S15, S16, S18, S19, S21, S25.
 
+**GATE F3 ABERTO em 2026-08-31**, com uma exclusão e um limite declarados.
+
+Cobertos por teste automatizado: **S7** (rateio de mídia por cliente com
+residual determinístico + matriz contábil provando que pagar a fatura do
+cartão NÃO cria despesa nova), **S9** (churn não apaga dívida: cobrança de
+cliente CHURNED continua vencida e cobrável), **S14** (reparcelamento sai do
+aging como RENEGOTIATED e a DRE não dobra), **S15** (empréstimo separa
+principal de juros; só os juros tocam o resultado), **S16** (reserva de
+imposto é transferência patrimonial: liquidez disponível cai, caixa total e
+DRE não mudam), **S18** (conciliação líquida: 1.000 de venda + 30 de taxa
+fecham a linha de 970 sem inventar diferença), **S21** (100 em 3 partes soma
+100,00 — testado em 36 combinações de valor × partes).
+
+**S19 NÃO SE APLICA.** "Self-approval proibido" pressupõe fila de aprovação, e
+a direção decidiu em 31/08 (19.35/19.36) que ela não existe: sem teto e sem
+segundo aprovador, não há auto-aprovação possível. O controle equivalente é
+permissão + motivo obrigatório + trilha de auditoria, e esse está testado.
+
+**S25 é PARCIAL, e a parte que falta é humana.** A fila priorizada, os sete
+tons, a régua com os cinco degraus e os silêncios, e o Modo Fila operável por
+teclado estão prontos e testados. "38 itens em 12 minutos" é medição de
+CRONÔMETRO com uma pessoa real na frente da tela — nenhum teste automatizado
+prova isso, e marcar o cenário como verde sem alguém ter cronometrado seria
+exatamente o tipo de check verde que este plano evita. Fica para a validação
+com a equipe de cobrança.
+
 -
 
 ## FASE 4 - COMERCIAL COMPLETO
