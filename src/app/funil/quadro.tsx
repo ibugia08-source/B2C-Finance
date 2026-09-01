@@ -10,10 +10,10 @@ import { Select } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { askReason } from "@/components/ui/confirm-dialog";
+import { askReason, confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
-import { criarOportunidadeAction, moverEtapaAction } from "@/lib/actions/funil";
+import { criarOportunidadeAction, fecharVendaAction, moverEtapaAction } from "@/lib/actions/funil";
 import { COLUNAS_DO_QUADRO, ETAPAS_DO_FUNIL, type EtapaDoFunil } from "@/lib/commercial/funil";
 import type { ColunaDoFunil } from "@/lib/services/pipeline";
 
@@ -70,6 +70,38 @@ export function QuadroDoFunil({
         }
         router.refresh();
       });
+
+    if (para === "GANHA") {
+      // Ganhar é ENTREGAR PARA A OPERAÇÃO (01 §6.1), não só mudar de coluna:
+      // cria/vincula o cliente, abre a relação, o termo, o onboarding, o
+      // contrato rascunho e as cobranças. Por isso passa por outra ação.
+      void (async () => {
+        const ok = await confirmAction({
+          title: `Fechar a venda “${card.titulo}”?`,
+          description:
+            "O cliente entra na carteira com relação, termo, implantação e contrato em rascunho. As cobranças de contrato fechado são geradas na hora.",
+          confirmLabel: "Fechar venda",
+        });
+        if (!ok) return;
+        retirar(id);
+        start(async () => {
+          const r = await fecharVendaAction(id);
+          if (!r.ok) {
+            setEstado(colunas);
+            return showUndoToast({ message: r.error });
+          }
+          showUndoToast({
+            message: r.pendencias.length
+              ? `Venda fechada com pendências: ${r.pendencias.join("; ")}.`
+              : r.billingIds.length
+                ? `Venda fechada — ${r.billingIds.length} ${r.billingIds.length === 1 ? "cobrança gerada" : "cobranças geradas"}.`
+                : "Venda fechada. A mensalidade entra no ciclo do mês.",
+          });
+          router.refresh();
+        });
+      })();
+      return;
+    }
 
     if (para === "PERDIDA") {
       void (async () => {

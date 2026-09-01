@@ -5,6 +5,7 @@ import {
   criarOportunidade, moverEtapa, type EntradaDeOportunidade,
 } from "@/lib/services/pipeline";
 import { converterLead, criarLead, type EntradaDeLead } from "@/lib/services/leads";
+import { fecharVenda, type OpcoesDoHandoff } from "@/lib/services/sale-handoff";
 import type { EtapaDoFunil } from "@/lib/commercial/funil";
 
 /**
@@ -23,6 +24,24 @@ export async function moverEtapaAction(
   await requirePermission(para === "GANHA" ? "comercial.registrar_venda" : "comercial.operar");
   const r = await moverEtapa(opportunityId, para, { motivo });
   revalidar();
+  return r;
+}
+
+/**
+ * Fecha a venda e entrega para a operação (F4.4 · 01 §6.1).
+ *
+ * Separada de `moverEtapaAction` porque marcar GANHA no seletor do quadro é
+ * um gesto de organização, e ESTA é a que cria cliente, contrato e cobrança.
+ * A venda arrastada no quadro sem passar por aqui aparece depois como "venda
+ * sem contrato" — de propósito: melhor a pendência visível que o handoff
+ * automático que ninguém pediu.
+ */
+export async function fecharVendaAction(opportunityId: string, opts: OpcoesDoHandoff = {}) {
+  await requirePermission("comercial.registrar_venda");
+  const r = await fecharVenda(opportunityId, opts);
+  revalidar();
+  revalidatePath("/clientes");
+  revalidatePath("/cobrancas");
   return r;
 }
 

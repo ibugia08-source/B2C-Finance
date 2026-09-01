@@ -21,9 +21,11 @@ import type { Competence } from "@/lib/competence";
  * verdes num sistema que mede nove seria o pior resultado possível: o dono
  * fecharia o mês confiando numa conferência que não aconteceu.
  *
- * A lista de não medidos ENCOLHE conforme as fases entregam. Na F3.4 saíram
- * quatro (rateio, provisão, reserva e fiscal) e na F3.5 saiu a conciliação
- * bancária. Sobra UM: vendas ganhas vinculadas ao funil, que chega na Fase 4.
+ * A lista de não medidos ENCOLHE conforme as fases entregam: na F3.4 saíram
+ * quatro (rateio, provisão, reserva e fiscal), na F3.5 a conciliação bancária
+ * e na F4.4 as vendas vinculadas. **Os dezesseis itens são medidos.** Se um
+ * dia voltar a aparecer NÃO MEDIDO aqui, é porque nasceu item novo — e ele
+ * tem de dizer por quê, como estes disseram.
  *
  * NENHUM ITEM BLOQUEIA O FECHAMENTO por decisão explícita: a spec lista os
  * dezesseis e NÃO diz quais impedem fechar. Inventar essa regra seria
@@ -48,7 +50,15 @@ export type ItemChecklist = {
   href: string | null;
 };
 
-const naoMedido = (
+/**
+ * Item que ainda não pode ser medido. SEM USO desde a F4.4 — os dezesseis
+ * itens passaram a ser medidos.
+ *
+ * Fica aqui de propósito, e não é código morto: é o formato obrigatório do
+ * item novo que ainda não tem como medir. Apagar o helper convidaria a
+ * próxima pessoa a fazer o que ele evita — marcar de verde o que não mede.
+ */
+export const naoMedido = (
   numero: number,
   id: string,
   titulo: string,
@@ -83,6 +93,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
     rateio,
     provisoes,
     conciliacao,
+    vendasSoltas,
     notasEmRascunho,
   ] = await Promise.all([
     // 1. MRR ativo sem cobrança na competência.
@@ -130,6 +141,8 @@ export async function montarChecklist(competence: Competence | string): Promise<
     sugerirProvisoes(competence),
     // 8. Conciliação bancária (F3.5).
     resumoDaConciliacao(competence as Competence),
+    // 13. Vendas ganhas que não foram entregues à operação (F4.4).
+    prisma.opportunity.count({ where: { stage: "GANHA", createdClientId: null } }),
     // 12. Notas paradas em rascunho (F3.6).
     prisma.fiscalDocument.count({
       where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
@@ -315,8 +328,22 @@ export async function montarChecklist(competence: Competence | string): Promise<
           : `${notasEmRascunho} ${notasEmRascunho === 1 ? "nota ficou" : "notas ficaram"} em rascunho, sem emitir nem descartar.`,
       href: `/relatorios`,
     },
-    naoMedido(13, "vendas-vinculadas", "Vendas ganhas vinculadas a cliente", "Comercial",
-      "O funil comercial chega na Fase 4 (F4.1-F4.4)."),
+    {
+      id: "vendas-vinculadas", numero: 13,
+      titulo: "Vendas ganhas vinculadas a cliente",
+      dono: "Comercial",
+      // Uma venda pode ser marcada GANHA arrastando o card no quadro, sem
+      // passar pelo fluxo que entrega para a operação. A venda fica
+      // registrada e a operação não sabe dela — é exatamente isso que este
+      // item procura, e por isso ele mede o que NÃO gerou cliente.
+      situacao: vendasSoltas === 0 ? "OK" : "PENDENTE",
+      quantidade: vendasSoltas,
+      detalhe:
+        vendasSoltas === 0
+          ? "Toda venda ganha virou cliente na operação."
+          : `${vendasSoltas} ${vendasSoltas === 1 ? "venda ganha não virou" : "vendas ganhas não viraram"} cliente, contrato nem cobrança.`,
+      href: "/funil",
+    },
     {
       id: "aprovacoes", numero: 14,
       titulo: "Aprovações decididas",
