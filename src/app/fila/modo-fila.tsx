@@ -9,7 +9,7 @@ import { askReason, confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
 import {
-  marcarEnviadaAction, registrarPromessaAction, silenciarCobrancaAction,
+  enviarPeloSistemaAction, marcarEnviadaAction, registrarPromessaAction, silenciarCobrancaAction,
 } from "@/lib/actions/fila";
 import { ignorarLinhaAction } from "@/lib/actions/conciliacao";
 import { encerrarPendenciaAction } from "@/lib/actions/import-review";
@@ -52,6 +52,7 @@ export function ModoFila({
   conciliacao,
   revisao,
   podeCobrar,
+  envioIntegrado,
   podeConciliar,
   podeRevisar,
 }: {
@@ -60,6 +61,8 @@ export function ModoFila({
   conciliacao: LinhaConciliacao[];
   revisao: ItemRevisao[];
   podeCobrar: boolean;
+  /** F5.1: o provedor de WhatsApp está ligado — o Enter passa a enviar de verdade. */
+  envioIntegrado: boolean;
   podeConciliar: boolean;
   podeRevisar: boolean;
 }) {
@@ -107,13 +110,22 @@ export function ModoFila({
   const enviar = useCallback(() => {
     if (!tarefa || !podeCobrar) return;
     start(async () => {
+      // Com o provedor ligado (F5.1 · 19.17), o clique humano É o disparo:
+      // o sistema registra a etapa e entrega a mensagem — nada é agendado.
+      if (envioIntegrado) {
+        const r = await enviarPeloSistemaAction(tarefa.billingId, tarefa.etapa, tarefa.mensagem);
+        if (!r.ok) return showUndoToast({ message: r.error });
+        showUndoToast({ message: `Mensagem de ${tarefa.etapa} enviada para ${tarefa.cliente}.` });
+        marcarResolvido(tarefa.billingId);
+        return;
+      }
       await navigator.clipboard?.writeText(tarefa.mensagem).catch(() => {});
       const r = await marcarEnviadaAction(tarefa.billingId, tarefa.etapa, tarefa.mensagem);
       if (!r.ok) return showUndoToast({ message: r.error });
       showUndoToast({ message: `Mensagem copiada e ${tarefa.etapa} registrada.` });
       marcarResolvido(tarefa.billingId);
     });
-  }, [tarefa, podeCobrar, marcarResolvido]);
+  }, [tarefa, podeCobrar, envioIntegrado, marcarResolvido]);
 
   const prometer = useCallback(() => {
     if (!tarefa || !podeCobrar) return;
@@ -310,8 +322,13 @@ export function ModoFila({
                   {podeCobrar ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button disabled={pending} onClick={enviar}>
-                        <Copy className="mr-1.5 h-4 w-4" aria-hidden />
-                        Copiar e marcar enviada <Tecla className="ml-1.5">Enter</Tecla>
+                        {envioIntegrado ? (
+                          <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden />
+                        ) : (
+                          <Copy className="mr-1.5 h-4 w-4" aria-hidden />
+                        )}
+                        {envioIntegrado ? "Enviar agora" : "Copiar e marcar enviada"}{" "}
+                        <Tecla className="ml-1.5">Enter</Tecla>
                       </Button>
                       {tarefa.whatsapp ? (
                         <Button variant="outline" asChild>

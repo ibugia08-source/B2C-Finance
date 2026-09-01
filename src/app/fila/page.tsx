@@ -5,6 +5,7 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { filaDeCobranca } from "@/lib/services/collection-tasks";
 import { linhasDaConta, resumoDaConciliacao } from "@/lib/services/reconciliation";
 import { filaDeRevisao } from "@/lib/services/import-review";
+import { urlConfigurada, segredoConfigurado } from "@/lib/integrations/avancecrm";
 import { ModoFila, type Trilha } from "./modo-fila";
 
 /**
@@ -90,6 +91,7 @@ export default async function FilaPage({
           conciliacao={conciliacao}
           revisao={revisao}
           podeCobrar={podeCobrar}
+          envioIntegrado={!!urlConfigurada() && !!segredoConfigurado()}
           podeConciliar={podeConciliar}
           podeRevisar={podeRevisar}
         />

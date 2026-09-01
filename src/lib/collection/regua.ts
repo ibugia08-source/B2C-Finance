@@ -60,6 +60,7 @@ export type MotivoDeSupressao =
   | "SILENCIO"
   | "BLOQUEIO"
   | "JA_ENVIADA"
+  | "FREQUENCIA"
   | "FIM_DE_SEMANA"
   | "SEM_ETAPA_HOJE";
 
@@ -70,6 +71,10 @@ export const EXPLICACAO_DA_SUPRESSAO: Record<MotivoDeSupressao, string> = {
   SILENCIO: "Cobrança silenciada até uma data.",
   BLOQUEIO: "Cobrança bloqueada por decisão da casa.",
   JA_ENVIADA: "Esta etapa da régua já foi enviada para esta cobrança.",
+  // Teto de frequência (F5.1 · decisão 19.17): UMA mensagem de cobrança por
+  // cliente por dia. Quem deve três faturas é uma pessoa só no WhatsApp —
+  // três mensagens no mesmo dia não cobram três vezes, irritam uma.
+  FREQUENCIA: "O cliente já recebeu uma mensagem de cobrança hoje — o teto é uma por dia.",
   FIM_DE_SEMANA: "Hoje não é dia útil — a tarefa aparece na segunda.",
   SEM_ETAPA_HOJE: "Nenhuma etapa da régua cai hoje para esta cobrança.",
 };

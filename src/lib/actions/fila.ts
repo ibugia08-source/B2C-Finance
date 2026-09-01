@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/viewer";
 import {
-  ajustarPreferenciaDeCobranca, registrarEnvioDaRegua, registrarPromessa,
+  ajustarPreferenciaDeCobranca, despacharPelaRegua, registrarEnvioDaRegua, registrarPromessa,
 } from "@/lib/services/collection-tasks";
 import type { EtapaDaRegua } from "@/lib/collection/regua";
 
@@ -21,6 +21,23 @@ export async function marcarEnviadaAction(
 ) {
   await requirePermission("recebimentos.gerar_cobranca");
   const r = await registrarEnvioDaRegua(billingId, etapa, { mensagem });
+  revalidatePath("/fila");
+  revalidatePath("/cobrancas");
+  return r;
+}
+
+/**
+ * Envio em 1 clique pelo sistema (F5.1 · 19.17): o clique é humano, a entrega
+ * é do provedor. A mensagem vai EXATAMENTE como está na tela — o que o
+ * operador leu é o que o cliente recebe.
+ */
+export async function enviarPeloSistemaAction(
+  billingId: string,
+  etapa: EtapaDaRegua,
+  mensagem: string
+) {
+  await requirePermission("recebimentos.gerar_cobranca");
+  const r = await despacharPelaRegua(billingId, etapa, mensagem);
   revalidatePath("/fila");
   revalidatePath("/cobrancas");
   return r;

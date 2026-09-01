@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { toNumber as n, formatBRL } from "@/lib/format";
 import { buildBillingMessage, whatsappLink, type MessageTone } from "@/lib/billing-message";
 import {
-  avaliarRegua, diasEntre, ETAPA_POR_ID, soData,
+  avaliarRegua, diasEntre, ETAPA_POR_ID, EXPLICACAO_DA_SUPRESSAO, soData,
   type EtapaDaRegua, type MotivoDeSupressao,
 } from "@/lib/collection/regua";
 import { escopoAtual, whereDaCobranca } from "@/lib/services/data-scope";
@@ -179,9 +179,42 @@ export async function filaDeCobranca(hoje: Date = new Date()): Promise<FilaDeCob
   // Mais atrasado e mais caro primeiro: é a ordem em que o dinheiro some.
   tarefas.sort((a, b) => b.diasDeAtraso - a.diasDeAtraso || b.valorEmAberto - a.valorEmAberto);
 
+  // TETO DE FREQUÊNCIA (F5.1 · decisão 19.17): UMA mensagem por cliente por
+  // dia. Quem deve três faturas é uma pessoa só no WhatsApp — a fila mantém
+  // a cobrança MAIS urgente (a ordenação acima já decidiu qual é) e cala as
+  // outras COM O MOTIVO À VISTA, porque sumir em silêncio é o que esta fila
+  // não faz. Vale também para quem já recebeu mensagem hoje: a tarefa da
+  // tarde não repete o toque da manhã.
+  const clientesComTarefa = [...new Set(tarefas.map((t) => t.clientId))];
+  const contatosHoje = clientesComTarefa.length
+    ? await prisma.collectionHistory.findMany({
+        where: {
+          clientId: { in: clientesComTarefa },
+          reguaStep: { not: null },
+          contactedAt: { gte: soData(hoje) },
+        },
+        select: { clientId: true },
+      })
+    : [];
+  const jaFalouHoje = new Set(contatosHoje.map((c) => c.clientId));
+  const ativas: TarefaDeCobranca[] = [];
+  for (const t of tarefas) {
+    if (jaFalouHoje.has(t.clientId)) {
+      suprimidas.push({
+        billingId: t.billingId, clientId: t.clientId, cliente: t.cliente,
+        valorEmAberto: t.valorEmAberto, dueDate: t.dueDate, diasDeAtraso: t.diasDeAtraso,
+        motivo: "FREQUENCIA", explicacao: EXPLICACAO_DA_SUPRESSAO.FREQUENCIA, ate: null,
+      });
+      continue;
+    }
+    // A primeira tarefa do cliente passa; as demais dele esperam amanhã.
+    jaFalouHoje.add(t.clientId);
+    ativas.push(t);
+  }
+
   return {
     hoje,
-    tarefas,
+    tarefas: ativas,
     suprimidas: suprimidas.sort((a, b) => b.valorEmAberto - a.valorEmAberto),
     totalEmAberto: Math.round(totalEmAberto * 100) / 100,
   };
@@ -229,6 +262,127 @@ export async function registrarEnvioDaRegua(
       if (b.collectionStatus === "NOT_CONTACTED") {
         await tx.billing.update({ where: { id: b.id }, data: { collectionStatus: "CONTACTED" } });
       }
+      // O CRM fica sabendo do contato pela MESMA transação (03 §4.2): se o
+      // registro falhar, o evento some junto. Sem configuração de saída, o
+      // evento espera — sincronizar contato repetido não existe, a dedupe do
+      // outbox é por (evento, cobrança, etapa).
+      await sincronizarContatoNoCrm(tx, b.id, etapa, {
+        clientId: b.clientId,
+        mensagem: opts.mensagem ?? null,
+        canal: opts.canal ?? "whatsapp",
+      });
+    });
+  } catch (e: any) {
+    if (e?.code === "P2002")
+      return { ok: false, error: "Esta etapa já foi enviada para esta cobrança." };
+    throw e;
+  }
+  return { ok: true };
+}
+
+async function sincronizarContatoNoCrm(
+  tx: any,
+  billingId: string,
+  etapa: EtapaDaRegua,
+  dados: { clientId: string; mensagem: string | null; canal: string }
+) {
+  const { currentWorkspaceId } = await import("@/lib/services/workspace");
+  const { publish } = await import("@/lib/outbox");
+  const workspaceId = await currentWorkspaceId().catch(() => null);
+  if (!workspaceId) return; // fora de requisição (teste, script): sem sincronia, sem quebra.
+  await publish(tx as any, {
+    workspaceId,
+    eventType: "COLLECTION_CONTACT",
+    channel: "crm",
+    sourceType: "Billing",
+    sourceId: billingId,
+    dedupeKey: `COLLECTION_CONTACT:Billing:${billingId}:${etapa}:crm`,
+    payload: { clientId: dados.clientId, etapa, canal: dados.canal, mensagem: dados.mensagem },
+  });
+}
+
+/**
+ * ENVIO EM 1 CLIQUE PELO SISTEMA (F5.1 · decisão 19.17).
+ *
+ * A decisão da direção, ao pé da letra: "não automatize por completo o envio
+ * — deixe pronto e aprovado" em D-3, no vencimento e em atraso. Este serviço
+ * é a metade que faltava: o CLIQUE continua humano, mas quem digita no
+ * WhatsApp passa a ser o provedor. Nenhum agendador chama esta função — quem
+ * chama é o botão da fila, sempre.
+ *
+ * A MESMA transação grava o histórico (a unique billingId+reguaStep é a trava
+ * contra a mensagem dupla) e publica o pedido de envio no outbox. Se o
+ * provedor estiver fora do ar, o histórico existe e a entrega tenta de novo
+ * com recuo — o operador não precisa saber disso.
+ *
+ * E o serviço RECUSA quando a integração não está configurada, em vez de
+ * aceitar e deixar o pedido esperando: aceitar marcaria a etapa como enviada
+ * com o cliente sem receber nada — o pior estado possível de uma régua.
+ */
+export async function despacharPelaRegua(
+  billingId: string,
+  etapa: EtapaDaRegua,
+  mensagem: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!ETAPA_POR_ID.has(etapa)) return { ok: false, error: "Etapa da régua desconhecida." };
+  if (!mensagem.trim()) return { ok: false, error: "A mensagem está vazia." };
+
+  const { urlConfigurada, segredoConfigurado } = await import("@/lib/integrations/avancecrm");
+  if (!urlConfigurada() || !segredoConfigurado())
+    return {
+      ok: false,
+      error: "O envio pelo sistema ainda não está ativado. Envie pelo WhatsApp e marque como enviada.",
+    };
+
+  const b = await prisma.billing.findUnique({
+    where: { id: billingId },
+    select: {
+      id: true, clientId: true, relationshipId: true, collectionStatus: true,
+      client: { select: { phone: true, collectionOptOut: true } },
+    },
+  });
+  if (!b) return { ok: false, error: "Cobrança não encontrada." };
+  if (!b.client.phone?.trim())
+    return { ok: false, error: "Este cliente não tem telefone cadastrado." };
+  // Última linha de defesa: a fila já suprime opt-out, mas o serviço confere
+  // de novo — é a mensagem que não tem undo.
+  if (b.client.collectionOptOut)
+    return { ok: false, error: "O cliente pediu para não receber cobrança automática." };
+
+  const { contextFromRequest } = await import("@/lib/engines/context");
+  const { currentWorkspaceId } = await import("@/lib/services/workspace");
+  const { publish } = await import("@/lib/outbox");
+  const ctx = await contextFromRequest();
+  const workspaceId = await currentWorkspaceId().catch(() => null);
+  if (!workspaceId)
+    return { ok: false, error: "Não foi possível identificar o espaço de trabalho." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.collectionHistory.create({
+        data: {
+          billingId: b.id,
+          clientId: b.clientId,
+          relationshipId: b.relationshipId,
+          status: "CONTACTED",
+          channel: "whatsapp",
+          message: mensagem,
+          reguaStep: etapa,
+          createdBy: ctx.actorEmail,
+        },
+      });
+      if (b.collectionStatus === "NOT_CONTACTED") {
+        await tx.billing.update({ where: { id: b.id }, data: { collectionStatus: "CONTACTED" } });
+      }
+      await publish(tx as any, {
+        workspaceId,
+        eventType: "COLLECTION_MESSAGE_REQUESTED",
+        channel: "whatsapp",
+        sourceType: "Billing",
+        sourceId: b.id,
+        dedupeKey: `COLLECTION_MESSAGE_REQUESTED:Billing:${b.id}:${etapa}:whatsapp`,
+        payload: { clientId: b.clientId, etapa, telefone: b.client.phone, mensagem },
+      });
     });
   } catch (e: any) {
     if (e?.code === "P2002")

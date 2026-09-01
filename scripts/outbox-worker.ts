@@ -23,12 +23,16 @@ async function main() {
   }
 
   const r = await runOutboxWorker(async (evento) => {
-    if (evento.channel === "crm") {
+    // O AvanceCRM é o provedor dos DOIS canais: `crm` (sincronia de fatos) e
+    // `whatsapp` (F5.1 — pedido de envio de mensagem da régua, sempre
+    // originado por um clique humano; decisão 19.17). O envelope leva o
+    // eventType, e é por ele que o provedor decide o que fazer.
+    if (evento.channel === "crm" || evento.channel === "whatsapp") {
       if (!temCrm) throw new Error("AvanceCRM não configurado.");
       await entregarNoCrm(evento);
       return;
     }
-    // WhatsApp e e-mail entram nas fases seguintes. Lançar aqui é o certo:
+    // E-mail entra quando houver provedor. Lançar aqui é o certo:
     // o worker reagenda e o evento espera, em vez de sumir como entregue.
     throw new Error(`Canal “${evento.channel}” ainda não tem entregador.`);
   });
