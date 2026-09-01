@@ -88,6 +88,7 @@ export const NAV_AREAS: NavArea[] = [
       { href: "/fechamento/fotografia", label: "Fotografia do mês", permission: "fechamento.fechar" },
       { href: "/projecoes", label: "Histórico Anual", permission: "projecoes.visualizar" },
       { href: "/caixa", label: "Reservas", permission: "caixa.visualizar" },
+      { href: "/fluxo", label: "Fluxo de caixa", permission: "caixa.visualizar" },
       { href: "/dre", label: "Resultado (DRE)", permission: "contabil.visualizar" },
       { href: "/impostos", label: "Impostos", permission: "contabil.visualizar" },
       { href: "/rateio", label: "Rateio de mídia", permission: "rateios.visualizar" },
