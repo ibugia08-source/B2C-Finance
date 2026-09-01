@@ -43,6 +43,28 @@ export function ShortcutsDialog({ user }: { user: UserLike }) {
             <Linha teclas="Ctrl K" descricao="Abrir busca e comandos" />
             <Linha teclas="/" descricao="Buscar" />
             <Linha teclas="?" descricao="Este mapa" />
+            <Linha teclas="u" descricao="Desfazer o último gesto" />
+            <Linha teclas="[ ]" descricao="Mês anterior e seguinte" />
+            <Linha teclas="t" descricao="Voltar ao mês atual" />
+          </Grupo>
+
+          {/* 02 §3: as teclas de tabela são fixas por definição — elas não
+              são comandos do registro, são o comportamento do gabarito
+              "planilha viva". Ficam escritas aqui porque é aqui que quem
+              nunca usou vai procurar. */}
+          <Grupo titulo="Dentro de uma tabela">
+            <Linha teclas="↑ ↓" descricao="Navegar entre as linhas" />
+            <Linha teclas="Enter" descricao="Abrir o item da linha" />
+            <Linha teclas="Espaço" descricao="Selecionar a linha" />
+            <Linha teclas="p" descricao="Registrar pagamento na linha" />
+          </Grupo>
+
+          <Grupo titulo="No Modo Fila">
+            <Linha teclas="j k" descricao="Próximo e anterior" />
+            <Linha teclas="Enter" descricao="Ação principal da trilha" />
+            <Linha teclas="s" descricao="Pular sem resolver" />
+            <Linha teclas="p" descricao="Registrar promessa" />
+            <Linha teclas="1 2 3" descricao="Trocar de trilha" />
           </Grupo>
 
           {[...porGrupo.entries()].map(([grupo, cmds]) => (

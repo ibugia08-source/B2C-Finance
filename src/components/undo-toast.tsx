@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, Undo2, X } from "lucide-react";
 
@@ -33,6 +33,22 @@ export function showUndoToast(t: UndoToastInput) {
   listener?.(t);
 }
 
+/**
+ * DESFAZER PELO TECLADO (F3.12 · 02 §3: "u desfaz"; cenário S24).
+ *
+ * O evento existe porque o gesto tem de valer em QUALQUER tela: quem acabou
+ * de registrar um pagamento errado aperta `u` onde estiver, e não vai
+ * procurar o botão do toast com o mouse. O atalho global dispara isto; o host
+ * é quem sabe qual é o desfazer da vez.
+ */
+export const EVENTO_DESFAZER = "b2c:undo";
+
+export function requestUndo() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(EVENTO_DESFAZER));
+  }
+}
+
 const AUTO_HIDE_MS = 8000;
 
 export function UndoToastHost() {
@@ -40,6 +56,30 @@ export function UndoToastHost() {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [mounted, setMounted] = useState(false);
+
+  const desfazer = useCallback(() => {
+    if (!toast?.onUndo || pending) return;
+    start(async () => {
+      try {
+        const res = await toast.onUndo!();
+        if (res && res.ok === false) {
+          setError(res.error ?? "Não foi possível desfazer.");
+          return;
+        }
+        setToast(null);
+      } catch {
+        setError("Não foi possível desfazer.");
+      }
+    });
+  }, [toast, pending]);
+
+  // A tecla `u` chega por evento e não por listener próprio: o host já é
+  // único no AppShell, e dois lugares escutando teclado é como se desfaz
+  // duas vezes o mesmo gesto.
+  useEffect(() => {
+    window.addEventListener(EVENTO_DESFAZER, desfazer);
+    return () => window.removeEventListener(EVENTO_DESFAZER, desfazer);
+  }, [desfazer]);
 
   useEffect(() => {
     setMounted(true);
@@ -74,20 +114,7 @@ export function UndoToastHost() {
         <button
           type="button"
           disabled={pending}
-          onClick={() =>
-            start(async () => {
-              try {
-                const res = await toast.onUndo!();
-                if (res && res.ok === false) {
-                  setError(res.error ?? "Não foi possível desfazer.");
-                  return;
-                }
-                setToast(null);
-              } catch {
-                setError("Não foi possível desfazer.");
-              }
-            })
-          }
+          onClick={desfazer}
           className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-60"
         >
           <Undo2 className="h-3.5 w-3.5" />

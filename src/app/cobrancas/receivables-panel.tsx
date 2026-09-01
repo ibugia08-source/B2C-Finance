@@ -29,6 +29,8 @@ import {
   BulkBar,
 } from "./receivables-actions";
 import { setClientChargeAmount } from "@/lib/actions/receivables-inline";
+import { useTableKeyboard } from "@/components/table-keyboard";
+import { useRouter } from "next/navigation";
 import type { ReceivableRow as ReceivableRowType } from "./receivables-table";
 
 export function ReceivablesPanel({
@@ -44,6 +46,7 @@ export function ReceivablesPanel({
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const onStatusChange = useStatusChangeHandler();
+  const router = useRouter();
   const allKeys = rows.map((r) => r.key);
   const allSelected = allKeys.length > 0 && selected.size === allKeys.length;
   const someSelected = selected.size > 0 && !allSelected;
@@ -61,10 +64,34 @@ export function ReceivablesPanel({
     [rows, selected]
   );
 
+  // F3.12 — 02 §3: "setas navegam, Enter abre, espaço seleciona, p registra
+  // pagamento na linha". O `u` (desfazer) é global e vive no undo-toast: ele
+  // precisa valer em qualquer tela, não só nesta tabela.
+  const teclado = useTableKeyboard(rows.length, {
+    onAbrir: (i) => {
+      const r = rows[i];
+      if (r) router.push(`/clientes/${r.clientId}`);
+    },
+    onSelecionar: (i) => {
+      const r = rows[i];
+      if (r) toggleOne(r.key);
+    },
+    extras: {
+      p: (i) => {
+        const r = rows[i];
+        if (r) void onStatusChange(r)("PAID");
+      },
+    },
+  });
+
   return (
     <>
       {/* Desktop */}
-      <div className="hidden md:block overflow-x-auto">
+      <div
+        className="hidden overflow-x-auto md:block"
+        ref={teclado.container}
+        onKeyDown={teclado.onKeyDown}
+      >
         <Table>
           <TableHeader>
             <TableRow>
@@ -96,7 +123,7 @@ export function ReceivablesPanel({
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <ReceivableRow
                 key={r.key}
                 row={r}
@@ -105,6 +132,7 @@ export function ReceivablesPanel({
                 accounts={accounts}
                 month={month}
                 year={year}
+                linhaProps={teclado.linhaProps(i)}
               />
             ))}
           </TableBody>

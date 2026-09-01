@@ -117,6 +117,7 @@ export const NAV_AREAS: NavArea[] = [
     icon: Settings2,
     pages: [
       { href: "/configuracoes", label: "Configurações", permission: "configuracoes.visualizar" },
+      { href: "/configuracoes/emails", label: "E-mails do sistema", permission: "configuracoes.visualizar" },
       { href: "/usuarios", label: "Usuários", permission: "usuarios.visualizar" },
       { href: "/regras", label: "Regras de Categoria", permission: "regras.visualizar" },
       { href: "/importacoes", label: "Importar Dados", permission: "importacoes.visualizar" },

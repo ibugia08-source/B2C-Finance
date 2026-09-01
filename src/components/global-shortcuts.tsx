@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { mesAtual, mesDaUrl, shiftMes } from "@/lib/month-param";
 import { visibleCommands } from "@/lib/commands";
 import { irParaMes, openPalette } from "./command-palette";
+import { requestUndo } from "./undo-toast";
 import type { UserLike } from "./nav-items";
 
 /**
@@ -89,6 +90,13 @@ export function GlobalShortcuts({ user }: { user: UserLike }) {
           // "t" leva ao mês atual — atalho de conveniência do MonthNav.
           e.preventDefault();
           irParaMes(router, mesAtual());
+          return;
+        case "u":
+          // 02 §3 e cenário S24: "u desfaz". Vale em qualquer tela — quem
+          // acabou de registrar um pagamento errado não vai procurar o botão
+          // do toast com o mouse. Sem toast aberto, não faz nada.
+          e.preventDefault();
+          requestUndo();
           return;
       }
     }

@@ -59,6 +59,7 @@ function ReceivableRowInner({
   accounts,
   month,
   year,
+  linhaProps,
 }: {
   row: ReceivableRowType;
   selected: boolean;
@@ -66,11 +67,17 @@ function ReceivableRowInner({
   accounts: { id: string; name: string }[];
   month: number;
   year: number;
+  /** Props do foco rotativo (F3.12) — vêm do useTableKeyboard do painel. */
+  linhaProps?: Record<string, unknown>;
 }) {
   const onStatusChange = useStatusChangeHandler();
 
   return (
-    <TableRow data-state={selected ? "selected" : undefined}>
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      {...linhaProps}
+    >
       <TableCell>
         <Checkbox
           aria-label={`Selecionar ${row.name}`}
