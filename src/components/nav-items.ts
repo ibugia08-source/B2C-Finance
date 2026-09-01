@@ -127,6 +127,7 @@ export const NAV_AREAS: NavArea[] = [
       { href: "/configuracoes/relatorios", label: "Relatórios agendados", permission: "configuracoes.visualizar" },
       { href: "/notificacoes", label: "Notificações", permission: "dashboard.visualizar" },
       { href: "/configuracoes/observabilidade", label: "Tempos do sistema", permission: "configuracoes.editar" },
+      { href: "/catalogo", label: "Catálogo de componentes", permission: "configuracoes.editar" },
       { href: "/usuarios", label: "Usuários", permission: "usuarios.visualizar" },
       { href: "/regras", label: "Regras de Categoria", permission: "regras.visualizar" },
       { href: "/importacoes", label: "Importar Dados", permission: "importacoes.visualizar" },
