@@ -153,6 +153,25 @@ com a equipe de cobrança.
 
 GATE F4: S2, S3, S5, S24 e reconstrução de pipeline histórico.
 
+**GATE F4 ABERTO em 2026-08-31**, com os mesmos dois tipos de limite do GATE F3.
+
+Cobertos por teste automatizado: **S3** (TCV de 3.000 em 2x cria cliente,
+relação, termo, implantação, contrato rascunho e duas cobranças de 1.500 em
+competências seguidas; vendido no mês da venda, faturado por competência),
+**S5** (renovação TCV→MRR com histórico preservado — já verde desde a F1),
+**S20** (webhook reenviado, inclusive dez vezes em paralelo, cria um fato só)
+e a **reconstrução de pipeline histórico** (a mesma oportunidade está GANHA
+hoje, estava NOVA em 5 de fevereiro e em REUNIÃO em 15; antes de existir não
+aparece em retrato nenhum).
+
+**S2 e S24 são PARCIAIS, e a parte que falta é humana.** A tela de atividade
+do SDR é de um toque por campo, sem salvar, com meta visível; os atalhos de
+teclado (paleta, tabela, `[`/`]`, `u` desfaz) estão prontos e no mapa do `?`.
+Mas "em 30 segundos" e "3 pagamentos sem mouse" são medições de CRONÔMETRO
+com uma pessoa real na frente da tela. Nenhum teste prova isso, e marcar
+verde sem alguém ter cronometrado seria o check verde que este plano evita.
+Fica para a validação com a equipe, junto com o S25 da Fase 3.
+
 -
 
 ## FASE 5 - AUTOMAÇÃO E INTELIGÊNCIA (contínua)
