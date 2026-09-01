@@ -46,6 +46,13 @@ export const CATEGORIA_DO_EVENTO: Record<string, CategoriaDeEvento> = {
 
   RECONCILIATION: "FECHAMENTO",
   CLOSING_ADJUSTMENT: "FECHAMENTO",
+  // Rateio é FECHAMENTO, não econômico: ele não muda o resultado do mês
+  // (a despesa já está reconhecida e postada), muda a margem de cada
+  // cliente. E é ITEM DO CHECKLIST — classificar como econômico travaria
+  // a conclusão do rateio justamente durante o fechamento, que é quando
+  // ele é feito. Em mês FECHADO continua bloqueado: aí o número já foi
+  // publicado por cliente, e mudar exige reabrir com justificativa.
+  ALLOCATION_CHANGED: "FECHAMENTO",
 
   MONTHLY_EVALUATION: "OPERACIONAL",
   ONBOARDING: "OPERACIONAL",

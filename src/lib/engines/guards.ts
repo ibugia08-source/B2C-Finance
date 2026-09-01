@@ -22,10 +22,24 @@ export const OK: Guard = { ok: true };
  * e em job — inclusive os motores inteiros.
  */
 export async function guardPermission(permission: string): Promise<Guard> {
-  const { tryPermission } = await import("@/lib/auth/viewer");
-  return (await tryPermission(permission))
-    ? OK
-    : { ok: false, error: "Você não tem permissão para esta ação." };
+  try {
+    const { tryPermission } = await import("@/lib/auth/viewer");
+    return (await tryPermission(permission))
+      ? OK
+      : { ok: false, error: "Você não tem permissão para esta ação." };
+  } catch {
+    // FORA de uma requisição — job, script, teste — a própria importação
+    // quebra (o módulo avalia `cache()` do React no topo). Degradar para OK é
+    // a mesma escolha de `guardPeriod` logo abaixo, e pelo mesmo motivo: não
+    // há PESSOA agindo, então não há permissão de pessoa a conferir, e
+    // recusar tudo travaria toda rotina automática.
+    //
+    // O que segura a ponta do usuário é a camada de cima: toda Server Action
+    // chama `requirePermission` ANTES de entrar no serviço. Esta guarda é a
+    // segunda tranca, não a única — e uma segunda tranca que impede o sistema
+    // de rodar sozinho não protege ninguém.
+    return OK;
+  }
 }
 
 /**

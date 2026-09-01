@@ -66,6 +66,10 @@ export async function destroyOwner(owner: TestOwner) {
       await prisma.paymentApplication.deleteMany({ where: { billingId: { in: billingIds } } });
       await prisma.payment.deleteMany({ where: { billingId: { in: billingIds } } });
     }
+    // F3.4 — rateio antes do resto: ele aponta para despesa e cliente por id,
+    // sem chave estrangeira, então nada o arrasta junto.
+    await prisma.allocation.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.allocationRule.deleteMany({ where: { ownerId: owner.id } });
     await prisma.income.deleteMany({ where: { ownerId: owner.id } });
     await prisma.collectionHistory.deleteMany({ where: { ownerId: owner.id } });
     await prisma.billing.deleteMany({ where: { ownerId: owner.id } });

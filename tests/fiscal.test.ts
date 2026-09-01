@@ -81,12 +81,14 @@ describe("F3.6 — nota fiscal como registro", () => {
     ).rejects.toThrow();
   });
 
-  it("o fechamento NÃO ganha pendência fiscal (19.38)", async () => {
+  it("o fechamento NÃO cobra emissão de nota (19.38)", async () => {
     const r = await asOwner(dono, async () => resumoDoFechamento("2027-02"));
     const fiscal = r.itens.find((i) => i.id === "fiscal")!;
-    // Continua "não medido", com o motivo escrito — construir a cobrança que
-    // a direção decidiu não ter seria pior do que não construir nada.
-    expect(fiscal.situacao).toBe("NAO_MEDIDO");
-    expect(fiscal.detalhe).toMatch(/19\.38|OPCIONAL|opcional/);
+    // O item passou a ser MEDIDO na F3.4, e o que ele mede é o que a decisão
+    // permite medir: nota parada em RASCUNHO. Ele continua sem cobrar
+    // emissão — não existe "obrigatoriedade de NF" no sistema, e construir
+    // essa cobrança seria inventar a regra que a direção descartou.
+    expect(fiscal.situacao).toBe("OK");
+    expect(fiscal.detalhe).toMatch(/não é obrigatória/i);
   });
 });

@@ -189,6 +189,8 @@ model User {
   ownedImportedRecords    ImportedRecord[]         @relation("OwnerImportedRecord")
   ownedTaxProvisions      TaxProvision[]           @relation("OwnerTaxProvision")
   ownedBillingAdjustments BillingAdjustment[]      @relation("OwnerBillingAdjustment")
+  ownedAllocations        Allocation[]             @relation("OwnerAllocation")
+  ownedAllocationRules    AllocationRule[]         @relation("OwnerAllocationRule")
   ownedFiscalDocuments    FiscalDocument[]         @relation("OwnerFiscalDocument")
   ownedRenegotiations     RenegotiationAgreement[] @relation("OwnerRenegotiation")
   ownedIncomes            Income[]                 @relation("OwnerIncome")
@@ -667,9 +669,10 @@ model Category {
   createdAt DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt DateTime           @updatedAt @db.Timestamptz(3)
 
-  transactions Transaction[]
-  rules        CategorizationRule[]
-  incomes      Income[]
+  transactions    Transaction[]
+  rules           CategorizationRule[]
+  allocationRules AllocationRule[]
+  incomes         Income[]
 }
 
 model Transaction {
@@ -3187,5 +3190,110 @@ model RenegotiationAgreement {
 
   @@index([clientId])
   @@index([status])
+  @@index([ownerId])
+}
+
+// ============================================================================
+// F3.4 — MOTOR GENÉRICO DE RATEIO (ref. 01 §4.7, §3.14; 02 §4.4)
+// ============================================================================
+
+/// Em que dimensão o custo é distribuído. 01 §4.7 nomeia as três; não há
+/// "centro de custo" porque a spec o descartou explicitamente (Agência +
+/// Conta + Allocation + Cliente/Serviço cobrem o caso).
+enum AllocationDimension {
+  AGENCY
+  CLIENT
+  SERVICE
+}
+
+/// Como a linha foi decidida. Guardado porque a pergunta que sempre volta é
+/// "quem disse que 40% desta fatura é do cliente X?" — e a resposta muda
+/// conforme tenha sido alguém digitando (MANUAL), uma regra (RULE) ou uma
+/// distribuição calculada por peso (PROPORTIONAL).
+enum AllocationMethod {
+  MANUAL
+  FIXED_PERCENT
+  PROPORTIONAL
+  RULE
+}
+
+/// Uma FATIA de uma origem, atribuída a uma dimensão.
+///
+/// `sourceId` e `dimensionId` NÃO têm chave estrangeira de propósito: o motor
+/// é genérico (01 §4.7) e a origem pode ser transação hoje e folha amanhã,
+/// enquanto a dimensão é agência, cliente ou serviço conforme a linha. A
+/// integridade é conferida no serviço; o que o banco garante é o que ele
+/// consegue garantir sozinho — e é o que mais importa aqui: o rateio NUNCA
+/// ultrapassar a origem (gatilho `b2c_allocation_nao_ultrapassa`).
+model Allocation {
+  id         String @id @default(cuid())
+  /// Por ora só "TRANSACTION". A coluna existe para o motor ser genérico.
+  sourceType String @default("TRANSACTION")
+  sourceId   String
+
+  dimensionType AllocationDimension
+  dimensionId   String
+
+  amount     Decimal  @db.Decimal(14, 2)
+  /// Percentual aplicado, quando a linha veio de percentual. Informativo:
+  /// o valor mandatório é `amount`, porque é ele que tem de somar a origem.
+  percentage Decimal? @db.Decimal(9, 6)
+
+  method AllocationMethod @default(MANUAL)
+  ruleId String?
+  rule   AllocationRule?  @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  /// Competência do CUSTO rateado (01 §3.15: dimensão explícita, nunca
+  /// deduzida de createdAt).
+  competence String
+
+  ownerId String?
+  owner   User?   @relation("OwnerAllocation", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// Uma linha por dimensão em cada origem: o mesmo cliente duas vezes na
+  /// mesma fatura é o jeito silencioso de contar o custo dobrado.
+  @@unique([sourceType, sourceId, dimensionType, dimensionId])
+  @@index([sourceType, sourceId])
+  @@index([competence])
+  @@index([dimensionType, dimensionId])
+  @@index([ownerId])
+  @@index([ownerId, competence])
+}
+
+/// Regra de rateio automático (02 §4.4: "regra por descrição de campanha +
+/// distribuição manual do resto").
+///
+/// A regra manda 100% do que ela casa para UMA dimensão. Não existe regra que
+/// divide em percentuais: quando o custo é compartilhado, quem decide a
+/// divisão é uma pessoa, na tela, e a linha nasce MANUAL — inventar uma
+/// divisão automática é exatamente o número que ninguém sabe defender depois.
+model AllocationRule {
+  id       String  @id @default(cuid())
+  name     String
+  priority Int     @default(100)
+  active   Boolean @default(true)
+
+  // condições (todas opcionais; todas as preenchidas precisam casar)
+  descriptionContains String?
+  categoryId          String?
+  category            Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  expenseType         ExpenseType?
+
+  // ação
+  dimensionType AllocationDimension
+  dimensionId   String
+
+  allocations Allocation[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerAllocationRule", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([active, priority])
   @@index([ownerId])
 }

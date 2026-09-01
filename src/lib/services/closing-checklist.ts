@@ -3,6 +3,8 @@ import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { ledgerHealth } from "@/lib/accounting/health";
 import { toNumber as n } from "@/lib/format";
+import { resumoDoRateio } from "@/lib/services/allocation";
+import { sugerirProvisoes } from "@/lib/services/tax-provision";
 import type { Competence } from "@/lib/competence";
 
 /**
@@ -14,11 +16,14 @@ import type { Competence } from "@/lib/competence";
  * resolve — e o link já leva com o mês certo na URL.
  *
  * A DECISÃO DE PROJETO MAIS IMPORTANTE DESTE ARQUIVO: um item que ainda não
- * pode ser medido aparece como NÃO MEDIDO, e não como verde. Sete dos
- * dezesseis dependem de coisas que só nascem nas fases 3 e 4 (conciliação,
- * rateio, provisão, fiscal, funil). Mostrar dezesseis verdes num sistema que
- * mede nove seria o pior resultado possível: o dono fecharia o mês confiando
- * numa conferência que não aconteceu.
+ * pode ser medido aparece como NÃO MEDIDO, e não como verde. Mostrar dezesseis
+ * verdes num sistema que mede nove seria o pior resultado possível: o dono
+ * fecharia o mês confiando numa conferência que não aconteceu.
+ *
+ * A lista de não medidos ENCOLHE conforme as fases entregam. Na F3.4 saíram
+ * quatro: rateio (item 9), provisão e reserva (10 e 11, entregues na F3.3) e
+ * fiscal (12, entregue na F3.6). Sobram dois: conciliação bancária (F3.5) e
+ * vendas vinculadas ao funil (Fase 4).
  *
  * NENHUM ITEM BLOQUEIA O FECHAMENTO por decisão explícita: a spec lista os
  * dezesseis e NÃO diz quais impedem fechar. Inventar essa regra seria
@@ -75,6 +80,9 @@ export async function montarChecklist(competence: Competence | string): Promise<
     avaliados,
     semGestor,
     saude,
+    rateio,
+    provisoes,
+    notasEmRascunho,
   ] = await Promise.all([
     // 1. MRR ativo sem cobrança na competência.
     prisma.clientAgencyRelationship.count({
@@ -115,11 +123,23 @@ export async function montarChecklist(competence: Competence | string): Promise<
       },
     }),
     ledgerHealth(workspaceId, { competence: competence as Competence }),
+    // 9. Rateio de mídia (F3.4).
+    resumoDoRateio(competence as Competence),
+    // 10 e 11. Provisão e reserva por entidade (F3.3).
+    sugerirProvisoes(competence),
+    // 12. Notas paradas em rascunho (F3.6).
+    prisma.fiscalDocument.count({
+      where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
+    }),
   ]);
 
   const MAX_SEM_CONTA = 5; // por cento
   const pctSemConta = despesas > 0 ? Math.round((despesasSemConta / despesas) * 100) : 0;
   const naoAvaliados = Math.max(0, ativos - avaliados);
+  const comAliquota = provisoes.filter((p) => !p.semAliquota);
+  const provisoesMedidas = comAliquota.length;
+  const provisoesPendentes = comAliquota.filter((p) => !p.jaLancada).length;
+  const reservasPendentes = comAliquota.filter((p) => p.jaLancada && !p.reservaFeita).length;
 
   return [
     {
@@ -203,14 +223,76 @@ export async function montarChecklist(competence: Competence | string): Promise<
     },
     naoMedido(8, "conciliacao", "Conciliação bancária no mínimo por conta", "Financeiro",
       "A conciliação bancária chega na Fase 3 (F3.5). Até lá este item não é medido — e é dito, em vez de aparecer verde."),
-    naoMedido(9, "rateios", "Rateios obrigatórios concluídos ou aceitos", "Financeiro",
-      "O rateio de mídia por cliente chega na Fase 3 (F3.4)."),
-    naoMedido(10, "provisao", "Provisão tributária confirmada", "Contador",
-      "A provisão automática por entidade chega na Fase 3 (F3.3)."),
-    naoMedido(11, "reserva-impostos", "Reserva de impostos revisada", "Administrador",
-      "Depende da provisão (F3.3) e da regra de reserva restrita (decisão 19.34, respondida em 31/08: configurável por reserva)."),
-    naoMedido(12, "fiscal", "Documentos fiscais emitidos ou justificados", "Financeiro",
-      "Registro de nota chega na Fase 3 (F3.6) — e é OPCIONAL por decisão 19.38: a maioria dos serviços não emite nota."),
+    {
+      id: "rateios", numero: 9,
+      titulo: "Rateios obrigatórios concluídos ou aceitos",
+      dono: "Financeiro",
+      // "Ou aceitos como não alocados" (01 §5.3) é o que faz este item ser
+      // fechável: mídia sem cliente é normal — campanha da própria agência,
+      // teste, prospecção. O que o item cobra é ter OLHADO. Por isso a conta
+      // é a de lançamentos SEM NENHUMA LINHA de rateio, e não a de valor sem
+      // dono: exigir 100% alocado obrigaria a inventar um cliente para o
+      // gasto que não é de cliente nenhum.
+      situacao: rateio.semNenhumRateio === 0 ? "OK" : "PENDENTE",
+      quantidade: rateio.semNenhumRateio,
+      detalhe:
+        rateio.despesas === 0
+          ? "Nenhuma despesa de mídia neste mês."
+          : rateio.semNenhumRateio === 0
+            ? `Toda a mídia do mês foi tratada (${rateio.percentualConcluido ?? 0}% do valor com dono).`
+            : `${rateio.semNenhumRateio} ${rateio.semNenhumRateio === 1 ? "lançamento de mídia não foi" : "lançamentos de mídia não foram"} distribuído nem aceito sem dono.`,
+      href: `/rateio${q}`,
+    },
+    {
+      id: "provisao", numero: 10,
+      titulo: "Provisão tributária confirmada",
+      dono: "Contador",
+      // Entidade SEM alíquota configurada não conta como pendência: não há
+      // o que provisionar enquanto ninguém disser qual é a alíquota, e
+      // marcá-la em vermelho todo mês ensinaria a ignorar a lista.
+      situacao: provisoesPendentes === 0 ? "OK" : "PENDENTE",
+      quantidade: provisoesPendentes,
+      detalhe:
+        provisoesMedidas === 0
+          ? "Nenhuma entidade com alíquota efetiva configurada."
+          : provisoesPendentes === 0
+            ? "Todas as entidades com alíquota configurada estão provisionadas."
+            : `${provisoesPendentes} de ${provisoesMedidas} ${provisoesMedidas === 1 ? "entidade não foi provisionada" : "entidades não foram provisionadas"}.`,
+      href: `/impostos${q}`,
+    },
+    {
+      id: "reserva-impostos", numero: 11,
+      titulo: "Reserva de impostos revisada",
+      dono: "Administrador",
+      // O sistema NUNCA transfere (01 §3.8): aqui ele pergunta se alguém
+      // transferiu. "Revisada" é o gesto humano, e é isso que se registra.
+      situacao: reservasPendentes === 0 ? "OK" : "PENDENTE",
+      quantidade: reservasPendentes,
+      detalhe:
+        provisoesMedidas === 0
+          ? "Sem provisão no mês, não há reserva a revisar."
+          : reservasPendentes === 0
+            ? "Reserva conferida em todas as entidades provisionadas."
+            : `${reservasPendentes} ${reservasPendentes === 1 ? "reserva ainda não foi" : "reservas ainda não foram"} confirmada.`,
+      href: `/impostos${q}`,
+    },
+    {
+      id: "fiscal", numero: 12,
+      titulo: "Documentos fiscais emitidos ou justificados",
+      dono: "Financeiro",
+      // DECIDIDO 19.38: nota é OPCIONAL — a maioria dos serviços não emite,
+      // e não existe cadastro de "obrigatoriedade" no sistema. Então o item
+      // NÃO cobra emissão: ele cobra que nenhuma nota fique em rascunho, que
+      // é a única pendência fiscal que o sistema consegue enxergar sem
+      // inventar uma regra que a direção descartou.
+      situacao: notasEmRascunho === 0 ? "OK" : "PENDENTE",
+      quantidade: notasEmRascunho,
+      detalhe:
+        notasEmRascunho === 0
+          ? "Nenhuma nota em rascunho. Emissão não é obrigatória (decisão da direção)."
+          : `${notasEmRascunho} ${notasEmRascunho === 1 ? "nota ficou" : "notas ficaram"} em rascunho, sem emitir nem descartar.`,
+      href: `/relatorios`,
+    },
     naoMedido(13, "vendas-vinculadas", "Vendas ganhas vinculadas a cliente", "Comercial",
       "O funil comercial chega na Fase 4 (F4.1-F4.4)."),
     {

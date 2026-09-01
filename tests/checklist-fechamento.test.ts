@@ -53,10 +53,21 @@ describe("F2.2 — checklist de fechamento", () => {
   it("o que ainda não pode ser medido DIZ isso, em vez de aparecer verde", async () => {
     const r = await asOwner(dono, async () => resumoDoFechamento("2026-03"));
     const naoMedidos = r.itens.filter((i) => i.situacao === "NAO_MEDIDO");
-    // Conciliação, rateio, provisão, reserva, fiscal e funil chegam nas
-    // fases 3 e 4. Se algum dia isto virar zero sem essas fases existirem,
-    // é porque alguém pintou de verde o que não mede.
-    expect(naoMedidos.length).toBeGreaterThanOrEqual(6);
+    // A lista ENCOLHE conforme as fases entregam, e é assim que tem de ser:
+    // eram seis, e na F3.4 saíram rateio (item 9), provisão e reserva (10 e
+    // 11, entregues na F3.3) e fiscal (12, entregue na F3.6). Sobram dois —
+    // conciliação bancária (F3.5) e vendas vinculadas ao funil (Fase 4).
+    //
+    // O que este teste protege NÃO é a quantidade: é a regra de que item não
+    // medido aparece como NÃO MEDIDO e DIZ por quê, nunca como verde.
+    const ids = naoMedidos.map((i) => i.id);
+    expect(ids).toContain("conciliacao");
+    expect(ids).toContain("vendas-vinculadas");
+    // Razão e integridade entram nesta lista só quando a bandeira do razão
+    // está desligada — é condição de ambiente, não de fase.
+    for (const id of ids) {
+      expect(["conciliacao", "vendas-vinculadas", "ledger", "integridade"]).toContain(id);
+    }
     for (const i of naoMedidos) {
       expect(i.detalhe).toMatch(/Fase [34]|desligado|decisão/i);
     }

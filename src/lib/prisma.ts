@@ -86,6 +86,9 @@ const OWNED_MODELS = new Set<string>([
   "CustomerCreditMovement",
   // F1.9 — trilha de auditoria.
   "AuditLog",
+  // F3.4 — rateio e suas regras.
+  "Allocation",
+  "AllocationRule",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):
