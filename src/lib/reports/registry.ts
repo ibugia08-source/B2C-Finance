@@ -17,6 +17,7 @@ import { contratosReport } from "./definitions/contratos";
 import { despesasReport } from "./definitions/despesas";
 import { folhaReport } from "./definitions/folha";
 import { caixaReport } from "./definitions/caixa";
+import { margemFinalReport } from "./definitions/margem-final";
 import { rentabilidadeClienteReport } from "./definitions/rentabilidade-cliente";
 import { recebimentosReport } from "./definitions/recebimentos";
 import { receitaExtraReport } from "./definitions/receita-extra";
@@ -46,6 +47,8 @@ export const REPORTS: ReportDef[] = [
   folhaReport,
   caixaReport,
   rentabilidadeClienteReport,
+  // F5.5 — a segunda metade da rentabilidade: overhead dentro.
+  margemFinalReport,
   recebimentosReport,
   receitaExtraReport,
   mrrReport,
