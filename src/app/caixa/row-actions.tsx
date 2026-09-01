@@ -20,7 +20,7 @@ export function CashBoxActions({
         accounts={accounts}
         initial={box}
         trigger={
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Editar caixa">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -28,6 +28,7 @@ export function CashBoxActions({
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Excluir caixa"
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: "Excluir este caixa? As movimentações serão perdidas.", destructive: true }))) return;
@@ -46,6 +47,7 @@ export function MovementDeleteButton({ id }: { id: string }) {
     <Button
       variant="ghost"
       size="icon"
+      aria-label="Excluir movimentação"
       disabled={pending}
       onClick={async () => {
         if (!(await confirmAction({ title: "Excluir movimentação?", destructive: true }))) return;

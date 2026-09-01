@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint:tokens": "node scripts/check-design-tokens.mjs",
-    "verify": "npm run lint && npm run lint:tokens && npm run build:ci && npm test",
+    "verify": "npm run lint && npm run lint:tokens && npm run audit:aa && npm run build:ci && npm test",
     "db:test:setup": "node scripts/setup-test-db.mjs",
     "db:baseline": "prisma migrate resolve --applied 0_init",
     "db:migrate:deploy": "prisma migrate deploy",
@@ -27,7 +27,8 @@
     "verify:ledger": "tsx scripts/verify-ledger.ts",
     "verify:snapshots": "tsx scripts/verify-snapshots.ts",
     "outbox:worker": "tsx scripts/outbox-worker.ts",
-    "relatorios:agendados": "tsx scripts/relatorios-agendados.ts"
+    "relatorios:agendados": "tsx scripts/relatorios-agendados.ts",
+    "audit:aa": "node scripts/auditoria-aa.mjs --ci"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

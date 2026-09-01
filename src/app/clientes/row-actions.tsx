@@ -50,6 +50,8 @@ export function ClientActions({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Mais ações do cliente"
+          aria-expanded={menuOpen}
           onClick={() => setMenuOpen(!menuOpen)}
           className="h-8 w-8"
         >
@@ -59,10 +61,17 @@ export function ClientActions({
         {menuOpen && (
           <>
             <div
+              aria-hidden
               className="fixed inset-0 z-30"
               onClick={() => setMenuOpen(false)}
             />
-            <div className="absolute right-0 top-8 z-40 w-48 rounded-md border bg-card shadow-lg">
+            <div
+              className="absolute right-0 top-8 z-40 w-48 rounded-md border bg-card shadow-lg"
+              role="menu"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setMenuOpen(false);
+              }}
+            >
               {/* Edit */}
               <ClientDialog
                 initial={client}

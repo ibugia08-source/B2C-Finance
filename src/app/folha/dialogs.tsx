@@ -98,9 +98,9 @@ export function EmployeeActions({ employee }: { employee: any }) {
   return (
     <div className="flex gap-1 justify-end">
       <EmployeeDialog initial={employee} trigger={
-        <Button variant="ghost" size="icon"><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" aria-label="Editar colaborador"><Pencil className="h-4 w-4" /></Button>
       } />
-      <Button variant="ghost" size="icon" disabled={pending}
+      <Button variant="ghost" size="icon" aria-label="Excluir colaborador" disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: `Excluir "${employee.name}"?`, destructive: true }))) return;
           start(async () => {
@@ -237,7 +237,7 @@ export function CommissionDialog({
 export function DeleteCommissionButton({ id }: { id: string }) {
   const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="icon" disabled={pending}
+    <Button variant="ghost" size="icon" aria-label="Excluir comissão" disabled={pending}
       onClick={async () => {
         if (!(await confirmAction({ title: "Excluir esta comissão pendente?", destructive: true }))) return;
         start(async () => {
@@ -324,7 +324,7 @@ export function PayrollItemDialog({
 export function DeleteItemButton({ id }: { id: string }) {
   const [pending, start] = useTransition();
   return (
-    <Button variant="ghost" size="icon" disabled={pending}
+    <Button variant="ghost" size="icon" aria-label="Remover item da folha" disabled={pending}
       onClick={async () => {
         if (!(await confirmAction({ title: "Remover este item da folha?", destructive: true }))) return;
         start(async () => {

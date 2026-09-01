@@ -131,7 +131,7 @@ function RowActions({ cardId, accountCard }: { cardId: string; accountCard: any 
         cardId={cardId}
         initial={accountCard}
         trigger={
-          <Button size="icon" variant="ghost">
+          <Button size="icon" variant="ghost" aria-label="Editar cartão">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -139,6 +139,7 @@ function RowActions({ cardId, accountCard }: { cardId: string; accountCard: any 
       <Button
         size="icon"
         variant="ghost"
+        aria-label="Excluir cartão"
         disabled={pending}
         onClick={async () => {
           if (await confirmAction({ title: `Excluir o cartão "${accountCard.name}"?`, destructive: true })) {

@@ -14,7 +14,7 @@ export function ServiceActions({ service }: { service: any }) {
       <ServiceDialog
         initial={service}
         trigger={
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Editar serviço">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -22,6 +22,7 @@ export function ServiceActions({ service }: { service: any }) {
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Excluir serviço"
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: `Excluir o serviço "${service.name}"?`, destructive: true }))) return;

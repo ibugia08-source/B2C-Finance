@@ -72,6 +72,10 @@ jobs:
       - name: Tokens de design
         run: npm run lint:tokens
 
+      # T5 — auditoria AA mecânica: achado grave reprova o ramo.
+      - name: Auditoria de acessibilidade (AA)
+        run: npm run audit:aa
+
       - name: Build
         run: npm run build:ci
         env:

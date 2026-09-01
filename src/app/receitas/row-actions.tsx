@@ -32,7 +32,7 @@ export function IncomeActions({
         contracts={contracts}
         initial={income}
         trigger={
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Editar receita">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -40,6 +40,7 @@ export function IncomeActions({
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Excluir receita"
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: "Excluir receita?", destructive: true }))) return;

@@ -13,7 +13,7 @@ export function CategoryRowActions({ category }: { category: any }) {
       <CategoryDialog
         initial={category}
         trigger={
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Editar categoria">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -21,6 +21,7 @@ export function CategoryRowActions({ category }: { category: any }) {
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Excluir categoria"
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: "Excluir esta categoria?", destructive: true }))) return;

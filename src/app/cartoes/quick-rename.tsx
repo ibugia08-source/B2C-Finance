@@ -52,6 +52,7 @@ export function QuickRenameCard({ id, name }: { id: string; name: string }) {
         variant="ghost"
         size="icon"
         className="h-6 w-6"
+        aria-label="Confirmar novo nome"
         disabled={pending}
         onClick={() =>
           start(async () => {
@@ -66,6 +67,7 @@ export function QuickRenameCard({ id, name }: { id: string; name: string }) {
         variant="ghost"
         size="icon"
         className="h-6 w-6"
+        aria-label="Cancelar renomeação"
         onClick={() => setEditing(false)}
       >
         <X className="h-3 w-3" />

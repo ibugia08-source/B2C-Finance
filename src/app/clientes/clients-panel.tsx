@@ -224,8 +224,14 @@ export function ClientsPanel({
           </Button>
           {colMenuOpen && (
             <>
-              <div className="fixed inset-0 z-20" onClick={() => setColMenuOpen(false)} />
-              <div className="absolute right-0 z-30 mt-1 w-60 rounded-md border bg-card p-2 shadow-lg">
+              <div aria-hidden className="fixed inset-0 z-20" onClick={() => setColMenuOpen(false)} />
+              <div
+                className="absolute right-0 z-30 mt-1 w-60 rounded-md border bg-card p-2 shadow-lg"
+                role="menu"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setColMenuOpen(false);
+                }}
+              >
                 <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
                   Mostrar colunas
                 </p>

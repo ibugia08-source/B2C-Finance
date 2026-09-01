@@ -122,7 +122,7 @@ export function ContactActions({ contact }: { contact: any }) {
         clientId={contact.clientId}
         initial={contact}
         trigger={
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Editar contato">
             <Pencil className="h-4 w-4" />
           </Button>
         }
@@ -130,6 +130,7 @@ export function ContactActions({ contact }: { contact: any }) {
       <Button
         variant="ghost"
         size="icon"
+        aria-label="Excluir contato"
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: `Excluir o contato "${contact.name}"?`, destructive: true }))) return;

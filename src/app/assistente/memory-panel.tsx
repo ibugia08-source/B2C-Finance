@@ -46,6 +46,7 @@ export function MemoryPanel({ memories }: { memories: Memory[] }) {
         </Select>
         <Button
           size="icon"
+          aria-label="Adicionar à memória"
           disabled={pending || !content.trim()}
           onClick={() => {
             const fd = new FormData();
