@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Table,
@@ -67,6 +67,24 @@ export function ReceivablesPanel({
   // F3.12 — 02 §3: "setas navegam, Enter abre, espaço seleciona, p registra
   // pagamento na linha". O `u` (desfazer) é global e vive no undo-toast: ele
   // precisa valer em qualquer tela, não só nesta tabela.
+  // F1.15 — coluna OPCIONAL estabilidade/risco (02 §5.2). Preferência do
+  // navegador, como as colunas da Carteira: quem cobra não é sempre quem
+  // acompanha entrega, e a coluna a mais custa largura de tela.
+  const [mostrarSaude, setMostrarSaude] = useState(false);
+  useEffect(() => {
+    try {
+      setMostrarSaude(localStorage.getItem("b2c:cobrancas:saude") === "1");
+    } catch {}
+  }, []);
+  const alternarSaude = useCallback(() => {
+    setMostrarSaude((v) => {
+      try {
+        localStorage.setItem("b2c:cobrancas:saude", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  }, []);
+
   const teclado = useTableKeyboard(rows.length, {
     onAbrir: (i) => {
       const r = rows[i];
@@ -86,6 +104,11 @@ export function ReceivablesPanel({
 
   return (
     <>
+      <div className="mb-2 hidden justify-end md:flex">
+        <Button variant="ghost" size="sm" onClick={alternarSaude} aria-pressed={mostrarSaude}>
+          {mostrarSaude ? "Ocultar coluna Saúde" : "Mostrar coluna Saúde"}
+        </Button>
+      </div>
       {/* Desktop */}
       <div
         className="hidden overflow-x-auto md:block"
@@ -108,6 +131,7 @@ export function ReceivablesPanel({
               <TableHead>Vencimento</TableHead>
               <TableHead className="text-right">Valor devido</TableHead>
               <TableHead>Status</TableHead>
+              {mostrarSaude ? <TableHead>Saúde</TableHead> : null}
               <TableHead>Prazo do contrato</TableHead>
               <TableHead></TableHead>
             </TableRow>
@@ -115,7 +139,7 @@ export function ReceivablesPanel({
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                <TableCell colSpan={mostrarSaude ? 9 : 8} className="text-center text-muted-foreground py-12">
                   Nenhum cliente encontrado no ciclo de recebimentos deste mês.{" "}
                   <Link href="/clientes" className="underline">
                     Abrir Gestão de Carteira
@@ -133,6 +157,7 @@ export function ReceivablesPanel({
                 month={month}
                 year={year}
                 linhaProps={teclado.linhaProps(i)}
+                mostrarSaude={mostrarSaude}
               />
             ))}
           </TableBody>

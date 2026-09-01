@@ -52,6 +52,13 @@ export function useStatusChangeHandler() {
   }, []);
 }
 
+/** Rótulos de tela da avaliação (01 §5.2: nome técnico não aparece). */
+const SAUDE_LABEL: Record<string, string> = {
+  estavel: "Estável",
+  oscilando: "Oscilando",
+  caindo: "Caindo",
+};
+
 function ReceivableRowInner({
   row,
   selected,
@@ -60,6 +67,7 @@ function ReceivableRowInner({
   month,
   year,
   linhaProps,
+  mostrarSaude,
 }: {
   row: ReceivableRowType;
   selected: boolean;
@@ -69,6 +77,8 @@ function ReceivableRowInner({
   year: number;
   /** Props do foco rotativo (F3.12) — vêm do useTableKeyboard do painel. */
   linhaProps?: Record<string, unknown>;
+  /** F1.15 — coluna opcional estabilidade/risco, ligada no painel. */
+  mostrarSaude?: boolean;
 }) {
   const onStatusChange = useStatusChangeHandler();
 
@@ -156,6 +166,32 @@ function ReceivableRowInner({
       <TableCell>
         <StatusCell row={row} onStatusChange={onStatusChange} />
       </TableCell>
+      {mostrarSaude ? (
+        <TableCell>
+          {row.saude ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-dense"
+              title={`Avaliação de ${row.saude.competence}`}
+            >
+              <span
+                aria-hidden
+                className={`h-2 w-2 shrink-0 rounded-full ${
+                  row.saude.risco === "alto"
+                    ? "bg-destructive"
+                    : row.saude.risco === "medio"
+                      ? "bg-warning"
+                      : "bg-success"
+                }`}
+              />
+              {SAUDE_LABEL[row.saude.estabilidade ?? ""] ?? row.saude.estabilidade ?? "—"}
+            </span>
+          ) : (
+            <span className="text-dense text-muted-foreground" title="Nenhuma avaliação mensal registrada para este cliente.">
+              sem leitura
+            </span>
+          )}
+        </TableCell>
+      ) : null}
       <TableCell>
         <TermSelect row={row} />
       </TableCell>

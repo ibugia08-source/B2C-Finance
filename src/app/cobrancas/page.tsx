@@ -439,9 +439,34 @@ export default async function RecebimentosPage({
     paymentDay: c.paymentDay,
     active: ["ACTIVE", "RENEWAL", "DELINQUENT"].includes(c.status),
   }));
-  const tableRows: ReceivableRow[] = visible.map(
-    ({ _sort, ...r }) => ({ ...(r as any), _dueDate: undefined, _amount: undefined })
-  );
+  // F1.15 — coluna opcional estabilidade/risco: a leitura mais recente da
+  // avaliação mensal (F1.1) por cliente. Sem avaliação, a célula diz "sem
+  // leitura" em vez de fingir saúde.
+  const clientIdsDaTabela = [...new Set(visible.map((r: any) => r.clientId).filter(Boolean))];
+  const avaliacoes = clientIdsDaTabela.length
+    ? await prisma.avaliacaoMensal.findMany({
+        where: { relationship: { clientId: { in: clientIdsDaTabela } } },
+        orderBy: { competence: "desc" },
+        select: {
+          estabilidade: true, risco: true, competence: true,
+          relationship: { select: { clientId: true } },
+        },
+      })
+    : [];
+  const saudePorCliente = new Map<string, { estabilidade: string | null; risco: string | null; competence: string }>();
+  for (const a of avaliacoes) {
+    const cid = a.relationship.clientId;
+    if (!saudePorCliente.has(cid))
+      saudePorCliente.set(cid, {
+        estabilidade: a.estabilidade, risco: a.risco, competence: a.competence,
+      });
+  }
+  const tableRows: ReceivableRow[] = visible.map(({ _sort, ...r }) => ({
+    ...(r as any),
+    _dueDate: undefined,
+    _amount: undefined,
+    saude: saudePorCliente.get((r as any).clientId) ?? null,
+  }));
 
   // ===== FASE B — resumo do mês (fontes oficiais, uma por vez) =====
   const receipts = await getReceiptsSummary(monthStart, monthEnd);

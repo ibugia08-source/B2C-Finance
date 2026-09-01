@@ -30,6 +30,8 @@ export type ReceivableRow = {
   responsible: string | null;
   removedInfo: string | null;
   msg: BillingMessageInput;
+  /** F1.15 — leitura mais recente da avaliação mensal (null = sem leitura). */
+  saude: { estabilidade: string | null; risco: string | null; competence: string } | null;
 };
 
 export function ReceivablesTable({
