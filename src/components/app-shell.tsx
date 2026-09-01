@@ -32,10 +32,13 @@ export function AppShell({
   children,
   user,
   scopeOptions,
+  naoLidas = 0,
 }: {
   children: React.ReactNode;
   user: UserLike;
   scopeOptions: ScopeOptions;
+  /** F1.19 — notificações não lidas, para o sino do topo. */
+  naoLidas?: number;
 }) {
   const path = usePathname() ?? "";
   const bare = NO_SHELL.some((p) => path === p || path.startsWith(p + "/"));
@@ -64,7 +67,7 @@ export function AppShell({
         />
         {/* useSearchParams (preserva ?mes=) exige Suspense em prerender. */}
         <Suspense fallback={null}>
-          <SiteHeader user={user} scopeOptions={scopeOptions} />
+          <SiteHeader user={user} scopeOptions={scopeOptions} naoLidas={naoLidas} />
         </Suspense>
       </header>
 

@@ -234,6 +234,8 @@ model User {
   ownedBillings            Billing[]           @relation("OwnerBilling")
   ownedGatewayCharges      GatewayCharge[]     @relation("OwnerGatewayCharge")
   ownedScheduledReports    ScheduledReport[]   @relation("OwnerScheduledReport")
+  ownedNotifications       Notification[]      @relation("OwnerNotification")
+  notificacoes             Notification[]      @relation("NotificacoesDoUsuario")
   ownedBillingPayments     Payment[]           @relation("OwnerPayment")
   ownedEmployees           Employee[]          @relation("OwnerEmployee")
   ownedPayrolls            Payroll[]           @relation("OwnerPayroll")
@@ -3844,6 +3846,46 @@ model ScheduledReport {
 
   @@index([enabled])
   @@index([ownerId])
+}
+
+/// F1.19 — central de notificações in-app (02 §4.7; 01 §4.10).
+///
+/// O AGRUPAMENTO POR ORIGEM mora na unique (destinatário, evento, dia): a
+/// segunda cobrança vencida do dia não cria linha — atualiza a contagem da
+/// que existe. É a primeira regra anti-fadiga da spec, garantida pelo banco.
+model Notification {
+  id String @id @default(cuid())
+
+  /// Chave do catálogo (02 §4.7): "cobranca_vencida", "caixa_negativo"…
+  event       String
+  recipientId String
+  recipient   User   @relation("NotificacoesDoUsuario", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  title    String
+  detail   String?
+  link     String?
+  /// critica | alta | media — crítica fura o silêncio noturno (02 §4.7).
+  severity String @default("media")
+
+  /// Dia do agrupamento (YYYY-MM-DD).
+  day   String
+  /// Quantos fatos esta linha agrupa ("n vencidas = 1 notificação").
+  count Int    @default(1)
+
+  /// Estourou o teto diário: mora no resumo, não na lista principal.
+  digest Boolean @default(false)
+
+  readAt     DateTime? @db.Timestamptz(3)
+  resolvedAt DateTime? @db.Timestamptz(3)
+
+  ownerId   String?
+  owner     User?    @relation("OwnerNotification", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([recipientId, event, day])
+  @@index([recipientId, readAt])
+  @@index([day])
 }
 
 model WebhookInbox {

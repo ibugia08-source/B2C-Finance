@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Search, Settings2 } from "lucide-react";
+import { Bell, Search, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { B2CLogo } from "./mascot";
 import { UserMenu } from "./user-menu";
@@ -32,9 +32,11 @@ import type { ScopeOptions } from "@/lib/services/org-scope";
 export function SiteHeader({
   user,
   scopeOptions,
+  naoLidas = 0,
 }: {
   user: UserLike;
   scopeOptions: ScopeOptions;
+  naoLidas?: number;
 }) {
   const pathname = usePathname() ?? "";
   const sp = useSearchParams();
@@ -95,6 +97,31 @@ export function SiteHeader({
               <Kbd>⌘K</Kbd>
             </button>
             <ThemeToggle />
+            <Link
+              href="/notificacoes"
+              title="Notificações"
+              aria-label={
+                naoLidas > 0
+                  ? `Notificações — ${naoLidas} não ${naoLidas === 1 ? "lida" : "lidas"}`
+                  : "Notificações"
+              }
+              className={cn(
+                "relative flex h-9 w-9 items-center justify-center rounded-pill transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                pathname.startsWith("/notificacoes")
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <Bell className="h-[18px] w-[18px]" aria-hidden />
+              {naoLidas > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-pill bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground"
+                >
+                  {naoLidas > 9 ? "9+" : naoLidas}
+                </span>
+              )}
+            </Link>
             {sistema && (
               <Link
                 href={sistema.href}

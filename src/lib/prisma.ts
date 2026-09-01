@@ -105,6 +105,8 @@ const OWNED_MODELS = new Set<string>([
   "GatewayCharge",
   // F5.7 — agendamento de relatórios.
   "ScheduledReport",
+  // F1.19 — central de notificações.
+  "Notification",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

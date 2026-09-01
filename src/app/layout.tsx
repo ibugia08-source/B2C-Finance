@@ -58,13 +58,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         permissions: Array.from(effectivePermissions(cu)),
       }
     : null;
+  // F1.19 — o sino do topo mostra quantas notificações esperam leitura.
+  let naoLidas = 0;
+  if (cu) {
+    const { contarNaoLidas } = await import("@/lib/services/notifications");
+    naoLidas = await contarNaoLidas(cu.id).catch(() => 0);
+  }
+
   return (
     <html lang="pt-BR" suppressHydrationWarning className={`${bodyFont.variable} ${mono.variable}`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen font-sans antialiased">
-        <AppShell user={user} scopeOptions={scopeOptions}>
+        <AppShell user={user} scopeOptions={scopeOptions} naoLidas={naoLidas}>
           {children}
         </AppShell>
       </body>
