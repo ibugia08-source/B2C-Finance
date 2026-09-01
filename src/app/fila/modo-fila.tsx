@@ -9,7 +9,8 @@ import { askReason, confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
 import {
-  enviarPeloSistemaAction, marcarEnviadaAction, registrarPromessaAction, silenciarCobrancaAction,
+  enviarPeloSistemaAction, gerarLinkDePagamentoAction, marcarEnviadaAction,
+  registrarPromessaAction, silenciarCobrancaAction,
 } from "@/lib/actions/fila";
 import { ignorarLinhaAction } from "@/lib/actions/conciliacao";
 import { encerrarPendenciaAction } from "@/lib/actions/import-review";
@@ -53,6 +54,7 @@ export function ModoFila({
   revisao,
   podeCobrar,
   envioIntegrado,
+  gatewayAtivo,
   podeConciliar,
   podeRevisar,
 }: {
@@ -63,6 +65,8 @@ export function ModoFila({
   podeCobrar: boolean;
   /** F5.1: o provedor de WhatsApp está ligado — o Enter passa a enviar de verdade. */
   envioIntegrado: boolean;
+  /** F5.2: o gateway de pagamento está ligado — dá para emitir link daqui. */
+  gatewayAtivo: boolean;
   podeConciliar: boolean;
   podeRevisar: boolean;
 }) {
@@ -336,6 +340,24 @@ export function ModoFila({
                             <MessageCircle className="mr-1.5 h-4 w-4" aria-hidden />
                             WhatsApp
                           </a>
+                        </Button>
+                      ) : null}
+                      {gatewayAtivo && !tarefa.linkPagamento ? (
+                        <Button
+                          variant="outline"
+                          disabled={pending}
+                          onClick={() =>
+                            start(async () => {
+                              const r = await gerarLinkDePagamentoAction(tarefa.billingId);
+                              showUndoToast({
+                                message: r.ok
+                                  ? "Link de pagamento pedido — ele entra na mensagem assim que ficar pronto."
+                                  : r.error,
+                              });
+                            })
+                          }
+                        >
+                          Gerar link de pagamento
                         </Button>
                       ) : null}
                       <Button variant="outline" disabled={pending} onClick={prometer}>

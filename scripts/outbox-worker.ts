@@ -1,5 +1,6 @@
 import { runOutboxWorker } from "@/lib/outbox";
 import { entregarNoCrm, urlConfigurada, segredoConfigurado } from "@/lib/integrations/avancecrm";
+import { emissaoConfigurada, entregarNoGateway } from "@/lib/integrations/gateway";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -30,6 +31,13 @@ async function main() {
     if (evento.channel === "crm" || evento.channel === "whatsapp") {
       if (!temCrm) throw new Error("AvanceCRM não configurado.");
       await entregarNoCrm(evento);
+      return;
+    }
+    // Canal `webhook` = gateway de pagamento (F5.2): pedidos de emissão de
+    // link. Sem configuração, o evento espera — igual aos outros canais.
+    if (evento.channel === "webhook") {
+      if (!emissaoConfigurada()) throw new Error("Gateway de pagamento não configurado.");
+      await entregarNoGateway(evento);
       return;
     }
     // E-mail entra quando houver provedor. Lançar aqui é o certo:

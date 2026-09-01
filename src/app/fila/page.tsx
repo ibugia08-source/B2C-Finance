@@ -6,6 +6,7 @@ import { filaDeCobranca } from "@/lib/services/collection-tasks";
 import { linhasDaConta, resumoDaConciliacao } from "@/lib/services/reconciliation";
 import { filaDeRevisao } from "@/lib/services/import-review";
 import { urlConfigurada, segredoConfigurado } from "@/lib/integrations/avancecrm";
+import { emissaoConfigurada } from "@/lib/integrations/gateway";
 import { ModoFila, type Trilha } from "./modo-fila";
 
 /**
@@ -92,6 +93,7 @@ export default async function FilaPage({
           revisao={revisao}
           podeCobrar={podeCobrar}
           envioIntegrado={!!urlConfigurada() && !!segredoConfigurado()}
+          gatewayAtivo={emissaoConfigurada()}
           podeConciliar={podeConciliar}
           podeRevisar={podeRevisar}
         />

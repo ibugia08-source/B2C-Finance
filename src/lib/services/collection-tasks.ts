@@ -36,6 +36,8 @@ export type TarefaDeCobranca = {
   tom: MessageTone;
   mensagem: string;
   whatsapp: string | null;
+  /** F5.2 — link de pagamento ativo no gateway, quando existir. */
+  linkPagamento: string | null;
   contatosAnteriores: number;
 };
 
@@ -172,6 +174,7 @@ export async function filaDeCobranca(hoje: Date = new Date()): Promise<FilaDeCob
       etapa: r.etapa.id, etapaTitulo: r.etapa.titulo, objetivo: r.etapa.objetivo,
       tom: r.etapa.tom, mensagem,
       whatsapp: whatsappLink(b.client.phone, mensagem),
+      linkPagamento: null,
       contatosAnteriores: historico.length,
     });
   }
@@ -210,6 +213,19 @@ export async function filaDeCobranca(hoje: Date = new Date()): Promise<FilaDeCob
     // A primeira tarefa do cliente passa; as demais dele esperam amanhã.
     jaFalouHoje.add(t.clientId);
     ativas.push(t);
+  }
+
+  // O LINK DE PAGAMENTO VAI NA MENSAGEM (F5.2): cobrar sem dizer COMO pagar
+  // devolve o trabalho ao cliente — e cliente que precisa perguntar a chave
+  // Pix é cliente que deixa para depois.
+  const { linksDasCobrancas } = await import("@/lib/services/gateway-charges");
+  const links = await linksDasCobrancas(ativas.map((t) => t.billingId));
+  for (const t of ativas) {
+    const link = links.get(t.billingId);
+    if (!link) continue;
+    t.linkPagamento = link;
+    t.mensagem = `${t.mensagem}\n\nSe preferir, pague por aqui: ${link}`;
+    t.whatsapp = whatsappLink(t.telefone, t.mensagem);
   }
 
   return {

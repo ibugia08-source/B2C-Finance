@@ -34,6 +34,15 @@ export type SettleInput = {
   method: string; // PaymentMethod
   accountId: string | null;
   notes: string | null;
+  /**
+   * Identidade do fato EXTERNO (gateway, OFX). Achado da F5.2: a unique
+   * (externalSource, externalId) do Payment existia desde a F1.5, mas
+   * ninguém GRAVAVA as colunas — a guarda de idempotência lia um campo
+   * sempre nulo, e a trava do banco nunca podia agir. Pagamento externo sem
+   * identidade gravada é pagamento que o reenvio do provedor duplica.
+   */
+  externalSource?: string | null;
+  externalId?: string | null;
 };
 
 export type SettleResult =
@@ -131,6 +140,8 @@ export async function settleBillingPayment(
           method: input.method as any,
           accountId: input.accountId,
           notes: input.notes,
+          externalSource: input.externalSource ?? null,
+          externalId: input.externalId ?? null,
         },
       });
 

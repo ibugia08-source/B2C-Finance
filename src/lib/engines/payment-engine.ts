@@ -89,7 +89,14 @@ export async function settleBilling(
   if (!idem.ok) return { ok: false, error: idem.error };
 
   const ctx = await contextFromRequest({ reason: opts.reason });
-  return settleBillingPayment(input, ctx);
+  return settleBillingPayment(
+    {
+      ...input,
+      externalSource: opts.externalSource ?? input.externalSource ?? null,
+      externalId: opts.externalId ?? input.externalId ?? null,
+    },
+    ctx
+  );
 }
 
 /** Estorno. 01 §4.10 exige MOTIVO — aqui ele é obrigatório de verdade. */

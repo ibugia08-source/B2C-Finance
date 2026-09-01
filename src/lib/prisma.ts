@@ -101,6 +101,8 @@ const OWNED_MODELS = new Set<string>([
   "AtividadeDiaria",
   "GastoAdsDiario",
   "CommercialGoal",
+  // F5.2 — links de pagamento do gateway.
+  "GatewayCharge",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

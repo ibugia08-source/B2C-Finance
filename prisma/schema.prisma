@@ -232,6 +232,7 @@ model User {
   ownedContracts           Contract[]          @relation("OwnerContract")
   ownedContractServices    ContractService[]   @relation("OwnerContractService")
   ownedBillings            Billing[]           @relation("OwnerBilling")
+  ownedGatewayCharges      GatewayCharge[]     @relation("OwnerGatewayCharge")
   ownedBillingPayments     Payment[]           @relation("OwnerPayment")
   ownedEmployees           Employee[]          @relation("OwnerEmployee")
   ownedPayrolls            Payroll[]           @relation("OwnerPayroll")
@@ -1803,6 +1804,7 @@ model Billing {
   settlementOfId   String?
   settlementOf     RenegotiationAgreement? @relation("AcordoParcelas", fields: [settlementOfId], references: [id], onDelete: SetNull)
   incomes          Income[] // recebimentos conciliados no caixa
+  gatewayCharges   GatewayCharge[] // F5.2 — links de pagamento emitidos no provedor
 
   @@index([clientId])
   @@index([contractId])
@@ -3787,6 +3789,35 @@ model CommercialGoal {
 ///
 /// A trava está no BANCO e não na aplicação de propósito: duas entregas
 /// simultâneas do mesmo evento passariam por qualquer checagem em memória.
+/// F5.2 — cobrança emitida no PROVEDOR de pagamento (Pix/boleto).
+///
+/// O link pertence à cobrança, mas o ciclo de vida dele é do provedor — por
+/// isso é um modelo próprio e não colunas no Billing. As DUAS travas que
+/// importam são índices parciais escritos na migration (o Prisma não declara
+/// unique parcial): (provider, chargeId) único quando o chargeId existe, e
+/// UMA cobrança viva (PENDING/ACTIVE) por billing.
+model GatewayCharge {
+  id        String  @id @default(cuid())
+  billingId String
+  billing   Billing @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  /// Nome do provedor configurado (GATEWAY_PROVIDER). "gateway" até existir conta.
+  provider  String
+  /// Id da cobrança NO PROVEDOR — chega pelo webhook de confirmação.
+  chargeId  String?
+  /// Link de pagamento (Pix copia-e-cola ou URL do boleto).
+  link      String?
+  /// PENDING (pedido publicado) | ACTIVE (link emitido) | PAID | CANCELED
+  status    String  @default("PENDING")
+
+  ownerId   String?
+  owner     User?    @relation("OwnerGatewayCharge", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([billingId])
+  @@index([status])
+}
+
 model WebhookInbox {
   id          String    @id @default(cuid())
   workspaceId String

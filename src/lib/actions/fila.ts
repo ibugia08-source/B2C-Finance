@@ -43,6 +43,19 @@ export async function enviarPeloSistemaAction(
   return r;
 }
 
+/**
+ * F5.2 — pede a emissão do link de pagamento. O Outbox leva ao provedor; o
+ * link volta pelo webhook e passa a viajar dentro da mensagem da régua.
+ */
+export async function gerarLinkDePagamentoAction(billingId: string) {
+  await requirePermission("recebimentos.gerar_cobranca");
+  const { emitirLinkDePagamento } = await import("@/lib/services/gateway-charges");
+  const r = await emitirLinkDePagamento(billingId);
+  revalidatePath("/fila");
+  revalidatePath("/cobrancas");
+  return r;
+}
+
 export async function registrarPromessaAction(
   billingId: string,
   dataISO: string,
