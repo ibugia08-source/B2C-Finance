@@ -70,6 +70,13 @@ export async function destroyOwner(owner: TestOwner) {
     // sem chave estrangeira, então nada o arrasta junto.
     await prisma.allocation.deleteMany({ where: { ownerId: owner.id } });
     await prisma.allocationRule.deleteMany({ where: { ownerId: owner.id } });
+    // F4.1 — comercial: evento antes da oportunidade, interação antes de tudo.
+    await prisma.pipelineEvent.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.interaction.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.opportunity.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.lead.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.atividadeDiaria.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.gastoAdsDiario.deleteMany({ where: { ownerId: owner.id } });
     // F3.5 — conciliação: match antes da linha, linha antes do extrato.
     await prisma.reconciliationMatch.deleteMany({ where: { ownerId: owner.id } });
     await prisma.bankStatementEntry.deleteMany({ where: { ownerId: owner.id } });

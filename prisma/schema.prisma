@@ -113,6 +113,10 @@ model Agency {
   relationships ClientAgencyRelationship[]
   /// Usuários cujo recorte de dados é esta agência (03 §1.1).
   scopedUsers   User[]                     @relation("ScopedUsers")
+  leads         Lead[]
+  opportunities Opportunity[]
+  atividades    AtividadeDiaria[]
+  gastosAds     GastoAdsDiario[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
@@ -194,6 +198,12 @@ model User {
   ownedBankStatements     BankStatement[]          @relation("OwnerBankStatement")
   ownedStatementEntries   BankStatementEntry[]     @relation("OwnerStatementEntry")
   ownedReconMatches       ReconciliationMatch[]    @relation("OwnerReconciliationMatch")
+  ownedLeads              Lead[]                   @relation("OwnerLead")
+  ownedInteractions       Interaction[]            @relation("OwnerInteraction")
+  ownedOpportunities      Opportunity[]            @relation("OwnerOpportunity")
+  ownedPipelineEvents     PipelineEvent[]          @relation("OwnerPipelineEvent")
+  ownedAtividades         AtividadeDiaria[]        @relation("OwnerAtividadeDiaria")
+  ownedGastosAds          GastoAdsDiario[]         @relation("OwnerGastoAds")
   ownedFiscalDocuments    FiscalDocument[]         @relation("OwnerFiscalDocument")
   ownedRenegotiations     RenegotiationAgreement[] @relation("OwnerRenegotiation")
   ownedIncomes            Income[]                 @relation("OwnerIncome")
@@ -1234,11 +1244,14 @@ model Client {
   monthDelinquencies ClientMonthDelinquency[]
 
   // Histórico de renovações de contrato (um registro por "Sim, renovou")
-  renewals       ClientRenewal[]
-  relationships  ClientAgencyRelationship[]
-  credits        CustomerCredit[]
-  FiscalDocument FiscalDocument[]
-  renegotiations RenegotiationAgreement[]
+  renewals         ClientRenewal[]
+  leadsConvertidos Lead[]                     @relation("LeadConvertido")
+  interacoes       Interaction[]              @relation("InteracaoCliente")
+  oportunidades    Opportunity[]              @relation("OportunidadeCliente")
+  relationships    ClientAgencyRelationship[]
+  credits          CustomerCredit[]
+  FiscalDocument   FiscalDocument[]
+  renegotiations   RenegotiationAgreement[]
 
   @@index([ownerId])
   @@index([status])
@@ -1567,8 +1580,9 @@ model Offer {
   createdAt      DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
 
-  services OfferService[]
-  upsells  Upsell[]
+  services      OfferService[]
+  upsells       Upsell[]
+  opportunities Opportunity[]
 
   @@index([active])
   @@index([modality])
@@ -3447,5 +3461,264 @@ model ReconciliationMatch {
 
   @@unique([entryId, targetType, targetId])
   @@index([targetType, targetId])
+  @@index([ownerId])
+}
+
+// ============================================================================
+// F4.1 — COMERCIAL: LEAD, OPORTUNIDADE, FUNIL E ATIVIDADE (ref. 01 §4.6)
+// ============================================================================
+
+/// Situação do lead. CONVERTED é terminal e aponta para o cliente criado.
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  SCHEDULED
+  CONVERTED
+  LOST
+}
+
+/// Um contato que ainda não é cliente.
+///
+/// O `document` é guardado NORMALIZADO (só dígitos) num campo próprio, e é a
+/// chave da deduplicação de 01 §4.6: "conversão deduplica por documento". Sem
+/// normalizar, "12.345.678/0001-99" e "12345678000199" são dois clientes
+/// diferentes para o banco e um só para a vida — e a carteira duplica.
+model Lead {
+  id             String  @id @default(cuid())
+  name           String
+  company        String?
+  phone          String?
+  email          String?
+  /// CNPJ/CPF como foi digitado, para conferência humana.
+  document       String?
+  /// Só os dígitos de `document`. É por aqui que a conversão procura.
+  documentDigits String?
+
+  niche    String?
+  /// Agência que vai atender, quando já se sabe.
+  agencyId String?
+  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  /// Canal (instagram, indicação, tráfego...) e campanha de origem.
+  channel  String?
+  campaign String?
+  source   String?
+  /// SDR responsável, por nome — o vínculo com usuário do sistema NÃO existe
+  /// por decisão 19.11 (usuário de login não é a mesma coisa que pessoa da
+  /// equipe), então aqui é texto, como no resto do produto.
+  sdr      String?
+
+  /// F4.2 — indicações. Quem indicou e quem pediu o contato.
+  indicadoPor   String?
+  solicitadoPor String?
+
+  status     LeadStatus @default(NEW)
+  lostReason String?
+
+  /// Preenchidos na conversão; `convertedClientId` pode apontar para cliente
+  /// que já existia (reativação de churnado, 01 §4.6).
+  convertedClientId String?
+  convertedClient   Client?   @relation("LeadConvertido", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedAt       DateTime? @db.Timestamptz(3)
+
+  interactions  Interaction[]
+  opportunities Opportunity[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerLead", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([status])
+  @@index([documentDigits])
+  @@index([agencyId])
+  @@index([sdr])
+  @@index([ownerId])
+}
+
+enum InteractionType {
+  LIGACAO
+  ABORDAGEM
+  REUNIAO
+  NO_SHOW
+  PROPOSTA
+  OUTRO
+}
+
+/// Um toque humano: ligação, abordagem, reunião, no-show, proposta.
+///
+/// Aponta para lead, oportunidade OU cliente — as três coisas recebem
+/// interação, e em momentos diferentes da mesma história.
+model Interaction {
+  id   String          @id @default(cuid())
+  type InteractionType
+
+  leadId        String?
+  lead          Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  opportunityId String?
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?      @relation("InteracaoCliente", fields: [clientId], references: [id], onDelete: Cascade)
+
+  happenedAt DateTime @db.Timestamptz(3)
+  notes      String?
+  createdBy  String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerInteraction", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([leadId])
+  @@index([opportunityId])
+  @@index([clientId])
+  @@index([type, happenedAt])
+  @@index([ownerId])
+}
+
+/// Etapas do funil. GANHA e PERDIDA são terminais.
+enum OpportunityStage {
+  NOVA
+  QUALIFICACAO
+  REUNIAO
+  PROPOSTA
+  NEGOCIACAO
+  GANHA
+  PERDIDA
+}
+
+/// A venda em andamento.
+model Opportunity {
+  id       String  @id @default(cuid())
+  title    String
+  leadId   String?
+  lead     Lead?   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  /// Preenchido quando a venda é de cliente que JÁ existe (expansão).
+  clientId String?
+  client   Client? @relation("OportunidadeCliente", fields: [clientId], references: [id], onDelete: SetNull)
+
+  agencyId String?
+  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  /// Closer responsável, por nome (mesma razão do `sdr` do Lead).
+  closer  String?
+  offerId String?
+  offer   Offer?  @relation(fields: [offerId], references: [id], onDelete: SetNull)
+
+  /// Valor negociado e como ele entra: mensalidade (MRR) ou contrato (TCV).
+  amount   Decimal        @db.Decimal(14, 2)
+  modality ClientModality @default(MRR)
+  /// Prazo em meses, quando TCV.
+  months   Int?
+
+  stage           OpportunityStage @default(NOVA)
+  expectedCloseAt DateTime?        @db.Timestamptz(3)
+  wonAt           DateTime?        @db.Timestamptz(3)
+  lostAt          DateTime?        @db.Timestamptz(3)
+  lostReason      String?
+
+  /// O que o ganho gerou (F4.4). Nulo enquanto a venda não foi entregue à
+  /// operação — e é essa nulidade que a home de Admin cobra como "venda sem
+  /// contrato".
+  createdClientId   String?
+  createdContractId String?
+
+  events       PipelineEvent[]
+  interactions Interaction[]
+
+  ownerId String?
+  owner   User?   @relation("OwnerOpportunity", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([stage])
+  @@index([agencyId])
+  @@index([closer])
+  @@index([leadId])
+  @@index([ownerId])
+}
+
+/// Cada mudança de etapa. É o que reconstrói o funil histórico e o tempo por
+/// etapa (01 §4.6) — sem esta tabela, "quanto tempo a proposta fica parada?"
+/// só teria a resposta de HOJE, e o mês passado seria irrecuperável.
+model PipelineEvent {
+  id            String      @id @default(cuid())
+  opportunityId String
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  fromStage OpportunityStage?
+  toStage   OpportunityStage
+  changedAt DateTime          @default(now()) @db.Timestamptz(3)
+  changedBy String?
+  reason    String?
+
+  ownerId String?
+  owner   User?   @relation("OwnerPipelineEvent", fields: [ownerId], references: [id])
+
+  @@index([opportunityId, changedAt])
+  @@index([toStage])
+  @@index([ownerId])
+}
+
+/// Números do dia de um SDR (01 §4.6; cenário S2).
+///
+/// Uma linha por SDR por dia por agência. `agencyId` é texto vazio quando não
+/// há agência — NULL não colide com NULL em índice único no Postgres, e sem
+/// isso o mesmo dia entraria duas vezes.
+model AtividadeDiaria {
+  id   String   @id @default(cuid())
+  date DateTime @db.Timestamptz(3)
+  sdr  String
+
+  agencyId String  @default("")
+  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  ligacoes           Int @default(0)
+  abordagens         Int @default(0)
+  agendamentos       Int @default(0)
+  reunioesRealizadas Int @default(0)
+  noShows            Int @default(0)
+  propostas          Int @default(0)
+
+  ownerId String?
+  owner   User?   @relation("OwnerAtividadeDiaria", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([date, sdr, agencyId])
+  @@index([date])
+  @@index([sdr])
+  @@index([ownerId])
+}
+
+/// Gasto de mídia do dia por agência e plataforma (01 §4.6).
+///
+/// É a base do CPL, do CPMQL e do ROAS de 01 §7.5. Separado da despesa
+/// contábil de propósito: a despesa entra no resultado por competência e por
+/// fatura; isto aqui é o gasto DIÁRIO por plataforma, que é a granularidade
+/// que o comercial precisa e a contábil não tem.
+model GastoAdsDiario {
+  id   String   @id @default(cuid())
+  date DateTime @db.Timestamptz(3)
+
+  agencyId String  @default("")
+  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  /// meta | google | tiktok | outro
+  platform String
+  amount   Decimal @db.Decimal(14, 2)
+
+  ownerId String?
+  owner   User?   @relation("OwnerGastoAds", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([date, agencyId, platform])
+  @@index([date])
   @@index([ownerId])
 }

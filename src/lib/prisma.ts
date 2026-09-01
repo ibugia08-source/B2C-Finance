@@ -93,6 +93,13 @@ const OWNED_MODELS = new Set<string>([
   "BankStatement",
   "BankStatementEntry",
   "ReconciliationMatch",
+  // F4.1 — comercial.
+  "Lead",
+  "Interaction",
+  "Opportunity",
+  "PipelineEvent",
+  "AtividadeDiaria",
+  "GastoAdsDiario",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):
