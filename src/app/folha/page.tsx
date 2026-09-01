@@ -9,6 +9,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field,
+} from "@/components/ui/record-card";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import {
   EmployeeDialog, EmployeeActions, GeneratePayrollButton,
@@ -165,6 +168,38 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
               Folha sem itens. Adicione salários, comissões e bônus.
             </p>
           ) : (
+            <>
+            <MobileCards>
+              {run.items.map((item) => {
+                const negative = item.kind === "DEDUCTION";
+                return (
+                  <MobileCard key={item.id}>
+                    <MobileCardHeader
+                      title={item.employee.name}
+                      aside={
+                        <Badge variant={negative ? "destructive" : "outline"}>
+                          {ITEM_KIND_LABEL[item.kind] ?? item.kind}
+                        </Badge>
+                      }
+                    />
+                    <Field label="Valor">
+                      {negative ? "−" : ""}
+                      {formatBRL(Number(item.amount))}
+                    </Field>
+                    {item.notes ? <Field label="Observação">{item.notes}</Field> : null}
+                    {run.status !== "PAID" ? (
+                      <MobileCardActions>
+                        <DeleteItemButton id={item.id} />
+                      </MobileCardActions>
+                    ) : null}
+                  </MobileCard>
+                );
+              })}
+              <p className="px-1 text-right text-dense font-semibold">
+                Total: {formatBRL(summary.total)}
+              </p>
+            </MobileCards>
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -214,6 +249,8 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                 </TableRow>
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  MobileCards, MobileCard, MobileCardHeader, Field,
+} from "@/components/ui/record-card";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -447,6 +450,21 @@ export function FolhaSection({
               Nenhum colaborador ativo com salário definido.
             </p>
           ) : (
+            <>
+            <MobileCards>
+              {rows.map((r) => (
+                <MobileCard key={r.employeeId}>
+                  <MobileCardHeader title={r.name} aside={null} />
+                  {r.role ? <Field label="Cargo">{r.role}</Field> : null}
+                  <Field label="Salário">{formatBRL(r.salary + r.others)}</Field>
+                  {r.commission > 0 ? (
+                    <Field label="Comissão">{formatBRL(r.commission)}</Field>
+                  ) : null}
+                  <Field label="Total">{formatBRL(r.total)}</Field>
+                </MobileCard>
+              ))}
+            </MobileCards>
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -488,6 +506,8 @@ export function FolhaSection({
                 </TableRow>
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

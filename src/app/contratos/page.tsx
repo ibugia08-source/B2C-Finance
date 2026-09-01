@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field, MobileEmpty,
+} from "@/components/ui/record-card";
 import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -199,6 +202,35 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
               Nenhum contrato gerado ainda. Use “Gerar contrato” em um modelo para criar o primeiro.
             </p>
           ) : (
+            <>
+            <MobileCards>
+              {generatedRaw.map((g) => (
+                <MobileCard key={g.id}>
+                  <MobileCardHeader
+                    title={g.name}
+                    aside={
+                      <Badge variant={generatedStatusVariant(g.status)}>
+                        {GENERATED_STATUS_LABEL[g.status]}
+                      </Badge>
+                    }
+                  />
+                  <Field label="Cliente">
+                    {g.client ? (
+                      <Link href={`/clientes/${g.client.id}`} className="hover:underline">
+                        {g.client.name}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </Field>
+                  <Field label="Gerado em">{formatDateBR(g.generatedAt)}</Field>
+                  <MobileCardActions>
+                    <GeneratedContractActions contract={g} />
+                  </MobileCardActions>
+                </MobileCard>
+              ))}
+            </MobileCards>
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -244,6 +276,8 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

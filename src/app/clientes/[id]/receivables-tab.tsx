@@ -4,6 +4,9 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useMemo, useState, useTransition } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  MobileCards, MobileCard, MobileCardHeader, Field,
+} from "@/components/ui/record-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -138,6 +141,27 @@ export function ReceivablesTab({
     <>
       <Card>
         <CardContent className="p-0">
+          <MobileCards>
+            {rows.map((b) => (
+              <MobileCard key={b.id}>
+                <MobileCardHeader
+                  title={b.description}
+                  aside={
+                    <Badge variant={billingStatusVariant(b.status)}>
+                      {BILLING_STATUS_LABEL[b.status] ?? b.status}
+                    </Badge>
+                  }
+                />
+                <Field label="Competência">
+                  {String(b.competenceMonth).padStart(2, "0")}/{b.competenceYear}
+                </Field>
+                <Field label="Vencimento">{formatDateBR(b.dueDate)}</Field>
+                <Field label="Valor">{formatBRL(b.amount)}</Field>
+                {b.paidTotal > 0 ? <Field label="Pago">{formatBRL(b.paidTotal)}</Field> : null}
+              </MobileCard>
+            ))}
+          </MobileCards>
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -196,6 +220,7 @@ export function ReceivablesTab({
               })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
