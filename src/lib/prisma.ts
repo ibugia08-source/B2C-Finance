@@ -100,6 +100,7 @@ const OWNED_MODELS = new Set<string>([
   "PipelineEvent",
   "AtividadeDiaria",
   "GastoAdsDiario",
+  "CommercialGoal",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

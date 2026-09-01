@@ -115,8 +115,6 @@ model Agency {
   scopedUsers   User[]                     @relation("ScopedUsers")
   leads         Lead[]
   opportunities Opportunity[]
-  atividades    AtividadeDiaria[]
-  gastosAds     GastoAdsDiario[]
 
   @@unique([workspaceId, slug])
   @@index([workspaceId])
@@ -204,6 +202,7 @@ model User {
   ownedPipelineEvents     PipelineEvent[]          @relation("OwnerPipelineEvent")
   ownedAtividades         AtividadeDiaria[]        @relation("OwnerAtividadeDiaria")
   ownedGastosAds          GastoAdsDiario[]         @relation("OwnerGastoAds")
+  ownedCommercialGoals    CommercialGoal[]         @relation("OwnerCommercialGoal")
   ownedFiscalDocuments    FiscalDocument[]         @relation("OwnerFiscalDocument")
   ownedRenegotiations     RenegotiationAgreement[] @relation("OwnerRenegotiation")
   ownedIncomes            Income[]                 @relation("OwnerIncome")
@@ -3673,8 +3672,15 @@ model AtividadeDiaria {
   date DateTime @db.Timestamptz(3)
   sdr  String
 
-  agencyId String  @default("")
-  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  /// Id da agência, ou string VAZIA para "sem agência".
+  ///
+  /// SEM chave estrangeira, e a razão é a colisão de duas regras: o índice
+  /// único precisa de um valor não nulo (NULL não colide com NULL no
+  /// Postgres, e o mesmo dia entraria duas vezes), e nenhuma chave
+  /// estrangeira aceita a string vazia como sentinela. Entre perder a trava
+  /// do dia duplicado e perder a checagem de existência da agência, a trava
+  /// vale mais — o duplicado é silencioso, a agência inexistente aparece.
+  agencyId String @default("")
 
   ligacoes           Int @default(0)
   abordagens         Int @default(0)
@@ -3705,8 +3711,8 @@ model GastoAdsDiario {
   id   String   @id @default(cuid())
   date DateTime @db.Timestamptz(3)
 
-  agencyId String  @default("")
-  agency   Agency? @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  /// Id da agência, ou string VAZIA — mesma razão do AtividadeDiaria acima.
+  agencyId String @default("")
 
   /// meta | google | tiktok | outro
   platform String
@@ -3720,5 +3726,35 @@ model GastoAdsDiario {
 
   @@unique([date, agencyId, platform])
   @@index([date])
+  @@index([ownerId])
+}
+
+/// Meta comercial de um mês (F4.3/F4.5 · ref. 02 §5.4).
+///
+/// O escopo é polimórfico por NOME e não por id de usuário: SDR, closer e
+/// gestor são pessoas da equipe, e a decisão 19.11 diz que usuário de login
+/// não é vinculado a pessoa da folha. Agência é a exceção — essa tem id.
+model CommercialGoal {
+  id         String @id @default(cuid())
+  competence String
+
+  /// AGENCY | SDR | CLOSER | GESTOR
+  scopeType String
+  /// Id da agência, ou o NOME da pessoa. Nunca nulo — string vazia significa
+  /// "a casa inteira", e NULL não colide com NULL em índice único.
+  scopeId   String @default("")
+
+  /// ligacoes | abordagens | agendamentos | reunioes | propostas | vendas | valor
+  metric String
+  target Decimal @db.Decimal(14, 2)
+
+  ownerId String?
+  owner   User?   @relation("OwnerCommercialGoal", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([competence, scopeType, scopeId, metric])
+  @@index([competence])
   @@index([ownerId])
 }

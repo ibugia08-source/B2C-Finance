@@ -77,6 +77,7 @@ export async function destroyOwner(owner: TestOwner) {
     await prisma.lead.deleteMany({ where: { ownerId: owner.id } });
     await prisma.atividadeDiaria.deleteMany({ where: { ownerId: owner.id } });
     await prisma.gastoAdsDiario.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.commercialGoal.deleteMany({ where: { ownerId: owner.id } });
     // F3.5 — conciliação: match antes da linha, linha antes do extrato.
     await prisma.reconciliationMatch.deleteMany({ where: { ownerId: owner.id } });
     await prisma.bankStatementEntry.deleteMany({ where: { ownerId: owner.id } });
