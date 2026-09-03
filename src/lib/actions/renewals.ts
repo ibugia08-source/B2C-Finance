@@ -97,7 +97,6 @@ export async function renewClientFlow(
     const staysMonthly = modRaw
       ? modRaw === "MRR"
       : (contract ? contract.type === "MRR" : client.modality !== "TCV");
-    const isMrr = staysMonthly; // modalidade escolhida define o novo ciclo
 
     let monthly: number | null = null;
     let paymentDay: number | null = null;

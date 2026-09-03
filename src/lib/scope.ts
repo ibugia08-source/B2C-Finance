@@ -68,9 +68,3 @@ export function scopeFingerprint(scope: DataScope): string {
 export function isScoped(scope: DataScope): scope is { kind: "AGENCY"; agencyId: string } {
   return scope.kind === "AGENCY";
 }
-
-/** Texto para a barra superior ("Vendo: Agência X"). */
-export function describeScope(scope: DataScope, nomeDaAgencia?: string | null): string {
-  if (scope.kind === "WORKSPACE") return "Todos os clientes";
-  return nomeDaAgencia ? `Agência ${nomeDaAgencia}` : "Uma agência";
-}

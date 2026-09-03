@@ -1,6 +1,5 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { revalidateAgency } from "@/lib/revalidate";
 import { z } from "zod";
 import { ClientStatus, ClientModality } from "@prisma/client";

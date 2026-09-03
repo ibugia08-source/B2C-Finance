@@ -31,11 +31,6 @@ export type ValorDeMetrica = {
 
 export type BaseDeValoracao = "PRIMEIRO_MES" | "CONTRATO";
 
-export const ROTULO_DA_BASE: Record<BaseDeValoracao, string> = {
-  PRIMEIRO_MES: "Primeiro mês da mensalidade",
-  CONTRATO: "Valor total do contrato (mensalidade × prazo)",
-};
-
 /**
  * Peso de cada etapa no pipeline ponderado.
  *

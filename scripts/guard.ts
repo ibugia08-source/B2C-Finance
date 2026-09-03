@@ -20,14 +20,27 @@ export type AppEnv = "local" | "staging" | "production";
 
 const VALID: AppEnv[] = ["local", "staging", "production"];
 
-/** URL efetiva do banco (mesma precedência do schema.prisma). */
+/**
+ * URL que o Prisma Client USA DE VERDADE nas queries (schema.prisma:
+ * `url = POSTGRES_PRISMA_URL`). Validar outra URL abriria a brecha de a
+ * trava aprovar "local" enquanto as escritas vão para o banco da PRISMA_URL.
+ */
 export function resolveDatabaseUrl(): string {
   return (
-    process.env.POSTGRES_URL_NON_POOLING ||
     process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING ||
     process.env.DATABASE_URL ||
     ""
   );
+}
+
+/** Todas as URLs de banco presentes no ambiente — a trava exige acordo entre elas. */
+export function urlsConfiguradas(): string[] {
+  return [
+    process.env.POSTGRES_PRISMA_URL,
+    process.env.POSTGRES_URL_NON_POOLING,
+    process.env.DATABASE_URL,
+  ].filter((u): u is string => !!u);
 }
 
 /**
@@ -97,6 +110,20 @@ export function assertDestructiveAllowed(opts: {
       "Confira POSTGRES_URL_NON_POOLING / POSTGRES_PRISMA_URL no .env.",
     ]);
   }
+  // Queries e migrations podem usar URLs diferentes (pool vs direta). Se elas
+  // apontarem para AMBIENTES diferentes, alguma está errada — e a errada pode
+  // ser produção. Nenhuma trava individual pega isso; o acordo entre elas pega.
+  const discordantes = urlsConfiguradas()
+    .map((u) => ({ u, env: inferEnvFromUrl(u) }))
+    .filter((x) => x.env !== inferred);
+  if (discordantes.length) {
+    fail([
+      "As URLs de banco do ambiente apontam para ambientes DIFERENTES:",
+      `  em uso pelo Prisma: ${redact(url)} (${inferred})`,
+      ...discordantes.map((x) => `  divergente: ${redact(x.u)} (${x.env})`),
+      "Corrija o .env antes de rodar qualquer script que escreve.",
+    ]);
+  }
   if (declared !== inferred) {
     fail([
       `APP_ENV declarado é "${declared}", mas o banco configurado é "${inferred}".`,
@@ -141,6 +168,13 @@ export function assertNotProduction(script: string): AppEnv {
   }
   if (inferred === "production") {
     fail([`${script} não roda contra produção.`, `Banco: ${redact(url)}`]);
+  }
+  const producao = urlsConfiguradas().find((u) => inferEnvFromUrl(u) === "production");
+  if (producao) {
+    fail([
+      `${script} não roda com uma URL de produção no ambiente, mesmo que não seja a principal.`,
+      `Banco: ${redact(producao)}`,
+    ]);
   }
   return inferred;
 }

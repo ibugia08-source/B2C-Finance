@@ -14,7 +14,7 @@ import { askReason, confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
 import { criarOportunidadeAction, fecharVendaAction, moverEtapaAction } from "@/lib/actions/funil";
-import { COLUNAS_DO_QUADRO, ETAPAS_DO_FUNIL, type EtapaDoFunil } from "@/lib/commercial/funil";
+import { ETAPAS_DO_FUNIL, type EtapaDoFunil } from "@/lib/commercial/funil";
 import type { ColunaDoFunil } from "@/lib/services/pipeline";
 
 type Opcao = { id: string; name: string };

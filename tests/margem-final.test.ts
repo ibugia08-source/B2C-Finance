@@ -39,7 +39,7 @@ describe("F5.5 — margem totalmente alocada", () => {
     await asOwner(dono, async () => {
       const a = await createMrrClient(dono, { name: "Cliente A" });
       const b = await createMrrClient(dono, { name: "Cliente B" });
-      const c = await createMrrClient(dono, { name: "Cliente C" });
+      await createMrrClient(dono, { name: "Cliente C" });
       // Receitas 2.000 / 1.000 / 0 — C não absorve overhead.
       await createBilling(dono, a.id, { month: 3, year: 2028, amount: 2000 });
       await createBilling(dono, b.id, { month: 3, year: 2028, amount: 1000 });

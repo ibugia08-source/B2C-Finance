@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-  asOwner, createBilling, createMrrClient, createOwner, destroyOwner,
+  asOwner, createMrrClient, createOwner, destroyOwner,
   prisma, type TestOwner,
 } from "./support/db";
 import {

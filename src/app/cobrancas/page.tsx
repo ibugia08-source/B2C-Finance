@@ -12,7 +12,6 @@ import {
   ensureMonthlyBillings,
   cycleStatusOf,
   CYCLE_STATUS_LABEL,
-  type CycleStatus,
 } from "@/lib/services/receivables-cycle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

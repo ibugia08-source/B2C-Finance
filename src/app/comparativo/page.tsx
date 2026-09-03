@@ -63,7 +63,7 @@ export default async function ComparativoPage({
       ) : null}
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-body">
             <thead>
               <tr className="border-b border-border text-caption uppercase tracking-wide text-muted-foreground">
@@ -134,7 +134,7 @@ export default async function ComparativoPage({
         Leitura da carteira
       </h2>
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           <table className="w-full text-body">
             <thead>
               <tr className="border-b border-border text-caption uppercase tracking-wide text-muted-foreground">

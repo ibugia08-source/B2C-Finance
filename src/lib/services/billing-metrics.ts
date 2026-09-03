@@ -39,62 +39,6 @@ export async function markOverdueBillings(): Promise<number> {
   return r.count;
 }
 
-export type BillingKpis = {
-  totalAReceber: number;
-  recebidoPeriodo: number;
-  totalVencido: number;
-  totalAVencer: number;
-  totalParcial: number;
-  clientesInadimplentes: number;
-};
-
-export async function getBillingKpis(
-  periodStart: Date,
-  periodEnd: Date
-): Promise<BillingKpis> {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const [open, overdue, toCome, partial, received, delinquents] = await Promise.all([
-    prisma.billing.aggregate({
-      where: { status: { in: OPEN_STATUSES as any } },
-      _sum: { amount: true, paidTotal: true },
-    }),
-    prisma.billing.aggregate({
-      where: { status: "OVERDUE" },
-      _sum: { amount: true, paidTotal: true },
-    }),
-    prisma.billing.aggregate({
-      where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { gte: today } },
-      _sum: { amount: true, paidTotal: true },
-    }),
-    prisma.billing.aggregate({
-      where: { status: "PARTIAL" },
-      _sum: { amount: true, paidTotal: true },
-    }),
-    prisma.payment.aggregate({
-      where: { status: "CONFIRMED", paidAt: { gte: periodStart, lt: periodEnd } },
-      _sum: { amount: true },
-    }),
-    prisma.billing.groupBy({
-      by: ["clientId"],
-      where: { status: "OVERDUE" },
-    }),
-  ]);
-
-  const openOf = (a: { _sum: { amount: any; paidTotal: any } }) =>
-    n(a._sum.amount) - n(a._sum.paidTotal);
-
-  return {
-    totalAReceber: openOf(open),
-    recebidoPeriodo: n(received._sum.amount),
-    totalVencido: openOf(overdue),
-    totalAVencer: openOf(toCome),
-    totalParcial: openOf(partial),
-    clientesInadimplentes: delinquents.length,
-  };
-}
-
 // ===== Inadimplência (aging) ========================================
 
 export type AgingBucket = "1-15" | "16-30" | "31-60" | "60+";

@@ -165,9 +165,6 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   // "Em aberto" não tem série própria: é esperado − recebido, mês a mês.
   const sparkEmAberto = yearly.faturamento.map((v, i) => Math.max(0, v - yearly.recebido[i]));
 
-  const prevMonthLabel = new Date(period.start.getFullYear(), period.start.getMonth() - 1, 1)
-    .toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-
   // Última atualização (horário de Brasília — servidor roda em UTC).
   const lastUpdate = new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit", month: "2-digit", year: "numeric",

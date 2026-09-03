@@ -59,10 +59,6 @@ export async function filaDeRevisao(limite = 100): Promise<ItemRevisao[]> {
   }));
 }
 
-export async function contarPendencias(): Promise<number> {
-  return prisma.importedRecord.count({ where: { reviewStatus: "PENDENTE" } });
-}
-
 /**
  * Marca a pendência como tratada.
  *

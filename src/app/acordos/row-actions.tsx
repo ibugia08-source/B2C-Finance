@@ -8,7 +8,6 @@ import { Pencil, Trash2, RefreshCw, Square, Receipt } from "lucide-react";
 import {
   deleteContract,
   endContract,
-  cancelContract,
   generateContractBillings,
 } from "@/lib/actions/contracts";
 

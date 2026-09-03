@@ -27,7 +27,6 @@ import { renovacoesReport } from "./definitions/renovacoes";
 import { perdasReport } from "./definitions/perdas";
 import { clientesPorResponsavelReport } from "./definitions/clientes-por-responsavel";
 import { upsellReport } from "./definitions/upsell";
-import { cartoesLimitesReport } from "./definitions/cartoes-limites";
 import { executivoReport } from "./definitions/executivo";
 
 export type {
@@ -57,7 +56,6 @@ export const REPORTS: ReportDef[] = [
   perdasReport,
   clientesPorResponsavelReport,
   upsellReport,
-  cartoesLimitesReport,
   executivoReport,
 ];
 

@@ -30,43 +30,6 @@ async function buildRenovacoes(q: ReportQuery): Promise<ReportRow[]> {
   return rows;
 }
 
-/** Projeção financeira — próximos 6 meses (MRR + renovações TCV − despesas). */
-async function buildProjecaoFinanceira(): Promise<ReportRow[]> {
-  const now = new Date();
-  const outlook = await getRenewalOutlook([0, 1, 2, 3, 4, 5]);
-  const rows: ReportRow[] = [];
-  for (let i = 0; i < 6; i++) {
-    const start = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
-    const [revenue, expenseAgg] = await Promise.all([
-      getPeriodRevenue(start, end, {}),
-      prisma.transaction.aggregate({
-        where: {
-          type: "despesa",
-          status: { not: "cancelado" },
-          dueDate: { gte: start, lt: end },
-        },
-        _sum: { amount: true },
-      }),
-    ]);
-    const window = outlook[i];
-    const tcvEsperado = window
-      ? window.clients.filter((c) => c.modality === "TCV").reduce((s, c) => s + c.expected, 0)
-      : 0;
-    const despesasPrevistas = n(expenseAgg._sum.amount);
-    const receitaProjetada = revenue.mrr + Math.max(revenue.tcv, tcvEsperado);
-    rows.push({
-      mes: `${String(start.getMonth() + 1).padStart(2, "0")}/${start.getFullYear()}`,
-      mrrPrevisto: revenue.mrr,
-      tcvEsperado: Math.max(revenue.tcv, tcvEsperado),
-      receitaProjetada,
-      despesasPrevistas,
-      resultadoProjetado: receitaProjetada - despesasPrevistas,
-    });
-  }
-  return rows;
-}
-
 export const renovacoesReport: ReportDef = {
   key: "renovacoes",
   title: "Renovações",

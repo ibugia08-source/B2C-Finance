@@ -69,10 +69,6 @@ export const BILLING_STATUS_META: Record<string, StatusMeta> = {
   CANCELED: META.neutro("Cancelada"),
 };
 
-export function billingStatusMeta(status: string): StatusMeta {
-  return BILLING_STATUS_META[status] ?? META.neutro(status);
-}
-
 // ===========================================================================
 // Despesas — Transaction.status (string) + vencimento derivado
 // ===========================================================================
@@ -108,13 +104,6 @@ export const PAYROLL_STATUS_META: Record<string, StatusMeta> = {
 export function payrollStatusMeta(status: string): StatusMeta {
   return PAYROLL_STATUS_META[status] ?? META.neutro(status);
 }
-
-export const COMMISSION_STATUS_META: Record<string, StatusMeta> = {
-  PENDING: META.alerta("Pendente"),
-  APPROVED: META.alerta("Aprovada"),
-  PAID: META.pago("Paga"),
-  CANCELED: META.neutro("Cancelada"),
-};
 
 // ===========================================================================
 // Receitas (Income.status string)

@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/viewer";
 import {
   aplicarRegras,
-  ratearPorPeso,
   salvarRateio,
   type EntradaDeRateio,
 } from "@/lib/services/allocation";
@@ -21,18 +20,6 @@ import { isCompetence } from "@/lib/competence";
 export async function salvarRateioAction(input: EntradaDeRateio) {
   await requirePermission("rateios.editar");
   const r = await salvarRateio(input);
-  if (r.ok) revalidar();
-  return r;
-}
-
-export async function ratearPorPesoAction(
-  sourceId: string,
-  dimensionType: AllocationDimension,
-  pesos: { id: string; peso: number }[],
-  motivo?: string
-) {
-  await requirePermission("rateios.editar");
-  const r = await ratearPorPeso(sourceId, dimensionType, pesos, { motivo });
   if (r.ok) revalidar();
   return r;
 }

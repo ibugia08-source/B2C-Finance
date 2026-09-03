@@ -21,8 +21,6 @@ import { toNumber as n } from "@/lib/format";
  * `reconcileCredit` prova que as duas batem.
  */
 
-export type CreditApplication = { billingId: string; amount: number };
-
 /** Pagamentos do cliente com dinheiro ainda não aplicado, mais antigos primeiro. */
 async function unappliedPayments(clientId: string) {
   const pagamentos = await prisma.payment.findMany({

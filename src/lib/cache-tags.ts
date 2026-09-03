@@ -53,35 +53,3 @@ export const CACHE_TAGS = {
   // Global invalidation
   ALL: "cache:*",
 } as const;
-
-/**
- * Returns a set of tags to invalidate for client updates.
- * Use in server actions with revalidateTag().
- */
-export function getClientUpdateTags(clientId: string) {
-  return [
-    CACHE_TAGS.CLIENT_ID(clientId),
-    CACHE_TAGS.CLIENTS,
-    CACHE_TAGS.CLIENT_BILLINGS(clientId),
-    CACHE_TAGS.BILLING_CYCLE,
-    CACHE_TAGS.DASHBOARD,
-    CACHE_TAGS.CONTRACTS,
-  ];
-}
-
-/**
- * Returns a set of tags to invalidate for billing updates.
- * Use in server actions with revalidateTag().
- */
-export function getBillingUpdateTags(clientId?: string): string[] {
-  const tags: string[] = [
-    CACHE_TAGS.BILLINGS,
-    CACHE_TAGS.BILLING_CYCLE,
-    CACHE_TAGS.DASHBOARD,
-  ];
-  if (clientId) {
-    tags.push(CACHE_TAGS.CLIENT_BILLINGS(clientId));
-    tags.push(CACHE_TAGS.CLIENT_ID(clientId));
-  }
-  return tags;
-}

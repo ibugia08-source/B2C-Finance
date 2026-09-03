@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { assinar, assinaturaConfere } from "@/lib/integrations/avancecrm";
+import { assinar } from "@/lib/integrations/avancecrm";
 
 /**
  * GATEWAY DE PAGAMENTO — Pix e boleto (F5.2 · ref. 03 §4.2, §4.3; decisão 19.10).

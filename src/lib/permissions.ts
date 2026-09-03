@@ -712,9 +712,6 @@ export function effectivePermissions(user: PermissionUser | null | undefined): S
   return set;
 }
 
-// Helpers semânticos (evitam ids soltos espalhados pelos componentes).
-export const canViewModule = (u: PermissionUser | null, moduleKey: string) =>
-  hasPermission(u, `${moduleKey}.visualizar`);
 export const canCreate = (u: PermissionUser | null, moduleKey: string) =>
   hasPermission(u, `${moduleKey}.criar`);
 export const canEdit = (u: PermissionUser | null, moduleKey: string) =>

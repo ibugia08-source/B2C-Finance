@@ -50,7 +50,6 @@ export async function ensureMonthlyBillings(
   }
   lastEnsuredAt.set(throttleKey, Date.now());
 
-  const monthStart = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 1);
   const today = new Date();
   today.setHours(0, 0, 0, 0);

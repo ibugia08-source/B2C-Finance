@@ -20,9 +20,7 @@ import {
   DELINQUENCY_VALUES,
   DELINQUENCY_LABEL,
   MONTHS,
-  clientStatusPill,
   delinquencyPill,
-  type DelinquencyValue,
 } from "./_meta";
 import {
   setClientLossReason,

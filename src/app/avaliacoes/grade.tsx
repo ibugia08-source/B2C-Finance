@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, CircleAlert, Keyboard } from "lucide-react";
+import { Check, Keyboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";

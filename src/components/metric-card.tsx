@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
  *  · sparkline de 12 meses: 1.5px, sem eixos, área 8%, ponto final marcado (§7.4);
  *  · todo card abre detalhe já filtrado — por href ou por modal (§5.5);
  *  · nulo vira "—" e diz por quê, em vez de zero enganoso;
- *  · esqueleto na geometria real (§7.6) via <MetricCardSkeleton/>.
  */
 
 export type DeltaInput = { pct: number | null; hasBase: boolean } | null;
@@ -324,17 +323,6 @@ export function Sparkline({
         vectorEffect="non-scaling-stroke"
       />
     </svg>
-  );
-}
-
-/** Estado CARREGANDO na geometria real do card (02 §7.6). */
-export function MetricCardSkeleton({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  return (
-    <div className={cn("rounded-card border bg-card elev-1", PAD[size])} aria-hidden>
-      <div className="h-3 w-24 animate-pulse rounded-pill bg-muted" />
-      <div className="mt-2.5 h-7 w-32 animate-pulse rounded-cell bg-muted" />
-      <div className="mt-2 h-3 w-20 animate-pulse rounded-pill bg-muted" />
-    </div>
   );
 }
 

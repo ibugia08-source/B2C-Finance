@@ -63,42 +63,6 @@ async function buildFinanceiroMensal(q: ReportQuery): Promise<ReportRow[]> {
   });
 }
 
-/** Faturamento total mês a mês: MRR + TCV (regra central, sem rateio). */
-async function buildFaturamentoTotal(q: ReportQuery): Promise<ReportRow[]> {
-  const months = monthsInPeriod(q);
-  const rows: ReportRow[] = [];
-  for (const mo of months) {
-    const start = new Date(mo.y, mo.m - 1, 1);
-    const end = new Date(mo.y, mo.m, 1);
-    const r = await getPeriodRevenue(start, end, {
-      salesOwner: q.responsavel ?? undefined,
-      clientId: q.clientId ?? undefined,
-    });
-    rows.push({
-      mes: `${String(mo.m).padStart(2, "0")}/${mo.y}`,
-      mrr: r.mrr,
-      clientesMrr: r.mrrClients,
-      tcv: r.tcv,
-      clientesTcv: r.tcvClients,
-      total: r.total,
-    });
-  }
-  return rows;
-}
-
-/** Margem operacional por mês (receitas × despesas × folha). */
-async function buildMargemOperacional(q: ReportQuery): Promise<ReportRow[]> {
-  const rows = await buildFinanceiroMensal(q);
-  return rows.map((r) => ({
-    mes: r.mes,
-    receitas: r.receitas,
-    despesas: r.despesas,
-    folha: r.folha,
-    lucro: r.lucro,
-    margem: r.margem,
-  }));
-}
-
 export const financeiroMensalReport: ReportDef = {
   key: "financeiro-mensal",
   title: "Financeiro mensal",

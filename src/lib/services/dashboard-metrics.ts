@@ -110,7 +110,6 @@ export type CommercialKpis = {
 export async function getCommercialKpis(f: DashboardFilters): Promise<CommercialKpis> {
   const { start, end } = f.period;
   const bw = billingWhere(f);
-  const today = new Date();
   const renewLimit = new Date();
   renewLimit.setDate(renewLimit.getDate() + 30);
 

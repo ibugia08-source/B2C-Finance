@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { competenceOf, type Competence } from "@/lib/competence";
-import { hashDaLinha, lerExtrato, type LinhaDeExtrato } from "@/lib/reconciliation/parse";
+import { hashDaLinha, lerExtrato } from "@/lib/reconciliation/parse";
 import type { ReconciliationState } from "@prisma/client";
 
 /**

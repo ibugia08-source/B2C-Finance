@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { ledgerHealth } from "@/lib/accounting/health";
 import { toNumber as n } from "@/lib/format";

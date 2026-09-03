@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  asOwner, createBilling, createMrrClient, createOwner, createRelationship,
+  asOwner, createBilling, createMrrClient, createOwner,
   destroyOwner, prisma, runWithoutScope, type TestOwner,
 } from "./support/db";
 import { settleBillingPayment } from "@/lib/services/payment-accounting";
@@ -88,7 +88,7 @@ describe("F1.6 — razão ligado", () => {
     await setLedgerEnabled(workspaceId, true);
     const cliente = await createMrrClient(dono, { name: "Idempotente" });
     const cob = await createBilling(dono, cliente.id, { month: 7, year: 2026, amount: 100 });
-    const r: any = await asOwner(dono, async () =>
+    await asOwner(dono, async () =>
       settleBillingPayment(
         { billingId: cob.id, amount: 100, paidAt: new Date(2026, 6, 2), method: "PIX", accountId: null, notes: null },
         systemContext("UI")

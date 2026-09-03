@@ -212,67 +212,6 @@ async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
 // Patrimônio (ativos × passivos)
 // ===================================================================
 
-export type BalanceSummary = {
-  // ativos
-  contas: number;
-  reservas: number;
-  aReceber: number; // cobranças abertas
-  ativosManuais: number; // Asset (equipamentos, investimentos, créditos…)
-  ativosTotais: number;
-  // passivos
-  contasAPagar: number; // despesas pendentes
-  faturasCartao: number; // faturas de cartão em aberto
-  passivosManuais: number; // Liability.remainingValue
-  passivosTotais: number;
-  saldoPatrimonial: number;
-};
-
-export async function getBalanceSummary(): Promise<BalanceSummary> {
-  const [accounts, boxes, billings, assets, pendingExpenses, invoices, liabilities] =
-    await Promise.all([
-      prisma.account.aggregate({ where: { active: true }, _sum: { balance: true } }),
-      prisma.cashBox.aggregate({ _sum: { currentAmount: true } }),
-      prisma.billing.aggregate({
-        where: { status: { in: [...BILLING_OPEN_STATUSES] } },
-        _sum: { amount: true, paidTotal: true },
-      }),
-      prisma.asset.aggregate({ _sum: { value: true } }),
-      prisma.transaction.aggregate({
-        where: { type: "despesa", status: { in: ["pendente", "devendo"] } },
-        _sum: { amount: true },
-      }),
-      prisma.creditCardInvoice.aggregate({
-        where: { status: { in: ["aberta", "fechada", "parcial", "atrasada"] } },
-        _sum: { total: true, paid: true },
-      }),
-      prisma.liability.aggregate({ _sum: { remainingValue: true } }),
-    ]);
-
-  const contas = n(accounts._sum.balance);
-  const reservas = n(boxes._sum.currentAmount);
-  const aReceber = n(billings._sum.amount) - n(billings._sum.paidTotal);
-  const ativosManuais = n(assets._sum.value);
-  const ativosTotais = contas + reservas + aReceber + ativosManuais;
-
-  const contasAPagar = n(pendingExpenses._sum.amount);
-  const faturasCartao = n(invoices._sum.total) - n(invoices._sum.paid);
-  const passivosManuais = n(liabilities._sum.remainingValue);
-  const passivosTotais = contasAPagar + faturasCartao + passivosManuais;
-
-  return {
-    contas,
-    reservas,
-    aReceber,
-    ativosManuais,
-    ativosTotais,
-    contasAPagar,
-    faturasCartao,
-    passivosManuais,
-    passivosTotais,
-    saldoPatrimonial: ativosTotais - passivosTotais,
-  };
-}
-
 // ===================================================================
 // Folha
 // ===================================================================

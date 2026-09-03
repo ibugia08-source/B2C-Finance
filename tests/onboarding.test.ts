@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   asOwner, createMrrClient, createOwner, createRelationship, destroyOwner,
-  prisma, type TestOwner,
+  type TestOwner,
 } from "./support/db";
 import {
   carregarQuadro, concluirOnboarding, iniciarOnboarding, marcarTarefa,

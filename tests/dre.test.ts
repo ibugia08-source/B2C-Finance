@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  asOwner, createBilling, createMrrClient, createOwner, destroyOwner,
+  createOwner, destroyOwner,
   prisma, runWithoutScope, type TestOwner,
 } from "./support/db";
 import { dreParaCsv, montarDre } from "@/lib/services/dre";

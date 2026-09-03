@@ -9,5 +9,3 @@ export const AI_REPORTS = [
   { key: "despesas", label: "Análise de despesas" },
   { key: "crescimento", label: "Análise de crescimento" },
 ] as const;
-
-export type AIReportKey = (typeof AI_REPORTS)[number]["key"];

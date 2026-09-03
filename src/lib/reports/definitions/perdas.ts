@@ -36,39 +36,6 @@ async function buildPerdas(q: ReportQuery): Promise<ReportRow[]> {
   return rows;
 }
 
-/** Receita perdida por mês (últimos 12 meses). */
-async function buildReceitaPerdida(): Promise<ReportRow[]> {
-  const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  const losses = await prisma.clientLoss.findMany({
-    where: { lostAt: { gte: from } },
-    select: { lostAt: true, modality: true, monthlyValue: true, referenceValue: true },
-  });
-  const byMonth = new Map<string, { count: number; value: number }>();
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
-    byMonth.set(`${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`, {
-      count: 0,
-      value: 0,
-    });
-  }
-  for (const l of losses) {
-    const key = `${String(l.lostAt.getMonth() + 1).padStart(2, "0")}/${l.lostAt.getFullYear()}`;
-    const cur = byMonth.get(key);
-    if (!cur) continue;
-    cur.count += 1;
-    cur.value +=
-      l.modality === "TCV"
-        ? n(l.referenceValue) || n(l.monthlyValue)
-        : n(l.monthlyValue) || n(l.referenceValue);
-  }
-  return Array.from(byMonth.entries()).map(([mes, v]) => ({
-    mes,
-    clientesPerdidos: v.count,
-    receitaPerdida: v.value,
-  }));
-}
-
 export const perdasReport: ReportDef = {
   key: "perdas",
   title: "Perdas de clientes",

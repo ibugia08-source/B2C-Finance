@@ -46,8 +46,3 @@ export const ORDEM_DA_ETAPA: Record<EtapaDoFunil, number> = {
  * dois lugares, senão o quadro e a rotina discordam sobre o que está parado.
  */
 export const DIAS_PARA_PARADA = 7;
-
-/** Motivo de perda em branco não existe (o banco também recusa). */
-export function exigeMotivo(etapa: EtapaDoFunil): boolean {
-  return etapa === "PERDIDA";
-}

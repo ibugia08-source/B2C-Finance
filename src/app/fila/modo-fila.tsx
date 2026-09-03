@@ -1,6 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { Copy, MessageCircle, SkipForward } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +69,6 @@ export function ModoFila({
   podeConciliar: boolean;
   podeRevisar: boolean;
 }) {
-  const router = useRouter();
   const [trilha, setTrilha] = useState<Trilha>(trilhaInicial);
   const [indice, setIndice] = useState(0);
   const [resolvidos, setResolvidos] = useState<Set<string>>(new Set());

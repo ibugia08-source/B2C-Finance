@@ -5,7 +5,7 @@ import { formatBRL, formatDateBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field, MobileEmpty,
+  MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field,
 } from "@/components/ui/record-card";
 import { Button } from "@/components/ui/button";
 import {

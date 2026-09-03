@@ -84,11 +84,3 @@ export async function requirePagePermission(permission: string, from?: string): 
   if (!hasPermission(v, permission)) redirect("/acesso-restrito");
   return v;
 }
-
-/**
- * Para USER comum sem Person vinculada, devolve true para que a página
- * mostre uma mensagem de "fale com o admin".
- */
-export function isUnlinkedUser(v: Viewer): boolean {
-  return v.role === "USER" && !v.personId;
-}

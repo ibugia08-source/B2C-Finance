@@ -23,8 +23,3 @@ export async function currentWorkspaceId(): Promise<string> {
   cache = w.id;
   return cache;
 }
-
-/** Só para teste: força a releitura. */
-export function resetWorkspaceCache() {
-  cache = null;
-}

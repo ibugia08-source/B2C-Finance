@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { runWithoutScope, runWithOwner } from "@/lib/auth/owner-scope";
-import { getReport, REPORTS } from "@/lib/reports/registry";
+import { getReport } from "@/lib/reports/registry";
 import { renderEmail } from "@/lib/email/template";
 import { formatBRL } from "@/lib/format";
 import { publish } from "@/lib/outbox";

@@ -23,7 +23,6 @@ import { Badge } from "@/components/ui/badge";
 import { ReceivableRow, useStatusChangeHandler } from "./receivables-row";
 import {
   StatusCell,
-  TermSelect,
   InlineMoney,
   RowActions,
   BulkBar,

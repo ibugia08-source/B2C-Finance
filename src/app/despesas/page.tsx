@@ -6,10 +6,7 @@ import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange, monthLabel, toNumber as n } from "@/lib/format";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
-import {
-} from "@/lib/services/calculations";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,

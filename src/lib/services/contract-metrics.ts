@@ -72,18 +72,6 @@ export async function receitaReconhecidaMes(ref = new Date()): Promise<number> {
   return n(agg._sum.monthlyValue);
 }
 
-/** Renovações nos próximos `dias` (contratos vigentes). */
-export async function renovacoesProximas(dias = 30): Promise<number> {
-  const limite = new Date();
-  limite.setDate(limite.getDate() + dias);
-  return prisma.contract.count({
-    where: {
-      status: { in: LIVE_STATUSES as any },
-      renewalDate: { not: null, lte: limite },
-    },
-  });
-}
-
 /** Contratos vencidos: passaram do fim/renovação sem encerrar. */
 export function vencidosWhere(): any {
   const today = new Date();

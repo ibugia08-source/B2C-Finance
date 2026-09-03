@@ -26,9 +26,6 @@ const RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
  * constante; a partir da Fase 1 vem de Workspace.timezone.
  */
 export const WORKSPACE_TIMEZONE = "America/Bahia";
-export const WORKSPACE_LOCALE = "pt-BR";
-export const WORKSPACE_CURRENCY = "BRL";
-
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",

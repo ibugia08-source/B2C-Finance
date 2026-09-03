@@ -50,26 +50,6 @@ export function B2CLogo({
   );
 }
 
-/** Símbolo "B" hexagonal (legado — preferir B2CLogo). */
-export function B2CSymbol({
-  size = 32,
-  className,
-}: {
-  size?: number;
-  className?: string;
-}) {
-  return (
-    <img
-      src="/brand/symbol.svg"
-      alt="B2C Finance"
-      width={size}
-      height={size}
-      className={cn("shrink-0 select-none", className)}
-      draggable={false}
-    />
-  );
-}
-
 /** Avatar do mascote (rosto) — ideal para avatares pequenos (Assistente). */
 export function B2CAvatar({
   size = 40,
@@ -119,6 +99,3 @@ export function B2CMascot({
     />
   );
 }
-
-/** Alias de compatibilidade. */
-export const B2CMascotFull = B2CMascot;

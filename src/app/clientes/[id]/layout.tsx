@@ -4,7 +4,6 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientHeader } from "./client-header";
 import { TabsNavigation, type TabsCount } from "./tabs-navigation";
 import { getClientSummaries, getClientRiskProfile } from "@/lib/services/client-metrics";
-import { CACHE_TAGS } from "@/lib/cache-tags";
 
 export const revalidate = 60;
 

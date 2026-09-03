@@ -24,27 +24,21 @@ function metricsTags() {
 }
 
 /**
- * Finanças (transações, cartões/faturas, caixinhas, pessoas/recebíveis,
- * importações, regras de categorização).
+ * Finanças (despesas, receitas, caixinhas, importações, regras).
+ * /transacoes, /pessoas e /cartoes viraram redirects — revalidá-los era efeito morto.
  */
-export function revalidateFinance(
-  opts: { cardId?: string | null; personId?: string | null } = {}
-) {
+export function revalidateFinance() {
   paths([
     "/",
     "/dashboard",
     "/rotina",
-    "/transacoes",
     "/despesas",
     "/receitas",
     "/caixa",
-    "/pessoas",
     "/projecoes",
     "/importacoes",
     "/regras",
   ]);
-  if (opts.cardId) revalidatePath(`/cartoes/${opts.cardId}`);
-  if (opts.personId) revalidatePath(`/pessoas/${opts.personId}`);
   metricsTags();
 }
 

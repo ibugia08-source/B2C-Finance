@@ -62,18 +62,6 @@ async function buildRecebimentos(q: ReportQuery): Promise<ReportRow[]> {
   return rows.map(({ _late, _otherMonth, ...r }) => r);
 }
 
-/** Só os pagos com atraso (dentro do mês de competência). */
-async function buildPagamentosAtrasados(q: ReportQuery): Promise<ReportRow[]> {
-  const rows = await paymentsWithClosing(q);
-  return rows.filter((r) => r._late).map(({ _late, _otherMonth, ...r }) => r);
-}
-
-/** Só os pagos em mês diferente da competência (viraram Receita Extra). */
-async function buildPagosOutroMes(q: ReportQuery): Promise<ReportRow[]> {
-  const rows = await paymentsWithClosing(q);
-  return rows.filter((r) => r._otherMonth).map(({ _late, _otherMonth, ...r }) => r);
-}
-
 export const recebimentosReport: ReportDef = {
   key: "recebimentos",
   title: "Recebimentos do período",
