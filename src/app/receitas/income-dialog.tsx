@@ -17,6 +17,15 @@ import { saveIncome } from "@/lib/actions/incomes";
 import { Plus } from "lucide-react";
 import { formatDateInput } from "@/lib/format";
 
+const LEGACY_TYPE_LABEL: Record<string, string> = {
+  SALARY: "Salário",
+  EARNINGS: "Rendimentos",
+  COMPANY_WITHDRAWAL: "Retirada da empresa",
+  CLIENT: "Cliente",
+  REIMBURSEMENT: "Reembolso",
+  LOAN_RECEIVED: "Empréstimo recebido",
+};
+
 export function IncomeDialog({
   accounts,
   people,
@@ -150,10 +159,16 @@ export function IncomeDialog({
               <div>
                 <Label>Classificação</Label>
                 <Select name="incomeType" defaultValue={initial?.incomeType ?? "OTHER"}>
+                  {/* Classificações pessoais do v1 (Salário, Rendimentos, Retirada)
+                      saíram da criação — 03 §6.1. Editando uma linha antiga, a
+                      classificação atual continua disponível para não mudar sozinha. */}
+                  {initial?.incomeType &&
+                    !["SALE", "OTHER"].includes(initial.incomeType) && (
+                      <option value={initial.incomeType}>
+                        {LEGACY_TYPE_LABEL[initial.incomeType] ?? initial.incomeType}
+                      </option>
+                    )}
                   <option value="SALE">Venda</option>
-                  <option value="EARNINGS">Rendimentos</option>
-                  <option value="COMPANY_WITHDRAWAL">Retirada da empresa</option>
-                  <option value="SALARY">Salário</option>
                   <option value="OTHER">Outro</option>
                 </Select>
               </div>

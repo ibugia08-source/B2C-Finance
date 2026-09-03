@@ -71,8 +71,11 @@ export function CashBoxDialog({
           </div>
           <div>
             <Label>Tipo</Label>
-            <Select name="type" defaultValue={initial?.type ?? "PERSONAL"}>
-              <option value="PERSONAL">Caixa pessoal</option>
+            {/* "Caixa pessoal" (v1) saiu da criação — 03 §6.1. A opção só
+                aparece editando uma caixa antiga desse tipo, senão o select
+                trocaria o tipo dela em silêncio. */}
+            <Select name="type" defaultValue={initial?.type ?? "EMERGENCY"}>
+              {initial?.type === "PERSONAL" && <option value="PERSONAL">Caixa pessoal</option>}
               <option value="EMERGENCY">Reserva de emergência</option>
               <option value="INVESTMENT">Investimento</option>
               <option value="COMPANY">Empresa</option>
