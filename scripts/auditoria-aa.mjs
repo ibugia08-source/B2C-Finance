@@ -50,7 +50,7 @@ for (const p of [...arquivos("src", [".tsx"])]) {
     const temNome =
       /aria-label=/.test(bloco) || /title=/.test(bloco) || /sr-only/.test(bloco) ||
       // texto visível dentro do botão
-      />\s*[^<>\s{][^<>]*</.test(m[1].replace(/<[^>]+>/g, (x) => x));
+      /(^|>)\s*[^<>\s{][^<>]*(<|$)/.test(m[1].replace(/<[^>]+>/g, ""));
     if (!temNome) graves.push(`${p}: Button size="icon" sem nome acessível.`);
   }
 }
@@ -137,7 +137,9 @@ for (const [tema, tokens] of [["claro", claro], ["escuro", escuro]]) {
     const f = hslParaRgb(resolver(tokens, fg) ?? "");
     const b = hslParaRgb(resolver(tokens, bg) ?? "");
     if (!f || !b) {
-      avisos.push(`tema ${tema}: não resolvi ${fg}/${bg} para conferir contraste.`);
+      // Não resolver o par significa que o GATE deixou de conferir contraste —
+      // isso reprova o CI em vez de virar aviso, senão o gate se desliga em silêncio.
+      graves.push(`tema ${tema}: não resolvi ${fg}/${bg} para conferir contraste (gate cego).`);
       continue;
     }
     const c = contraste(f, b);

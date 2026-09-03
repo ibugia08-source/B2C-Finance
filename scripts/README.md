@@ -1,104 +1,59 @@
-# Scripts de manutenção — B2C Finance
+# Scripts — B2C Finance
 
-Todos os scripts exigem `POSTGRES_PRISMA_URL` no ambiente ou num arquivo `.env`
-na raiz do projeto (o mesmo valor usado na Vercel/Supabase).
+Todos leem o `.env` da raiz (loader próprio em `env.ts`; `tsx` não carrega
+`.env` sozinho). Scripts que ESCREVEM passam pela guarda de `guard.ts`
+(03 §4.6): `APP_ENV` declarado + `ALLOW_DESTRUCTIVE=true` + o ambiente
+declarado tem de bater com o inferido de TODAS as URLs de banco presentes.
+Produção só com `allowProduction: true` no código — nenhum script do repo tem.
 
-## Migrations (uma vez, antes do próximo deploy)
+## Operação (rodam em produção via cron/manual)
 
-O build de produção agora roda `prisma migrate deploy` (em vez de `db push` +
-`seed` a cada deploy). Como o banco já existe, é preciso **marcar a baseline
-como aplicada UMA única vez**:
-
-```bash
-npm run db:baseline        # marca a migration 0_init como já aplicada
-npm run db:migrate:deploy  # aplica a migration nova (campos/índices)
-```
-
-Sem esse passo, o primeiro `prisma migrate deploy` falharia com P3005
-(banco não vazio). Depois disso, todos os deploys aplicam migrations
-automaticamente e o seed passa a ser manual (`npm run db:seed`).
-
-## Limpeza de dados contaminados por importações antigas
-
-O comportamento antigo de importação criava **parcelas futuras no banco**
-(com valor dividido incorretamente por N) e espalhava compras de uma fatura
-em faturas de meses diferentes. Dois scripts cuidam disso:
-
-### 1. Diagnóstico (somente leitura)
+| Script | O que faz |
+|---|---|
+| `outbox-worker.ts` | entrega eventos do Outbox (AvanceCRM/whatsapp, gateway); canal sem provedor configurado fica pendente, nunca vira erro |
+| `relatorios-agendados.ts` | dispara relatórios por e-mail agendados (janela recuperável) |
 
 ```bash
-npm run db:diagnose
+npm run outbox:worker
+npm run relatorios:agendados
 ```
 
-Relata: parcelas fantasma, importações fragmentadas em várias faturas,
-faturas com total divergente e possíveis duplicatas. Não altera nada.
+## Desenvolvimento local
 
-### 2. Correção (dry-run por padrão)
+| Script | O que faz |
+|---|---|
+| `mint-token.ts` | emite cookie de sessão de admin para smoke autenticado (recusa produção) |
+| `setup-test-db.mjs` | (re)cria e migra o banco de TESTE `b2c_finance_test` (porta 55433) |
+| `inicio-limpo.ts` | zera DADOS DE OPERAÇÃO mantendo estrutura e configuração do dono; faz backup antes; exige a guarda + `--confirmar` |
+| `ledger-toggle.ts` | liga/desliga o razão contábil (FeatureFlag em banco); exige a guarda |
 
 ```bash
-npm run db:fix-imported              # dry-run: mostra o que faria
-npm run db:fix-imported -- --apply   # executa (com backup automático)
+APP_ENV=local npx tsx scripts/mint-token.ts
+npm run db:test:setup
 ```
 
-Com `--apply`, o script:
-1. grava um backup JSON completo em `./backups/`;
-2. preenche `installmentTotal`/`installmentGroupKey` nas transações
-   importadas antigas (backfill de metadados);
-3. remove as `Installment` fantasma de transações importadas
-   (as de despesas manuais são preservadas);
-4. recalcula o total de todas as faturas (compras − estornos).
+Seed (admin + categorias + regras, nada de dado de negócio): `npm run db:seed:dev`.
+Aborta se o banco já tiver dados; `--forcar` exige a guarda completa.
 
-**O que ele NÃO faz:** mover transações de faturas fragmentadas. Para
-consolidar uma fatura antiga fragmentada, exclua as transações do lote
-antigo e reimporte o PDF — a importação nova é ancorada no mês correto
-e idempotente (reimportar o mesmo arquivo não duplica).
+## Verificação (somente leitura)
 
-## Migração para multiusuário (isolamento por dono)
+| Script | O que confere |
+|---|---|
+| `verify-ledger.ts` | partidas dobradas balanceadas (`npm run verify:ledger`) |
+| `verify-snapshots.ts` | fotografias mensais vs recálculo (`npm run verify:snapshots`) |
+| `verify-metric-parity.ts` | paridade dicionário de métricas × serviços |
 
-A partir desta versão, cada usuário só vê os próprios dados. Toda entidade
-privada ganhou uma coluna `ownerId` e a extensão do Prisma
-(`src/lib/prisma.ts`) injeta o dono automaticamente em toda leitura/criação.
+## Gates do CI (rodam no `npm run verify`)
 
-Passo único no banco de produção (depois de aplicar a migration nova):
+| Script | Gate |
+|---|---|
+| `check-design-tokens.mjs` | `lint:tokens` — cor/tipografia só via token |
+| `auditoria-aa.mjs` | `audit:aa` — acessibilidade AA mecânica; par de contraste não resolvido REPROVA (gate nunca fica cego em silêncio) |
 
-```bash
-npm run db:migrate:deploy    # cria as colunas ownerId
-npm run db:multiuser              # DRY-RUN: mostra o que faria
-npm run db:multiuser -- --apply   # executa (com backup em ./backups/)
-```
+## `archive/`
 
-Com `--apply`, o script:
-1. grava backup JSON completo;
-2. apaga os lançamentos de teste (transações, parcelas, faturas, receitas,
-   a receber, pagamentos, movimentos de caixa, importações) e logs de
-   IA/WhatsApp;
-3. atribui `ownerId = admin primário` a tudo que foi preservado (contas,
-   cartões, pessoas, metas, regras) e zera o saldo dos caixas.
-
-Depois disso, os demais usuários (ex.: Alvaro) começam com a conta vazia e o
-admin mantém o setup preservado — sem vazamento entre contas.
-
-## Backfill do responsável comercial (Client → Employee)
-
-O "Responsável" do cliente deixou de ser texto livre e passou a ser um vínculo
-com o colaborador da Folha (`Client.salesOwnerId`). O texto `salesOwner` é
-mantido sincronizado com o nome do colaborador (filtros e relatórios seguem
-funcionando). Para vincular os dados históricos:
-
-```bash
-npm run db:migrate:deploy                          # aplica a migration do vínculo
-npx tsx scripts/backfill-sales-owner.ts            # DRY-RUN: mostra o que faria
-npx tsx scripts/backfill-sales-owner.ts --apply    # executa
-```
-
-O script casa o nome digitado com colaboradores do mesmo dono (ignorando
-maiúsculas/espaços); nomes sem correspondente criam um colaborador novo
-(PJ, salário 0, ativo). É idempotente — re-rode após importações ou
-bulk-updates que só escrevem o texto.
-
-## Ordem recomendada (deploy desta versão)
-
-1. `npm run db:baseline` (só na 1ª vez, se ainda não feito)
-2. `npm run db:migrate:deploy`
-3. `npm run db:multiuser` (conferir) → `npm run db:multiuser -- --apply`
-4. Deploy normal na Vercel.
+História, não ferramenta: migrações e backfills já executados
+(`import-reestruturacao`, `backfill-sales-owner`, `cutover-dry-run`,
+`verify-decimal-backfill`, `verify-timestamps`), o `wipe-data` superado pelo
+`inicio-limpo`, e os testes manuais da era v1 (`test-*.ts`). Não rode nada
+daqui sem ler o cabeçalho do arquivo — e sem a guarda, nada roda mesmo.

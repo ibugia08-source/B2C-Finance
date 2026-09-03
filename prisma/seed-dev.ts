@@ -15,7 +15,8 @@ import { CATEGORIES, RULES } from "./seed-data";
  *
  * TRAVA DE SEGURANÇA: se o banco alvo já tiver dados de negócio, o script
  * ABORTA — é o sinal de que o .env está apontando para produção. Rodar mesmo
- * assim exige --forcar (nunca use isso apontando para produção).
+ * assim exige --forcar E a guarda oficial (APP_ENV + ALLOW_DESTRUCTIVE=true),
+ * que recusa produção por conta própria.
  *
  * Uso: npm run db:seed:dev
  */
@@ -65,6 +66,10 @@ async function assertEmpty(force: boolean) {
     );
     process.exit(1);
   }
+  // --forcar sem a guarda seria um wipe disfarçado: em banco com dados,
+  // seguir escrevendo é decisão destrutiva e passa pela porta única de 03 §4.6.
+  const { assertDestructiveAllowed } = await import("../scripts/guard");
+  assertDestructiveAllowed({ script: "prisma/seed-dev.ts --forcar" });
   console.warn(`⚠️  --forcar: seguindo mesmo com dados existentes (${detalhe})`);
 }
 

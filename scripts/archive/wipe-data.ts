@@ -10,8 +10,8 @@
  * Uso (03 §4.6 — ambiente explícito + ALLOW_DESTRUCTIVE):
  *   APP_ENV=local ALLOW_DESTRUCTIVE=true npx tsx scripts/wipe-data.ts --confirmar
  */
-import { loadEnv } from "./env";
-import { assertDestructiveAllowed } from "./guard";
+import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 import { writeFileSync } from "fs";
 loadEnv();
 

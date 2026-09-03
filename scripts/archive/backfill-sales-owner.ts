@@ -16,8 +16,8 @@
  *
  * Pré-requisito: migration 20260728000000_client_sales_owner_employee aplicada.
  */
-import { loadEnv } from "./env";
-import { assertDestructiveAllowed } from "./guard";
+import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
 
 const APPLY = process.argv.includes("--apply");

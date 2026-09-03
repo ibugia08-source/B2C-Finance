@@ -1,3 +1,5 @@
+import { loadEnv } from "./env";
+loadEnv(); // AVANCECRM_*/GATEWAY_* vêm do .env; sem isto o worker acharia "não configurado"
 import { runOutboxWorker } from "@/lib/outbox";
 import { entregarNoCrm, urlConfigurada, segredoConfigurado } from "@/lib/integrations/avancecrm";
 import { emissaoConfigurada, entregarNoGateway } from "@/lib/integrations/gateway";

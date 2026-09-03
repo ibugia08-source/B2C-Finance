@@ -4,25 +4,6 @@
  * só configuração). Fonte única: mudar aqui vale para os dois.
  */
 
-export const PEOPLE = [
-  { name: "Israel", type: "pessoal" },
-  { name: "Isis", type: "familiar" },
-  { name: "Esaú", type: "familiar" },
-  { name: "Pai", type: "familiar" },
-  { name: "Empresa / Agência", type: "empresa" },
-  { name: "Terceiro", type: "terceiro" },
-];
-export const CARDS = [
-  { name: "Nubank Israel", bank: "Nubank", type: "pessoal", holder: "Israel", limitTotal: 5000, closingDay: 17, dueDay: 25 },
-  { name: "Inter Israel", bank: "Inter", type: "pessoal", holder: "Israel", limitTotal: 3000, closingDay: 5, dueDay: 12 },
-  { name: "C6 Bank", bank: "C6", type: "pessoal", holder: "Israel", limitTotal: 2000, closingDay: 10, dueDay: 18 },
-  { name: "Will", bank: "Will Bank", type: "pessoal", holder: "Israel", limitTotal: 1500, closingDay: 20, dueDay: 28 },
-  { name: "Magalu Esaú", bank: "Itaú", type: "terceiro", holder: "Esaú", limitTotal: 1000, closingDay: 1, dueDay: 8 },
-  { name: "Magalu Israel", bank: "Itaú", type: "pessoal", holder: "Israel", limitTotal: 1500, closingDay: 1, dueDay: 8 },
-  { name: "PicPay", bank: "PicPay", type: "pessoal", holder: "Israel", limitTotal: 800, closingDay: 22, dueDay: 30 },
-  { name: "Sicredi", bank: "Sicredi", type: "pessoal", holder: "Israel", limitTotal: 2500, closingDay: 15, dueDay: 22 },
-  { name: "Cartão do Pai", bank: "Bradesco", type: "terceiro", holder: "Pai", limitTotal: 4000, closingDay: 8, dueDay: 15 },
-];
 export const CATEGORIES = [
   { name: "Pessoal", kind: "despesa", color: "#3b82f6" },
   { name: "Empresa", kind: "despesa", color: "#10b981" },

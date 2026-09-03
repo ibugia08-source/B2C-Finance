@@ -11,7 +11,11 @@ async function main() {
   const admin = await runWithoutScope(async () =>
     prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true, role: true } })
   );
-  console.log("TOKEN=" + createSessionToken({ uid: admin!.id, role: admin!.role as any }));
+  if (!admin) {
+    console.error("✖ Nenhum usuário ADMIN no banco. Rode o seed antes: npm run db:seed:dev");
+    process.exit(1);
+  }
+  console.log("TOKEN=" + createSessionToken({ uid: admin.id, role: admin.role as any }));
   await prisma.$disconnect();
 }
 

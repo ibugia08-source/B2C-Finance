@@ -17,12 +17,11 @@
     "db:baseline": "prisma migrate resolve --applied 0_init",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx prisma/seed-dev.ts",
     "db:seed:dev": "tsx prisma/seed-dev.ts",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "verify:ledger": "tsx scripts/verify-ledger.ts",
     "verify:snapshots": "tsx scripts/verify-snapshots.ts",
@@ -31,7 +30,7 @@
     "audit:aa": "node scripts/auditoria-aa.mjs --ci"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed-dev.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

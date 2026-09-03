@@ -19,8 +19,8 @@
  *   APP_ENV=local npx tsx scripts/cutover-dry-run.ts --data 2026-09-01
  *   ... --json  (para conferir contra planilha)
  */
-import { loadEnv } from "./env";
-import { assertNotProduction } from "./guard";
+import { loadEnv } from "../env";
+import { assertNotProduction } from "../guard";
 loadEnv();
 assertNotProduction("scripts/cutover-dry-run.ts");
 

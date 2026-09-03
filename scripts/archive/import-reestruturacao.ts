@@ -18,8 +18,8 @@
  *
  * Uso: npx tsx scripts/import-reestruturacao.ts
  */
-import { loadEnv } from "./env";
-import { assertDestructiveAllowed } from "./guard";
+import { loadEnv } from "../env";
+import { assertDestructiveAllowed } from "../guard";
 loadEnv();
 import { readFileSync } from "fs";
 import { resolve } from "path";
