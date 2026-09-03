@@ -74,15 +74,17 @@ export function PaymentDialog({
               ))}
             </Select>
           </div>
-          <div>
-            <Label>Conta de destino</Label>
-            <Select name="accountId" defaultValue="">
-              <option value="">—</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name}</option>
-              ))}
-            </Select>
-          </div>
+          {accounts.length > 0 ? (
+            <div>
+              <Label>Conta de destino</Label>
+              <Select name="accountId" defaultValue="">
+                <option value="">—</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
           <div className="col-span-2">
             <Label>Observação</Label>
             <Input name="notes" placeholder="opcional" />

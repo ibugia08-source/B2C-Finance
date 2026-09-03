@@ -71,19 +71,17 @@ async function gravarGuardado(next: Guardado): Promise<void> {
  * paralelo — o card abre junto com a home, não depois dela.
  */
 async function contagens(): Promise<Record<PassoId, number>> {
-  const [agencias, usuarios, clientes, contas, despesas] = await Promise.all([
+  const [agencias, usuarios, clientes, despesas] = await Promise.all([
     runWithoutScope(async () => prisma.agency.count({ where: { active: true } })),
     // Equipe = alguém ALÉM do dono. Um usuário só significa que ninguém entrou.
     runWithoutScope(async () => prisma.user.count({ where: { active: true } })),
     prisma.client.count(),
-    prisma.account.count({ where: { active: true } }),
     prisma.transaction.count({ where: { type: "despesa" } }),
   ]);
   return {
     agencia: agencias,
     time: Math.max(0, usuarios - 1),
     clientes,
-    contas,
     despesas,
   };
 }

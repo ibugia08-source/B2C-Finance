@@ -35,7 +35,6 @@ export function revalidateFinance(
     "/dashboard",
     "/rotina",
     "/transacoes",
-    "/cartoes",
     "/despesas",
     "/receitas",
     "/caixa",

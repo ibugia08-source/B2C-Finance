@@ -1,5 +1,5 @@
 import {
-  Building2, Users, Contact, Landmark, Receipt, Rocket, type LucideIcon,
+  Building2, Users, Contact, Receipt, Rocket, type LucideIcon,
 } from "lucide-react";
 
 /**
@@ -21,7 +21,7 @@ import {
  *   · o fim é a Gestão do Mês aberta e POPULADA, não um troféu.
  */
 
-export type PassoId = "agencia" | "time" | "clientes" | "contas" | "despesas";
+export type PassoId = "agencia" | "time" | "clientes" | "despesas";
 
 export type PassoSetup = {
   id: PassoId;
@@ -75,21 +75,12 @@ export const PASSOS: PassoSetup[] = [
     icon: Contact,
     vazio: "Nenhum cliente na carteira ainda.",
   },
-  {
-    id: "contas",
-    numero: 4,
-    titulo: "Contas e saldo de hoje",
-    descricao:
-      "Cadastre as contas e cartões e informe o saldo atual de cada um. É essa âncora que faz o caixa do sistema bater com o do banco.",
-    href: "/caixa",
-    cta: "Cadastrar contas",
-    minutos: 6,
-    icon: Landmark,
-    vazio: "Nenhuma conta cadastrada — o caixa começa sem âncora.",
-  },
+  // O passo "Contas e saldo de hoje" SAIU em 02/09 por decisão da direção:
+  // cadastrar conta bancária à mão não é mais o fluxo — a conta nasce da
+  // importação de extrato (conciliação) ou da conexão Open Finance.
   {
     id: "despesas",
-    numero: 5,
+    numero: 4,
     titulo: "Despesas fixas",
     descricao:
       "Aluguel, ferramentas, folha, impostos. Sem elas o resultado do mês mostra só a receita e parece bom demais.",

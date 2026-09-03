@@ -7,7 +7,6 @@ import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, monthRange, monthLabel, toNumber as n } from "@/lib/format";
 import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import {
-  limitesUsadosPorCartao,
 } from "@/lib/services/calculations";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -33,9 +32,6 @@ import { ExpenseDialog } from "./expense-dialog";
 import { EXPENSE_TYPE_LABEL, RECURRENCE_LABEL } from "./_meta";
 import { ExpenseActions } from "./row-actions";
 import { ExpenseFilters } from "./filters";
-import { CardDialog } from "@/app/cartoes/card-dialog";
-import { CardRowActions } from "@/app/cartoes/row-actions";
-import { QuickRenameCard } from "@/app/cartoes/quick-rename";
 import { Repeat2 } from "lucide-react";
 import { requirePagePermission } from "@/lib/auth/viewer";
 
@@ -63,9 +59,11 @@ function statusInfo(status: string, dueDate: Date | null): { label: string; vari
   return { label: "Pendente", variant: "warning" };
 }
 
+// A aba "Cartões e Contas" SAIU em 02/09 por decisão da direção: cadastrar
+// conta bancária à mão deixou de ser o fluxo. A despesa continua aceitando
+// cartão/conta quando o registro existir por outro caminho (importação).
 const TABS = [
   { key: "despesas", label: "Despesas" },
-  { key: "cartoes", label: "Cartões e Contas" },
   { key: "resumo", label: "Resumo" },
 ] as const;
 
@@ -117,7 +115,6 @@ export default async function DespesasPage({ searchParams }: { searchParams: Sea
       )}
 
       {aba === "despesas" && <ExpensesTab searchParams={searchParams} refDate={ref} />}
-      {aba === "cartoes" && <CardsTab />}
       {aba === "resumo" && <ResumoTab refDate={ref} />}
     </div>
   );
@@ -338,80 +335,6 @@ async function ExpensesTab({
           </MobileCards>
         </CardContent>
       </Card>
-    </>
-  );
-}
-
-// ===================================================================
-// Aba 2 — Cartões e Contas (configuração; sem importação de fatura)
-// ===================================================================
-
-async function CardsTab() {
-  const [cards, people, accounts] = await Promise.all([
-    prisma.creditCard.findMany({ orderBy: { name: "asc" }, include: { holder: true } }),
-    prisma.person.findMany({ orderBy: { name: "asc" } }),
-    prisma.account.findMany({ orderBy: { name: "asc" } }),
-  ]);
-  const usedByCard = await limitesUsadosPorCartao(cards.map((c) => c.id));
-
-  return (
-    <>
-      <div className="flex justify-end mb-4">
-        <CardDialog people={people} accounts={accounts} />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {cards.length === 0 && (
-          <Card className="sm:col-span-2 lg:col-span-3">
-            <CardContent className="p-0">
-              <EmptyState title="Nenhuma conta ou cartão cadastrado" passo="contas" />
-            </CardContent>
-          </Card>
-        )}
-        {cards.map((c) => {
-          const used = usedByCard.get(c.id) ?? 0;
-          const available = Math.max(0, n(c.limitTotal) - used);
-          const pct = n(c.limitTotal) > 0 ? (used / n(c.limitTotal)) * 100 : 0;
-          return (
-            <Card key={c.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <QuickRenameCard id={c.id} name={c.name} />
-                  <Badge variant={c.active ? "secondary" : "outline"} className="capitalize">
-                    {c.active ? c.type : "inativo"}
-                  </Badge>
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {c.bank ?? "—"} · Fecha dia {c.closingDay} · Vence dia {c.dueDay}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Limite usado</span>
-                    <span className="font-medium">
-                      {formatBRL(used)} / {formatBRL(c.limitTotal)}
-                    </span>
-                  </div>
-                  <Progress value={pct} />
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Disponível</p>
-                    <p className="font-medium text-emerald-600">{formatBRL(available)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Titular</p>
-                    <p className="font-medium">{c.holder?.name ?? "—"}</p>
-                  </div>
-                </div>
-                <div className="flex justify-end pt-1">
-                  <CardRowActions card={c} people={people} accounts={accounts} />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
     </>
   );
 }

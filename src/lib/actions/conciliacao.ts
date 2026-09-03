@@ -19,8 +19,30 @@ const MAX_ARQUIVO = 5 * 1024 * 1024;
 export async function importarExtratoAction(fd: FormData) {
   await requirePermission("conciliacao.conciliar");
 
-  const accountId = String(fd.get("accountId") ?? "");
-  if (!accountId) return { ok: false as const, error: "Escolha a conta do extrato." };
+  let accountId = String(fd.get("accountId") ?? "");
+  const nomeDaConta = String(fd.get("accountName") ?? "").trim();
+  // Sem cadastro manual de conta (decisão de 02/09), a conta NASCE aqui:
+  // a primeira importação de um extrato batiza a conta pelo nome que o dono
+  // usa para ela. Saldo inicial não é chutado — a âncora é o extrato.
+  if (!accountId && nomeDaConta) {
+    if (nomeDaConta.length < 3)
+      return { ok: false as const, error: "Dê um nome à conta (ex.: Itaú PJ)." };
+    const { prisma } = await import("@/lib/prisma");
+    const igual = await prisma.account.findFirst({
+      where: { name: { equals: nomeDaConta, mode: "insensitive" } },
+      select: { id: true },
+    });
+    accountId =
+      igual?.id ??
+      (
+        await prisma.account.create({
+          data: { name: nomeDaConta, type: "corrente", balance: 0 },
+          select: { id: true },
+        })
+      ).id;
+  }
+  if (!accountId)
+    return { ok: false as const, error: "Escolha a conta do extrato — ou dê nome a uma nova." };
 
   const file = fd.get("file");
   if (!(file instanceof File) || file.size === 0)

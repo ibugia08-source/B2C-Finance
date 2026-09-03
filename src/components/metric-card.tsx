@@ -128,7 +128,11 @@ export function MetricCard({
         >
           {title}
         </p>
-        {help && <MetricHelp title={title} text={help} />}
+        {help && (
+          <span className="relative z-10">
+            <MetricHelp title={title} text={help} />
+          </span>
+        )}
       </div>
 
       <p
@@ -167,17 +171,35 @@ export function MetricCard({
     "transition-shadow duration-fast ease-out hover:elev-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
   // Detalhe em modal tem prioridade: mantém o contexto e o período filtrado.
+  //
+  // A concha clicável é uma DIV com papel de botão, e não um <button>, de
+  // propósito: o card CONTÉM o botão de ajuda (?), e interativo dentro de
+  // interativo é HTML inválido — o navegador reparenteia os filhos, o layout
+  // desmonta (sparkline fora do padding) e a hidratação quebra. Foi um bug
+  // visto em produção, não estilo.
   if (detail) {
     return (
       <>
-        <button type="button" onClick={() => setOpen(true)} className={cn(shell, interactive)}>
+        <div
+          role="button"
+          tabIndex={0}
+          aria-haspopup="dialog"
+          onClick={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setOpen(true);
+            }
+          }}
+          className={cn(shell, interactive, "cursor-pointer")}
+        >
           {body}
           {footer && (
             <div className="mt-3" onClick={(e) => e.stopPropagation()}>
               {footer}
             </div>
           )}
-        </button>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -191,11 +213,18 @@ export function MetricCard({
   }
 
   if (href) {
+    // Mesmo motivo da variante de detalhe: <a> contendo <button> é inválido.
+    // O link vira um overlay esticado e o botão de ajuda fica ACIMA dele.
     return (
-      <Link href={href} className={cn(shell, interactive)}>
+      <div className={cn(shell, interactive, "relative")}>
+        <Link
+          href={href}
+          aria-label={title}
+          className="absolute inset-0 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
         {body}
         {footer && <div className="mt-3">{footer}</div>}
-      </Link>
+      </div>
     );
   }
 

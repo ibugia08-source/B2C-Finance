@@ -22,11 +22,14 @@ export function UserMenu({
     .toUpperCase();
 
   if (compact) {
+    // Na BARRA SUPERIOR (40px de altura): avatar e sair lado a lado. O
+    // empilhado antigo era da sidebar recolhida, que não existe mais — na
+    // barra ele cortava o avatar e jogava o sair para fora da linha.
     return (
-      <div className="flex flex-col items-center gap-1.5 py-1">
+      <div className="flex items-center gap-1.5">
         <div
           title={`${user.name} · ${user.email}`}
-          className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold"
+          className="h-8 w-8 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold"
         >
           {initials || "U"}
         </div>
@@ -34,8 +37,9 @@ export function UserMenu({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-8 w-8 min-h-0 min-w-0"
+          className="h-8 w-8 min-h-0 min-w-0 shrink-0"
           title="Sair"
+          aria-label="Sair"
           disabled={pending}
           onClick={() => start(() => logoutAction())}
         >

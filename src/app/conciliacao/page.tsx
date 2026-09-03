@@ -99,12 +99,25 @@ export default async function ConciliacaoPage({
       </div>
 
       {resumo.contas.length === 0 ? (
-        <EmptyState
-          icon={Landmark}
-          title="Nenhuma conta bancária cadastrada"
-          description="A conciliação compara o extrato do banco com os lançamentos da conta."
-          passo="contas"
-        />
+        <div>
+          <EmptyState
+            icon={Landmark}
+            title="Nenhuma conta conectada ainda"
+            description="A conta nasce da primeira importação de extrato (abaixo) ou da conexão bancária — não existe cadastro manual de conta."
+          />
+          {can(viewer, "conciliacao.conciliar") ? (
+            <div className="mt-4">
+              <PainelDeConciliacao
+                competence={competence}
+                resumo={resumo}
+                contas={contas}
+                contaAtual={null}
+                linhas={[]}
+                podeConciliar
+              />
+            </div>
+          ) : null}
+        </div>
       ) : (
         <PainelDeConciliacao
           competence={competence}

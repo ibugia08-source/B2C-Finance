@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { askReason } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { formatBRL } from "@/lib/format";
@@ -157,18 +158,32 @@ export function PainelDeConciliacao({
             })
           }
         >
-          <div className="space-y-1.5">
-            <label htmlFor="conc-conta" className="text-caption text-muted-foreground">
-              Conta
-            </label>
-            <Select id="conc-conta" name="accountId" defaultValue={contaAtual ?? ""}>
-              {contas.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {contas.length === 0 ? (
+            <div className="space-y-1.5">
+              <label htmlFor="conc-conta-nome" className="text-caption text-muted-foreground">
+                Nome da conta (a primeira importação cria a conta)
+              </label>
+              <Input
+                id="conc-conta-nome"
+                name="accountName"
+                placeholder="ex.: Itaú PJ"
+                className="max-w-xs"
+              />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label htmlFor="conc-conta" className="text-caption text-muted-foreground">
+                Conta
+              </label>
+              <Select id="conc-conta" name="accountId" defaultValue={contaAtual ?? ""}>
+                {contas.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="conc-arquivo" className="text-caption text-muted-foreground">
               Extrato (.ofx ou .csv)
@@ -179,7 +194,7 @@ export function PainelDeConciliacao({
               type="file"
               name="file"
               accept=".ofx,.csv,.txt,text/csv"
-              className="block h-9 w-full max-w-xs rounded-md border bg-background px-2 text-dense file:mr-2 file:border-0 file:bg-transparent file:text-dense"
+              className="block w-full max-w-xs rounded-md border bg-background p-1.5 text-dense text-muted-foreground file:mr-3 file:rounded file:border-0 file:bg-surface-sunken file:px-2.5 file:py-1 file:text-dense file:text-foreground"
             />
           </div>
           <Button type="submit" disabled={pending}>

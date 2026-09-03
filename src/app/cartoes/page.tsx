@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
 /**
- * Contas & Cartões deixou de ser módulo separado (briefing PARTE 8).
- * A configuração vive na aba "Cartões e Contas" dentro de Despesas.
- * O detalhe do cartão (/cartoes/[id]) permanece para consulta de histórico.
+ * ROTA LEGADA. O cadastro manual de contas bancárias e cartões SAIU em
+ * 02/09/2026 por decisão da direção — não é mais assim que conta existe no
+ * sistema (a conta nasce da importação de extrato ou da conexão bancária).
+ * O link antigo aponta para Despesas, onde o assunto vivia.
  */
-export default function CartoesPage() {
-  redirect("/despesas?aba=cartoes");
+export default function CartoesLegado() {
+  redirect("/despesas");
 }

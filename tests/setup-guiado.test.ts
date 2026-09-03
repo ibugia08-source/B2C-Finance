@@ -37,7 +37,7 @@ describe("F1.20 — setup guiado", () => {
 
   it("cabe nos ~30 minutos que a spec promete", () => {
     expect(MINUTOS_TOTAIS).toBeLessThanOrEqual(30);
-    expect(PASSOS).toHaveLength(5);
+    expect(PASSOS).toHaveLength(4);
     for (const p of PASSOS) {
       expect(p.minutos).toBeGreaterThan(0);
       expect(p.href.startsWith("/")).toBe(true);
@@ -45,8 +45,8 @@ describe("F1.20 — setup guiado", () => {
     }
   });
 
-  it("os números dos passos são 1..5, sem buraco nem repetição", () => {
-    expect(PASSOS.map((p) => p.numero)).toEqual([1, 2, 3, 4, 5]);
+  it("os números dos passos são 1..4, sem buraco nem repetição", () => {
+    expect(PASSOS.map((p) => p.numero)).toEqual([1, 2, 3, 4]);
   });
 
   it('"feito" vem do banco, não de clique', async () => {

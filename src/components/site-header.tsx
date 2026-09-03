@@ -144,7 +144,14 @@ export function SiteHeader({
 
       {/* Faixa 2 — subnav do espaço ativo */}
       {active && active.pages.length > 1 && (
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          style={{
+            WebkitMaskImage:
+              "linear-gradient(to right, black calc(100% - 28px), transparent)",
+            maskImage: "linear-gradient(to right, black calc(100% - 28px), transparent)",
+          }}
+        >
           <nav
             className="mx-auto flex w-full max-w-content items-stretch gap-1 px-3 lg:px-6"
             aria-label={`Páginas de ${active.label}`}
