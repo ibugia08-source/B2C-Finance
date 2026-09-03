@@ -14,9 +14,16 @@ import { METRIC_REGISTRY, METRIC_REGISTRY_VERSION } from "../src/lib/metrics/reg
 
 loadEnv();
 
-async function main() {
-  assertDestructiveAllowed({ script: "prisma/seed-metric-registry.ts" });
-
+/**
+ * Semeadura de REFERÊNCIA do dicionário de métricas.
+ *
+ * É create-only e idempotente: nunca apaga nem sobrescreve dado de negócio,
+ * só garante que a configuração canônica exista. Por isso roda em qualquer
+ * ambiente — inclusive no deploy de produção, onde é obrigatória: sem ela o
+ * sistema sobe sem dicionário de métricas e as telas que dependem dele ficam vazias.
+ * A guarda de ambiente continua no uso MANUAL, logo abaixo.
+ */
+export async function semear() {
   const { prisma } = await import("@/lib/prisma");
   const { runWithoutScope } = await import("@/lib/auth/owner-scope");
 
@@ -71,11 +78,20 @@ async function main() {
     for (const b of porBase) console.log(`   ${b.dateBasis}: ${b._count._all}`);
   });
 
+}
+
+async function main() {
+  assertDestructiveAllowed({ script: "prisma/seed-metric-registry.ts" });
+  await semear();
   const { prisma: db } = await import("@/lib/prisma");
   await db.$disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Executa só quando chamado direto na linha de comando; importado pelo
+// bootstrap, o módulo apenas expõe `semear()`.
+if ((process.argv[1] ?? "").endsWith("seed-metric-registry.ts")) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

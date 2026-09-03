@@ -57,17 +57,14 @@ jobs:
                   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
                 END \$\$;"
 
-      # O banco do CI nasce VAZIO. A migration da F0.4 só semeia o Workspace a
-      # partir de um admin que já exista (caminho de quem migrou do v1), então
-      # em banco novo é o seed de bootstrap que cria admin + workspace — sem
-      # ele os três seeds abaixo morrem em "Nenhum Workspace encontrado".
+      # O banco do CI nasce VAZIO, como uma instalação nova de produção. O seed
+      # chama o MESMO bootstrap do deploy (admin, workspace, agência, plano de
+      # contas, métricas e regras) — então o CI prova o caminho da instalação
+      # limpa, não um atalho só dele.
       - name: Migrations e seeds do banco de testes
         run: |
           npx prisma migrate deploy
           npx tsx prisma/seed-dev.ts
-          npx tsx prisma/seed-chart-of-accounts.ts
-          npx tsx prisma/seed-metric-registry.ts
-          npx tsx prisma/seed-posting-rules.ts
         env:
           ADMIN_PASSWORD: senha-descartavel-do-ci-nao-usada-em-runtime
 

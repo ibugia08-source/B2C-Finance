@@ -22,9 +22,16 @@ import {
 
 loadEnv();
 
-async function main() {
-  assertDestructiveAllowed({ script: "prisma/seed-chart-of-accounts.ts" });
-
+/**
+ * Semeadura de REFERÊNCIA do plano de contas.
+ *
+ * É create-only e idempotente: nunca apaga nem sobrescreve dado de negócio,
+ * só garante que a configuração canônica exista. Por isso roda em qualquer
+ * ambiente — inclusive no deploy de produção, onde é obrigatória: sem ela o
+ * sistema sobe sem plano de contas e as telas que dependem dele ficam vazias.
+ * A guarda de ambiente continua no uso MANUAL, logo abaixo.
+ */
+export async function semear() {
   const { prisma } = await import("@/lib/prisma");
   const { runWithoutScope } = await import("@/lib/auth/owner-scope");
 
@@ -126,11 +133,20 @@ async function main() {
     console.log(erradas === 0 ? "✓ saldo normal coerente em todas as contas" : `✗ ${erradas} conta(s) com saldo normal incoerente`);
   });
 
+}
+
+async function main() {
+  assertDestructiveAllowed({ script: "prisma/seed-chart-of-accounts.ts" });
+  await semear();
   const { prisma: db } = await import("@/lib/prisma");
   await db.$disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+// Executa só quando chamado direto na linha de comando; importado pelo
+// bootstrap, o módulo apenas expõe `semear()`.
+if ((process.argv[1] ?? "").endsWith("seed-chart-of-accounts.ts")) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
