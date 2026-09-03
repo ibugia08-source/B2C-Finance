@@ -3,17 +3,7 @@ import { toNumber as n } from "@/lib/format";
 import { type ReportQuery, amountRange, dueDateRange } from "../query";
 import { type ReportDef, type ReportRow } from "../shared";
 
-const EXPENSE_TYPE_LABEL: Record<string, string> = {
-  FIXED: "Fixa",
-  VARIABLE: "Variável",
-  PAYROLL: "Folha",
-  TAX: "Imposto",
-  TOOL: "Ferramenta",
-  ADS: "Mídia/Ads",
-  LOAN: "Empréstimo",
-  CARD: "Cartão",
-  OTHER: "Outra",
-};
+import { EXPENSE_TYPE_LABEL } from "@/lib/status-meta";
 
 async function buildDespesas(q: ReportQuery): Promise<ReportRow[]> {
   const { start, end } = q.period;

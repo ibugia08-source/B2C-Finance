@@ -1,3 +1,4 @@
+import { computeOperationalMargin } from "@/lib/financial/calculations";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
@@ -97,7 +98,7 @@ async function getFinanceSummaryImpl(period: Period): Promise<FinanceSummary> {
     despesasVariaveis: n(variaveisAgg._sum.amount),
     resultadoOperacional: receitas - despesas,
     lucro,
-    margem: receitas > 0 ? lucro / receitas : 0,
+    margem: computeOperationalMargin(lucro, receitas),
     folhaPeriodo,
     folhaSobreReceita: receitas > 0 ? folhaPeriodo / receitas : 0,
   };

@@ -7,6 +7,7 @@ import { formatBRL, monthLabel } from "@/lib/format";
 import { metricasComerciais } from "@/lib/metrics/commercial";
 import { getMetricSpec } from "@/lib/metrics/registry";
 import { BaseDeValoracaoSelector } from "./base";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * MÉTRICAS COMERCIAIS (F4.6 · ref. 01 §7.5).
@@ -46,12 +47,7 @@ export default async function MetricasComerciaisPage({
 }) {
   const viewer = await requirePagePermission("comercial.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
 
   const m = await metricasComerciais(competence);
 

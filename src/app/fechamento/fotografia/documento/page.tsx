@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { lerFotografia } from "@/lib/snapshots/read";
-import { formatBRL, monthLabel } from "@/lib/format";
+import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
 import { METRIC_REGISTRY } from "@/lib/metrics/registry";
 import { BotaoImprimir } from "./imprimir";
 import "./documento.css";
@@ -108,7 +108,7 @@ export default async function DocumentoPage({
                     {v?.valor == null
                       ? "—"
                       : def?.rounding?.includes("%")
-                        ? `${(v.valor * 100).toFixed(1).replace(".", ",")}%`
+                        ? formatPercent(v.valor)
                         : def?.rounding?.includes("half-up, 2 casas")
                           ? formatBRL(v.valor)
                           : String(v.valor)}

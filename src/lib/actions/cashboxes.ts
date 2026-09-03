@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
-import { parseBRL, parseDateBR, toNumber as n } from "@/lib/format";
+import { MONTHS_PT, parseBRL, parseDateBR, toNumber as n } from "@/lib/format";
 
 const TYPES = [
   "PERSONAL",
@@ -140,10 +140,7 @@ export async function registerCashMovement(formData: FormData) {
  * cada mês já foi lançado e evitar duplicidade. Reutiliza um caixa "Caixa
  * operacional" (type COMPANY); cria se não existir.
  */
-const MONTHS_PT_FULL = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
+const MONTHS_PT_FULL = MONTHS_PT;
 
 export async function launchResultToCash(input: {
   year: number;

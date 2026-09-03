@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth/viewer";
 import { dreParaCsv, montarDre } from "@/lib/services/dre";
+import { isCompetence } from "@/lib/competence";
 
 /**
  * Exportação do DRE para o contador (F3.2 · 02 §4.5).
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const mes = url.searchParams.get("mes") ?? "";
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) {
+  if (!isCompetence(mes)) {
     return NextResponse.json({ error: "Informe o mês no formato AAAA-MM." }, { status: 400 });
   }
 

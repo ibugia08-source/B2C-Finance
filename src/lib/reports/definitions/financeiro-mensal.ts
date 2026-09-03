@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { getPeriodRevenue } from "@/lib/services/revenue-metrics";
 import { toNumber as n } from "@/lib/format";
 import { type ReportQuery } from "../query";
 import { monthsInPeriod, type ReportDef, type ReportRow } from "../shared";

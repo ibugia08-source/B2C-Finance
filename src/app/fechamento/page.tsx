@@ -10,6 +10,7 @@ import { monthLabel } from "@/lib/format";
 import { PeriodBadge } from "@/components/period-badge";
 import { ChecklistFechamento } from "./checklist";
 import { RotinaMensal } from "./rotina";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * FECHAMENTO DO MÊS (F2.2 · ref. 01 §5.3; 02 §4.6).
@@ -34,11 +35,7 @@ export default async function FechamentoPage({
   // competência nova e inicia o fechamento da que acabou). Abrir na
   // competência corrente faria a tela sugerir fechar um mês em andamento.
   const padrao = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes, padrao);
 
   const [periodo, resumo, motivos] = await Promise.all([
     periodoDe(competence),

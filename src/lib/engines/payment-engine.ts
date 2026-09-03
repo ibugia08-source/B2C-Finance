@@ -124,3 +124,29 @@ export async function useCredit(
 }
 
 export type { EngineContext };
+
+// ---------- Gesto "Pago com 1 clique" (Gestão do Mês) ----------
+
+/**
+ * Marcador que identifica pagamentos do gesto de 1 clique. O DESFAZER compara
+ * este texto — por isso ele mora aqui, e as DUAS actions que fazem o gesto
+ * (billings.quickSettleBilling e receivables-inline.setClientMonthPayment)
+ * importam daqui em vez de repetir o literal.
+ */
+export const QUICK_SETTLE_NOTE = "Pago com 1 clique (Gestão do Mês).";
+
+/**
+ * Data do pagamento do 1 clique: competência passada → data do VENCIMENTO
+ * (backfill "pagou em dia", a célula verde da planilha); mês corrente ou
+ * futuro → hoje. Quem pagou atrasado de verdade usa o dialog com data real.
+ */
+export function quickSettlePaidAt(
+  competenceYear: number,
+  competenceMonth: number,
+  dueDate: Date,
+  now: Date = new Date()
+): Date {
+  const compKey = competenceYear * 12 + (competenceMonth - 1);
+  const nowKey = now.getFullYear() * 12 + now.getMonth();
+  return compKey < nowKey ? dueDate : now;
+}

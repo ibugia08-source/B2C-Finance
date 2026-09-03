@@ -1,3 +1,4 @@
+import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { ownerCached } from "@/lib/owner-cache";
@@ -64,7 +65,7 @@ export type RenewalPanel = {
   pendingCount: number;
 };
 
-const ACTIVE_STATUSES = ["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"] as const;
+const ACTIVE_STATUSES = PORTFOLIO_ACTIVE_STATUSES;
 
 function monthsBetween(from: Date | null, toYear: number, toMonth: number): number | null {
   if (!from) return null;

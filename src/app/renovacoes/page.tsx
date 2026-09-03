@@ -1,3 +1,4 @@
+import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
@@ -44,7 +45,7 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
     getRenewalStrip(mes.month, mes.year, 6),
     gates.agendar
       ? prisma.client.findMany({
-          where: { status: { in: ["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"] } },
+          where: { status: { in: [...PORTFOLIO_ACTIVE_STATUSES] } },
           orderBy: { name: "asc" },
           select: { id: true, name: true },
           take: 2000,

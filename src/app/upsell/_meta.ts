@@ -1,3 +1,4 @@
+import type { BadgeVariant } from "@/lib/status-meta";
 /** Metadados de status de Upsell compartilhados entre telas (sem @prisma/client). */
 
 export const UPSELL_STATUSES = [
@@ -33,7 +34,7 @@ export const KANBAN_COLUMNS: {
   { key: "LOST", label: "Upsell recusado", statuses: ["LOST"] },
 ];
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "success" | "warning" | "outline";
+
 
 export function upsellStatusVariant(status: string): BadgeVariant {
   switch (status) {

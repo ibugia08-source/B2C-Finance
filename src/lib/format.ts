@@ -79,6 +79,13 @@ export function formatDecimalInput(v: Money): string {
   return v != null ? Number(v).toFixed(2).replace(".", ",") : "";
 }
 
+/** 0,235 → "23,5%" — fonte única das cópias locais de percentual. */
+export function formatPercent(value: Money, digits = 1): string {
+  const n = Number(value ?? 0);
+  if (isNaN(n)) return "0%";
+  return `${(n * 100).toFixed(digits).replace(".", ",")}%`;
+}
+
 export function parseBRL(value: string): number {
   if (!value) return 0;
   const cleaned = value
@@ -105,6 +112,17 @@ export function formatDateInput(date: Date | string | null | undefined): string 
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Data → "YYYY-MM-DD" no FUSO LOCAL (defaults de <input type="date"> com
+ * "hoje"). A formatDateInput acima usa UTC de propósito — datas do banco
+ * ancoradas em meia-noite UTC; usar getDate() local nelas volta um dia.
+ */
+export function formatDateInputLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 }
 
 export function parseDateBR(value: string): Date | null {

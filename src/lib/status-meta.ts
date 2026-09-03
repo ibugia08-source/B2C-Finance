@@ -119,3 +119,43 @@ export const INCOME_STATUS_META: Record<string, StatusMeta> = {
 export function incomeStatusMeta(status: string): StatusMeta {
   return INCOME_STATUS_META[status] ?? META.neutro(status);
 }
+
+/**
+ * Vocabulário ÚNICO do status de cliente — carteira, renovações e RELATÓRIOS
+ * leem daqui. Antes havia dois mapas divergentes (o relatório dizia
+ * "Prospect" onde a tela dizia "Prospecção") e o mesmo cliente aparecia com
+ * status escrito diferente dependendo de onde se olhava.
+ */
+export const CLIENT_STATUS_LABEL: Record<string, string> = {
+  PROSPECT: "Prospecção",
+  LEAD: "Lead / Prospecção",
+  ACTIVE: "Ativo",
+  INACTIVE: "Inativo",
+  PAUSED: "Pausado",
+  RENEWAL: "Em renovação",
+  DELINQUENT: "Inadimplente",
+  CHURNED: "Perdido / Cancelado",
+};
+
+/** Tipos de despesa — telas e relatórios leem o MESMO vocabulário. */
+export const EXPENSE_TYPE_LABEL: Record<string, string> = {
+  FIXED: "Fixa",
+  VARIABLE: "Variável",
+  CARD: "Cartão de crédito",
+  TAX: "Imposto",
+  PAYROLL: "Folha",
+  TOOL: "Ferramenta",
+  ADS: "Mídia / Ads",
+  LOAN: "Empréstimo",
+  OTHER: "Outros",
+};
+
+/** Recorrência (despesas e acordos usam o mesmo enum e o mesmo texto). */
+export const RECURRENCE_LABEL: Record<string, string> = {
+  NONE: "Sem recorrência",
+  MONTHLY: "Mensal",
+  QUARTERLY: "Trimestral",
+  SEMIANNUAL: "Semestral",
+  ANNUAL: "Anual",
+  CUSTOM: "Personalizada",
+};

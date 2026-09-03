@@ -5,6 +5,7 @@ import { sugerirProvisoes } from "@/lib/services/tax-provision";
 import { formatBRL, monthLabel } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { PainelDeImpostos } from "./painel";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * IMPOSTOS: PROVISÃO E RESERVA (F3.3 · ref. 01 §3.8).
@@ -26,12 +27,7 @@ export default async function ImpostosPage({
 }) {
   const viewer = await requirePagePermission("contabil.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
 
   const [sugestoes, reservas] = await Promise.all([
     sugerirProvisoes(competence),

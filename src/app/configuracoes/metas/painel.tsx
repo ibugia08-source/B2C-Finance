@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, parseBRL } from "@/lib/format";
 import { apagarMetaAction, definirMetaAction } from "@/lib/actions/metas";
 import {
   ESCOPOS, METRICAS_DE_META, ROTULO_DO_ESCOPO,
@@ -132,7 +132,7 @@ export function PainelDeMetas({
                           scopeType: escopo,
                           scopeId: quem,
                           metric: metrica,
-                          target: Number(alvo.replace(/\./g, "").replace(",", ".")) || 0,
+                          target: parseBRL(alvo) || 0,
                         });
                         if (!r.ok) return setErro(r.error);
                         setAlvo("");

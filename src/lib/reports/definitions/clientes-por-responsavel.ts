@@ -1,3 +1,4 @@
+import { REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { type ReportDef, type ReportRow } from "../shared";
@@ -29,7 +30,7 @@ async function buildClientesPorResponsavel(): Promise<ReportRow[]> {
   };
   for (const c of clients) {
     const a = get(c.salesOwner);
-    if (c.status === "ACTIVE" || c.status === "RENEWAL" || c.status === "DELINQUENT") {
+    if ((REVENUE_ACTIVE_STATUSES as readonly string[]).includes(c.status)) {
       a.ativos += 1;
       if (c.modality === "MRR") {
         a.mrr += 1;

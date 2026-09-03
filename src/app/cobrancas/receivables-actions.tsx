@@ -24,7 +24,7 @@ import { setClientContractMonths, bulkSetMonthStatus, bulkRemoveClientsFromList 
 import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 import { bulkUpdateClients } from "@/lib/actions/clients";
 import { restoreBilling, registerBillingPaymentsBulk } from "@/lib/actions/billings";
-import { formatDateInput, formatBRL } from "@/lib/format";
+import { formatBRL, formatDateInput, parseBRL } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL } from "./_meta";
 import type { ActionResult } from "@/lib/actions/clients";
 import type { ReceivableRow } from "./receivables-table";
@@ -187,7 +187,7 @@ export function InlineMoney({
         setShown(prev);
         showUndoToast({ message: String(res.error) });
       } else {
-        const parsed = Number(raw.replace(/\./g, "").replace(",", "."));
+        const parsed = parseBRL(raw);
         if (Number.isFinite(parsed)) setShown(parsed);
       }
     });

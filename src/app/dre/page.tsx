@@ -4,10 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { montarDre } from "@/lib/services/dre";
-import { formatBRL, monthLabel } from "@/lib/format";
+import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { FiltrosDre } from "./filtros";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * DRE GERENCIAL (F3.2 · ref. 01 §3.11; 02 §4.5).
@@ -28,15 +29,10 @@ export default async function DrePage({
 }) {
   await requirePagePermission("contabil.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
   const base = searchParams?.base === "caixa" ? "caixa" : "competencia";
   const agencyId = searchParams?.agencia || null;
   const comProLabore = searchParams?.prolabore !== "fora";
-  const [ano, mes] = competence.split("-").map(Number);
 
   const [dre, agencias] = await Promise.all([
     montarDre(competence, { base, agencyId, comProLabore }),
@@ -144,7 +140,7 @@ export default async function DrePage({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Resumo
           rotulo="Margem gerencial"
-          valor={dre.margem == null ? "—" : `${(dre.margem * 100).toFixed(1).replace(".", ",")}%`}
+          valor={dre.margem == null ? "—" : formatPercent(dre.margem)}
         />
         <Resumo rotulo="Pró-labore no mês" valor={formatBRL(dre.proLabore)} />
         <Resumo

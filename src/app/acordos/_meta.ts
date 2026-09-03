@@ -1,3 +1,4 @@
+import type { BadgeVariant } from "@/lib/status-meta";
 /** Metadados de contratos compartilhados entre telas (server e client). */
 
 export const CONTRACT_STATUS_LABEL: Record<string, string> = {
@@ -17,22 +18,9 @@ export const CONTRACT_TYPE_LABEL: Record<string, string> = {
   CUSTOM: "Personalizado",
 };
 
-export const RECURRENCE_LABEL: Record<string, string> = {
-  NONE: "Sem recorrência",
-  MONTHLY: "Mensal",
-  QUARTERLY: "Trimestral",
-  SEMIANNUAL: "Semestral",
-  ANNUAL: "Anual",
-  CUSTOM: "Personalizada",
-};
+export { RECURRENCE_LABEL } from "@/lib/status-meta";
 
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "outline";
+
 
 export function contractStatusVariant(status: string): BadgeVariant {
   switch (status) {

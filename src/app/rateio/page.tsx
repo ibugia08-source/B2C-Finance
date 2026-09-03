@@ -9,6 +9,7 @@ import { formatBRL, monthLabel } from "@/lib/format";
 import { despesasParaRatear, resumoDoRateio } from "@/lib/services/allocation";
 import { escopoAtual, whereDoCliente } from "@/lib/services/data-scope";
 import { PainelDeRateio } from "./painel";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * RATEIO DE MÍDIA (F3.4 · ref. 01 §4.7; 02 §4.4).
@@ -32,12 +33,7 @@ export default async function RateioPage({
 }) {
   const viewer = await requirePagePermission("rateios.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
 
   const scope = await escopoAtual();
   const [despesas, resumo, clientes, agencias, servicos, regras] = await Promise.all([

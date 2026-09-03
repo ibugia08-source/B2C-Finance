@@ -11,7 +11,7 @@ import { requirePermission } from "@/lib/auth/viewer";
  * Escopo por dono é automático (extensão ownerId do prisma).
  */
 
-type ActionResult = { ok: true } | { ok: false; error: string };
+import type { ActionResult } from "@/lib/actions/clients";
 
 const ITEM_TYPES = ["cobranca", "pagamento", "acao"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];

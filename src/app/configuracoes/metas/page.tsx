@@ -4,6 +4,7 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { prisma } from "@/lib/prisma";
 import { metasDoMes } from "@/lib/services/commercial-goals";
 import { PainelDeMetas } from "./painel";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * METAS COMERCIAIS (F4.5 · ref. 02 §5.4).
@@ -22,12 +23,7 @@ export default async function MetasPage({
 }) {
   const viewer = await requirePagePermission("comercial.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
 
   const [metas, agencias, sdrs, closers] = await Promise.all([
     metasDoMes(competence),

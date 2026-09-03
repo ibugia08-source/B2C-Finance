@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { askReason, confirmAction } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, parseBRL } from "@/lib/format";
 import { criarOportunidadeAction, fecharVendaAction, moverEtapaAction } from "@/lib/actions/funil";
 import { ETAPAS_DO_FUNIL, type EtapaDoFunil } from "@/lib/commercial/funil";
 import type { ColunaDoFunil } from "@/lib/services/pipeline";
@@ -374,7 +374,7 @@ function DialogoDeOportunidade({
                   agencyId: agencyId || null,
                   offerId: offerId || null,
                   closer: closer || null,
-                  amount: Number(valor.replace(/\./g, "").replace(",", ".")) || 0,
+                  amount: parseBRL(valor) || 0,
                   modality: modalidade,
                   months: meses ? Number(meses) : null,
                 });

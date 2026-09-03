@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { ClientOnly } from "./client-only";
-import { formatBRL, formatBRLShort } from "@/lib/format";
+import { formatBRL, formatBRLShort, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -153,7 +153,7 @@ function VariationTooltip({
       <p className="stat-number text-foreground">{formatBRL(value)}</p>
       {variation != null && (
         <p className={cn("stat-number mt-0.5", variation >= 0 ? "text-success" : "text-destructive")}>
-          {variation >= 0 ? "▲" : "▼"} {Math.abs(variation * 100).toFixed(1).replace(".", ",")}% vs mês anterior
+          {variation >= 0 ? "▲" : "▼"} {formatPercent(Math.abs(variation))} vs mês anterior
         </p>
       )}
     </div>

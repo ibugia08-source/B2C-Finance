@@ -1,3 +1,4 @@
+import { clientActiveInMonth } from "@/lib/client-status";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { ownerCached } from "@/lib/owner-cache";
@@ -24,7 +25,6 @@ import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 
 // Status que CONTAM como cliente ativo para faturamento no mês corrente.
 // DELINQUENT conta (é ativo devendo); PAUSED/CHURNED/INACTIVE/PROSPECT não.
-const REVENUE_ACTIVE_STATUSES = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;
 
 export type RevenueFilters = {
   modality?: string; // "MRR" | "TCV"
@@ -126,23 +126,11 @@ async function getPeriodRevenueImpl(
 
   // ---- MRR mês a mês ----
   const now = new Date();
-  const currentKey = now.getFullYear() * 12 + now.getMonth();
   let mrr = 0;
   let mrrClients = 0;
 
-  const activeInMonth = (c: (typeof mrrClientsRows)[number], y: number, m: number) => {
-    const monthStart = new Date(y, m - 1, 1);
-    const monthEnd = new Date(y, m, 1);
-    const entered = c.startedAt ?? c.createdAt;
-    if (entered && entered >= monthEnd) return false; // ainda não era cliente
-    if (c.churnedAt && c.churnedAt < monthStart) return false; // já tinha saído
-    // Mês corrente/futuro: o status atual manda (Pausado/Perdido não faturam).
-    const key = y * 12 + (m - 1);
-    if (key >= currentKey && !REVENUE_ACTIVE_STATUSES.includes(c.status as any)) {
-      return false;
-    }
-    return true;
-  };
+  const activeInMonth = (c: (typeof mrrClientsRows)[number], y: number, m: number) =>
+    clientActiveInMonth(c, y, m, now);
 
   for (const { y, m } of months) {
     let monthTotal = 0;

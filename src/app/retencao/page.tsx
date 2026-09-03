@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, formatPercent } from "@/lib/format";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { getRetentionPanel } from "@/lib/services/retention-metrics";
 import { previsaoDeChurn } from "@/lib/services/churn-signals";
@@ -63,7 +63,7 @@ export default async function RetencaoPage({
     },
   });
 
-  const churnPct = (v: number) => `${(v * 100).toFixed(1).replace(".", ",")}%`;
+  const churnPct = formatPercent;
   const monthsShown = panel.months.filter(
     (m) => panel.lastMonthWithData >= 0 && m.month <= panel.lastMonthWithData
   );
@@ -233,7 +233,7 @@ export default async function RetencaoPage({
                       {m.nrr == null ? (
                         <span className="text-muted-foreground" title={m.motivoDoNulo ?? undefined}>—</span>
                       ) : (
-                        `${(m.nrr * 100).toFixed(1).replace(".", ",")}%`
+                        formatPercent(m.nrr)
                       )}
                     </TableCell>
                   </TableRow>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatBRL0, MONTHS_PT_SHORT } from "@/lib/format";
+import { formatBRL0, formatPercent, MONTHS_PT_SHORT } from "@/lib/format";
 import type { AnnualPanel } from "@/lib/services/annual-panel";
 
 /**
@@ -9,7 +9,7 @@ import type { AnnualPanel } from "@/lib/services/annual-panel";
  * Meses futuros ficam "—". Verde/vermelho seguem os tokens do design system.
  */
 
-const pct = (v: number) => `${(v * 100).toFixed(1).replace(".", ",")}%`;
+const pct = formatPercent;
 
 type CellKind = "money" | "moneySigned" | "pct" | "pctSigned" | "int";
 

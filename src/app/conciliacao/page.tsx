@@ -10,6 +10,7 @@ import {
   linhasDaConta, resumoDaConciliacao, MINIMO_CONCILIADO,
 } from "@/lib/services/reconciliation";
 import { PainelDeConciliacao } from "./painel";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * CONCILIAÇÃO BANCÁRIA (F3.5 · ref. 01 §4.7; 02 §4.4).
@@ -30,12 +31,7 @@ export default async function ConciliacaoPage({
 }) {
   const viewer = await requirePagePermission("conciliacao.visualizar");
 
-  const hoje = new Date();
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes);
 
   const resumo = await resumoDaConciliacao(competence);
   const contasRelevantes = resumo.contas.filter((c) => c.situacao !== "PARADA");

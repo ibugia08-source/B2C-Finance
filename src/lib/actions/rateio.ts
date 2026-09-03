@@ -6,7 +6,6 @@ import {
   salvarRateio,
   type EntradaDeRateio,
 } from "@/lib/services/allocation";
-import type { AllocationDimension } from "@prisma/client";
 import { isCompetence } from "@/lib/competence";
 
 /**

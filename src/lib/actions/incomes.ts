@@ -44,6 +44,7 @@ const Schema = z.object({
 
 export async function saveIncome(formData: FormData) {
   await requirePermission("receitas.editar");
+  try {
   const receivedAt =
     parseDateBR(String(formData.get("receivedAt") || "")) ?? new Date();
 
@@ -101,6 +102,12 @@ export async function saveIncome(formData: FormData) {
   }
 
   revalidateFinance();
+  return { ok: true as const };
+  } catch {
+    // Zod/Prisma estourariam uma tela de erro genérica; o formulário mostra
+    // a mensagem no lugar, como todos os outros dialogs.
+    return { ok: false as const, error: "Não consegui salvar. Confira o valor e a data." };
+  }
 }
 
 export async function deleteIncome(id: string) {

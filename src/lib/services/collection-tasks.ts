@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n, formatBRL } from "@/lib/format";
 import { buildBillingMessage, whatsappLink, type MessageTone } from "@/lib/billing-message";
@@ -72,7 +73,7 @@ export async function filaDeCobranca(hoje: Date = new Date()): Promise<FilaDeCob
   const cobrancas = await prisma.billing.findMany({
     where: {
       ...whereDaCobranca(scope),
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      status: { in: [...BILLING_OPEN_STATUSES] },
       dueDate: { gte: limitePassado, lte: limiteFuturo },
     },
     select: {

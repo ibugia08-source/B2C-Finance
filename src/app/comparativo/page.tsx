@@ -3,8 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { compararPeriodos } from "@/lib/services/period-compare";
-import { formatBRL, monthLabel } from "@/lib/format";
+import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
 import { SeletorDeMeses } from "./seletor";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * COMPARAR DOIS MESES (F2.5 · ref. 02 §5.3, §7.8).
@@ -16,10 +17,8 @@ import { SeletorDeMeses } from "./seletor";
  */
 export const dynamic = "force-dynamic";
 
-function competenciaValida(v: string | undefined, padrao: Date): string {
-  if (v && /^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return v;
-  return `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, "0")}`;
-}
+const competenciaValida = (v: string | undefined, padrao: Date): string =>
+  competenciaDaUrl(v, padrao).competence;
 
 export default async function ComparativoPage({
   searchParams,
@@ -41,7 +40,7 @@ export default async function ComparativoPage({
   const fmt = (v: number | null, formato: string) => {
     if (v == null) return "—";
     if (formato === "BRL") return formatBRL(v);
-    if (formato === "PCT") return `${(v * 100).toFixed(1).replace(".", ",")}%`;
+    if (formato === "PCT") return formatPercent(v);
     return String(Math.round(v));
   };
 

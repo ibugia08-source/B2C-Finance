@@ -1,6 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { getPeriodRevenue, getRenewalOutlook } from "@/lib/services/revenue-metrics";
-import { toNumber as n } from "@/lib/format";
+import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
 import { type ReportQuery } from "../query";
 import {
   CLIENT_STATUS_LABEL,

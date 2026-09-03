@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 
@@ -78,7 +79,7 @@ export async function previsaoDeChurn(hoje: Date = new Date()): Promise<Previsao
   const vencidas = await prisma.billing.findMany({
     where: {
       clientId: { in: relacoes.map((r) => r.clientId) },
-      status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+      status: { in: [...BILLING_OPEN_STATUSES] },
       dueDate: { lt: hoje },
       canceledAt: null,
     },

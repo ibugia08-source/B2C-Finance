@@ -1,3 +1,4 @@
+import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n, formatBRL } from "@/lib/format";
 import { hasPermission } from "@/lib/permissions";
@@ -46,7 +47,7 @@ async function achadosDoDia(hoje: Date): Promise<Achado[]> {
     await Promise.all([
       prisma.billing.aggregate({
         where: {
-          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+          status: { in: [...BILLING_OPEN_STATUSES] },
           dueDate: { lt: d0 },
           canceledAt: null,
         },

@@ -10,6 +10,7 @@ import { SnapshotBanner, NaoExistiaNoPeriodo } from "@/components/snapshot-banne
 import { areaDisponivel, conferirChecksum, lerFotografia } from "@/lib/snapshots/read";
 import { formatBRL, monthLabel } from "@/lib/format";
 import { METRIC_REGISTRY } from "@/lib/metrics/registry";
+import { competenciaDaUrl } from "@/lib/competence";
 
 /**
  * A FOTOGRAFIA DO MÊS (F2.4 · ref. 02 §7.8).
@@ -43,11 +44,7 @@ export default async function FotografiaPage({
 
   const hoje = new Date();
   const padrao = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
-  const competence =
-    searchParams?.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(searchParams.mes)
-      ? searchParams.mes
-      : `${padrao.getFullYear()}-${String(padrao.getMonth() + 1).padStart(2, "0")}`;
-  const [ano, mes] = competence.split("-").map(Number);
+  const { competence, ano, mes } = competenciaDaUrl(searchParams?.mes, padrao);
 
   const [foto, avulsas] = await Promise.all([
     lerFotografia(competence),

@@ -308,23 +308,17 @@ export async function setClientMonthPayment(
       const open = n(billing.amount) - n(billing.paidTotal);
       if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
 
-      // Mês passado → data do vencimento (backfill "pagou em dia");
-      // mês corrente/futuro → hoje. Mesma regra do 1 clique da Gestão do Mês.
-      const now = new Date();
-      const compKey = year * 12 + (month - 1);
-      const nowKey = now.getFullYear() * 12 + now.getMonth();
-      const paidAt = compKey < nowKey ? billing.dueDate : now;
-
-      const { settleBilling: settleViaEngine } = await import(
-        "@/lib/engines/payment-engine"
-      );
+      // Mesma regra e mesmo marcador do 1 clique da Gestão do Mês — importados
+      // do motor para o Desfazer reconhecer o pagamento dos dois caminhos.
+      const { settleBilling: settleViaEngine, quickSettlePaidAt, QUICK_SETTLE_NOTE } =
+        await import("@/lib/engines/payment-engine");
       const res = await settleViaEngine({
         billingId: billing.id,
         amount: open,
-        paidAt,
+        paidAt: quickSettlePaidAt(year, month, billing.dueDate),
         method: "OTHER",
         accountId: null,
-        notes: "Pago com 1 clique (Gestão do Mês).",
+        notes: QUICK_SETTLE_NOTE,
       });
       if (!res.ok) return res;
       revalidateAll(clientId);

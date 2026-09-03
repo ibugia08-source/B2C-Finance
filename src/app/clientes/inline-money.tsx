@@ -2,7 +2,7 @@
 import { showUndoToast } from "@/components/undo-toast";
 import { useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, parseBRL } from "@/lib/format";
 import type { ActionResult } from "@/lib/actions/clients";
 
 /**
@@ -36,7 +36,7 @@ export function InlineMoney({
         showUndoToast({ message: String(res.error) });
       } else {
         const parsed = raw
-          ? Number(raw.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", "."))
+          ? parseBRL(raw)
           : null;
         setShown(parsed != null && Number.isFinite(parsed) ? parsed : null);
       }

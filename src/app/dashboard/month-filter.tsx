@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
-import { MONTHS_PT } from "@/lib/format";
+import { MONTHS_PT, formatDateInputLocal } from "@/lib/format";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,7 @@ import { CalendarDays } from "lucide-react";
  * Atualiza ?date=YYYY-MM-DD_YYYY-MM-DD (lido por resolvePeriod).
  */
 
-const iso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const iso = formatDateInputLocal;
 
 function monthRange(y: number, m: number) {
   // m: 1-12 → primeiro e último dia do mês

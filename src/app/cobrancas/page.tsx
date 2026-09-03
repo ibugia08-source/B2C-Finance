@@ -1,3 +1,4 @@
+import { PORTFOLIO_ACTIVE_STATUSES, REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { PageHeader } from "@/components/page-header";
 import { PeriodBadge } from "@/components/period-badge";
 import { SnapshotBanner } from "@/components/snapshot-banner";
@@ -5,7 +6,7 @@ import { periodoDe } from "@/lib/services/closing-period";
 import { lerFotografia } from "@/lib/snapshots/read";
 import { MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatBRL0, formatDateBR, parseMonthParam } from "@/lib/format";
+import { formatBRL, formatBRL0, formatDateBR, parseBRL, parseMonthParam } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import {
@@ -73,7 +74,7 @@ type Search = {
 /** "1.500,00" | "1500.00" → número (filtros de valor). */
 function parseMoneyParam(v?: string): number | null {
   if (!v) return null;
-  const num = Number(v.replace(/\./g, "").replace(",", "."));
+  const num = parseBRL(v);
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
@@ -168,7 +169,7 @@ async function RecebimentosPageInner({
       }),
       // Clientes ativos da carteira — aparecem mesmo sem cobrança no mês.
       prisma.client.findMany({
-        where: { status: { in: ["ACTIVE", "RENEWAL", "DELINQUENT"] } },
+        where: { status: { in: [...REVENUE_ACTIVE_STATUSES] } },
         select: {
           id: true, name: true, phone: true, modality: true, paymentDay: true,
           salesOwner: true, contractMonths: true, monthlyValue: true,
@@ -427,7 +428,7 @@ async function RecebimentosPageInner({
   // Agendar renovação só faz sentido para cliente em atividade (o painel de
   // renovações filtra por esses status — agendar um CHURNED seria invisível).
   const scheduleClients = allClients
-    .filter((c) => ["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"].includes(c.status))
+    .filter((c) => (PORTFOLIO_ACTIVE_STATUSES as readonly string[]).includes(c.status))
     .map((c) => ({ id: c.id, name: c.name }));
   const includeOptions: IncludeClientOption[] = allClients.map((c) => ({
     id: c.id,
@@ -436,7 +437,7 @@ async function RecebimentosPageInner({
     monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
     totalContractValue: c.totalContractValue != null ? Number(c.totalContractValue) : null,
     paymentDay: c.paymentDay,
-    active: ["ACTIVE", "RENEWAL", "DELINQUENT"].includes(c.status),
+    active: (REVENUE_ACTIVE_STATUSES as readonly string[]).includes(c.status),
   }));
   // F1.15 — coluna opcional estabilidade/risco: a leitura mais recente da
   // avaliação mensal (F1.1) por cliente. Sem avaliação, a célula diz "sem

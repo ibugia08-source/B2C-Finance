@@ -1,3 +1,4 @@
+import { REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { type ReportQuery } from "../query";
@@ -7,7 +8,7 @@ import { CLIENT_STATUS_LABEL, type ReportDef, type ReportRow } from "../shared";
 async function buildMrr(q: ReportQuery): Promise<ReportRow[]> {
   const where: Record<string, unknown> = {
     modality: "MRR",
-    status: { in: ["ACTIVE", "RENEWAL", "DELINQUENT"] },
+    status: { in: [...REVENUE_ACTIVE_STATUSES] },
   };
   if (q.clientId) where.id = q.clientId;
   if (q.responsavel)

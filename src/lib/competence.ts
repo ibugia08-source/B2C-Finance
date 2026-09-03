@@ -1,3 +1,4 @@
+import { MONTHS_PT } from "@/lib/format";
 /**
  * COMPETÊNCIA — dimensão temporal do resultado (ref. 01 §3.15).
  *
@@ -26,10 +27,7 @@ const RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
  * constante; a partir da Fase 1 vem de Workspace.timezone.
  */
 export const WORKSPACE_TIMEZONE = "America/Bahia";
-const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
+const MESES = MONTHS_PT;
 
 /** `(2026, 3)` → `"2026-03"`. Mês 1-12. */
 export function toCompetence(year: number, month: number): Competence {
@@ -47,6 +45,21 @@ export function parseCompetence(
   const m = typeof value === "string" ? value.match(RE) : null;
   if (!m) return null;
   return { year: Number(m[1]), month: Number(m[2]) };
+}
+
+/**
+ * Resolve o `?mes=` das páginas: bem formado → ele; senão → a competência da
+ * data padrão (hoje, ou o mês anterior no Fechamento). Substitui o bloco de
+ * regex + split copiado que vivia em 9 pages.
+ */
+export function competenciaDaUrl(
+  param: string | null | undefined,
+  padrao: Date = new Date()
+): { competence: Competence; ano: number; mes: number } {
+  const p = typeof param === "string" ? parseCompetence(param) : null;
+  const ano = p?.year ?? padrao.getFullYear();
+  const mes = p?.month ?? padrao.getMonth() + 1;
+  return { competence: toCompetence(ano, mes), ano, mes };
 }
 
 /** É uma competência bem formada? */

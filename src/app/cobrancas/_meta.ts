@@ -1,3 +1,4 @@
+import type { BadgeVariant } from "@/lib/status-meta";
 /** Metadados de cobrança compartilhados entre telas (server e client). */
 
 export const BILLING_STATUS_LABEL: Record<string, string> = {
@@ -35,13 +36,7 @@ export const REVENUE_TYPE_LABEL: Record<string, string> = {
   OTHER: "Outra",
 };
 
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "outline";
+
 
 export function billingStatusVariant(status: string): BadgeVariant {
   switch (status) {

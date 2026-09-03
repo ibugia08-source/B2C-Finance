@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, parseBRL } from "@/lib/format";
 import {
   type Baseline,
   type ScenarioInput,
@@ -32,12 +32,7 @@ const TONE_CLASS: Record<Tone, string> = {
   gray: "bg-muted text-muted-foreground border-transparent",
 };
 
-function parseNum(v: string): number {
-  if (!v) return 0;
-  const cleaned = v.replace(/[R$\s.]/g, "").replace(",", ".");
-  const n = Number(cleaned);
-  return isNaN(n) ? 0 : n;
-}
+const parseNum = parseBRL;
 
 function TonePill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (

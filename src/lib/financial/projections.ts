@@ -1,3 +1,4 @@
+import { formatBRL0 } from "@/lib/format";
 /**
  * Projeções e simulação de cenários — funções PURAS (sem banco).
  * O baseline vem da camada central de cálculos (revenue/expense metrics);
@@ -175,8 +176,7 @@ export function profitTone(lucro: number): Tone {
   return "red";
 }
 
-const brl = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const brl = formatBRL0;
 
 /**
  * Resumo interpretativo do cenário (saída estratégica, PARTE 11.38).

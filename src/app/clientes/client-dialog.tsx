@@ -16,15 +16,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveClient, getClientForEdit, listEmployeeOptions } from "@/lib/actions/clients";
 import { Plus } from "lucide-react";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInput, parseBRL } from "@/lib/format";
 import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
 
 /** Parse tolerante de dinheiro pt-BR ("1.500,00" → 1500) só para validar > 0. */
-function looseMoney(s: string): number {
-  const cleaned = String(s).replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
-  const n = parseFloat(cleaned);
-  return Number.isNaN(n) ? 0 : n;
-}
+const looseMoney = (s: string) => parseBRL(String(s));
 
 // Validação client-side (espelha a Server Action; strings do formulário).
 // Regras condicionais por modalidade (Bloco 1 §7).

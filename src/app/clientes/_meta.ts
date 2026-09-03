@@ -1,3 +1,6 @@
+import { CLIENT_STATUS_LABEL as LIB_CLIENT_STATUS_LABEL } from "@/lib/status-meta";
+import type { BadgeVariant } from "@/lib/status-meta";
+import { MONTHS_PT } from "@/lib/format";
 /**
  * Metadados de status de Cliente compartilhados entre telas (server e client).
  * Mantido livre de imports de @prisma/client para poder ser usado com segurança
@@ -17,24 +20,10 @@ export const CLIENT_STATUSES = [
 
 export type ClientStatusValue = (typeof CLIENT_STATUSES)[number];
 
-export const CLIENT_STATUS_LABEL: Record<ClientStatusValue, string> = {
-  PROSPECT: "Prospecção",
-  LEAD: "Lead / Prospecção",
-  ACTIVE: "Ativo",
-  INACTIVE: "Inativo",
-  PAUSED: "Pausado",
-  RENEWAL: "Em renovação",
-  DELINQUENT: "Inadimplente",
-  CHURNED: "Perdido / Cancelado",
-};
+export const CLIENT_STATUS_LABEL =
+  LIB_CLIENT_STATUS_LABEL as Record<ClientStatusValue, string>;
 
-type BadgeVariant =
-  | "default"
-  | "secondary"
-  | "destructive"
-  | "success"
-  | "warning"
-  | "outline";
+
 
 export function clientStatusVariant(status: string): BadgeVariant {
   switch (status) {
@@ -74,20 +63,9 @@ export const DELINQUENCY_LABEL: Record<DelinquencyValue | "SEM_COBRANCA", string
 };
 
 // ===== Meses (mês de renovação) =====
-export const MONTHS: { value: number; label: string }[] = [
-  { value: 1, label: "Janeiro" },
-  { value: 2, label: "Fevereiro" },
-  { value: 3, label: "Março" },
-  { value: 4, label: "Abril" },
-  { value: 5, label: "Maio" },
-  { value: 6, label: "Junho" },
-  { value: 7, label: "Julho" },
-  { value: 8, label: "Agosto" },
-  { value: 9, label: "Setembro" },
-  { value: 10, label: "Outubro" },
-  { value: 11, label: "Novembro" },
-  { value: 12, label: "Dezembro" },
-];
+export const MONTHS: { value: number; label: string }[] = MONTHS_PT.map(
+  (label, i) => ({ value: i + 1, label })
+);
 export const MONTH_LABEL: Record<number, string> = Object.fromEntries(
   MONTHS.map((m) => [m.value, m.label])
 );

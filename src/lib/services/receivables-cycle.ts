@@ -1,3 +1,4 @@
+import { REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { toNumber as n } from "@/lib/format";
@@ -20,7 +21,7 @@ import { resolveOwnerId } from "@/lib/auth/owner-scope";
 
 
 /** Status ativo para efeito de faturamento mensal. */
-const CYCLE_ACTIVE = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;
+const CYCLE_ACTIVE = REVENUE_ACTIVE_STATUSES;
 
 /**
  * Garante as mensalidades MRR do mês (idempotente):

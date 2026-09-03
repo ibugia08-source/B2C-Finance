@@ -180,8 +180,6 @@ export async function registerBillingPayment(
 
 // ---------- Pagamento em 1 clique + Desfazer (gesto da planilha) ----------
 
-/** Marcador que identifica pagamentos feitos pelo gesto de 1 clique. */
-const QUICK_SETTLE_NOTE = "Pago com 1 clique (Gestão do Mês).";
 /** Janela em que o próprio gesto pode ser desfeito sem permissão de exclusão. */
 const QUICK_UNDO_WINDOW_MS = 15 * 60 * 1000;
 
@@ -204,12 +202,9 @@ export async function quickSettleBilling(billingId: string): Promise<ActionResul
     const open = n(b.amount) - n(b.paidTotal);
     if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
 
-    const now = new Date();
-    const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
-    const nowKey = now.getFullYear() * 12 + now.getMonth();
-    const paidAt = compKey < nowKey ? b.dueDate : now;
-
-    const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
+    const { settleBilling: settleViaEngine, quickSettlePaidAt, QUICK_SETTLE_NOTE } =
+      await import("@/lib/engines/payment-engine");
+    const paidAt = quickSettlePaidAt(b.competenceYear, b.competenceMonth, b.dueDate);
     const res = await settleViaEngine({
       billingId: b.id,
       amount: open,
@@ -237,6 +232,7 @@ export async function quickSettleBilling(billingId: string): Promise<ActionResul
 export async function undoQuickSettle(paymentId: string): Promise<ActionResult> {
   if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
   try {
+    const { QUICK_SETTLE_NOTE } = await import("@/lib/engines/payment-engine");
     const p = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!p) return { ok: false, error: "Pagamento não encontrado." };
     if (p.notes !== QUICK_SETTLE_NOTE)

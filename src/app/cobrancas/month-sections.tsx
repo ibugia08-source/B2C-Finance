@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatPercent } from "@/lib/format";
 import {
   incomeStatusMeta,
   cycleStatusMeta,
@@ -493,7 +493,7 @@ export function FolhaSection({
                       {formatBRL(r.total)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {total > 0 ? `${((r.total / total) * 100).toFixed(1).replace(".", ",")}%` : "—"}
+                      {total > 0 ? formatPercent(r.total / total) : "—"}
                     </TableCell>
                   </TableRow>
                 ))}

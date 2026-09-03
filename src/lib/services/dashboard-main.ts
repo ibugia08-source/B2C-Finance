@@ -1,9 +1,11 @@
+import { computeOperationalMargin } from "@/lib/financial/calculations";
+import { clientActiveInMonth, REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { ownerCached } from "@/lib/owner-cache";
 import type { Period } from "@/lib/period";
 import { CACHE_TAGS } from "@/lib/cache-tags";
-import { toNumber as n } from "@/lib/format";
+import { MONTHS_PT_SHORT, formatBRL, toNumber as n } from "@/lib/format";
 import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
 import {
   getPeriodRevenue,
@@ -78,7 +80,7 @@ function buildMetrics(
     emAberto,
     vencido: receipts.overdueOpenAmount,
     resultado,
-    margem: recebido > 0 ? resultado / recebido : 0,
+    margem: computeOperationalMargin(resultado, recebido),
     mrrClients: revenue.mrrClients,
     tcvClients: revenue.tcvClients,
   };
@@ -225,10 +227,7 @@ export type YearlySeries = {
   resultado: number[]; // recebido − despesas por mês
 };
 
-const MONTHS_SHORT = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
+const MONTHS_SHORT = [...MONTHS_PT_SHORT];
 
 /**
  * 12 pontos (Jan–Dez) do ano selecionado para os gráficos de Faturamento,
@@ -238,7 +237,6 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const yStart = new Date(year, 0, 1);
   const yEnd = new Date(year + 1, 0, 1);
   const now = new Date();
-  const currentKey = now.getFullYear() * 12 + now.getMonth();
 
   const [mrrClients, tcvBillings, extraRevenues, looseIncomes, payments, expenses] =
     await Promise.all([
@@ -284,21 +282,9 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const recebido = zero();
   const despesas = zero();
 
-  // MRR previsto por mês: cliente MRR ativo naquele mês.
-  const activeInMonth = (
-    c: (typeof mrrClients)[number],
-    m: number
-  ) => {
-    const monthStart = new Date(year, m, 1);
-    const monthEnd = new Date(year, m + 1, 1);
-    const entered = c.startedAt ?? c.createdAt;
-    if (entered && entered >= monthEnd) return false;
-    if (c.churnedAt && c.churnedAt < monthStart) return false;
-    const key = year * 12 + m;
-    const REVENUE_ACTIVE = ["ACTIVE", "RENEWAL", "DELINQUENT"];
-    if (key >= currentKey && !REVENUE_ACTIVE.includes(c.status)) return false;
-    return true;
-  };
+  // MRR previsto por mês: cliente MRR ativo naquele mês (regra única).
+  const activeInMonth = (c: (typeof mrrClients)[number], m: number) =>
+    clientActiveInMonth(c, year, m + 1, now);
   for (let m = 0; m < 12; m++) {
     for (const c of mrrClients) {
       if (activeInMonth(c, m)) mrr[m] += n(c.monthlyValue);
@@ -521,8 +507,7 @@ export type SummaryInput = {
  * Frases curtas, linguagem simples, sempre com base nos dados do período.
  */
 export function buildDashboardSummary(i: SummaryInput): string[] {
-  const brl = (v: number) =>
-    v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const brl = formatBRL;
   const out: string[] = [];
 
   if (i.previsto <= 0 && i.recebido <= 0 && i.despesas <= 0) {
@@ -565,7 +550,6 @@ export function buildDashboardSummary(i: SummaryInput): string[] {
 
 export type NamedValue = { id?: string; name: string; sub?: string; value: number };
 
-const REVENUE_ACTIVE_STATUSES = ["ACTIVE", "RENEWAL", "DELINQUENT"];
 
 /** Clientes MRR que compõem o faturamento recorrente do período. */
 async function getMrrClientsDetailImpl(): Promise<NamedValue[]> {

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { formatBRL0 } from "@/lib/format";
+import { formatBRL0, formatPercent } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Pencil, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -126,7 +126,7 @@ export function MetaAnual({
                   />
                 </div>
                 <span className="stat-number text-sm font-semibold">
-                  {(pctMeta * 100).toFixed(1).replace(".", ",")}%
+                  {formatPercent(pctMeta)}
                 </span>
               </div>
             ) : (

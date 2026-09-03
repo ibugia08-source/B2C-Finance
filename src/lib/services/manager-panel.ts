@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { toNumber as n } from "@/lib/format";
+import { MONTHS_PT_SHORT, toNumber as n } from "@/lib/format";
 import { toCompetence, type Competence } from "@/lib/competence";
 import { isScoped, type DataScope } from "@/lib/scope";
 import { nomeDoEscopo, whereDaRelacao } from "@/lib/services/data-scope";
@@ -51,7 +51,7 @@ export type PainelGestor = {
   evolucao: { label: string; ativos: number }[];
 };
 
-const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const MESES = MONTHS_PT_SHORT;
 
 export async function carregarPainelGestor(
   scope: DataScope,

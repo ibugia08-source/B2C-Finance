@@ -50,16 +50,7 @@ export type ReportDef = {
   build: (q: ReportQuery) => Promise<ReportRow[]>;
 };
 
-export const CLIENT_STATUS_LABEL: Record<string, string> = {
-  LEAD: "Lead",
-  PROSPECT: "Prospect",
-  ACTIVE: "Ativo",
-  INACTIVE: "Inativo",
-  PAUSED: "Pausado",
-  RENEWAL: "Renovação",
-  DELINQUENT: "Inadimplente",
-  CHURNED: "Perdido",
-};
+export { CLIENT_STATUS_LABEL } from "@/lib/status-meta";
 
 export const MODALITY_LABEL: Record<string, string> = { MRR: "MRR", TCV: "TCV" };
 

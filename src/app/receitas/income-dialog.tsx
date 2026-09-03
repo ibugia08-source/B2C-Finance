@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,6 +35,8 @@ export function IncomeDialog({
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -50,10 +52,15 @@ export function IncomeDialog({
           <DialogTitle>{initial ? "Editar receita" : "Nova receita"}</DialogTitle>
         </DialogHeader>
         <form
-          action={async (fd) => {
-            await saveIncome(fd);
-            setOpen(false);
-          }}
+          action={(fd) =>
+            start(async () => {
+              const res = await saveIncome(fd);
+              if (res.ok) {
+                setOpen(false);
+                setError(null);
+              } else setError(res.error);
+            })
+          }
           className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
           {initial?.id && <input type="hidden" name="id" value={initial.id} />}
@@ -201,11 +208,14 @@ export function IncomeDialog({
             </div>
           </details>
 
+          {error && <p className="col-span-2 text-sm text-destructive">{error}</p>}
           <DialogFooter className="col-span-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Salvando…" : "Salvar"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

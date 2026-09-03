@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { showUndoToast } from "@/components/undo-toast";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, parseBRL } from "@/lib/format";
 import { distribuirPorPeso } from "@/lib/allocations/split";
 import { aplicarRegrasAction, salvarRateioAction } from "@/lib/actions/rateio";
 import type { DespesaParaRatear } from "@/lib/services/allocation";
@@ -214,7 +214,7 @@ function DialogoDeRateio({
   const [pending, start] = useTransition();
 
   const opcoes = dimensao === "CLIENT" ? clientes : dimensao === "AGENCY" ? agencias : servicos;
-  const aRatear = Math.max(0, Number(valor.replace(",", ".")) || 0);
+  const aRatear = Math.max(0, parseBRL(valor) || 0);
 
   const previa = useMemo(() => {
     const escolhidos = Object.keys(pesos).filter((id) => pesos[id] > 0);

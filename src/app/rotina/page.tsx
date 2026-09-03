@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, formatDateInputLocal } from "@/lib/format";
 import { resolvePeriod } from "@/lib/period";
 import { can, requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
@@ -102,8 +102,7 @@ export default async function RotinaPage() {
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const iso = formatDateInputLocal;
 
   // ---- Fase 1: fila de vencidos (agregador com várias queries internas) ----
   const queue = gates.cobrancas ? await getCollectionQueue() : [];

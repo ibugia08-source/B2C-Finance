@@ -2,7 +2,7 @@ import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
 import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, parseMonthParam } from "@/lib/format";
+import { formatBRL, formatDateBR, formatPercent, parseMonthParam } from "@/lib/format";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -297,7 +297,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                     <TableCell className="text-sm text-muted-foreground">{c.client?.name ?? "—"}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {c.basisAmount != null && c.rate != null
-                        ? `${formatBRL(c.basisAmount)} × ${(c.rate * 100).toFixed(1).replace(".", ",")}%`
+                        ? `${formatBRL(c.basisAmount)} × ${formatPercent(c.rate)}`
                         : "—"}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{c.notes ?? "—"}</TableCell>

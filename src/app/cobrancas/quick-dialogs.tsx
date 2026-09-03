@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { formatBRL, formatDateInputLocal } from "@/lib/format";
 import { useRouter } from "next/navigation";
 import { Plus, Wallet, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,7 @@ import { EXPENSE_TYPE_LABEL } from "@/app/despesas/_meta";
  * O cadastro completo continua nas telas próprias (link em cada seção).
  */
 
-function toDateInput(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+const toDateInput = formatDateInputLocal;
 
 /** Data default dentro da competência: hoje (se for o mês) ou dia 1º. */
 function defaultDateFor(month: number, year: number): string {
@@ -60,13 +59,11 @@ export function EntradaQuickDialog({ month, year }: { month: number; year: numbe
           action={(fd) =>
             start(async () => {
               setError(null);
-              try {
-                await saveIncome(fd);
+              const res = await saveIncome(fd);
+              if (res.ok) {
                 setOpen(false);
                 router.refresh();
-              } catch (e: any) {
-                setError(e?.message ?? "Falha ao lançar a entrada.");
-              }
+              } else setError(res.error);
             })
           }
           className="grid grid-cols-2 gap-3"
@@ -272,7 +269,7 @@ export function PagarFolhaButton({
             : "A folha será aprovada e marcada como PAGA."}{" "}
           Isso cria a despesa de folha no mês
           {total > 0
-            ? ` (total atual: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })})`
+            ? ` (total atual: ${formatBRL(total)})`
             : ""}{" "}
           e quita as comissões aprovadas. Ajustes finos (bônus, descontos,
           adiantamentos) ficam na tela Folha.
