@@ -5,7 +5,12 @@ export const metadata = {
   title: "Entrar — B2C Finance",
 };
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: { sessao?: string };
+}) {
+  const sessaoEncerrada = searchParams?.sessao === "encerrada";
   return (
     <div className="min-h-screen app-shell flex items-center justify-center p-6 text-foreground">
       <div className="w-full max-w-4xl grid lg:grid-cols-2 gap-10 items-center">
@@ -54,6 +59,11 @@ export default function LoginPage() {
                   Acesse sua visão financeira com segurança.
                 </p>
               </div>
+              {sessaoEncerrada && (
+                <p className="rounded-card border border-warning/30 bg-warning-soft px-3.5 py-2.5 text-dense text-warning-foreground">
+                  Sua sessão anterior não vale mais. Entre de novo.
+                </p>
+              )}
               <LoginForm />
             </div>
 

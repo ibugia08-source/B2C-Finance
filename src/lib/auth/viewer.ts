@@ -21,7 +21,12 @@ const getPersonIdForUser = cache(async (userId: string): Promise<string | null> 
  */
 export async function getViewer(from?: string): Promise<Viewer> {
   const user = await getCurrentUser();
-  if (!user) redirect(`/login${from ? `?from=${encodeURIComponent(from)}` : ""}`);
+  // Sem usuário aqui significa que o cookie PASSOU pelo middleware (a
+  // assinatura confere) mas não há ninguém no banco por trás dele — conta
+  // apagada ou desativada. Mandar direto para /login criaria um laço
+  // infinito: o middleware veria a sessão como válida e devolveria para o
+  // painel. A rota abaixo APAGA o cookie antes de voltar para o login.
+  if (!user) redirect(`/api/auth/encerrar${from ? `?from=${encodeURIComponent(from)}` : ""}`);
 
   const personId = await getPersonIdForUser(user.id);
   return { ...user, personId };

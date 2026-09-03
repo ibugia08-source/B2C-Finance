@@ -131,6 +131,14 @@ export async function middleware(req: NextRequest) {
     return seguir();
   }
 
+  // Encerrar sessão órfã: precisa rodar SEM depender de sessão, porque é
+  // exatamente o caminho de quem tem um cookie que não vale mais. Se o
+  // middleware o mandasse para /login, o cookie nunca seria apagado e o
+  // laço continuaria.
+  if (pathname === "/api/auth/encerrar") {
+    return seguir();
+  }
+
   // Webhook de entrada (F4.8): provedor externo não faz login. Quem
   // autentica é a ASSINATURA HMAC do corpo, conferida na própria rota em
   // tempo constante — e ela é bem mais forte que uma sessão, porque prova a
