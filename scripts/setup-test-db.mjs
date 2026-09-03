@@ -57,6 +57,13 @@ const env = {
 };
 execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env });
 
+// Banco novo não tem admin quando a migration da F0.4 roda, e sem admin ela
+// não semeia o Workspace — os seeds abaixo (e a suíte) dependem dele.
+execFileSync("npx", ["tsx", "prisma/seed-dev.ts"], {
+  stdio: "inherit",
+  env: { ...env, ADMIN_PASSWORD: env.ADMIN_PASSWORD ?? "senha-descartavel-de-teste" },
+});
+
 // Plano de contas: a suíte verifica a NATUREZA das contas (03 §2.2), então o
 // seed faz parte do preparo do banco, não de um teste.
 execFileSync("npx", ["tsx", "prisma/seed-chart-of-accounts.ts"], { stdio: "inherit", env });

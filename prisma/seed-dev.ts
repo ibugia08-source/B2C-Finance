@@ -103,6 +103,96 @@ async function main() {
   }
   const ownerId = admin.id;
 
+  // ---- Workspace -----------------------------------------------------
+  // A migration da F0.4 semeia o Workspace A PARTIR de um admin que já
+  // existia — é o caminho de quem MIGROU do v1. Num banco NOVO não há
+  // usuário quando ela roda, e o sistema subiria sem workspace nenhum
+  // ("Nenhum workspace configurado"): o razão, o Outbox e as bandeiras de
+  // funcionalidade dependem dele. O id repete a fórmula da migration para
+  // que os dois caminhos cheguem exatamente ao mesmo registro.
+  console.log("→ Workspace, entidade e agência");
+  const { createHash } = await import("crypto");
+  const idDe = (prefixo: string, semente: string) =>
+    prefixo + createHash("md5").update(semente).digest("hex").slice(0, 21);
+
+  let workspace = await prisma.workspace.findFirst({ orderBy: { createdAt: "asc" } });
+  if (!workspace) {
+    workspace = await prisma.workspace.create({
+      data: {
+        id: idDe("ws_", ownerId),
+        name: "B2C Gestão",
+        timezone: "America/Bahia",
+        locale: "pt-BR",
+        currency: "BRL",
+        ownerId,
+      },
+    });
+    console.log("  ✓ workspace criado");
+  } else {
+    console.log(`  • workspace já existe: ${workspace.name}`);
+  }
+
+  // A entidade e a agência padrão vêm juntas: a agência é o recorte que a
+  // carteira, o rateio e o RBAC usam, e um sistema sem nenhuma não deixa
+  // sequer cadastrar cliente.
+  let entidade = await prisma.legalEntity.findFirst({
+    where: { workspaceId: workspace.id },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!entidade) {
+    entidade = await prisma.legalEntity.create({
+      data: {
+        id: idDe("le_", workspace.id),
+        workspaceId: workspace.id,
+        legalName: "B2C Gestão",
+        tradeName: "B2C Gestão",
+        timezone: workspace.timezone,
+        currency: workspace.currency,
+        active: true,
+      },
+    });
+    console.log("  ✓ entidade criada");
+  } else {
+    console.log(`  • entidade já existe: ${entidade.tradeName ?? entidade.legalName}`);
+  }
+
+  // Bandeira do razão: nasce DESLIGADA, como na migration. Sem a linha, o
+  // updateMany que a liga não encontra nada e falha em silêncio.
+  const bandeira = await prisma.featureFlag.findFirst({
+    where: { workspaceId: workspace.id, key: "ledger_enabled" },
+  });
+  if (!bandeira) {
+    await prisma.featureFlag.create({
+      data: {
+        id: idDe("ff_", workspace.id + "ledger"),
+        workspaceId: workspace.id,
+        key: "ledger_enabled",
+        enabled: false,
+        description:
+          "Libera a gravação de lançamentos no razão pelo AccountingEngine (01 §3.10).",
+      },
+    });
+    console.log("  ✓ bandeira do razão criada (desligada)");
+  }
+
+  const agencia = await prisma.agency.findFirst({ where: { workspaceId: workspace.id } });
+  if (!agencia) {
+    await prisma.agency.create({
+      data: {
+        id: idDe("ag_", entidade.id),
+        workspaceId: workspace.id,
+        legalEntityId: entidade.id,
+        name: "B2C Gestão",
+        slug: "b2c-gestao",
+        color: "#1E70D3",
+        active: true,
+      },
+    });
+    console.log("  ✓ agência criada");
+  } else {
+    console.log(`  • agência já existe: ${agencia.name}`);
+  }
+
   // ---- Configuração: categorias (globais) e regras (do admin) --------
   // Create-only, como o seed principal: nunca sobrescreve o que existe.
   console.log("→ Categorias (globais)");
