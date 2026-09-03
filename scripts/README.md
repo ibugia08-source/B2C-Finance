@@ -18,6 +18,34 @@ npm run outbox:worker
 npm run relatorios:agendados
 ```
 
+## Instalação do zero (banco vazio)
+
+O build de produção roda `prisma/bootstrap.ts` automaticamente:
+
+```
+prisma generate && prisma migrate deploy && tsx prisma/bootstrap.ts && next build
+```
+
+Ele é **create-only e idempotente** — nunca apaga nem sobrescreve nada, só
+garante que exista o que o sistema precisa para funcionar: administrador,
+workspace, entidade, agência, bandeira do razão, plano de contas, dicionário de
+métricas e matriz de eventos contábeis. Roda a cada publicação sem risco.
+
+Isso existe porque as migrations semeiam workspace/entidade/agência a partir de
+um admin QUE JÁ EXISTA (o caminho de quem migrou do sistema antigo). Num banco
+novo não há usuário quando elas rodam — sem o bootstrap, a instalação limpa sobe
+sem workspace e toda tela estoura.
+
+**Antes da primeira publicação num banco vazio**, defina no ambiente:
+
+| Variável | Para quê |
+|---|---|
+| `ADMIN_EMAIL` | e-mail de entrada do dono (padrão `admin@b2cfinance.local`) |
+| `ADMIN_PASSWORD` | senha do dono — sem ela o build PARA com a explicação |
+
+O build falha alto de propósito: publicar um sistema em que ninguém consegue
+entrar seria pior que não publicar.
+
 ## Desenvolvimento local
 
 | Script | O que faz |
