@@ -28,6 +28,12 @@ import { currentWorkspaceId } from "@/lib/services/workspace";
 
 export const FONTE = "avancecrm";
 
+/**
+ * Depois disto, uma linha ainda em RECEIVED é considerada ABANDONADA (o
+ * processo que a segurava morreu) e volta a ser reprocessável.
+ */
+const JANELA_DE_ABANDONO_MS = 5 * 60 * 1000;
+
 export type EnvelopeDeWebhook = {
   /** Identificador do evento NA ORIGEM. É a chave de idempotência. */
   id: string;
@@ -123,6 +129,11 @@ export async function receberEvento(
           eventId: envelope.id,
           eventType: envelope.type,
           payload: (envelope.data ?? {}) as any,
+          // Nasce PROCESSANDO: quem inseriu a linha é o dono do trabalho.
+          // É o que separa "ninguém pegou este evento" de "alguém está com
+          // ele agora" — sem isso, entregas simultâneas se veem como
+          // "sem desfecho" e aplicam o mesmo fato N vezes.
+          status: "PROCESSANDO",
         },
         select: { id: true },
       })
@@ -146,6 +157,35 @@ export async function receberEvento(
     if (anterior.status === "PROCESSED" || anterior.status === "IGNORED") {
       return { ok: true, situacao: "REPETIDO" };
     }
+
+    // AINDA EM VOO ≠ LIVRE PARA REPROCESSAR. Dez entregas simultâneas do
+    // mesmo evento: uma cria a linha e as outras nove caem aqui com ela
+    // ainda RECEIVED. Se todas seguissem, o fato seria aplicado dez vezes
+    // (dez leads do mesmo lead) — a unique da caixa não protege o
+    // PROCESSAMENTO, só a linha.
+    //
+    // A reivindicação é um UPDATE condicional, que o Postgres resolve
+    // atomicamente: só quem TROCA o status leva o evento. Quem não levou
+    // responde REPETIDO — o dono legítimo vai chegar a um desfecho.
+    // FAILED continua reprocessável, e RECEIVED velho também: é o processo
+    // que morreu no meio e não vai mais terminar.
+    const limite = new Date(Date.now() - JANELA_DE_ABANDONO_MS);
+    const reivindicou = await runWithoutScope(async () =>
+      prisma.webhookInbox.updateMany({
+        where: {
+          id: anterior.id,
+          OR: [
+            // Sem dono: linha órfã (entrou por fora) ou tentativa encerrada
+            // em erro — as duas são reprocessáveis.
+            { status: { in: ["RECEIVED", "FAILED"] } },
+            // Dono que sumiu: processo morreu segurando o evento.
+            { status: "PROCESSANDO", receivedAt: { lt: limite } },
+          ],
+        },
+        data: { status: "PROCESSANDO", receivedAt: new Date(), processedAt: null },
+      })
+    );
+    if (reivindicou.count === 0) return { ok: true, situacao: "REPETIDO" };
     inbox = { id: anterior.id };
   }
 

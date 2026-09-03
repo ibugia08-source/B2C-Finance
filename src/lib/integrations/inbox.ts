@@ -3,6 +3,9 @@ import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { assinaturaConfere } from "@/lib/integrations/avancecrm";
 
+/** Linha em RECEIVED mais velha que isto = processo morto; volta a ser reprocessável. */
+const JANELA_DE_ABANDONO_MS = 5 * 60 * 1000;
+
 /**
  * CAIXA DE ENTRADA DE WEBHOOK, GENÉRICA (F5.3 · ref. 03 §4.2, §4.3).
  *
@@ -63,6 +66,11 @@ export async function receberNaCaixa(opts: {
           eventId: envelope.id,
           eventType: envelope.type,
           payload: (envelope.data ?? {}) as any,
+          // Nasce PROCESSANDO: quem inseriu a linha é o dono do trabalho.
+          // É o que separa "ninguém pegou este evento" de "alguém está com
+          // ele agora" — sem isso, entregas simultâneas se veem como
+          // "sem desfecho" e aplicam o mesmo fato N vezes.
+          status: "PROCESSANDO",
         },
         select: { id: true },
       })
@@ -79,6 +87,28 @@ export async function receberNaCaixa(opts: {
     if (anterior.status === "PROCESSED" || anterior.status === "IGNORED") {
       return { ok: true, situacao: "REPETIDO" };
     }
+
+    // Entregas SIMULTÂNEAS do mesmo evento: a unique protege a linha, não o
+    // processamento. Sem reivindicar, todas as concorrentes veriam RECEIVED,
+    // concluiriam "sem desfecho" e aplicariam o fato N vezes. O UPDATE
+    // condicional é atômico no Postgres: só quem troca o status leva.
+    const limite = new Date(Date.now() - JANELA_DE_ABANDONO_MS);
+    const reivindicou = await runWithoutScope(async () =>
+      prisma.webhookInbox.updateMany({
+        where: {
+          id: anterior.id,
+          OR: [
+            // Sem dono: linha órfã (entrou por fora) ou tentativa encerrada
+            // em erro — as duas são reprocessáveis.
+            { status: { in: ["RECEIVED", "FAILED"] } },
+            // Dono que sumiu: processo morreu segurando o evento.
+            { status: "PROCESSANDO", receivedAt: { lt: limite } },
+          ],
+        },
+        data: { status: "PROCESSANDO", receivedAt: new Date(), processedAt: null },
+      })
+    );
+    if (reivindicou.count === 0) return { ok: true, situacao: "REPETIDO" };
     inbox = { id: anterior.id };
   }
 

@@ -3900,7 +3900,8 @@ model WebhookInbox {
   eventType String
   payload   Json
 
-  /// RECEIVED | PROCESSED | IGNORED | FAILED
+  /// RECEIVED | PROCESSANDO | PROCESSED | IGNORED | FAILED
+  /// PROCESSANDO = alguém é dono do evento agora (trava a entrega simultânea).
   status      String    @default("RECEIVED")
   /// Por que foi ignorado ou o que falhou.
   note        String?
