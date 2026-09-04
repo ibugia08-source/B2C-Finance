@@ -42,7 +42,7 @@ function isEmpty(v: unknown): boolean {
   return v == null || String(v).trim() === "";
 }
 
-function parseDateCell(v: unknown): Date | null {
+export function parseDateCell(v: unknown): Date | null {
   if (v instanceof Date && !isNaN(v.getTime())) {
     // normaliza para meia-noite local (células de data do Excel vêm com hora)
     return new Date(v.getFullYear(), v.getMonth(), v.getDate());
@@ -68,7 +68,7 @@ function buildDate(y: number, m: number, d: number): Date | null {
   return date;
 }
 
-function parseMoneyCell(v: unknown): number | null {
+export function parseMoneyCell(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? Math.round(v * 100) / 100 : null;
   const s = String(v).trim().replace(/^R\$\s*/i, "");
   if (!s) return null;
