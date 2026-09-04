@@ -167,6 +167,61 @@ function resolverCliente(ref: string, ehDocumento: boolean, indice: Indice): str
 }
 
 // ---------------------------------------------------------------------------
+// Prévia (somente leitura)
+// ---------------------------------------------------------------------------
+
+export type RevisaoPrevista = { aba: string; linha: number; motivo: string };
+
+/**
+ * O que a fila de revisão vai receber SE a planilha for confirmada como
+ * está — dedupes, gestores/serviços/agências não casados, clientes da
+ * MENSAL desconhecidos e competências fechadas. Nada é gravado.
+ */
+export async function preverRevisoes(plan: PlanilhaTotal): Promise<RevisaoPrevista[]> {
+  const indice = await montarIndice();
+  const out: RevisaoPrevista[] = [];
+  const conhecidos = new Set<string>();
+
+  for (const c of plan.clientes) {
+    const nomeNorm = normalizarNomeCliente(c.nome);
+    conhecidos.add(nomeNorm);
+    if (c.documento) conhecidos.add(c.documento);
+    const existe =
+      (c.documento && indice.porDocumento.has(c.documento)) || indice.porNome.has(nomeNorm);
+    if (!existe && !c.documento) {
+      const parecido = nomeParecido(nomeNorm, indice);
+      if (parecido)
+        out.push({
+          aba: "CLIENTES", linha: c.sourceRow,
+          motivo: `nome parecido com cliente existente ("${parecido}") e sem documento — vai para revisão humana`,
+        });
+    }
+    if (c.agencia && !indice.agencias.has(normalizarNomeCliente(c.agencia)))
+      out.push({ aba: "CLIENTES", linha: c.sourceRow, motivo: `agência "${c.agencia}" não encontrada — cairá na agência padrão` });
+    for (const g of [c.gestor1, c.gestor2])
+      if (g && !indice.usuarios.has(normalizarNomeCliente(g)))
+        out.push({ aba: "CLIENTES", linha: c.sourceRow, motivo: `gestor "${g}" não casa com nenhum usuário` });
+    for (const svc of c.servicos)
+      if (!indice.servicos.has(normalizarNomeCliente(svc)))
+        out.push({ aba: "CLIENTES", linha: c.sourceRow, motivo: `serviço "${svc}" será criado INATIVO para conferência` });
+  }
+
+  for (const l of plan.mensal) {
+    const conhecido = l.clienteRefEhDocumento
+      ? conhecidos.has(l.clienteRef) || indice.porDocumento.has(l.clienteRef)
+      : conhecidos.has(normalizarNomeCliente(l.clienteRef)) || indice.porNome.has(normalizarNomeCliente(l.clienteRef));
+    if (!conhecido)
+      out.push({ aba: l.sourceSheet, linha: l.sourceRow, motivo: `cliente "${l.clienteRef}" não existe nem na aba CLIENTES nem no sistema` });
+    if (indice.fechadas.has(l.competencia))
+      out.push({ aba: l.sourceSheet, linha: l.sourceRow, motivo: `competência ${l.competencia} está FECHADA — exige reabertura antes de importar` });
+    if (l.gestor1DoMes && !indice.usuarios.has(normalizarNomeCliente(l.gestor1DoMes)))
+      out.push({ aba: l.sourceSheet, linha: l.sourceRow, motivo: `gestor do mês "${l.gestor1DoMes}" não casa com nenhum usuário` });
+  }
+
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Aplicação
 // ---------------------------------------------------------------------------
 

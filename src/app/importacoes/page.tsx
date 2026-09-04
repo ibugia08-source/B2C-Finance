@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission } from "@/lib/auth/viewer";
@@ -33,6 +34,26 @@ export default async function ImportacoesPage() {
       <ImportClient
         defs={IMPORT_DEFS.map((d) => ({ key: d.key, title: d.title, description: d.description }))}
       />
+
+      {/* F1.13 (v2): a carga histórica multi-mês tem assistente próprio —
+          uma planilha com todos os meses constrói o passado inteiro. */}
+      <Card className="mt-4">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-dense font-medium">Importação total (histórico multi-mês)</p>
+            <p className="text-caption text-muted-foreground">
+              Uma planilha com todos os meses: clientes, cobranças, pagamentos,
+              avaliações e fotografias por competência — com prévia e reconciliação mês a mês.
+            </p>
+          </div>
+          <Link
+            href="/importacoes/total"
+            className="inline-flex h-9 items-center rounded-input bg-brand px-3.5 text-sm font-medium text-brand-foreground"
+          >
+            Abrir assistente
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Fila de revisão (03 §3.3): a linha duvidosa ENTRA, mas entra
           marcada. Recusá-la faria perder o trabalho de 300 linhas por causa
