@@ -58,9 +58,10 @@ const env = {
 execFileSync("npx", ["prisma", "migrate", "deploy"], { stdio: "inherit", env });
 
 // Banco novo não tem admin quando a migration da F0.4 roda, e sem admin ela
-// não semeia workspace/agência. O seed de desenvolvimento chama o MESMO
-// bootstrap do deploy — inclusive plano de contas, métricas e regras.
-execFileSync("npx", ["tsx", "prisma/seed-dev.ts"], {
+// não semeia workspace/agência. Direto o BOOTSTRAP (o mesmo do deploy):
+// create-only e reentrante — o seed-dev, com a trava de banco-vazio, abortava
+// no RERUN porque a suíte deixa resíduo de negócio no banco de teste.
+execFileSync("npx", ["tsx", "prisma/bootstrap.ts"], {
   stdio: "inherit",
   env: { ...env, ADMIN_PASSWORD: env.ADMIN_PASSWORD ?? "senha-descartavel-de-teste" },
 });
