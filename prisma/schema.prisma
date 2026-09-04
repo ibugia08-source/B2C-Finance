@@ -2877,7 +2877,12 @@ model ImportedRecord {
 
   /// Linha na planilha (1 = primeira linha de dados, sem contar o cabeçalho).
   sourceRow    Int
+  /// Aba de origem (modelo de 3 abas da Importação Total): CLIENTES | MENSAL | RENOVACOES.
+  sourceSheet  String?
   sourceSystem String @default("PLANILHA")
+
+  /// CRIOU | ATUALIZOU — a reversão do lote só desfaz o que o lote CRIOU.
+  operation String @default("CRIOU")
 
   /// 0 a 100. Quanto o sistema confia que esta linha virou o registro certo.
   confidence Int @default(100)
