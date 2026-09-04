@@ -270,12 +270,21 @@ export async function gerarSnapshot(
 /** A fotografia vigente de uma competência (a maior versão nativa). */
 export async function snapshotDe(competence: Competence | string) {
   const workspaceId = await currentWorkspaceId();
-  return runWithoutScope(async () =>
-    prisma.snapshot.findFirst({
+  return runWithoutScope(async () => {
+    // Fechamento nativo prevalece SEMPRE (F1.14: "o definitivo substitui o
+    // selo importado"). Sem nativo, vale a reconstrução de importação mais
+    // recente — é ela que faz a máquina do tempo responder um mês que nunca
+    // teve fechamento, e a tela mostra a origem.
+    const nativa = await prisma.snapshot.findFirst({
       where: { workspaceId, competence, kind: "NATIVE" },
       orderBy: { version: "desc" },
-    })
-  );
+    });
+    if (nativa) return nativa;
+    return prisma.snapshot.findFirst({
+      where: { workspaceId, competence, kind: "REBUILT_FROM_MIGRATION" },
+      orderBy: { createdAt: "desc" },
+    });
+  });
 }
 
 /** Fotografias AVULSAS de uma competência (§5.7), da mais recente. */

@@ -31,6 +31,10 @@ export type Fotografia = {
   checksum: string;
   checksumPorArea: Record<string, string>;
   precisaRevalidar: boolean;
+  /** NATIVA = fechamento; IMPORTADA = reconstruída pela Importação Total. */
+  origem: "NATIVA" | "IMPORTADA";
+  /** Nome do lote quando IMPORTADA (importacao-<lote>). */
+  nomeDoLote: string | null;
   areas: Record<string, any>;
 };
 
@@ -51,6 +55,8 @@ export async function lerFotografia(
     checksum: row.checksum,
     checksumPorArea: (row.checksumByArea ?? {}) as Record<string, string>,
     precisaRevalidar: row.needsRevalidation,
+    origem: row.kind === "REBUILT_FROM_MIGRATION" ? "IMPORTADA" : "NATIVA",
+    nomeDoLote: row.kind === "REBUILT_FROM_MIGRATION" ? row.name || null : null,
     areas: (row.areas ?? {}) as Record<string, any>,
   };
 }

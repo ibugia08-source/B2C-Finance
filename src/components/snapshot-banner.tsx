@@ -20,12 +20,15 @@ export function SnapshotBanner({
   fechadoPor,
   fechadoEm,
   precisaRevalidar,
+  origem = "NATIVA",
 }: {
   competence: string;
   versao: number;
   fechadoPor: string | null;
   fechadoEm: Date | null;
   precisaRevalidar?: boolean;
+  /** IMPORTADA = fotografia reconstruída pela Importação Total (F1.14). */
+  origem?: "NATIVA" | "IMPORTADA";
 }) {
   const [ano, mes] = competence.split("-").map(Number);
   return (
@@ -42,9 +45,15 @@ export function SnapshotBanner({
         {fechadoPor ? ` · fechado por ${fechadoPor}` : ""}
         {fechadoEm ? ` em ${formatDateBR(fechadoEm)}` : ""}
       </span>
+      {origem === "IMPORTADA" ? (
+        <span className="rounded-pill border border-warning/40 px-2 py-0.5 text-caption font-medium text-warning-foreground">
+          origem: importação de planilha
+        </span>
+      ) : null}
       <span className="text-caption text-warning-foreground/80">
-        Este mês está fechado: os números são os do fechamento e não mudam
-        mais. Para alterá-los é preciso reabrir a competência.
+        {origem === "IMPORTADA"
+          ? "Retrato reconstruído a partir da planilha importada. Um fechamento nativo deste mês, quando houver, passa a valer no lugar."
+          : "Este mês está fechado: os números são os do fechamento e não mudam mais. Para alterá-los é preciso reabrir a competência."}
       </span>
       {precisaRevalidar ? (
         <span className="ml-auto rounded-pill bg-warning px-2 py-0.5 text-caption font-medium text-warning-foreground">

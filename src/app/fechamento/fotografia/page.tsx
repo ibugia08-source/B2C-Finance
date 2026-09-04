@@ -112,6 +112,7 @@ export default async function FotografiaPage({
         fechadoPor={foto.fechadoPor}
         fechadoEm={foto.fechadoEm}
         precisaRevalidar={foto.precisaRevalidar}
+        origem={foto.origem}
       />
 
       <Avulsas competence={competence} lista={avulsas} podeCriar={podeFotografar} />
