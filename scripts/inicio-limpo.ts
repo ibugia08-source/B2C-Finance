@@ -22,36 +22,9 @@ import { assertDestructiveAllowed } from "./guard";
 import { writeFileSync } from "fs";
 loadEnv();
 
-/**
- * ESTRUTURA — o que faz o sistema funcionar, e não é dado de operação.
- * Apagar qualquer uma destas produz um sistema que parece vazio e está
- * quebrado.
- */
-const ESTRUTURA = new Set([
-  "_prisma_migrations",
-  // Quem entra e o que cada um pode
-  "User",
-  "UserPermission",
-  // Organização
-  "Workspace",
-  "LegalEntity",
-  "Agency",
-  "EconomicGroup",
-  // Motor contábil e de métricas
-  "AccountingAccount",
-  "PostingRule",
-  "MetricDefinition",
-  "FeatureFlag",
-  // Configuração que o dono montou e não quer remontar
-  "Category",
-  "CategorizationRule",
-  "ContractTemplate",
-  "AllocationRule",
-  "ImportTemplate",
-  "SavedView",
-  "AISetting",
-  "AnnualTarget",
-]);
+// A lista do que FICA mora no serviço — fonte única entre este script e o
+// botão "Limpar o sistema" de Configurações (mesma regra, um lugar só).
+import { ESTRUTURA } from "@/lib/services/limpar-sistema";
 
 async function main() {
   assertDestructiveAllowed({

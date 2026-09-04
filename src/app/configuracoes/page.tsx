@@ -6,10 +6,11 @@ import { CategoryDialog } from "./category-dialog";
 import { CategoriesList, type CategoryRow } from "./categories-list";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { SetupCard } from "./setup-card";
+import { DangerCard } from "./danger-card";
 import { estadoDoSetup } from "@/lib/services/setup";
 
 export default async function ConfiguracoesPage() {
-  await requirePagePermission("configuracoes.visualizar");
+  const viewer = await requirePagePermission("configuracoes.visualizar");
   const [categories, usageByCat] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
     prisma.transaction.groupBy({
@@ -57,6 +58,9 @@ export default async function ConfiguracoesPage() {
       </div>
 
       <CategoriesList categories={rows} />
+
+      {/* Zona de risco: limpar o sistema — só o ADMIN vê. */}
+      {viewer.role === "ADMIN" && <DangerCard />}
     </div>
   );
 }
