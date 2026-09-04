@@ -8,6 +8,11 @@ import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
 import { requirePermission } from "@/lib/auth/viewer";
 import { parseBRL, parseDateBR, parseMonthParam, toNumber as n, clean } from "@/lib/format";
+import {
+  incorporarComissoesPendentes,
+  pagarComplementoDaFolha,
+  podeRemoverItem,
+} from "@/lib/services/payroll-complement";
 import type { ActionResult } from "./clients";
 
 
@@ -121,35 +126,11 @@ export async function ensurePayroll(
       }
     }
 
-    // Comissões PENDENTES da competência entram na folha automaticamente.
-    // A transição PENDING → APPROVED garante que nunca entram duas vezes.
-    if (run.status !== "PAID") {
-      const pending = await prisma.commission.findMany({
-        where: { month, year, status: "PENDING" },
-        include: { client: { select: { name: true } } },
-      });
-      if (pending.length > 0) {
-        // Lote único (antes: 2 queries POR comissão) — mesma atomicidade.
-        await prisma.$transaction([
-          prisma.payrollItem.createMany({
-            data: pending.map((c) => ({
-              payrollId: run.id,
-              employeeId: c.employeeId,
-              kind: "COMMISSION" as PayrollItemKind,
-              amount: c.amount,
-              notes:
-                [c.client?.name ? `Comissão — ${c.client.name}` : "Comissão", c.notes]
-                  .filter(Boolean)
-                  .join(" · "),
-            })),
-          }),
-          prisma.commission.updateMany({
-            where: { id: { in: pending.map((c) => c.id) } },
-            data: { status: "APPROVED" },
-          }),
-        ]);
-      }
-    }
+    // Comissões PENDENTES da competência entram na folha automaticamente —
+    // INCLUSIVE com a folha já PAGA: aí o item nasce sem carimbo de
+    // pagamento, ou seja, complemento A PAGAR (comissão fecha no mês
+    // seguinte, e a folha original não muda de valor).
+    await incorporarComissoesPendentes(run);
     revalidatePayroll();
     return { ok: true, runId: run.id };
   } catch (e: any) {
@@ -251,11 +232,16 @@ export async function addPayrollItem(formData: FormData): Promise<ActionResult> 
     });
     const run = await prisma.payroll.findUnique({ where: { id: parsed.payrollId } });
     if (!run) return { ok: false, error: "Folha não encontrada." };
-    if (run.status === "PAID")
-      return { ok: false, error: "Folha paga não pode ser alterada." };
+    // Folha PAGA aceita lançamento — ele entra sem carimbo de pagamento
+    // (complemento A PAGAR) e a despesa original não muda de valor.
     await prisma.payrollItem.create({ data: parsed });
     revalidatePayroll();
-    return { ok: true };
+    return {
+      ok: true,
+      ...(run.status === "PAID"
+        ? { warning: "Folha já paga: o lançamento entrou como complemento a pagar." }
+        : {}),
+    };
   } catch (e: any) {
     return { ok: false, error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao adicionar o item." };
   }
@@ -269,8 +255,8 @@ export async function deletePayrollItem(id: string): Promise<ActionResult> {
       include: { payroll: { select: { status: true } } },
     });
     if (!item) return { ok: false, error: "Item não encontrado." };
-    if (item.payroll.status === "PAID")
-      return { ok: false, error: "Folha paga não pode ser alterada." };
+    const regra = podeRemoverItem(item.payroll.status, item);
+    if (!regra.ok) return regra;
     await prisma.payrollItem.deleteMany({ where: { id } });
     revalidatePayroll();
     return { ok: true };
@@ -321,6 +307,12 @@ export async function setPayrollStatus(
             hash: null,
           },
         }),
+        // Todos os itens presentes foram cobertos por ESTA despesa — o
+        // carimbo é o que separa o pago do complemento a pagar futuro.
+        prisma.payrollItem.updateMany({
+          where: { payrollId: runId, settledAt: null },
+          data: { settledAt: paidAt },
+        }),
         // comissões da competência quitadas junto com a folha
         prisma.commission.updateMany({
           where: { month: run.month, year: run.year, status: "APPROVED" },
@@ -367,4 +359,17 @@ export async function generateApproveAndPayPayroll(
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao pagar a folha do mês." };
   }
+}
+
+/**
+ * Paga o COMPLEMENTO de uma folha já paga: os lançamentos posteriores
+ * (comissões que fecham no mês seguinte, bônus, ajustes) viram uma NOVA
+ * despesa PAYROLL na data de hoje — a despesa original nunca muda de valor.
+ */
+export async function payPayrollComplement(runId: string): Promise<ActionResult> {
+  await requirePermission("folha.editar");
+  const r = await pagarComplementoDaFolha(runId);
+  if (!r.ok) return r;
+  revalidatePayroll();
+  return { ok: true };
 }

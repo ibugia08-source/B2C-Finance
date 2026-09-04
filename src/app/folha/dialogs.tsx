@@ -13,11 +13,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   saveEmployee, deleteEmployee, ensurePayroll, addPayrollItem,
   deletePayrollItem, setPayrollStatus, saveCommission, deleteCommission,
+  payPayrollComplement,
 } from "@/lib/actions/payroll";
 import {
   Plus, Pencil, Trash2, Play, CheckCircle2, BadgeDollarSign, Percent, RefreshCw,
 } from "lucide-react";
-import { formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
+import { formatBRL, formatDateInput, formatDecimalInput as fmt } from "@/lib/format";
 
 import { EMPLOYEE_TYPE_LABEL, ITEM_KIND_LABEL } from "./_meta";
 
@@ -253,10 +254,13 @@ export function DeleteCommissionButton({ id }: { id: string }) {
 export function PayrollItemDialog({
   payrollId,
   employees,
+  paid = false,
   trigger,
 }: {
   payrollId: string;
   employees: { id: string; name: string }[];
+  /** Folha já paga: o lançamento entra como complemento a pagar. */
+  paid?: boolean;
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -267,12 +271,22 @@ export function PayrollItemDialog({
       <DialogTrigger asChild>
         {trigger ?? (
           <Button variant="outline" size="sm">
-            <Plus className="h-4 w-4 mr-1" /> Adicionar item
+            <Plus className="h-4 w-4 mr-1" /> {paid ? "Adicionar lançamento" : "Adicionar item"}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-sm">
-        <DialogHeader><DialogTitle>Item da folha</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{paid ? "Lançamento pós-pagamento" : "Item da folha"}</DialogTitle>
+        </DialogHeader>
+        {paid && (
+          <p className="text-xs text-muted-foreground -mt-1">
+            A folha já foi paga e a despesa original não muda de valor: este
+            lançamento entra como <strong>complemento a pagar</strong> — pague
+            pelo botão &ldquo;Pagar complemento&rdquo; quando fechar os valores
+            (comissão do mês seguinte, bônus, ajuste).
+          </p>
+        )}
         <form
           action={(fd) => start(async () => {
             setError(null);
@@ -293,7 +307,7 @@ export function PayrollItemDialog({
           </div>
           <div>
             <Label>Tipo</Label>
-            <Select name="kind" defaultValue="BONUS">
+            <Select name="kind" defaultValue={paid ? "COMMISSION" : "BONUS"}>
               {Object.entries(ITEM_KIND_LABEL).map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
               ))}
@@ -370,6 +384,49 @@ export function PayrollStatusButtons({ runId, status }: { runId: string; status:
           </Button>
         )}
       </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Paga o COMPLEMENTO da folha: os lançamentos feitos DEPOIS do pagamento
+ * (comissões do mês seguinte, bônus, ajustes) viram uma nova despesa na data
+ * de hoje — a despesa da folha original não muda de valor.
+ */
+export function PayComplementButton({
+  runId,
+  amount,
+  competencia,
+}: {
+  runId: string;
+  amount: number;
+  competencia: string; // "MM/AAAA"
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        disabled={pending}
+        onClick={async () => {
+          if (
+            !(await confirmAction({
+              title: `Pagar complemento de ${formatBRL(amount)}?`,
+              description: `Cria uma despesa de folha com a data de hoje cobrindo os lançamentos a pagar da competência ${competencia}. A despesa da folha original não muda.`,
+            }))
+          )
+            return;
+          start(async () => {
+            setError(null);
+            const res = await payPayrollComplement(runId);
+            if (!res.ok) setError(res.error);
+          });
+        }}
+      >
+        <BadgeDollarSign className="h-4 w-4 mr-1" />
+        {pending ? "Pagando…" : `Pagar complemento (${formatBRL(amount)})`}
+      </Button>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );

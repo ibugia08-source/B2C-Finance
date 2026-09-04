@@ -2017,6 +2017,9 @@ model PayrollItem {
   kind       PayrollItemKind @default(SALARY)
   amount     Decimal         @db.Decimal(14, 2) // DEDUCTION entra negativo
   notes      String?
+  /// Quando este item foi COBERTO por um pagamento (a despesa da folha ou um
+  /// complemento posterior). Nulo em folha PAGA = lançamento a pagar.
+  settledAt  DateTime?       @db.Timestamptz(3)
   ownerId    String?
   owner      User?           @relation("OwnerPayrollItem", fields: [ownerId], references: [id])
   createdAt  DateTime        @default(now()) @db.Timestamptz(3)

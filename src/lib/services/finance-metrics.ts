@@ -230,6 +230,8 @@ export type PayrollSummary = {
     employee: { id: string; name: string; role: string | null };
   }[];
   folhaSobreReceita: number;
+  /** Folha PAGA com lançamentos posteriores ainda não pagos (complemento). */
+  pendingTotal: number;
 };
 
 export async function getPayrollSummary(
@@ -246,7 +248,7 @@ export async function getPayrollSummary(
   // Sem folha lançada no mês (caso comum ao navegar meses antigos/futuros):
   // retorna zerado ANTES dos aggregates de receita — 2 queries a menos.
   if (!run) {
-    return { runId: null, status: null, total: 0, byEmployee: [], items: [], folhaSobreReceita: 0 };
+    return { runId: null, status: null, total: 0, byEmployee: [], items: [], folhaSobreReceita: 0, pendingTotal: 0 };
   }
 
   const monthStart = new Date(year, month - 1, 1);
@@ -265,9 +267,13 @@ export async function getPayrollSummary(
 
   const byEmp = new Map<string, { employeeId: string; name: string; role: string | null; total: number }>();
   let total = 0;
+  // Complemento A PAGAR: item sem carimbo de pagamento numa folha PAGA
+  // (lançamento posterior — comissão que fechou no mês seguinte).
+  let pendingTotal = 0;
   for (const item of run.items) {
     const amt = n(item.amount) * (item.kind === "DEDUCTION" ? -1 : 1);
     total += amt;
+    if (run.status === "PAID" && item.settledAt == null) pendingTotal += amt;
     const cur = byEmp.get(item.employee.id) ?? {
       employeeId: item.employee.id,
       name: item.employee.name,
@@ -292,6 +298,7 @@ export async function getPayrollSummary(
       employee: { id: it.employee.id, name: it.employee.name, role: it.employee.role },
     })),
     folhaSobreReceita: receitas > 0 ? total / receitas : 0,
+    pendingTotal,
   };
 }
 

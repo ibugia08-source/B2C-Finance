@@ -16,7 +16,7 @@ import { requirePagePermission } from "@/lib/auth/viewer";
 import {
   EmployeeDialog, EmployeeActions, GeneratePayrollButton,
   PayrollItemDialog, DeleteItemButton, PayrollStatusButtons,
-  CommissionDialog, DeleteCommissionButton,
+  CommissionDialog, DeleteCommissionButton, PayComplementButton,
 } from "./dialogs";
 import { Button } from "@/components/ui/button";
 import { Percent } from "lucide-react";
@@ -96,9 +96,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
               clients={clients}
               defaultMonth={monthValue}
             />
-            {(!run || run.status !== "PAID") && (
-              <GeneratePayrollButton month={month} year={year} exists={!!run} />
-            )}
+            <GeneratePayrollButton month={month} year={year} exists={!!run} />
           </div>
         }
       />
@@ -146,10 +144,16 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
             </div>
             {run && (
               <div className="flex flex-wrap items-center gap-2">
-                {run.status !== "PAID" && (
-                  <PayrollItemDialog
-                    payrollId={run.id}
-                    employees={activeEmployees.map((e) => ({ id: e.id, name: e.name }))}
+                <PayrollItemDialog
+                  payrollId={run.id}
+                  paid={run.status === "PAID"}
+                  employees={activeEmployees.map((e) => ({ id: e.id, name: e.name }))}
+                />
+                {run.status === "PAID" && summary.pendingTotal > 0 && (
+                  <PayComplementButton
+                    runId={run.id}
+                    amount={summary.pendingTotal}
+                    competencia={`${String(month).padStart(2, "0")}/${year}`}
                   />
                 )}
                 <PayrollStatusButtons runId={run.id} status={run.status} />
@@ -177,9 +181,14 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                     <MobileCardHeader
                       title={item.employee.name}
                       aside={
-                        <Badge variant={negative ? "destructive" : "outline"}>
-                          {ITEM_KIND_LABEL[item.kind] ?? item.kind}
-                        </Badge>
+                        <span className="flex items-center gap-1">
+                          {run.status === "PAID" && !item.settledAt && (
+                            <Badge variant="warning">a pagar</Badge>
+                          )}
+                          <Badge variant={negative ? "destructive" : "outline"}>
+                            {ITEM_KIND_LABEL[item.kind] ?? item.kind}
+                          </Badge>
+                        </span>
                       }
                     />
                     <Field label="Valor">
@@ -187,7 +196,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                       {formatBRL(Number(item.amount))}
                     </Field>
                     {item.notes ? <Field label="Observação">{item.notes}</Field> : null}
-                    {run.status !== "PAID" ? (
+                    {run.status !== "PAID" || !item.settledAt ? (
                       <MobileCardActions>
                         <DeleteItemButton id={item.id} />
                       </MobileCardActions>
@@ -198,6 +207,11 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
               <p className="px-1 text-right text-dense font-semibold">
                 Total: {formatBRL(summary.total)}
               </p>
+              {run.status === "PAID" && summary.pendingTotal > 0 && (
+                <p className="px-1 text-right text-dense font-medium text-warning-foreground">
+                  Complemento a pagar: {formatBRL(summary.pendingTotal)}
+                </p>
+              )}
             </MobileCards>
             <div className="hidden md:block">
             <Table>
@@ -207,7 +221,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                   <TableHead>Tipo</TableHead>
                   <TableHead>Observação</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
-                  {run.status !== "PAID" && <TableHead></TableHead>}
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -217,9 +231,14 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.employee.name}</TableCell>
                       <TableCell>
-                        <Badge variant={negative ? "destructive" : "outline"}>
-                          {ITEM_KIND_LABEL[item.kind] ?? item.kind}
-                        </Badge>
+                        <span className="flex items-center gap-1.5">
+                          <Badge variant={negative ? "destructive" : "outline"}>
+                            {ITEM_KIND_LABEL[item.kind] ?? item.kind}
+                          </Badge>
+                          {run.status === "PAID" && !item.settledAt && (
+                            <Badge variant="warning">a pagar</Badge>
+                          )}
+                        </span>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {item.notes ?? "—"}
@@ -230,11 +249,11 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                         {negative ? "−" : ""}
                         {formatBRL(Number(item.amount))}
                       </TableCell>
-                      {run.status !== "PAID" && (
-                        <TableCell className="text-right">
+                      <TableCell className="text-right">
+                        {(run.status !== "PAID" || !item.settledAt) && (
                           <DeleteItemButton id={item.id} />
-                        </TableCell>
-                      )}
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -245,8 +264,19 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                   <TableCell className="text-right font-bold">
                     {formatBRL(summary.total)}
                   </TableCell>
-                  {run.status !== "PAID" && <TableCell />}
+                  <TableCell />
                 </TableRow>
+                {run.status === "PAID" && summary.pendingTotal > 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-right font-medium text-warning-foreground">
+                      Complemento a pagar (lançamentos pós-pagamento)
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-warning-foreground">
+                      {formatBRL(summary.pendingTotal)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
             </div>
