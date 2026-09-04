@@ -283,6 +283,34 @@ e write-off. Foi lido como "não existe teto nem aprovação", mantendo o ajuste
 em si. Se a intenção era que desconto e baixa de dívida não existam de forma
 alguma, é uma linha a mudar na F3.8.
 
+## PLANO v2 (recebido em 04/09/2026) — RECONCILIAÇÃO
+
+A direção enviou o EXECUTAR v2. Reconciliado tarefa a tarefa contra o sistema
+entregue (GATE FINAL de 02/09): TUDO do v2 já existe e está no diário — fases
+0 a 5, transversais, gates — EXCETO o bloco novo IMPORTAÇÃO TOTAL (carga
+histórica multi-mês), que reintroduz como funcionalidade de produto o que a
+decisão 19.32 havia cortado como migração one-shot. Faz sentido agora: o banco
+de produção foi zerado em 03/09 e a história será recarregada por planilha.
+
+Delta real a executar (numeração do v2):
+
+- [x] F1.10 [SCHEMA] ImportBatch + proveniência por linha + fila de revisão — JÁ EXISTIA
+      (ImportedRecord com sourceRow/confidence/raw/reviewStatus; fila em /importacoes).
+      Delta desta fase: colunas `sourceSheet` e `operation` (CRIOU|ATUALIZOU) para o
+      modelo de 3 abas e para a reversão distinguir o que pode desfazer.
+- [ ] F1.11 Parser do modelo de 3 abas (CLIENTES/MENSAL/RENOVACOES) + conversor do
+      formato largo (aba por mês / colunas de meses) + modelo XLSX baixável.
+- [ ] F1.12 Motor de aplicação por competência (upsert por documento; termos por
+      vigência inferidos; Billings+Payments por status incl. "Pago em MM/AAAA";
+      AvaliacaoMensal; gestores por vigência; churn/pausa inferidos com alerta;
+      idempotente por documento+competência; lote reversível).
+- [ ] F1.13 Prévia obrigatória (erros por linha, fila de revisão, RELATÓRIO DE
+      RECONCILIAÇÃO POR MÊS) + confirmação + reversão total do lote.
+- [ ] F1.14 Pós-importação: snapshots REBUILT_FROM_MIGRATION por mês importado sem
+      fechamento nativo + selo de origem importada na fotografia (delta de F2.4).
+- [ ] F1.15 Carga real das planilhas históricas. DECISÃO: exige as planilhas da
+      direção e as respostas 19.13/19.15 no contexto novo — PARAR e perguntar.
+
 ## DIÁRIO DE EXECUÇÃO
 
 (adicionar uma linha por tarefa concluída: data . tarefa . arquivos . observações)
