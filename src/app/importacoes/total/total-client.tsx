@@ -184,16 +184,39 @@ export function ImportTotalClient() {
             </Card>
           )}
 
-          {!ok.confirmado && ok.erros.length === 0 && ok.contagens.mensal + ok.contagens.clientes > 0 && (
-            <div className="flex items-center gap-3">
-              <Button onClick={() => submit(true)} disabled={pending}>
-                {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : null}
-                Confirmar importação
-              </Button>
-              <span className="text-caption text-muted-foreground">
-                Grava tudo acima e gera as fotografias dos meses encerrados.
-              </span>
-            </div>
+          {/* A zona de confirmação SEMPRE aparece depois da prévia — quando a
+              confirmação não está liberada, ela DIZ o porquê em vez de sumir
+              (defeito relatado pela direção em 04/09: prévia sem botão nenhum). */}
+          {!ok.confirmado && (
+            <Card>
+              <CardContent className="flex flex-wrap items-center gap-3 p-4">
+                {ok.erros.length > 0 ? (
+                  <>
+                    <Button disabled>Confirmar importação</Button>
+                    <span className="text-dense text-destructive">
+                      A confirmação libera depois de corrigir {ok.erros.length === 1 ? "o erro" : `os ${ok.erros.length} erros`} de linha
+                      acima na planilha e clicar em “Ver prévia” de novo.
+                    </span>
+                  </>
+                ) : ok.contagens.mensal + ok.contagens.clientes + ok.contagens.renovacoes === 0 ? (
+                  <span className="text-dense text-muted-foreground">
+                    Nenhuma linha reconhecida — confira se as abas se chamam
+                    CLIENTES, MENSAL e RENOVACOES (baixe o modelo para comparar
+                    os cabeçalhos).
+                  </span>
+                ) : (
+                  <>
+                    <Button onClick={() => submit(true)} disabled={pending}>
+                      {pending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden /> : null}
+                      Confirmar importação
+                    </Button>
+                    <span className="text-caption text-muted-foreground">
+                      Grava tudo acima e gera as fotografias dos meses encerrados.
+                    </span>
+                  </>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {ok.confirmado && (
