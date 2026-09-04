@@ -14,18 +14,31 @@ const EXTRA_TYPE_LABEL: Record<string, string> = {
 /** Receitas Extras do período (automáticas + manuais + avulsas). */
 async function buildReceitaExtra(q: ReportQuery): Promise<ReportRow[]> {
   const { start, end } = q.period;
+  // Meses do período, para filtrar pela COMPETÊNCIA informada no cadastro.
+  const meses: { y: number; m: number }[] = [];
+  for (
+    let d = new Date(start.getFullYear(), start.getMonth(), 1);
+    d < end && meses.length < 36;
+    d = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+  )
+    meses.push({ y: d.getFullYear(), m: d.getMonth() + 1 });
   const [extras, loose] = await Promise.all([
     prisma.extraRevenue.findMany({
-      // Receita Extra é apenas MANUAL (automáticas legadas ficam fora).
+      // Receita Extra é apenas MANUAL (automáticas legadas ficam fora) e
+      // entra pela competência do cadastro; legado cai no recebimento.
       where: {
-        receivedAt: { gte: start, lt: end },
         origin: "MANUAL",
+        OR: [
+          ...meses.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+          { competenceYear: null, receivedAt: { gte: start, lt: end } },
+        ],
         ...(q.clientId ? { clientId: q.clientId } : {}),
       },
       orderBy: { receivedAt: "desc" },
       select: {
         description: true, amount: true, receivedAt: true, type: true, origin: true,
         originalReferenceMonth: true, originalReferenceYear: true,
+        competenceMonth: true, competenceYear: true,
         client: { select: { name: true } },
       },
     }),
@@ -50,6 +63,9 @@ async function buildReceitaExtra(q: ReportQuery): Promise<ReportRow[]> {
       descricao: e.description,
       tipo: EXTRA_TYPE_LABEL[e.type] ?? e.type,
       origem: e.origin === "AUTOMATIC" ? "Automática" : "Manual",
+      competencia: e.competenceMonth
+        ? `${String(e.competenceMonth).padStart(2, "0")}/${e.competenceYear}`
+        : null,
       competenciaOriginal: e.originalReferenceMonth
         ? `${String(e.originalReferenceMonth).padStart(2, "0")}/${e.originalReferenceYear}`
         : null,
@@ -61,6 +77,7 @@ async function buildReceitaExtra(q: ReportQuery): Promise<ReportRow[]> {
       descricao: i.description || "Receita avulsa",
       tipo: "Entrada avulsa",
       origem: "Manual",
+      competencia: null,
       competenciaOriginal: null,
       valor: n(i.amount),
     })),
@@ -77,6 +94,7 @@ export const receitaExtraReport: ReportDef = {
     { key: "descricao", label: "Descrição", kind: "text" },
     { key: "tipo", label: "Tipo", kind: "text" },
     { key: "origem", label: "Origem", kind: "text" },
+    { key: "competencia", label: "Competência", kind: "text" },
     { key: "competenciaOriginal", label: "Competência original", kind: "text" },
     { key: "valor", label: "Valor", kind: "money", total: true },
   ],

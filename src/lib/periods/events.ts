@@ -33,6 +33,10 @@ export type CategoriaDeEvento =
  */
 export const CATEGORIA_DO_EVENTO: Record<string, CategoriaDeEvento> = {
   REVENUE_RECOGNIZED: "ECONOMICO",
+  // Receita extra reconhece e recebe no MESMO fato, na competência que o
+  // dono informou no cadastro — muda o resultado dela, logo mês fechado
+  // bloqueia (lançar e excluir).
+  EXTRA_REVENUE_RECEIVED: "ECONOMICO",
   EXPENSE_RECOGNIZED_ON_CREDIT: "ECONOMICO",
   BILLING_ADJUSTED: "ECONOMICO",
   MANUAL_LEDGER_ENTRY: "ECONOMICO",

@@ -249,8 +249,16 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
         select: { amount: true, competenceMonth: true },
       }),
       prisma.extraRevenue.findMany({
-        where: { origin: "MANUAL", receivedAt: { gte: yStart, lt: yEnd } },
-        select: { amount: true, receivedAt: true },
+        // Pela COMPETÊNCIA informada no cadastro; legado sem competência cai
+        // no mês do recebimento.
+        where: {
+          origin: "MANUAL",
+          OR: [
+            { competenceYear: year },
+            { competenceYear: null, receivedAt: { gte: yStart, lt: yEnd } },
+          ],
+        },
+        select: { amount: true, receivedAt: true, competenceMonth: true },
       }),
       prisma.income.findMany({
         where: { status: "RECEIVED", billingId: null, receivedAt: { gte: yStart, lt: yEnd } },
@@ -297,8 +305,10 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
     if (i >= 0 && i < 12) tcv[i] += n(b.amount);
   }
 
-  // Receita Extra manual + receitas avulsas por mês de recebimento.
-  for (const e of extraRevenues) extra[e.receivedAt.getMonth()] += n(e.amount);
+  // Receita Extra manual entra no mês da COMPETÊNCIA informada; avulsas
+  // (Income) seguem pelo mês de recebimento.
+  for (const e of extraRevenues)
+    extra[(e.competenceMonth ?? e.receivedAt.getMonth() + 1) - 1] += n(e.amount);
   for (const i of looseIncomes) extra[i.receivedAt.getMonth()] += n(i.amount);
 
   // Recebido por competência (pago on-time ou adiantado; atrasado não conta no

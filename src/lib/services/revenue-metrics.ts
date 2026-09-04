@@ -254,10 +254,15 @@ async function getReceiptsSummaryImpl(
     }),
     prisma.extraRevenue.findMany({
       // Receita Extra é apenas MANUAL (automáticas legadas ficam fora para
-      // não duplicar com a recuperação contada direto dos pagamentos).
+      // não duplicar com a recuperação contada direto dos pagamentos) e
+      // entra pela COMPETÊNCIA informada no cadastro — não pelo mês do
+      // caixa. Linha legada sem competência cai no mês do recebimento.
       where: {
-        receivedAt: { gte: start, lt: end },
         origin: "MANUAL",
+        OR: [
+          ...months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+          { competenceYear: null, receivedAt: { gte: start, lt: end } },
+        ],
         ...(clientFilter as any),
       },
       select: { amount: true, origin: true },

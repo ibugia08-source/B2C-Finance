@@ -93,8 +93,15 @@ async function getAnnualPanelImpl(year: number): Promise<AnnualPanel> {
       select: { amount: true, receivedAt: true },
     }),
     prisma.extraRevenue.findMany({
-      where: { origin: "MANUAL", receivedAt: { gte: yStart, lt: yEnd } },
-      select: { amount: true, receivedAt: true },
+      // Pela COMPETÊNCIA informada no cadastro; legado cai no recebimento.
+      where: {
+        origin: "MANUAL",
+        OR: [
+          { competenceYear: year },
+          { competenceYear: null, receivedAt: { gte: yStart, lt: yEnd } },
+        ],
+      },
+      select: { amount: true, receivedAt: true, competenceMonth: true },
     }),
     prisma.billing.findMany({
       where: { competenceYear: year, status: { not: "CANCELED" } },
@@ -140,7 +147,9 @@ async function getAnnualPanelImpl(year: number): Promise<AnnualPanel> {
 
   const outrasEntradas = zero();
   for (const i of looseIncomes) outrasEntradas[i.receivedAt.getMonth()] += n(i.amount);
-  for (const e of manualExtras) outrasEntradas[e.receivedAt.getMonth()] += n(e.amount);
+  for (const e of manualExtras)
+    outrasEntradas[(e.competenceMonth ?? e.receivedAt.getMonth() + 1) - 1] +=
+      n(e.amount);
 
   const clientesAtivos = zero();
   for (const b of cycleBillings)

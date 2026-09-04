@@ -1859,6 +1859,11 @@ model ExtraRevenue {
   // Competência ORIGINAL da cobrança recuperada (de onde o valor "veio")
   originalReferenceMonth Int?
   originalReferenceYear  Int?
+  // Competência em que a receita ENTRA (exercício informado no cadastro —
+  // pode diferir do mês do caixa; nulo só em linha legada, que cai no
+  // mês do recebimento)
+  competenceMonth        Int?
+  competenceYear         Int?
   ownerId                String?
   owner                  User?              @relation("OwnerExtraRevenue", fields: [ownerId], references: [id])
   createdAt              DateTime           @default(now()) @db.Timestamptz(3)
@@ -1868,6 +1873,7 @@ model ExtraRevenue {
   @@index([receivedAt])
   @@index([type])
   @@index([ownerId])
+  @@index([competenceYear, competenceMonth])
 }
 
 // Pagamento de uma cobrança (permite parcial; histórico preservado).

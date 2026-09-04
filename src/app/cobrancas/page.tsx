@@ -32,6 +32,8 @@ import { PastDelinquencyDialog } from "./past-delinquency-dialog";
 import { ReceivablesTable, type ReceivableRow } from "./receivables-table";
 import { GenerateAllButton } from "@/app/acordos/generate-all-button";
 import { EXPENSE_TYPE_LABEL } from "@/app/despesas/_meta";
+import { ExtraRevenueSection, type ExtraRevenueRow } from "./extra-revenue-section";
+import { EXTRA_REVENUE_TYPE_LABEL } from "@/lib/extra-revenue-meta";
 import {
   SectionNav,
   RecebimentosSection,
@@ -131,6 +133,8 @@ async function RecebimentosPageInner({
   const gates = {
     entradas: can(viewer, "receitas.visualizar"),
     entradasCriar: can(viewer, "receitas.editar"),
+    extrasCriar: can(viewer, "receitas.criar"),
+    extrasExcluir: can(viewer, "receitas.excluir"),
     contas: can(viewer, "despesas.visualizar"),
     contasCriar: can(viewer, "despesas.editar"),
     contasPagar: can(viewer, "despesas.marcar_como_paga"),
@@ -508,9 +512,14 @@ async function RecebimentosPageInner({
       : Promise.resolve([] as any[]),
     gates.entradas
       ? prisma.extraRevenue.findMany({
+          // Pela COMPETÊNCIA informada no cadastro (exercício); legado sem
+          // competência cai no mês do recebimento — mesma regra das métricas.
           where: {
-            receivedAt: { gte: monthStart, lt: monthEnd },
             origin: "MANUAL",
+            OR: [
+              { competenceYear: mes.year, competenceMonth: mes.month },
+              { competenceYear: null, receivedAt: { gte: monthStart, lt: monthEnd } },
+            ],
             ...(searchParams.cliente ? { clientId: searchParams.cliente } : {}),
           },
           orderBy: { receivedAt: "desc" },
@@ -520,6 +529,9 @@ async function RecebimentosPageInner({
             description: true,
             amount: true,
             receivedAt: true,
+            type: true,
+            competenceMonth: true,
+            competenceYear: true,
             client: { select: { name: true } },
           },
         })
@@ -682,6 +694,23 @@ async function RecebimentosPageInner({
       .reduce((s, r) => s + r.openAmount, 0),
   };
 
+  // Quadro próprio das RECEITAS EXTRAS (fim da tela): as mesmas linhas que
+  // entram na lista unificada acima, agora com o exercício visível e a
+  // gestão (lançar / excluir) num lugar só.
+  const extraRevenueRows: ExtraRevenueRow[] = entradasExtras.map((e: any) => ({
+    id: e.id,
+    description: e.client?.name
+      ? `${e.description} — ${e.client.name}`
+      : e.description,
+    typeLabel: EXTRA_REVENUE_TYPE_LABEL[e.type] ?? e.type,
+    competenceBR: e.competenceMonth
+      ? `${String(e.competenceMonth).padStart(2, "0")}/${e.competenceYear}`
+      : `${String(mes.month).padStart(2, "0")}/${mes.year}`,
+    receivedBR: formatDateBR(e.receivedAt),
+    amount: Number(e.amount),
+  }));
+  const extraRevenueTotal = extraRevenueRows.reduce((s, r) => s + r.amount, 0);
+
   const contaRows: ContaRow[] = contasRaw.map((t: any) => ({
     id: t.id,
     description: t.description,
@@ -763,6 +792,15 @@ async function RecebimentosPageInner({
       : []),
     ...(gates.renovacoes
       ? [{ href: "#renovacoes", label: "Renovações", count: renewalPanel?.rows.length ?? 0 }]
+      : []),
+    ...(gates.entradas
+      ? [
+          {
+            href: "#receitas-extras",
+            label: "Receitas extras",
+            count: extraRevenueRows.length,
+          },
+        ]
       : []),
   ];
 
@@ -1037,6 +1075,18 @@ async function RecebimentosPageInner({
           monthLabel={referenceMonth}
           competence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
           defaultMonth={mes.month}
+        />
+      )}
+
+      {/* ================= RECEITAS EXTRAS DO MÊS ================= */}
+      {gates.entradas && (
+        <ExtraRevenueSection
+          rows={extraRevenueRows}
+          total={extraRevenueTotal}
+          month={mes.month}
+          year={mes.year}
+          canCreate={gates.extrasCriar && !mesFechado}
+          canDelete={gates.extrasExcluir && !mesFechado}
         />
       )}
 
