@@ -127,13 +127,28 @@ export function DespesasDetail({
 }
 
 export function RecebidoDetail({
-  items, mrrReceived, tcvReceived, total,
-}: { items: ReceivedItem[]; mrrReceived: number; tcvReceived: number; total: number }) {
+  items, mrrReceived, tcvReceived, recuperado = 0, extras = 0, total,
+}: {
+  items: ReceivedItem[];
+  mrrReceived: number;
+  tcvReceived: number;
+  /** cobranças de meses anteriores recebidas no mês (recuperação) */
+  recuperado?: number;
+  /** receitas extras manuais + entradas avulsas */
+  extras?: number;
+  total: number;
+}) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground mb-2">Recebido por modalidade</p>
+      <p className="text-xs text-muted-foreground mb-2">Recebido por origem</p>
       <Line label="MRR recebido" value={formatBRL(mrrReceived)} />
       <Line label="TCV recebido" value={formatBRL(tcvReceived)} />
+      {recuperado > 0 && (
+        <Line label="Recuperações de meses anteriores" value={formatBRL(recuperado)} />
+      )}
+      {extras > 0 && (
+        <Line label="Receitas extras e avulsas" value={formatBRL(extras)} />
+      )}
       <Line label="Total recebido" value={formatBRL(total)} strong tone="pos" />
       <p className="text-xs text-muted-foreground mb-1 mt-4">Recebimentos confirmados</p>
       {items.length === 0 ? (

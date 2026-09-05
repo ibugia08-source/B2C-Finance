@@ -22,11 +22,12 @@ import { getFinanceSummary } from "./finance-metrics";
  *
  *  - Faturamento total = MRR previsto + TCV previsto + Receita Extra manual
  *    (TCV entra CHEIO no mês da adesão/renovação, NUNCA rateado).
- *  - Recebido = recebimentos confirmados na competência do mês (mesma base do
- *    módulo Recebimentos / card Em Aberto) + Receita Extra manual recebida.
- *  - Em aberto = max(0, Faturamento total − Recebido). Como a Receita Extra
- *    entra dos dois lados, o Em aberto = previsto MRR/TCV − recebido cobranças
- *    (coerente com Recebimentos e Rotina).
+ *  - Recebido = totalRevenue do dicionário (a MESMA conta do "Recebido no
+ *    mês" da Gestão do Mês): pagamentos da competência + RECUPERAÇÕES de
+ *    meses anteriores recebidas no mês + Receita Extra manual/avulsas.
+ *  - Em aberto = max(0, Faturamento total − (Recebido − Recuperado)): fica na
+ *    base de COMPETÊNCIA — recuperação de mês anterior não abate o aberto do
+ *    mês atual (coerente com Recebimentos e Rotina).
  *  - Vencido ⊂ Em aberto (parte já vencida).
  *  - Resultado = Recebido − Total de despesas.  Margem = Resultado / Recebido.
  *
@@ -45,6 +46,8 @@ export type DashboardMainMetrics = {
   extraManual: number;
   despesas: number;
   recebido: number;
+  /** Recuperações: cobranças de competências ANTERIORES pagas neste mês (⊂ recebido). */
+  recuperado: number;
   mrrRecebido: number;
   tcvRecebido: number;
   emAberto: number; // max(0, total − recebido)
@@ -63,9 +66,16 @@ function buildMetrics(
 ): DashboardMainMetrics {
   const extraManual = receipts.extraRevenueManual;
   const faturamentoTotal = revenue.total + extraManual;
-  const recebido = receipts.receiptsCorrectMonth + extraManual;
+  // RECEBIDO EM CAIXA = a MESMA conta do "Recebido no mês" da Gestão do Mês
+  // (totalRevenue do dicionário): competência certa + RECUPERAÇÕES de meses
+  // anteriores recebidas agora + extras/avulsas. Antes o card excluía as
+  // recuperações e discordava da outra tela — §5.5 proíbe exatamente isso.
+  const recuperado = receipts.extraRevenueAutomatic;
+  const recebido = receipts.totalRevenue;
   const despesas = finance.despesas;
-  const emAberto = Math.max(0, faturamentoTotal - recebido);
+  // EM ABERTO continua na base de COMPETÊNCIA: recuperação de julho recebida
+  // em agosto não abate o que agosto ainda tem a receber.
+  const emAberto = Math.max(0, faturamentoTotal - (recebido - recuperado));
   const resultado = recebido - despesas;
 
   return {
@@ -75,6 +85,7 @@ function buildMetrics(
     extraManual,
     despesas,
     recebido,
+    recuperado,
     mrrRecebido: receipts.mrrReceived,
     tcvRecebido: receipts.tcvReceived,
     emAberto,
@@ -223,7 +234,10 @@ export type YearlySeries = {
   labels: string[]; // Jan..Dez
   faturamento: number[]; // total previsto por mês (MRR+TCV+extra)
   despesas: number[]; // total de despesas por mês
-  recebido: number[]; // recebido por competência do mês
+  /** recebido em caixa: competência do mês + recuperações recebidas no mês + extras */
+  recebido: number[];
+  /** recuperações de competências anteriores, no mês do RECEBIMENTO (⊂ recebido) */
+  recuperado: number[];
   resultado: number[]; // recebido − despesas por mês
 };
 
@@ -265,11 +279,18 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
         select: { amount: true, receivedAt: true },
       }),
       prisma.payment.findMany({
-        // Só pagamentos de cobranças cuja COMPETÊNCIA é do ano selecionado —
-        // bounded e suficiente (recebido é bucketizado por competência).
+        // Pagamentos de cobranças da COMPETÊNCIA do ano (recebido no mês
+        // certo) OU pagos DENTRO do ano (recuperações — contam no mês do
+        // caixa, inclusive as de competências do ano anterior).
         where: {
           status: "CONFIRMED",
-          billing: { status: { not: "CANCELED" }, competenceYear: year },
+          OR: [
+            { billing: { status: { not: "CANCELED" }, competenceYear: year } },
+            {
+              paidAt: { gte: yStart, lt: yEnd },
+              billing: { status: { not: "CANCELED" } },
+            },
+          ],
         },
         select: {
           amount: true,
@@ -288,6 +309,7 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const tcv = zero();
   const extra = zero();
   const recebido = zero();
+  const recuperado = zero();
   const despesas = zero();
 
   // MRR previsto por mês: cliente MRR ativo naquele mês (regra única).
@@ -311,13 +333,18 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
     extra[(e.competenceMonth ?? e.receivedAt.getMonth() + 1) - 1] += n(e.amount);
   for (const i of looseIncomes) extra[i.receivedAt.getMonth()] += n(i.amount);
 
-  // Recebido por competência (pago on-time ou adiantado; atrasado não conta no
-  // mês original — vira recuperação, fora da série de faturamento do mês).
+  // Recebido: pago on-time/adiantado entra na COMPETÊNCIA; pago depois da
+  // competência é RECUPERAÇÃO e entra no mês do CAIXA — a mesma regra do
+  // totalRevenue que os cards do mês usam.
   for (const p of payments) {
     const compKey = p.billing.competenceYear * 12 + (p.billing.competenceMonth - 1);
     const paidKey = p.paidAt.getFullYear() * 12 + p.paidAt.getMonth();
-    if (p.billing.competenceYear === year && paidKey <= compKey) {
-      recebido[p.billing.competenceMonth - 1] += n(p.amount);
+    if (paidKey <= compKey) {
+      if (p.billing.competenceYear === year)
+        recebido[p.billing.competenceMonth - 1] += n(p.amount);
+    } else if (p.paidAt >= yStart && p.paidAt < yEnd) {
+      recebido[p.paidAt.getMonth()] += n(p.amount);
+      recuperado[p.paidAt.getMonth()] += n(p.amount);
     }
   }
   // Receita Extra também é recebimento.
@@ -329,7 +356,7 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const faturamento = mrr.map((v, i) => v + tcv[i] + extra[i]);
   const resultado = recebido.map((r, i) => r - despesas[i]);
 
-  return { year, labels: MONTHS_SHORT, faturamento, despesas, recebido, resultado };
+  return { year, labels: MONTHS_SHORT, faturamento, despesas, recebido, recuperado, resultado };
 }
 
 // ===================================================================

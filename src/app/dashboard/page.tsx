@@ -149,8 +149,9 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
 
   // ===== 5 métricas principais (camada central dashboard-main) =====
   // Faturamento total = MRR + TCV + Receita Extra manual (TCV cheio, sem rateio).
-  // Recebido = recebimentos da competência + Receita Extra manual recebida.
-  // Em aberto = max(0, total − recebido) (= card Em Aberto / Recebimentos).
+  // Recebido = totalRevenue (mesma conta do "Recebido no mês" da Gestão do
+  // Mês): competência + recuperações recebidas no mês + extras/avulsas.
+  // Em aberto = max(0, total − (recebido − recuperado)) — base de competência.
   // Vencido ⊂ Em aberto. Resultado = Recebido − Despesas. Margem = Resultado/Recebido.
   const M = main.current;
   const previsto = M.faturamentoTotal;
@@ -162,8 +163,11 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
 
   // Comparação textual usa o mês anterior; rótulo do período de comparação.
   // Sparkline de 12 meses em cada card (02 §5.1: "cada um com sparkline 12m").
-  // "Em aberto" não tem série própria: é esperado − recebido, mês a mês.
-  const sparkEmAberto = yearly.faturamento.map((v, i) => Math.max(0, v - yearly.recebido[i]));
+  // "Em aberto" não tem série própria: é esperado − recebido DA COMPETÊNCIA,
+  // mês a mês (recuperação entra no recebido mas não abate o aberto do mês).
+  const sparkEmAberto = yearly.faturamento.map((v, i) =>
+    Math.max(0, v - (yearly.recebido[i] - yearly.recuperado[i]))
+  );
 
   // Última atualização (horário de Brasília — servidor roda em UTC).
   const lastUpdate = new Intl.DateTimeFormat("pt-BR", {
@@ -278,12 +282,13 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           value={formatBRL(recebido)}
           basis="caixa"
           sparkline={yearly.recebido}
-          help="Total de valores efetivamente registrados como recebidos no mês selecionado."
+          help="Dinheiro efetivamente recebido no mês selecionado: cobranças da competência, recuperações de meses anteriores recebidas agora e receitas extras/avulsas. É a mesma conta do Recebido no mês da Gestão do Mês."
           delta={main.deltas.recebido}
           tone="pos"
           detailTitle="Recebido em caixa no mês"
           detail={<RecebidoDetail items={receivedDetail} mrrReceived={M.mrrRecebido}
-            tcvReceived={M.tcvRecebido} total={recebido} />}
+            tcvReceived={M.tcvRecebido} recuperado={M.recuperado}
+            extras={M.extraManual} total={recebido} />}
         />
         <MetricCard
           title="Em aberto"
