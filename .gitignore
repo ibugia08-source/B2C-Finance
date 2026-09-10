@@ -42,3 +42,6 @@ docs/B2C-Finance-Documentacao-Consolidada.html
 *\ 2.sql
 *\ 2.json
 *\ 2.css
+.backups/
+# Relatórios gerados com dados de clientes — ficam fora do repositório.
+relatorios-julho/
