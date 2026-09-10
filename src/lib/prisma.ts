@@ -87,7 +87,7 @@ const OWNED_MODELS = new Set<string>([
   "CustomerCreditMovement",
   // F1.9 — trilha de auditoria.
   "AuditLog",
-  // F3.4 — rateio e suas regras.
+  // F3.4 — rateio e suas regras, REMOVIDOS em 10/09/2026 (tabelas preservadas).
   "Allocation",
   "AllocationRule",
   // F3.5 — conciliação bancária, REMOVIDA em 10/09/2026. As tabelas seguem

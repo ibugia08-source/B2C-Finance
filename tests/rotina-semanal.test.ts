@@ -46,14 +46,14 @@ describe("F3.10 — os blocos da semana", () => {
     await destroyOwner(dono);
   });
 
-  it("traz os sete blocos de 02 §4.6, na ordem", async () => {
+  it("traz os seis blocos de 02 §4.6, na ordem", async () => {
     await asOwner(dono, async () => {
       const r = await rotinaSemanal(new Date(2027, 3, 14));
       expect(r.blocos.map((b) => b.id)).toEqual([
         "criticos", "renovacoes", "promessas", "pipeline",
-        "caixa", "rateios", "fiscais",
+        "caixa", "fiscais",
       ]);
-      expect(r.blocos.map((b) => b.numero)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      expect(r.blocos.map((b) => b.numero)).toEqual([1, 2, 3, 4, 5, 6]);
     });
   });
 

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { competenceOf } from "@/lib/competence";
-import { resumoDoRateio } from "@/lib/services/allocation";
 import { getLiquidez } from "@/lib/services/liquidity";
 import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
 
@@ -9,9 +8,8 @@ import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
  * ROTINA SEMANAL (F3.10 · ref. 02 §4.6).
  *
  * "Semanal (segunda): críticos/observação, renovações 30d sem negociação,
- * promessas da semana, pipeline parado 7+ dias, caixa projetado, rateios
- * pendentes, fiscais faltantes, comparativo da semana anterior; gera as
- * tarefas da semana."
+ * promessas da semana, pipeline parado 7+ dias, caixa projetado, fiscais
+ * faltantes, comparativo da semana anterior; gera as tarefas da semana."
  *
  * A DIFERENÇA ENTRE ESTA E A ROTINA DIÁRIA, que é a razão de as duas
  * existirem: a diária é sobre HOJE — quem cobrar, o que pagar, o que já
@@ -105,7 +103,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
     renovacoes,
     renovadosRecentemente,
     promessas,
-    rateio,
     notasRascunho,
     liquidez,
     recebidoSemana,
@@ -157,7 +154,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
         billing: { select: { id: true, amount: true, paidTotal: true, status: true } },
       },
     }),
-    resumoDoRateio(competence),
     prisma.fiscalDocument.count({ where: { status: "DRAFT" } }),
     getLiquidez(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).toISOString()),
     somaRecebida(inicio, fim),
@@ -261,21 +257,7 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       href: "/caixa",
     },
     {
-      id: "rateios", numero: 6,
-      titulo: "Rateios pendentes",
-      dono: "Financeiro",
-      situacao: rateio.semNenhumRateio === 0 ? "OK" : "ATENCAO",
-      resumo:
-        rateio.despesas === 0
-          ? "Nenhuma despesa de mídia no mês."
-          : rateio.semNenhumRateio === 0
-            ? `Mídia do mês tratada (${rateio.percentualConcluido ?? 0}% do valor com dono).`
-            : `${rateio.semNenhumRateio} ${rateio.semNenhumRateio === 1 ? "lançamento de mídia espera" : "lançamentos de mídia esperam"} distribuição.`,
-      itens: [],
-      href: `/rateio?mes=${competence}`,
-    },
-    {
-      id: "fiscais", numero: 7,
+      id: "fiscais", numero: 6,
       titulo: "Notas fiscais paradas em rascunho",
       dono: "Financeiro",
       // DECIDIDO 19.38: emissão NÃO é obrigatória e não existe cadastro de

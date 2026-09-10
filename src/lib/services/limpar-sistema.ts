@@ -34,7 +34,6 @@ export const ESTRUTURA = new Set([
   "Category",
   "CategorizationRule",
   "ContractTemplate",
-  "AllocationRule",
   "ImportTemplate",
   "SavedView",
   "AISetting",

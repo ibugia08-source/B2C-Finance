@@ -119,31 +119,32 @@ describe("F5.5 — margem totalmente alocada", () => {
     });
   });
 
-  it("despesa geral JÁ rateada a cliente sai do pool — nunca cobrada duas vezes", async () => {
+  it("despesa COM cliente é custo direto e não entra no pool de overhead", async () => {
     await asOwner(dono, async () => {
       const d = await createMrrClient(dono, { name: "Cliente D" });
       await createBilling(dono, d.id, { month: 5, year: 2028, amount: 1000 });
-      const t = await prisma.transaction.create({
+      // Metade da fatura de mídia é do cliente D e está escrita nela; a outra
+      // metade não tem dono. Com o rateio removido (10/09/2026), o vínculo é
+      // por lançamento — então são dois lançamentos, não uma distribuição.
+      await prisma.transaction.create({
         data: {
-          date: new Date(2028, 4, 8), description: "Fatura do cartão de mídia",
-          amount: 400, type: "despesa", status: "pago",
+          date: new Date(2028, 4, 8), description: "Mídia do cliente D",
+          amount: 200, type: "despesa", status: "pago", clientId: d.id,
         },
-        select: { id: true },
       });
-      // Metade rateada ao cliente D (decisão manual da F3.4)…
-      await prisma.allocation.create({
+      await prisma.transaction.create({
         data: {
-          sourceType: "TRANSACTION", sourceId: t.id,
-          dimensionType: "CLIENT", dimensionId: d.id,
-          amount: 200, percentage: 50, competence: "2028-05", method: "MANUAL",
+          date: new Date(2028, 4, 8), description: "Mídia institucional",
+          amount: 200, type: "despesa", status: "pago",
         },
       });
       const r = await margemTotalmenteAlocada(["2028-05"]);
-      // …então só a METADE sem destino entra no pool.
+      // Só a parte sem dono entra no pool — a com dono já foi cobrada do
+      // cliente como custo direto, e somá-la aqui cobraria duas vezes.
       expect(r.pool.despesasGerais).toBe(200);
       const ld = r.linhas.find((l) => l.cliente === "Cliente D")!;
-      expect(ld.custosRateados).toBe(200);
-      // Contribuição 800; overhead = os 200 restantes (único cliente com receita).
+      expect(ld.custosDiretos).toBe(200);
+      // Contribuição 800; overhead = os 200 sem dono (único cliente com receita).
       expect(ld.margemFinal).toBe(600);
     });
   });

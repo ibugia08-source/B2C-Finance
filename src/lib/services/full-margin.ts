@@ -7,8 +7,7 @@ import {
 } from "@/lib/services/contribution-margin";
 
 /**
- * MARGEM TOTALMENTE ALOCADA (F5.5 · ref. 01 §7.6 "Margem totalmente alocada
- * (futura, via Allocation)").
+ * MARGEM TOTALMENTE ALOCADA (F5.5 · ref. 01 §7.6).
  *
  * A margem de contribuição (F3.4) para de propósito antes do overhead — e o
  * aviso dela diz isso em toda tela. Esta é a segunda metade: folha, impostos
@@ -26,11 +25,11 @@ import {
  *     base padrão de custeio quando não há medição melhor, DECLARADA na
  *     tela. Cliente sem receita no período não absorve overhead (não há
  *     peso para dar a ele).
- *  3. NADA É GRAVADO. O rateio manual (F3.4) grava Allocation porque é
- *     DECISÃO sobre uma despesa concreta; o overhead é LEITURA derivada que
- *     muda toda vez que o mês anda. A distribuição usa a MESMA aritmética
- *     do motor de rateio (distribuirPorPeso: fecha no centavo, resto na
- *     maior fatia) — "via Allocation" na regra, sem inventar fato auditável.
+ *  3. NADA É GRAVADO. O overhead é LEITURA derivada que muda toda vez que o
+ *     mês anda; gravá-lo criaria um fato auditável que ninguém decidiu. A
+ *     distribuição usa a aritmética determinística de allocations/split
+ *     (fecha no centavo, resto na maior fatia) — a única coisa que sobreviveu
+ *     do motor de rateio, removido em 10/09/2026.
  */
 
 export type MargemFinalDoCliente = {
@@ -38,7 +37,6 @@ export type MargemFinalDoCliente = {
   cliente: string;
   receita: number;
   custosDiretos: number;
-  custosRateados: number;
   margemDeContribuicao: number;
   overheadAlocado: number;
   margemFinal: number;
@@ -72,7 +70,7 @@ export async function margemTotalmenteAlocada(
   const start = new Date(y0, m0 - 1, 1);
   const end = new Date(y1, m1, 1);
 
-  const [despesasSemDono, alocacoes, folhas] = await Promise.all([
+  const [despesasSemDono, folhas] = await Promise.all([
     prisma.transaction.findMany({
       where: {
         type: "despesa",
@@ -88,26 +86,20 @@ export async function margemTotalmenteAlocada(
         category: { select: { account: { select: { code: true } } } },
       },
     }),
-    prisma.allocation.findMany({
-      where: { competence: { in: ordenadas }, dimensionType: "CLIENT" },
-      select: { sourceId: true, amount: true },
-    }),
     prisma.payroll.findMany({
       where: { competence: { in: ordenadas } },
       select: { items: { select: { amount: true } } },
     }),
   ]);
 
-  // Despesa geral = sem cliente E sem rateio manual. A parte já rateada a
-  // clientes NÃO volta para o pool — estaria sendo cobrada duas vezes.
-  const rateadoPorOrigem = new Map<string, number>();
-  for (const a of alocacoes) {
-    rateadoPorOrigem.set(a.sourceId, (rateadoPorOrigem.get(a.sourceId) ?? 0) + n(a.amount));
-  }
+  // Despesa geral = a que não tem cliente escrito nela. Com o rateio de
+  // mídia removido (10/09/2026), o vínculo com cliente é só o direto: o que
+  // tem dono está nos custos diretos da margem de contribuição, o que não
+  // tem cai aqui e é distribuído por receita.
   let despesasGerais = 0;
   let impostosTotal = 0;
   for (const d of despesasSemDono) {
-    const sobra = n(d.amount) - (rateadoPorOrigem.get(d.id) ?? 0);
+    const sobra = n(d.amount);
     if (sobra <= 0) continue;
     // Imposto é PARTE das despesas gerais, não uma parcela somada por fora.
     // Era somado por fora enquanto vinha da provisão automática (removida em
@@ -149,7 +141,6 @@ export async function margemTotalmenteAlocada(
         cliente: l.cliente,
         receita: l.receita,
         custosDiretos: l.custosDiretos,
-        custosRateados: l.custosRateados,
         margemDeContribuicao: l.margem,
         overheadAlocado: overhead,
         margemFinal: final,

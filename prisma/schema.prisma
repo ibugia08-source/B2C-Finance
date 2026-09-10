@@ -3315,6 +3315,11 @@ enum AllocationMethod {
 /// integridade é conferida no serviço; o que o banco garante é o que ele
 /// consegue garantir sozinho — e é o que mais importa aqui: o rateio NUNCA
 /// ultrapassar a origem (gatilho `b2c_allocation_nao_ultrapassa`).
+/// @deprecated RATEIO DE MÍDIA REMOVIDO em 2026-09-10 (simplificação).
+/// Dados preservados: os rateios já feitos continuam aqui e nas margens
+/// históricas; nada escreve mais nesta tabela. O vínculo de uma despesa com
+/// um cliente passou a ser só o `Transaction.clientId` — decisão por
+/// lançamento, e não distribuição mensal numa tela.
 model Allocation {
   id         String @id @default(cuid())
   /// Por ora só "TRANSACTION". A coluna existe para o motor ser genérico.
@@ -3360,6 +3365,8 @@ model Allocation {
 /// divide em percentuais: quando o custo é compartilhado, quem decide a
 /// divisão é uma pessoa, na tela, e a linha nasce MANUAL — inventar uma
 /// divisão automática é exatamente o número que ninguém sabe defender depois.
+/// @deprecated RATEIO DE MÍDIA REMOVIDO em 2026-09-10 — ver Allocation.
+/// Tabela preservada com as regras cadastradas; sem caminho de escrita.
 model AllocationRule {
   id       String  @id @default(cuid())
   name     String

@@ -2,11 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { ledgerHealth } from "@/lib/accounting/health";
 import { toNumber as n } from "@/lib/format";
-import { resumoDoRateio } from "@/lib/services/allocation";
 import type { Competence } from "@/lib/competence";
 
 /**
- * CHECKLIST DE FECHAMENTO — 13 itens (01 §5.3, menos as funções removidas).
+ * CHECKLIST DE FECHAMENTO — 12 itens (01 §5.3, menos as funções removidas).
  *
  * "Cada pendência com dono e link" é o pedido inteiro: uma lista que só diz
  * "faltam 12 coisas" transfere o problema de volta para quem abriu a tela.
@@ -18,17 +17,15 @@ import type { Competence } from "@/lib/competence";
  * verdes num sistema que mede nove seria o pior resultado possível: o dono
  * fecharia o mês confiando numa conferência que não aconteceu.
  *
- * A lista de não medidos ENCOLHE conforme as fases entregam: na F3.4 saíram
- * rateio e fiscal e na F4.4 as vendas vinculadas.
+ * A lista de não medidos ENCOLHE conforme as fases entregam: na F3.4 saiu o
+ * fiscal e na F4.4 as vendas vinculadas.
  * **Todos os itens são medidos.** Se um dia voltar a aparecer NÃO MEDIDO
  * aqui, é porque nasceu item novo — e ele tem de dizer por quê.
  *
- * TRÊS ITENS SAÍRAM em 10/09/2026, cada um com a função que o alimentava:
- * "conciliação bancária no mínimo por conta" (sem extrato importado não há
- * percentual a exigir), "provisão tributária confirmada" e "reserva de
- * impostos revisada" (provisão automática e reserva deixaram de existir; o
- * imposto é lançado como qualquer despesa). Item que nunca mais pode ficar
- * verde ensina a ignorar a lista inteira.
+ * QUATRO ITENS SAÍRAM em 10/09/2026, cada um com a função que o alimentava:
+ * conciliação bancária, provisão tributária, reserva de impostos e rateio de
+ * mídia. Item que nunca mais pode ficar verde ensina a ignorar a lista
+ * inteira — e um item sem tela para resolvê-lo nunca fica verde.
  *
  * NENHUM ITEM BLOQUEIA O FECHAMENTO por decisão explícita: a spec lista os
  * itens e NÃO diz quais impedem fechar. Inventar essa regra seria
@@ -93,7 +90,6 @@ export async function montarChecklist(competence: Competence | string): Promise<
     avaliados,
     semGestor,
     saude,
-    rateio,
     vendasSoltas,
     notasEmRascunho,
   ] = await Promise.all([
@@ -136,11 +132,9 @@ export async function montarChecklist(competence: Competence | string): Promise<
       },
     }),
     ledgerHealth(workspaceId, { competence: competence as Competence }),
-    // 8. Rateio de mídia (F3.4).
-    resumoDoRateio(competence as Competence),
-    // 10. Vendas ganhas que não foram entregues à operação (F4.4).
+    // 9. Vendas ganhas que não foram entregues à operação (F4.4).
     prisma.opportunity.count({ where: { stage: "GANHA", createdClientId: null } }),
-    // 9. Notas paradas em rascunho (F3.6).
+    // 8. Notas paradas em rascunho (F3.6).
     prisma.fiscalDocument.count({
       where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
     }),
@@ -231,27 +225,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: "/clientes",
     },
     {
-      id: "rateios", numero: 8,
-      titulo: "Rateios obrigatórios concluídos ou aceitos",
-      dono: "Financeiro",
-      // "Ou aceitos como não alocados" (01 §5.3) é o que faz este item ser
-      // fechável: mídia sem cliente é normal — campanha da própria agência,
-      // teste, prospecção. O que o item cobra é ter OLHADO. Por isso a conta
-      // é a de lançamentos SEM NENHUMA LINHA de rateio, e não a de valor sem
-      // dono: exigir 100% alocado obrigaria a inventar um cliente para o
-      // gasto que não é de cliente nenhum.
-      situacao: rateio.semNenhumRateio === 0 ? "OK" : "PENDENTE",
-      quantidade: rateio.semNenhumRateio,
-      detalhe:
-        rateio.despesas === 0
-          ? "Nenhuma despesa de mídia neste mês."
-          : rateio.semNenhumRateio === 0
-            ? `Toda a mídia do mês foi tratada (${rateio.percentualConcluido ?? 0}% do valor com dono).`
-            : `${rateio.semNenhumRateio} ${rateio.semNenhumRateio === 1 ? "lançamento de mídia não foi" : "lançamentos de mídia não foram"} distribuído nem aceito sem dono.`,
-      href: `/rateio${q}`,
-    },
-    {
-      id: "fiscal", numero: 9,
+      id: "fiscal", numero: 8,
       titulo: "Documentos fiscais emitidos ou justificados",
       dono: "Financeiro",
       // DECIDIDO 19.38: nota é OPCIONAL — a maioria dos serviços não emite,
@@ -268,7 +242,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: `/relatorios`,
     },
     {
-      id: "vendas-vinculadas", numero: 10,
+      id: "vendas-vinculadas", numero: 9,
       titulo: "Vendas ganhas vinculadas a cliente",
       dono: "Comercial",
       // Uma venda pode ser marcada GANHA arrastando o card no quadro, sem
@@ -284,7 +258,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: "/funil",
     },
     {
-      id: "aprovacoes", numero: 11,
+      id: "aprovacoes", numero: 10,
       titulo: "Aprovações decididas",
       dono: "—",
       situacao: "NAO_SE_APLICA",
@@ -294,7 +268,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: null,
     },
     {
-      id: "ledger", numero: 12,
+      id: "ledger", numero: 11,
       titulo: "Razão contábil balanceado",
       dono: "Administrador",
       situacao: !saude.enabled ? "NAO_MEDIDO" : saude.balanceOk ? "OK" : "PENDENTE",
@@ -307,7 +281,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: null,
     },
     {
-      id: "integridade", numero: 13,
+      id: "integridade", numero: 12,
       titulo: "Todo pagamento tem lançamento no razão",
       dono: "Administrador",
       situacao: !saude.enabled

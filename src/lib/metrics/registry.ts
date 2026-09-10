@@ -377,13 +377,27 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     rounding: MOEDA, nullPolicy: DIV0, spec: "01 §7.4",
   },
   {
-    key: "margem_contribuicao_cliente",
+    key: "margem_contribuicao_cliente", version: 1, vigenteAte: "2026-09-10",
     name: "Margem de contribuição do cliente",
     description:
       "Receita do cliente menos os custos diretos dele. NÃO é lucro líquido: o overhead ainda não está rateado.",
     formulaDescription: "Receita reconhecida do cliente − custos diretos e alocados a ele.",
     grain: "CLIENT", dateBasis: "COMPETENCE",
     sourceEntities: ["Billing", "Transaction", "Allocation"],
+    rounding: MOEDA, spec: "01 §7.4",
+  },
+  {
+    // v2: sem o rateio de mídia (removido em 10/09/2026), o custo do cliente
+    // é o DIRETO — a despesa com o cliente escrito nela. Mídia sem dono é
+    // overhead e só aparece na margem totalmente alocada, que declara isso.
+    key: "margem_contribuicao_cliente", version: 2,
+    name: "Margem de contribuição do cliente",
+    description:
+      "Receita do cliente menos os custos diretos dele. NÃO é lucro líquido: o overhead não está incluído.",
+    formulaDescription:
+      "Receita reconhecida do cliente − despesas vinculadas manualmente a ele (Transaction.clientId).",
+    grain: "CLIENT", dateBasis: "COMPETENCE",
+    sourceEntities: ["Billing", "Transaction"],
     rounding: MOEDA, spec: "01 §7.4",
   },
   {

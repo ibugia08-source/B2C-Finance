@@ -340,14 +340,6 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
-    key: "rateios",
-    label: "Rateios",
-    permissions: [
-      { id: "rateios.visualizar", label: "Ver rateios", sensitive: true },
-      { id: "rateios.editar", label: "Criar e editar regras de rateio", sensitive: true },
-    ],
-  },
-  {
     key: "comercial",
     label: "Comercial (funil)",
     permissions: [

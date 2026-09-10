@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import type { Competence } from "@/lib/competence";
 import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
-import { resumoDoRateio, type ResumoDoRateio } from "@/lib/services/allocation";
 
 /**
  * MARGEM DE CONTRIBUIÇÃO POR CLIENTE (F3.4 · ref. 01 §7.4).
@@ -23,11 +22,16 @@ import { resumoDoRateio, type ResumoDoRateio } from "@/lib/services/allocation";
  * fazer sem dizer — produz margens que oscilam com a data do pagamento do
  * cliente, e não com a operação.
  *
- * A ARMADILHA DA CONTAGEM DUPLA, resolvida aqui: uma despesa pode ter o
- * cliente escrito nela (`Transaction.clientId`) E linhas de rateio. Somar as
- * duas coisas conta o mesmo custo duas vezes. A regra é simples e única:
- * despesa COM rateio conta pelas linhas de rateio; despesa SEM rateio e com
- * cliente conta como custo direto. Nunca as duas.
+ * VERSÃO 2 (10/09/2026): com o rateio de mídia removido, o custo do cliente
+ * é só o DIRETO — a despesa com o cliente escrito nela (`Transaction.clientId`).
+ * Some com isso a armadilha da contagem dupla (despesa rateada E com cliente),
+ * e some também a parcela de tráfego distribuída: mídia sem dono agora é
+ * overhead, e overhead só aparece na margem TOTALMENTE alocada (F5.5), que
+ * declara que está distribuindo.
+ *
+ * Quem quiser o custo de mídia dentro da margem de um cliente escreve o
+ * cliente na despesa — o vínculo manual, que continua existindo. É uma
+ * decisão por lançamento em vez de uma tela de distribuição mensal.
  */
 
 export type MargemDoCliente = {
@@ -35,7 +39,6 @@ export type MargemDoCliente = {
   cliente: string;
   receita: number;
   custosDiretos: number;
-  custosRateados: number;
   custoTotal: number;
   margem: number;
   /** Percentual sobre a receita; null quando não houve receita. */
@@ -48,13 +51,6 @@ export type MargemDeContribuicao = {
   receita: number;
   custoTotal: number;
   margem: number;
-  /**
-   * Mídia sem dono — não entra na margem de ninguém. Quando o pedido abrange
-   * vários meses, este resumo é o do ÚLTIMO: é o mês em que ainda dá para
-   * agir, e somar percentuais de conclusão de meses diferentes não significa
-   * nada.
-   */
-  rateio: ResumoDoRateio;
   /**
    * O que esta conta NÃO desconta, para a tela dizer em vez de deixar
    * subentendido (01 §7.4).
@@ -93,7 +89,7 @@ export async function margemDeContribuicaoDe(
   const idsDoEscopo = await clientesNoEscopo(scope);
   const filtroCliente = idsDoEscopo === null ? {} : { clientId: { in: idsDoEscopo } };
 
-  const [cobrancas, despesas, alocacoes, rateio] = await Promise.all([
+  const [cobrancas, despesas] = await Promise.all([
     // Receita RECONHECIDA: só REVENUE. Parcela de reparcelamento é
     // SETTLEMENT_ONLY e fica fora — ela liquida dívida velha, não fatura
     // de novo (01 §3.13).
@@ -115,34 +111,19 @@ export async function margemDeContribuicaoDe(
       },
       select: { id: true, clientId: true, amount: true },
     }),
-    prisma.allocation.findMany({
-      where: { competence: { in: ordenadas }, dimensionType: "CLIENT" },
-      select: { dimensionId: true, amount: true, sourceId: true },
-    }),
-    resumoDoRateio(competence),
   ]);
-
-  const rateadas = new Set(alocacoes.map((a) => a.sourceId));
 
   const receita = new Map<string, number>();
   const diretos = new Map<string, number>();
-  const alocados = new Map<string, number>();
   const soma = (mapa: Map<string, number>, id: string | null, v: number) => {
     if (!id) return;
     mapa.set(id, (mapa.get(id) ?? 0) + v);
   };
 
   for (const b of cobrancas) soma(receita, b.clientId, n(b.amount));
-  for (const d of despesas) {
-    if (rateadas.has(d.id)) continue; // conta pelas linhas de rateio
-    soma(diretos, d.clientId, n(d.amount));
-  }
-  for (const a of alocacoes) {
-    if (idsDoEscopo !== null && !idsDoEscopo.includes(a.dimensionId)) continue;
-    soma(alocados, a.dimensionId, n(a.amount));
-  }
+  for (const d of despesas) soma(diretos, d.clientId, n(d.amount));
 
-  const ids = [...new Set([...receita.keys(), ...diretos.keys(), ...alocados.keys()])];
+  const ids = [...new Set([...receita.keys(), ...diretos.keys()])];
   const nomes = ids.length
     ? new Map(
         (
@@ -157,16 +138,13 @@ export async function margemDeContribuicaoDe(
   const linhas: MargemDoCliente[] = ids
     .map((id) => {
       const r = Math.round((receita.get(id) ?? 0) * 100) / 100;
-      const cd = Math.round((diretos.get(id) ?? 0) * 100) / 100;
-      const ca = Math.round((alocados.get(id) ?? 0) * 100) / 100;
-      const custoTotal = Math.round((cd + ca) * 100) / 100;
+      const custoTotal = Math.round((diretos.get(id) ?? 0) * 100) / 100;
       const margem = Math.round((r - custoTotal) * 100) / 100;
       return {
         clientId: id,
         cliente: nomes.get(id) ?? "(cliente removido)",
         receita: r,
-        custosDiretos: cd,
-        custosRateados: ca,
+        custosDiretos: custoTotal,
         custoTotal,
         margem,
         margemPercentual: r > 0 ? Math.round((margem / r) * 1000) / 10 : null,
@@ -183,7 +161,6 @@ export async function margemDeContribuicaoDe(
     receita: totalReceita,
     custoTotal: totalCusto,
     margem: Math.round((totalReceita - totalCusto) * 100) / 100,
-    rateio,
     overheadForaDaConta: AVISO_OVERHEAD,
   };
 }

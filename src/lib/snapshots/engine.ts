@@ -20,8 +20,10 @@ import type { Competence } from "@/lib/competence";
  * conferência periódica compararia o passado congelado com o presente vivo e
  * acusaria divergência sempre.
  *
- * ÁREAS de §5.4 que ainda não têm fonte (funil, rateio, conciliação) NÃO
- * entram como objeto vazio: entram declarando que não existiam nesta fase.
+ * ÁREAS de §5.4 que não têm fonte NÃO entram como objeto vazio: entram
+ * declarando que não existiam nesta fase. Vale para o funil (ainda sem
+ * fonte) e para rateio e conciliação, que existiram e foram REMOVIDOS em
+ * 10/09/2026 — a fotografia diz "não existia aqui", não "estava zerado".
  * Uma área vazia dentro de uma fotografia é indistinguível de uma área que
  * zerou — e essa confusão só aparece meses depois, quando é tarde.
  */

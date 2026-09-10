@@ -36,7 +36,6 @@ async function margem(q: ReportQuery): Promise<ReportRow[]> {
       cliente: l.cliente,
       receita: l.receita,
       despesasDiretas: l.custosDiretos,
-      custosRateados: l.custosRateados,
       resultado: l.margem,
       margem: l.margemPercentual,
     }));
@@ -47,12 +46,11 @@ export const rentabilidadeClienteReport: ReportDef = {
   key: "rentabilidade-cliente",
   title: "Margem de contribuição por cliente",
   description:
-    "Receita reconhecida menos custos diretos e rateados, por competência. Não desconta folha, estrutura nem impostos — não é lucro do cliente.",
+    "Receita reconhecida menos os custos diretos do cliente, por competência. Não desconta folha, estrutura nem impostos — não é lucro do cliente.",
   columns: [
     { key: "cliente", label: "Cliente", kind: "text" },
     { key: "receita", label: "Receita", kind: "money", total: true },
     { key: "despesasDiretas", label: "Custos diretos", kind: "money", total: true },
-    { key: "custosRateados", label: "Custos rateados", kind: "money", total: true },
     { key: "resultado", label: "Margem", kind: "money", total: true },
     { key: "margem", label: "% Margem", kind: "percent" },
   ],
