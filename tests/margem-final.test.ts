@@ -30,7 +30,6 @@ describe("F5.5 — margem totalmente alocada", () => {
     await asOwner(dono, async () => {
       await prisma.payrollItem.deleteMany({});
       await prisma.payroll.deleteMany({});
-      await prisma.taxProvision.deleteMany({ where: { competence: COMP } });
     });
     await destroyOwner(dono);
   });
@@ -73,19 +72,25 @@ describe("F5.5 — margem totalmente alocada", () => {
           { payrollId: folha.id, employeeId: emp.id, kind: "BONUS", amount: 100 },
         ],
       });
-      // Imposto provisionado: 90.
-      const le = await runWithoutScope(async () =>
-        prisma.legalEntity.findFirstOrThrow({ select: { id: true } })
+      // Imposto: 90, lançado como DESPESA na conta gerencial 11 (é assim
+      // desde que a provisão automática saiu, em 10/09/2026). Continua
+      // aparecendo separado na composição do pool, mas somado uma vez só.
+      const contaDeImposto = await runWithoutScope(async () =>
+        prisma.accountingAccount.findFirstOrThrow({ where: { code: "11.1" }, select: { id: true } })
       );
-      // A unique (legalEntity, competência) é GLOBAL: a linha da rodada
-      // anterior sobrevive ao destroyOwner e colidiria aqui.
-      await runWithoutScope(async () =>
-        prisma.taxProvision.deleteMany({ where: { competence: COMP } })
-      );
-      await prisma.taxProvision.create({
+      // Category.name é único GLOBAL e sobrevive ao destroyOwner: upsert,
+      // senão a segunda execução da suíte colide com a primeira.
+      const categoriaImposto = await prisma.category.upsert({
+        where: { name: `Impostos ${COMP}` },
+        update: { accountId: contaDeImposto.id },
+        create: { name: `Impostos ${COMP}`, kind: "despesa", accountId: contaDeImposto.id },
+        select: { id: true },
+      });
+      await prisma.transaction.create({
         data: {
-          legalEntityId: le.id, competence: COMP, baseAmount: 3000,
-          rate: 3, amount: 90,
+          date: new Date(2028, 2, 20), description: "Guia do Simples",
+          amount: 90, type: "despesa", status: "pago",
+          categoryId: categoriaImposto.id,
         },
       });
 

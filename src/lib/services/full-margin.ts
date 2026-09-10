@@ -19,8 +19,9 @@ import {
  *
  *  1. O POOL de overhead é composto e MOSTRADO por parte: despesas gerais
  *     (sem cliente e sem rateio manual), folha da competência e impostos
- *     provisionados. Um número composto que não mostra a composição é um
- *     número em que ninguém confia.
+ *     (as despesas do grupo 11 do plano de contas, separadas das demais para
+ *     a composição continuar legível). Um número composto que não mostra a
+ *     composição é um número em que ninguém confia.
  *  2. A BASE de distribuição é a RECEITA reconhecida de cada cliente — a
  *     base padrão de custeio quando não há medição melhor, DECLARADA na
  *     tela. Cliente sem receita no período não absorve overhead (não há
@@ -71,7 +72,7 @@ export async function margemTotalmenteAlocada(
   const start = new Date(y0, m0 - 1, 1);
   const end = new Date(y1, m1, 1);
 
-  const [despesasSemDono, alocacoes, folhas, impostos] = await Promise.all([
+  const [despesasSemDono, alocacoes, folhas] = await Promise.all([
     prisma.transaction.findMany({
       where: {
         type: "despesa",
@@ -79,7 +80,13 @@ export async function margemTotalmenteAlocada(
         date: { gte: start, lt: end },
         clientId: null,
       },
-      select: { id: true, amount: true },
+      // A conta gerencial vem junto para separar, DENTRO do pool, o que é
+      // imposto (grupo 11 do plano de contas) — o número continua aparecendo
+      // por parte, agora lido da despesa lançada e não da provisão.
+      select: {
+        id: true, amount: true,
+        category: { select: { account: { select: { code: true } } } },
+      },
     }),
     prisma.allocation.findMany({
       where: { competence: { in: ordenadas }, dimensionType: "CLIENT" },
@@ -88,10 +95,6 @@ export async function margemTotalmenteAlocada(
     prisma.payroll.findMany({
       where: { competence: { in: ordenadas } },
       select: { items: { select: { amount: true } } },
-    }),
-    prisma.taxProvision.findMany({
-      where: { competence: { in: ordenadas } },
-      select: { amount: true },
     }),
   ]);
 
@@ -102,17 +105,22 @@ export async function margemTotalmenteAlocada(
     rateadoPorOrigem.set(a.sourceId, (rateadoPorOrigem.get(a.sourceId) ?? 0) + n(a.amount));
   }
   let despesasGerais = 0;
+  let impostosTotal = 0;
   for (const d of despesasSemDono) {
     const sobra = n(d.amount) - (rateadoPorOrigem.get(d.id) ?? 0);
-    if (sobra > 0) despesasGerais += sobra;
+    if (sobra <= 0) continue;
+    // Imposto é PARTE das despesas gerais, não uma parcela somada por fora.
+    // Era somado por fora enquanto vinha da provisão automática (removida em
+    // 10/09/2026); agora a guia é uma despesa como qualquer outra, e
+    // somá-la de novo cobraria o imposto duas vezes de cada cliente.
+    if (d.category?.account?.code?.startsWith("11")) impostosTotal += sobra;
+    else despesasGerais += sobra;
   }
 
   const folha = folhas.reduce(
     (s, f) => s + f.items.reduce((si, i) => si + n(i.amount), 0),
     0
   );
-  const impostosTotal = impostos.reduce((s, i) => s + n(i.amount), 0);
-
   const arred = (v: number) => Math.round(v * 100) / 100;
   const pool: PoolDeOverhead = {
     despesasGerais: arred(despesasGerais),

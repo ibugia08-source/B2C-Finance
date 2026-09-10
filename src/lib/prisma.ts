@@ -23,6 +23,7 @@ const OWNED_MODELS = new Set<string>([
   "PersonPayment",
   "ImportBatch",
   "ImportedRecord",
+  // F3.3 — provisão tributária, REMOVIDA em 10/09/2026 (tabela preservada).
   "TaxProvision",
   "BillingAdjustment",
   "FiscalDocument",

@@ -3099,6 +3099,11 @@ model SnapshotDependency {
 /// O sistema SUGERE a transferência para a reserva e NUNCA a executa (§3.8):
 /// mover dinheiro entre contas é decisão de quem assina, não efeito colateral
 /// de um cálculo.
+/// @deprecated PROVISÃO TRIBUTÁRIA AUTOMÁTICA REMOVIDA em 2026-09-10
+/// (simplificação). Dados preservados: as provisões já lançadas continuam
+/// aqui e no razão; nada escreve mais nesta tabela. A despesa de imposto
+/// passou a ser lançada manualmente como qualquer outra (grupo 11 do plano
+/// de contas), e a alíquota informativa segue no cadastro da EntidadeLegal.
 model TaxProvision {
   id            String      @id @default(cuid())
   legalEntityId String
