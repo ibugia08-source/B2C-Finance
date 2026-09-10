@@ -26,7 +26,7 @@ import type { Competence } from "@/lib/competence";
  * zerou — e essa confusão só aparece meses depois, quando é tarde.
  */
 
-export const SNAPSHOT_SCHEMA_VERSION = 1;
+export const SNAPSHOT_SCHEMA_VERSION = 2;
 
 export type AreaNaoDisponivel = { indisponivel: true; motivo: string };
 
@@ -59,7 +59,7 @@ export async function montarAreas(
   const fim = new Date(ano, mes, 1);
   const corteDaLeitura = opts.ate ? { createdAt: { lte: opts.ate } } : {};
 
-  const [relacoes, termos, cobrancas, despesas, contas, reservas, folha, avaliacoes, metricas] =
+  const [relacoes, termos, cobrancas, despesas, contas, folha, avaliacoes, metricas] =
     await Promise.all([
       prisma.clientAgencyRelationship.findMany({
         where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] }, ...corteDaLeitura },
@@ -95,11 +95,6 @@ export async function montarAreas(
         where: { active: true, ...corteDaLeitura },
         orderBy: { id: "asc" },
         select: { id: true, name: true, balance: true, type: true },
-      }),
-      prisma.cashBox.findMany({
-        where: { ...corteDaLeitura },
-        orderBy: { id: "asc" },
-        select: { id: true, name: true, currentAmount: true, targetAmount: true },
       }),
       prisma.payroll.findMany({
         where: { year: ano, month: mes, ...corteDaLeitura },
@@ -172,13 +167,13 @@ export async function montarAreas(
       id: d.id, valor: money(n(d.amount)), situacao: d.status,
       categoria: d.categoryId, data: d.date,
     })),
-    caixa_reservas: {
+    // v2 do esquema (10/09/2026): as reservas (CashBox) saíram do produto e
+    // do bloco. Fotografias antigas continuam com `caixa_reservas` e a
+    // versão 1 — a fotografia é imutável, não é reescrita por mudança de
+    // código (01 §2.22).
+    caixa: {
       contas: contas.map((c) => ({
         id: c.id, nome: c.name, tipo: c.type, saldo: money(n(c.balance)),
-      })),
-      reservas: reservas.map((r) => ({
-        id: r.id, nome: r.name, atual: money(n(r.currentAmount)),
-        meta: money(n(r.targetAmount)),
       })),
     },
     folha: folha.map((f) => ({

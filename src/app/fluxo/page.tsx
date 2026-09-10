@@ -49,8 +49,8 @@ export default async function FluxoPage() {
           value={formatBRL(f.liquidez.disponivel)}
           basis="caixa"
           tone={f.liquidez.disponivel < 0 ? "negative" : "default"}
-          hint={`${formatBRL(f.liquidez.contas + f.liquidez.reservas)} no total, ${formatBRL(f.liquidez.reservado)} restrito`}
-          help="Saldo das contas e reservas menos as reservas restritas (imposto, 13º). É este número que responde 'posso gastar?', não o saldo bruto."
+          hint={`${formatBRL(f.liquidez.contas)} em conta, ${formatBRL(f.liquidez.compromissos)} já comprometido`}
+          help="Saldo das contas ativas menos os compromissos imediatos (contas a pagar vencidas e as que vencem na janela configurada). É este número que responde 'posso gastar?', não o saldo bruto."
         />
         {f.projecoes.map((p) => (
           <MetricCard

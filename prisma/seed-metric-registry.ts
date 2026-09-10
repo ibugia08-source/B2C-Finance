@@ -45,8 +45,12 @@ export async function semear() {
         rounding: m.rounding ?? "half-up 2 casas",
         nullPolicy: m.nullPolicy ?? "denominador zero → null (exibe —)",
       };
+      // A versão é POR MÉTRICA (o registry passou a guardar as antigas em
+      // 10/09/2026): a linha da v1 continua no banco quando nasce a v2, que é
+      // o que faz a fotografia velha continuar reportando a fórmula que usou.
+      const versao = m.version ?? METRIC_REGISTRY_VERSION;
       const existente = await prisma.metricDefinition.findFirst({
-        where: { workspaceId: workspace.id, key: m.key, version: METRIC_REGISTRY_VERSION },
+        where: { workspaceId: workspace.id, key: m.key, version: versao },
         select: { id: true },
       });
       if (existente) {
@@ -58,7 +62,8 @@ export async function semear() {
             ...dados,
             workspaceId: workspace.id,
             key: m.key,
-            version: METRIC_REGISTRY_VERSION,
+            version: versao,
+            ...(m.vigenteAte ? { effectiveTo: new Date(m.vigenteAte) } : {}),
           },
         });
         criadas++;
@@ -67,7 +72,7 @@ export async function semear() {
 
     const total = await prisma.metricDefinition.count({ where: { workspaceId: workspace.id } });
     console.log(
-      `→ métricas v${METRIC_REGISTRY_VERSION}: ${criadas} criada(s), ${atualizadas} atualizada(s) · ${total} no registry`
+      `→ métricas: ${criadas} criada(s), ${atualizadas} atualizada(s) · ${total} linha(s) no registry (versões incluídas)`
     );
 
     const porBase = await prisma.metricDefinition.groupBy({

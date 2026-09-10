@@ -81,7 +81,7 @@ describe("F2.3 — a fotografia", () => {
   it("guarda todas as áreas de §5.4", async () => {
     const areas = await asOwner(dono, async () => montarAreas("2026-02"));
     for (const nome of [
-      "carteira", "termos_vigentes", "receber", "pagar", "caixa_reservas",
+      "carteira", "termos_vigentes", "receber", "pagar", "caixa",
       "folha", "avaliacao", "indicadores", "funil", "dre_razao_resumido",
     ]) {
       expect(Object.keys(areas), nome).toContain(nome);

@@ -171,10 +171,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     key: "caixa",
     label: "Reservas (caixa)",
     permissions: [
-      { id: "caixa.visualizar", label: "Ver caixa e reservas", sensitive: true },
-      { id: "caixa.lancar", label: "Lançar valores no caixa", sensitive: true },
-      { id: "caixa.editar", label: "Editar lançamentos", sensitive: true },
-      { id: "caixa.excluir", label: "Excluir lançamentos", sensitive: true },
+      { id: "caixa.visualizar", label: "Ver caixa e fluxo", sensitive: true },
     ],
   },
   {

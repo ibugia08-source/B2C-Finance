@@ -11,8 +11,11 @@ import { div } from "@/lib/metrics/engine";
 
 describe("registry de métricas", () => {
   it("não tem chave repetida", () => {
-    const chaves = METRIC_REGISTRY.map((m) => m.key);
-    expect(new Set(chaves).size).toBe(chaves.length);
+    // Desde 10/09/2026 a mesma chave pode aparecer em VERSÕES diferentes (a
+    // fórmula antiga fica para o passado continuar legível). O que não pode
+    // repetir é o par chave+versão — duas linhas iguais no banco.
+    const pares = METRIC_REGISTRY.map((m) => `${m.key}@${m.version ?? 1}`);
+    expect(new Set(pares).size).toBe(pares.length);
   });
 
   it("toda métrica declara fórmula, grão, base temporal e origem", () => {
@@ -45,9 +48,17 @@ describe("registry de métricas", () => {
   });
 
   it("liquidez disponível é a métrica do card de caixa, não o saldo bruto", () => {
+    // getMetricSpec devolve a VIGENTE: a v2 (contas ativas − compromissos
+    // imediatos), não a v1 que descontava reservas.
     const liq = getMetricSpec("liquidez_disponivel")!;
-    expect(liq.formulaDescription).toMatch(/reservado/i);
+    expect(liq.version).toBe(2);
+    expect(liq.formulaDescription).toMatch(/compromissos imediatos/i);
     expect(liq.description).toMatch(/nunca o saldo bruto/i);
+    // E a v1 continua no registry, marcada — é o que faz a fotografia velha
+    // continuar reportando a fórmula que ela usou.
+    const v1 = METRIC_REGISTRY.find((m) => m.key === "liquidez_disponivel" && m.version === 1)!;
+    expect(v1.vigenteAte).toBe("2026-09-10");
+    expect(v1.formulaDescription).toMatch(/reservado/i);
   });
 
   it("o ROAS exige base de valoração explícita", () => {

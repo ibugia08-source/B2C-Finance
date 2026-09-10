@@ -59,6 +59,12 @@ model Workspace {
   /// por doze vezes — e os dois se chamariam "ROAS".
   /// Formato: { "baseDeValoracaoMrr": "PRIMEIRO_MES" | "CONTRATO" }
   commercialSettings Json @default("{}")
+
+  /// Parâmetros financeiros. Hoje guarda a JANELA DO COMPROMISSO IMEDIATO
+  /// usada pela Liquidez disponível v2 (01 §7.2): quantos dias à frente uma
+  /// conta a pagar já conta como dinheiro comprometido. Padrão 7.
+  /// Formato: { "compromissosImediatosDias": 7 }
+  financeSettings Json @default("{}")
 }
 
 // ===================================================================
@@ -918,6 +924,11 @@ model Income {
   @@index([ownerId, competence])
 }
 
+/// @deprecated RESERVAS REMOVIDAS em 2026-09-10 (simplificação). Dados
+/// preservados: nada é dropado e nada escreve mais aqui — não há tela,
+/// serviço nem ação que crie caixinha ou movimento. A liquidez disponível
+/// passou a descontar COMPROMISSOS IMEDIATOS (contas a pagar vencidas e
+/// vencendo na janela configurada), que são fato lançado e não intenção.
 model CashBox {
   id            String   @id @default(cuid())
   name          String
@@ -965,6 +976,8 @@ model PersonPayment {
   @@index([ownerId])
 }
 
+/// @deprecated RESERVAS REMOVIDAS em 2026-09-10 — ver CashBox. Tabela
+/// preservada com o histórico de movimentos; sem caminho de escrita.
 model CashBoxMovement {
   id          String   @id @default(cuid())
   cashBoxId   String

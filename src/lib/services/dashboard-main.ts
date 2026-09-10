@@ -684,20 +684,6 @@ async function getRenewalClientsDetailImpl(month: number): Promise<NamedValue[]>
   }));
 }
 
-/** Marcador estável na descrição do movimento para rastrear o mês de origem. */
-export function resultLaunchTag(year: number, month: number): string {
-  return `[resultado:${year}-${String(month).padStart(2, "0")}]`;
-}
-
-/** Total já lançado ao caixa como "Resultado do mês" para a competência. */
-async function getResultLaunchedForMonthImpl(year: number, month: number): Promise<number> {
-  const agg = await prisma.cashBoxMovement.aggregate({
-    where: { type: "IN", description: { contains: resultLaunchTag(year, month) } },
-    _sum: { amount: true },
-  });
-  return n(agg._sum.amount);
-}
-
 /** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */
 export const getYearlySeries = ownerCached("yearly-series", getYearlySeriesImpl, {
   revalidate: 300,
@@ -713,4 +699,3 @@ export const getMrrClientsDetail = ownerCached("getmrrclientsdetail", getMrrClie
 export const getTcvClientsDetail = ownerCached("gettcvclientsdetail", getTcvClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
 export const getNewClientsDetail = ownerCached("getnewclientsdetail", getNewClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
 export const getRenewalClientsDetail = ownerCached("getrenewalclientsdetail", getRenewalClientsDetailImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });
-export const getResultLaunchedForMonth = ownerCached("getresultlaunchedformonth", getResultLaunchedForMonthImpl, { revalidate: 300, tags: [CACHE_TAGS.DASHBOARD_METRICS] });

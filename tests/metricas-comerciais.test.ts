@@ -76,8 +76,11 @@ describe("F4.6 — métricas comerciais", () => {
   });
 
   it("nenhuma chave do registry se repete", () => {
-    const chaves = METRIC_REGISTRY.map((m) => m.key);
-    expect(new Set(chaves).size).toBe(chaves.length);
+    // Desde 10/09/2026 a mesma chave pode aparecer em VERSÕES diferentes (a
+    // fórmula antiga fica para o passado continuar legível). O que não pode
+    // repetir é o par chave+versão — duas linhas iguais no banco.
+    const pares = METRIC_REGISTRY.map((m) => `${m.key}@${m.version ?? 1}`);
+    expect(new Set(pares).size).toBe(pares.length);
   });
 
   it("SEM dados, tudo é nulo COM MOTIVO — nunca zero", async () => {

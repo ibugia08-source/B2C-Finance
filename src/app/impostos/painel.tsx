@@ -4,8 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { showUndoToast } from "@/components/undo-toast";
-import { confirmAction } from "@/components/ui/confirm-dialog";
-import { marcarReservaFeitaAction, provisionarAction } from "@/lib/actions/impostos";
+import { provisionarAction } from "@/lib/actions/impostos";
 import { formatBRL } from "@/lib/format";
 import type { SugestaoDeProvisao } from "@/lib/services/tax-provision";
 
@@ -60,18 +59,13 @@ export function PainelDeImpostos({
                 ) : (
                   <Badge variant="outline">não provisionado</Badge>
                 )}
-                {s.reservaFeita ? (
-                  <Badge variant="success">reserva feita</Badge>
-                ) : (
-                  <Badge variant="outline">reserva pendente</Badge>
-                )}
               </div>
             </div>
 
             {s.semAliquota ? null : (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-3">
                 <Passo
-                  titulo="1. Provisionar no resultado"
+                  titulo="Provisionar no resultado"
                   texto="Reconhece a obrigação: despesa tributária contra impostos a pagar. Isto entra no DRE."
                   feito={s.jaLancada}
                   rotulo="Provisionar"
@@ -93,35 +87,6 @@ export function PainelDeImpostos({
                       showUndoToast({ message: `Provisionado ${formatBRL(r.valor)}.` });
                     })
                   }
-                />
-                <Passo
-                  titulo="2. Guardar na reserva"
-                  texto="Segrega o caixa. NÃO é despesa — o dinheiro continua sendo da empresa, só sai do disponível. O sistema não transfere: você transfere e anota aqui."
-                  feito={s.reservaFeita}
-                  rotulo="Já transferi"
-                  desabilitado={!podeLancar || pending}
-                  aoClicar={async () => {
-                    const ok = await confirmAction({
-                      title: "Você já fez a transferência?",
-                      description:
-                        "Isto apenas REGISTRA que a transferência foi feita. O sistema nunca move dinheiro entre contas sozinho.",
-                      confirmLabel: "Já transferi",
-                    });
-                    if (!ok) return;
-                    start(async () => {
-                      const r = await marcarReservaFeitaAction(competence, s.legalEntityId);
-                      if (!r.ok) {
-                        showUndoToast({ message: r.error });
-                        return;
-                      }
-                      setLista((l) =>
-                        l.map((x) =>
-                          x.legalEntityId === s.legalEntityId ? { ...x, reservaFeita: true } : x
-                        )
-                      );
-                      showUndoToast({ message: "Reserva registrada." });
-                    });
-                  }}
                 />
               </div>
             )}

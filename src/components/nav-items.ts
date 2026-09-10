@@ -17,7 +17,7 @@ import {
  *   Hoje       → visão do dia, rotina e assistente
  *   Clientes   → gerir a carteira por completo (carteira + retenção)
  *   Financeiro → gerir o financeiro por completo (mês, inadimplência,
- *                contas, folha, reservas, relatórios) e o HISTÓRICO
+ *                contas, folha, fluxo de caixa, relatórios) e o HISTÓRICO
  *                mês a mês do ano (pilar "meses anteriores")
  *   Comercial  → upsell, renovações, contratos, serviços e planos
  *   Sistema    → configurações, usuários, regras e importações
@@ -86,7 +86,6 @@ export const NAV_AREAS: NavArea[] = [
       { href: "/fechamento", label: "Fechamento do mês", permission: "fechamento.fechar" },
       { href: "/fechamento/fotografia", label: "Fotografia do mês", permission: "fechamento.fechar" },
       { href: "/projecoes", label: "Histórico Anual", permission: "projecoes.visualizar" },
-      { href: "/caixa", label: "Reservas", permission: "caixa.visualizar" },
       { href: "/fluxo", label: "Fluxo de caixa", permission: "caixa.visualizar" },
       { href: "/dre", label: "Resultado (DRE)", permission: "contabil.visualizar" },
       { href: "/impostos", label: "Impostos", permission: "contabil.visualizar" },

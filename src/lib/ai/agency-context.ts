@@ -91,7 +91,7 @@ export async function buildAgencySnapshotText(): Promise<string> {
   );
 
   L.push(
-    `CAIXA: disponível ${formatBRL(cash.caixaDisponivel)} (contas ${formatBRL(cash.contasBancarias)} + reservas ${formatBRL(cash.reservas)}); ` +
+    `CAIXA: disponível ${formatBRL(cash.caixaDisponivel)} (contas ativas); ` +
       `entradas do mês ${formatBRL(cash.entradasPeriodo)}; saídas ${formatBRL(cash.saidasPeriodo)}; ` +
       `previsto (caixa + a receber − a pagar) ${formatBRL(cash.saldoPrevisto)}; ` +
       `PROJEÇÃO: 30d ${formatBRL(cash.projecao30)}; 60d ${formatBRL(cash.projecao60)}; 90d ${formatBRL(cash.projecao90)}.`

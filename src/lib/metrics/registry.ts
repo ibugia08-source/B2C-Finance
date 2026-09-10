@@ -19,6 +19,15 @@ export type MetricDateBasis = "COMPETENCE" | "CASH" | "CURRENT_STATE" | "SNAPSHO
 
 export type MetricSpec = {
   key: string;
+  /**
+   * Versão DESTA métrica. Ausente = 1. Quando uma fórmula muda, a entrada
+   * antiga FICA (marcada com `vigenteAte`) e nasce uma nova com version+1 —
+   * é isso que faz o passado continuar reportando a fórmula que usou
+   * (01 §2.21-2.22). O seed grava uma linha por (chave, versão).
+   */
+  version?: number;
+  /** Data em que esta versão deixou de valer (ISO). Ausente = vigente. */
+  vigenteAte?: string;
   name: string;
   description: string;
   formulaDescription: string;
@@ -200,8 +209,12 @@ export const METRIC_REGISTRY: MetricSpec[] = [
   },
 
   // ===================== 7.2 CAIXA E LIQUIDEZ =====================
+  // As três métricas de caixa mudaram de fórmula em 10/09/2026, quando as
+  // reservas (CashBox) saíram do produto. As versões 1 continuam AQUI e no
+  // banco, com `vigenteAte`: fotografia antiga tem de continuar reportando a
+  // fórmula que usou (01 §2.21-2.22). O código lê sempre a versão vigente.
   {
-    key: "caixa_total",
+    key: "caixa_total", version: 1, vigenteAte: "2026-09-10",
     name: "Caixa total",
     description: "Saldo somado das contas e caixas incluídos.",
     formulaDescription: "Soma dos saldos das contas bancárias e caixas marcados como incluídos.",
@@ -210,22 +223,43 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     rounding: MOEDA, spec: "01 §7.2",
   },
   {
-    key: "caixa_reservado",
+    key: "caixa_total", version: 2,
+    name: "Caixa total",
+    description: "Saldo somado das contas bancárias ativas.",
+    formulaDescription: "Soma dos saldos das contas bancárias ativas.",
+    grain: "POINT_IN_TIME", dateBasis: "CURRENT_STATE",
+    sourceEntities: ["Account"],
+    rounding: MOEDA, spec: "01 §7.2",
+  },
+  {
+    key: "caixa_reservado", version: 1, vigenteAte: "2026-09-10",
     name: "Caixa reservado",
-    description: "Parte do caixa comprometida com reservas restritas ou planejadas.",
+    description:
+      "DESCONTINUADA: as reservas saíram do produto em 10/09/2026. Fica no registry para o passado continuar legível.",
     formulaDescription: "Soma das reservas marcadas como restritas/planejadas.",
     grain: "POINT_IN_TIME", dateBasis: "CURRENT_STATE",
     sourceEntities: ["CashBox"],
     rounding: MOEDA, spec: "01 §7.2",
   },
   {
-    key: "liquidez_disponivel",
+    key: "liquidez_disponivel", version: 1, vigenteAte: "2026-09-10",
     name: "Liquidez disponível",
     description:
       "O dinheiro que dá para usar. É esta métrica que vai no card de caixa — nunca o saldo bruto.",
     formulaDescription: "Caixa total − caixa reservado − compromissos imediatos configurados.",
     grain: "POINT_IN_TIME", dateBasis: "CURRENT_STATE",
     sourceEntities: ["Account", "CashBox", "Transaction"],
+    rounding: MOEDA, spec: "01 §7.2; 02 §5.1",
+  },
+  {
+    key: "liquidez_disponivel", version: 2,
+    name: "Liquidez disponível",
+    description:
+      "O dinheiro que dá para usar. É esta métrica que vai no card de caixa — nunca o saldo bruto.",
+    formulaDescription:
+      "Soma dos saldos das contas ativas − compromissos imediatos (contas a pagar vencidas e as que vencem dentro da janela configurada, padrão 7 dias).",
+    grain: "POINT_IN_TIME", dateBasis: "CURRENT_STATE",
+    sourceEntities: ["Account", "Transaction"],
     rounding: MOEDA, spec: "01 §7.2; 02 §5.1",
   },
 
@@ -494,7 +528,7 @@ export const METRIC_REGISTRY: MetricSpec[] = [
 
   // ===================== 7.7 SAÚDE =====================
   {
-    key: "saude_financeira",
+    key: "saude_financeira", version: 1, vigenteAte: "2026-09-10",
     name: "Saúde financeira",
     description:
       "Nota 0-100 com fatores, pesos e limites configuráveis e versionados — nada fixo no código como verdade estrutural.",
@@ -504,11 +538,42 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     sourceEntities: ["Billing", "Transaction", "CashBox", "ClientLoss"],
     rounding: "inteiro 0-100", spec: "01 §7.7",
   },
+  {
+    // Mesma nota, mesma fórmula: o fator "caixa" deixou de ler as reservas
+    // (CashBox) e passou a ler o saldo das contas ativas. Fonte diferente é
+    // contrato diferente, então é versão nova — o passado continua na v1.
+    key: "saude_financeira", version: 2,
+    name: "Saúde financeira",
+    description:
+      "Nota 0-100 com fatores, pesos e limites configuráveis e versionados — nada fixo no código como verdade estrutural.",
+    formulaDescription:
+      "Soma ponderada dos fatores configurados (margem, inadimplência, caixa em conta, churn), com os penalizadores expostos na interface.",
+    grain: "COMPETENCE", dateBasis: "COMPETENCE",
+    sourceEntities: ["Billing", "Transaction", "Account", "ClientLoss"],
+    rounding: "inteiro 0-100", spec: "01 §7.7",
+  },
 ];
 
-/** Busca uma métrica pela chave (a interface usa para tooltip e rótulo). */
+/**
+ * Busca a métrica VIGENTE pela chave (a interface usa para tooltip e rótulo).
+ *
+ * Com o registry guardando versões antigas, "a métrica" é sempre a de maior
+ * versão sem `vigenteAte` — quem quiser a fórmula de uma fotografia velha lê
+ * a MetricDefinition da versão gravada nela, que é o ponto de guardar as duas.
+ */
 export function getMetricSpec(key: string): MetricSpec | undefined {
-  return METRIC_REGISTRY.find((m) => m.key === key);
+  const daChave = METRIC_REGISTRY.filter((m) => m.key === key);
+  const vigentes = daChave.filter((m) => !m.vigenteAte);
+  const lista = vigentes.length > 0 ? vigentes : daChave;
+  return lista.reduce<MetricSpec | undefined>(
+    (melhor, m) => (!melhor || (m.version ?? 1) > (melhor.version ?? 1) ? m : melhor),
+    undefined
+  );
+}
+
+/** Versão vigente de uma métrica (o que vai no snapshot ao lado do valor). */
+export function versaoVigenteDaMetrica(key: string): number {
+  return getMetricSpec(key)?.version ?? 1;
 }
 
 /** Versão vigente do registry — vai no snapshot do fechamento (01 §4.12). */

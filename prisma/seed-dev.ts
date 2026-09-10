@@ -137,7 +137,6 @@ async function main() {
     ["Despesas/transações", await prisma.transaction.count()],
     ["Colaboradores", await prisma.employee.count()],
     ["Folhas", await prisma.payroll.count()],
-    ["Caixas/reservas", await prisma.cashBox.count()],
     ["Serviços", await prisma.service.count()],
     ["Ofertas", await prisma.offer.count()],
     ["Upsells", await prisma.upsell.count()],

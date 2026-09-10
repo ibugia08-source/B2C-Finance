@@ -130,8 +130,6 @@ export {
   getYearlySeries, // Faturamento/Despesas/Resultado do ano (getYearly*Series)
   getPreviousMonthComparison,
   buildDashboardSummary,
-  getResultLaunchedForMonth,
-  resultLaunchTag,
   previousPeriodRange,
   getOpenByClient,
   getReceivedDetail,

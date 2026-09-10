@@ -6,7 +6,6 @@ import {
   sobraReal,
   saldoPrevistoCompleto,
   totalEmCaixa,
-  totalReservaEmergencia,
   taxaEndividamento,
   comprometimentoFaturas,
   nivelReserva,
@@ -32,7 +31,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
     sobra,
     saldoPrev,
     caixa,
-    reserva,
     taxa,
     compr,
     nivel,
@@ -50,7 +48,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
     sobraReal(ref),
     saldoPrevistoCompleto(ref),
     totalEmCaixa(),
-    totalReservaEmergencia(),
     taxaEndividamento(ref),
     comprometimentoFaturas(ref),
     nivelReserva(ref),
@@ -108,7 +105,6 @@ export async function buildFinancialSnapshot(ref = new Date()) {
       sobraRealMes: sobra,
       saldoPrevisto: saldoPrev,
       totalEmCaixa: caixa,
-      reservaEmergencia: reserva,
       aReceberDeTerceiros: aReceber,
       faturasEmAberto: faturas.openAmount,
     },
@@ -154,7 +150,7 @@ export function snapshotToText(s: FinancialSnapshot): string {
   lines.push(
     `VISÃO GERAL: receitas ${formatBRL(vg.receitasMes)}; despesas ${formatBRL(vg.despesasMes)}; ` +
       `sobra real ${formatBRL(vg.sobraRealMes)}; saldo previsto ${formatBRL(vg.saldoPrevisto)}; ` +
-      `em caixa ${formatBRL(vg.totalEmCaixa)}; reserva ${formatBRL(vg.reservaEmergencia)}; ` +
+      `em caixa ${formatBRL(vg.totalEmCaixa)}; ` +
       `a receber ${formatBRL(vg.aReceberDeTerceiros)}; faturas em aberto ${formatBRL(vg.faturasEmAberto)}.`
   );
   lines.push(

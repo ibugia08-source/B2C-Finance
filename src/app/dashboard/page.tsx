@@ -20,7 +20,6 @@ import { computePeriodMetrics } from "@/lib/metrics/engine";
 import {
   getDashboardMainMetrics,
   getYearlySeries,
-  getResultLaunchedForMonth,
   getOpenByClient,
   getReceivedDetail,
   getExpensesDetail,
@@ -38,7 +37,6 @@ import { ChartCard, HBarList } from "@/components/charts";
 import { MainChart, CompositionDonut, CombinedChart } from "@/components/dashboard/charts-lazy";
 import { MetricCard, SecondaryStat } from "@/components/metric-card";
 import { getLiquidez } from "@/lib/services/liquidity";
-import { LaunchToCash } from "@/components/dashboard/launch-to-cash";
 import {
   FaturamentoDetail, DespesasDetail, RecebidoDetail, EmAbertoDetail, ResultadoDetail,
   NamedValueList,
@@ -117,11 +115,10 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   // sequenciais — nunca dois agregadores pesados ao mesmo tempo.
   const data = await getExecutiveDashboard(filters);
   const main = await getDashboardMainMetrics(period);
-  const [yearly, churn, newClients, launched] = await Promise.all([
+  const [yearly, churn, newClients] = await Promise.all([
     getYearlySeries(selectedYear),
     getMonthlyChurn(period.start, period.end),
     getNewClientsSummary(period.start, period.end),
-    isFullMonth ? getResultLaunchedForMonth(selectedYear, selectedMonth) : Promise.resolve(0),
   ]);
   // Detalhes dos cards (queries leves) — um lote só, depois dos pesados.
   const [
@@ -137,8 +134,8 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
     getNewClientsDetail(period),
     getRenewalClientsDetail(selectedMonth),
   ]);
-  // Sexto card do painel executivo (02 §5.1). A regra de reservas
-  // restritas é da DECISÃO 19.34 / F3.11 — aqui a conta é aberta.
+  // Sexto card do painel executivo (02 §5.1). Com as reservas removidas
+  // (10/09/2026), a conta é: contas ativas − compromissos imediatos.
   const liquidez = await getLiquidez(new Date().toISOString());
   const {
     finance, health, alerts,
@@ -159,7 +156,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   const emAberto = M.emAberto;
   const vencido = M.vencido;
   const resultado = M.resultado;
-  const disponivelCaixa = Math.max(0, resultado - launched);
+  const disponivelCaixa = Math.max(0, resultado);
 
   // Comparação textual usa o mês anterior; rótulo do período de comparação.
   // Sparkline de 12 meses em cada card (02 §5.1: "cada um com sparkline 12m").
@@ -314,23 +311,17 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           detailTitle="Resultado do mês"
           detail={<ResultadoDetail recebido={recebido} despesas={finance.despesas}
             resultado={resultado} margem={M.margem} disponivel={disponivelCaixa} />}
-          footer={
-            isFullMonth && resultado > 0 ? (
-              <LaunchToCash year={selectedYear} month={selectedMonth}
-                resultado={resultado} alreadyLaunched={launched} />
-            ) : undefined
-          }
         />
         <MetricCard
           title="Liquidez disponível"
           value={formatBRL(liquidez.disponivel)}
           basis="caixa"
           hint={
-            liquidez.reservado > 0
-              ? `${formatBRL(liquidez.reservado)} reservados · projeção 30d: ${formatBRL(liquidez.projecao30d)}`
+            liquidez.compromissos > 0
+              ? `${formatBRL(liquidez.compromissos)} de compromisso imediato · projeção 30d: ${formatBRL(liquidez.projecao30d)}`
               : `Projeção 30 dias: ${formatBRL(liquidez.projecao30d)}`
           }
-          help="Contas e reservas de hoje, MENOS as reservas restritas (impostos e 13º por padrão) — aquele dinheiro tem dono e data, e mostrá-lo como disponível é o que faz alguém aprovar uma despesa contra o imposto do mês seguinte. A projeção de 30 dias acrescenta as cobranças que vencem no período e subtrai as contas a pagar do mesmo prazo."
+          help={`Saldo das contas ativas de hoje, MENOS os compromissos imediatos — as contas a pagar já vencidas e as que vencem nos próximos ${liquidez.janelaDias} dias. É este número que responde "posso gastar?", não o saldo bruto. A projeção de 30 dias acrescenta as cobranças que vencem no período e subtrai as contas a pagar do mesmo prazo.`}
           tone={liquidez.projecao30d < 0 ? "neg" : liquidez.disponivel > 0 ? "pos" : "default"}
           detailTitle="Liquidez disponível e projeção de 30 dias"
           detail={
@@ -339,15 +330,11 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
                 items={liquidez.itens.map((i) => ({
                   name: i.label,
                   value: i.value,
-                  sub: i.restrita
-                    ? "reserva restrita — fora do disponível"
-                    : i.tipo === "conta"
-                      ? "conta"
-                      : "reserva",
+                  sub: i.tipo === "conta" ? "conta" : "compromisso imediato",
                 }))}
                 total={liquidez.disponivel}
                 totalLabel="Disponível hoje"
-                emptyText="Nenhuma conta ou reserva cadastrada — o saldo precisa vir do extrato."
+                emptyText="Nenhuma conta cadastrada — o saldo precisa vir do extrato."
               />
               <div className="space-y-1 border-t pt-3 text-body">
                 <p className="flex justify-between">

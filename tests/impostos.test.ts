@@ -8,10 +8,9 @@ import { isLedgerEnabled } from "@/lib/accounting/engine";
 import { setLedgerEnabled } from "@/lib/accounting/health";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { montarDre } from "@/lib/services/dre";
-import { getLiquidez } from "@/lib/services/liquidity";
 
 /**
- * F3.3 — provisão tributária e reserva (01 §3.8) + F3.11 (liquidez, 19.34).
+ * F3.3 — provisão tributária e reserva (01 §3.8).
  *
  * A regra que estes testes protegem: provisão e reserva são EVENTOS
  * INDEPENDENTES. Quem trata as duas como uma só conta o imposto DUAS VEZES no
@@ -118,45 +117,12 @@ describe("F3.3 — provisão x reserva", () => {
     );
     expect(p.reserveDoneBy).toBe("Israel");
     expect(p.reserveDoneAt).toBeTruthy();
-    // Nenhum movimento de caixa foi criado pelo sistema.
-    const movimentos = await asOwner(dono, async () =>
-      prisma.cashBoxMovement.count({ where: { description: { contains: "imposto" } } })
+    // Nenhuma saída de caixa foi criada pelo sistema.
+    const saidas = await asOwner(dono, async () =>
+      prisma.transaction.count({
+        where: { type: "despesa", description: { contains: "Reserva de imposto" } },
+      })
     );
-    expect(movimentos).toBe(0);
-  });
-});
-
-describe("F3.11 — reserva restrita sai da liquidez (19.34)", () => {
-  let dono: TestOwner;
-  beforeAll(async () => {
-    dono = await createOwner();
-  });
-  afterAll(async () => {
-    await destroyOwner(dono);
-  });
-
-  it("o disponível é contas + reservas MENOS as restritas", async () => {
-    await asOwner(dono, async () => {
-      await prisma.cashBox.create({
-        data: { name: "Reserva livre", currentAmount: 5000, type: "COMPANY" },
-      });
-      await prisma.cashBox.create({
-        data: { name: "Reserva de impostos", currentAmount: 3000, type: "COMPANY", restricted: true },
-      });
-    });
-
-    const l = await asOwner(dono, async () => getLiquidez(new Date().toISOString()));
-    expect(l.reservas).toBe(8000);
-    expect(l.reservado).toBe(3000);
-    // Mostrar 8000 como disponível é o que faz alguém aprovar uma despesa
-    // contra o imposto do mês seguinte.
-    expect(l.disponivel).toBe(l.contas + 5000);
-  });
-
-  it("a composição continua mostrando TUDO, marcando o que é restrito", async () => {
-    const l = await asOwner(dono, async () => getLiquidez(new Date().toISOString()));
-    const restrita = l.itens.find((i) => i.label === "Reserva de impostos");
-    expect(restrita?.restrita).toBe(true);
-    expect(l.itens.some((i) => i.label === "Reserva livre" && !i.restrita)).toBe(true);
+    expect(saidas).toBe(0);
   });
 });

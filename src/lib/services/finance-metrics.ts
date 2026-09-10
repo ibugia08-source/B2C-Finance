@@ -16,7 +16,7 @@ import { toNumber as n } from "@/lib/format";
  *  - Folha NÃO entra automaticamente em despesas: ao marcar a folha como
  *    PAGA, o sistema cria a despesa (expenseType=PAYROLL) — assim o lucro
  *    = receitas − despesas já inclui folha SEM contagem dupla.
- *  - Caixa disponível     = Σ Account.balance + Σ CashBox.currentAmount.
+ *  - Caixa disponível     = Σ Account.balance das contas ativas.
  *  - Projeção (30/60/90)  = caixa + cobranças abertas a vencer no horizonte
  *    − despesas pendentes no horizonte − parcelas de passivos no horizonte.
  */
@@ -109,9 +109,9 @@ async function getFinanceSummaryImpl(period: Period): Promise<FinanceSummary> {
 // ===================================================================
 
 export type CashSummary = {
-  caixaDisponivel: number; // contas + caixinhas
+  /** Saldo das contas ATIVAS. As reservas (CashBox) saíram em 10/09/2026. */
+  caixaDisponivel: number;
   contasBancarias: number;
-  reservas: number; // caixinhas
   entradasPeriodo: number; // recebido no período
   saidasPeriodo: number; // pago no período
   saldoRealizado: number; // entradas − saídas
@@ -159,10 +159,9 @@ async function projecao(caixa: number, dias: number): Promise<number> {
 async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
   const { start, end } = period;
 
-  const [accounts, boxes, inflow, outflow, openBillings, pendingExpenses] =
+  const [accounts, inflow, outflow, openBillings, pendingExpenses] =
     await Promise.all([
       prisma.account.aggregate({ where: { active: true }, _sum: { balance: true } }),
-      prisma.cashBox.aggregate({ _sum: { currentAmount: true } }),
       prisma.income.aggregate({
         where: { status: "RECEIVED", receivedAt: { gte: start, lt: end } },
         _sum: { amount: true },
@@ -182,8 +181,7 @@ async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
     ]);
 
   const contasBancarias = n(accounts._sum.balance);
-  const reservas = n(boxes._sum.currentAmount);
-  const caixaDisponivel = contasBancarias + reservas;
+  const caixaDisponivel = contasBancarias;
   const entradasPeriodo = n(inflow._sum.amount);
   const saidasPeriodo = n(outflow._sum.amount);
   const aReceber = n(openBillings._sum.amount) - n(openBillings._sum.paidTotal);
@@ -198,7 +196,6 @@ async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
   return {
     caixaDisponivel,
     contasBancarias,
-    reservas,
     entradasPeriodo,
     saidasPeriodo,
     saldoRealizado: entradasPeriodo - saidasPeriodo,

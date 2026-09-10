@@ -71,17 +71,17 @@ export async function faturasPagasMes(reference: Date = new Date()) {
   return n(r._sum.paid);
 }
 
+/**
+ * Dinheiro em conta hoje. Lia as caixinhas (CashBox) até 10/09/2026, quando
+ * as reservas saíram do produto; agora é o saldo das contas ATIVAS, que é
+ * onde o dinheiro realmente está.
+ */
 export async function totalEmCaixa() {
-  const r = await prisma.cashBox.aggregate({ _sum: { currentAmount: true } });
-  return n(r._sum.currentAmount);
-}
-
-export async function totalReservaEmergencia() {
-  const r = await prisma.cashBox.aggregate({
-    where: { type: "EMERGENCY" },
-    _sum: { currentAmount: true },
+  const r = await prisma.account.aggregate({
+    where: { active: true },
+    _sum: { balance: true },
   });
-  return n(r._sum.currentAmount);
+  return n(r._sum.balance);
 }
 
 export async function taxaEndividamento(reference: Date = new Date()) {
@@ -116,6 +116,11 @@ export async function comprometimentoFaturas(reference: Date = new Date()) {
   return faturas.openAmount / receitas;
 }
 
+/**
+ * Meses de fôlego: caixa em conta dividido pela despesa do mês. Continua
+ * se chamando "nível de reserva" porque é disso que ele fala — quantos meses
+ * a operação aguenta —, e não da caixinha que deixou de existir.
+ */
 export async function nivelReserva(reference: Date = new Date()) {
   const caixa = await totalEmCaixa();
   const desp = await totalDespesasMes(reference);
