@@ -109,6 +109,24 @@ export async function revertPayment(
   if (!reason?.trim())
     return { ok: false, error: "Informe o motivo do estorno." };
 
+  // Guarda de PERÍODO, simétrica à do registro: estornar tira dinheiro do
+  // caixa do mês em que ele entrou. Sem esta checagem, um estorno mudava
+  // por fora um mês já fechado — exatamente o que a fotografia congela.
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: { paidAt: true },
+  });
+  if (!payment) return { ok: false, error: "Pagamento não encontrado." };
+  const caixa = competenciaDoCaixa(payment.paidAt);
+  const periodo = await guardPeriod("CUSTOMER_PAYMENT_RECEIVED", caixa);
+  if (!periodo.ok) {
+    const [ano, mesN] = String(caixa).split("-");
+    return {
+      ok: false,
+      error: `O caixa de ${mesN}/${ano} está fechado — para estornar este pagamento, reabra a competência (com justificativa) e tente de novo.`,
+    };
+  }
+
   const ctx = await contextFromRequest({ reason });
   return revertBillingPayment(paymentId, ctx);
 }

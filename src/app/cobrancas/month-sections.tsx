@@ -29,6 +29,10 @@ import {
   ContaQuickDialog,
   PagarFolhaButton,
 } from "./quick-dialogs";
+import {
+  ExcluirRecebimentoButton,
+  type ExcluirRecebimento,
+} from "./recebimento-actions";
 
 /**
  * Seções da GESTÃO DO MÊS — os blocos da aba mensal da planilha, cada um
@@ -122,6 +126,8 @@ export type RecebimentoRow = {
   status: string;
   isRecovery: boolean;
   recoveryOf: string | null; // "MM/AAAA" da competência recuperada
+  /** Como excluir esta linha (ajuste de erro). null = sem exclusão aqui. */
+  excluir: ExcluirRecebimento | null;
 };
 
 export type RecebimentosTotals = {
@@ -153,6 +159,9 @@ export function RecebimentosSection({
   month: number;
   year: number;
 }) {
+  // A coluna de exclusão só existe quando alguma linha pode ser excluída —
+  // sem permissão, a tabela continua com as 4 colunas de sempre.
+  const temExcluir = rows.some((r) => r.excluir);
   return (
     <SectionShell
       id="entradas"
@@ -184,6 +193,7 @@ export function RecebimentosSection({
                   <TableHead>Data</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
+                  {temExcluir && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -233,24 +243,39 @@ export function RecebimentosSection({
                           </span>
                         )}
                       </TableCell>
+                      {temExcluir && (
+                        <TableCell className="w-10 p-1 text-right">
+                          {r.excluir && (
+                            <ExcluirRecebimentoButton
+                              alvo={r.excluir}
+                              nome={r.clientName ?? r.description}
+                              valor={
+                                r.excluir.via === "billing" || r.excluir.via === "payment"
+                                  ? r.paidAmount || r.amount
+                                  : r.amount
+                              }
+                            />
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
                 <TableRow className="bg-muted/40 font-semibold">
-                  <TableCell colSpan={3}>Recebido no mês</TableCell>
+                  <TableCell colSpan={temExcluir ? 4 : 3}>Recebido no mês</TableCell>
                   <TableCell className="text-right stat-number text-success">
                     {formatBRL(totals.recebido)}
                   </TableCell>
                 </TableRow>
                 <TableRow className="bg-muted/20 text-sm">
-                  <TableCell colSpan={3}>A receber (a vencer + atrasado)</TableCell>
+                  <TableCell colSpan={temExcluir ? 4 : 3}>A receber (a vencer + atrasado)</TableCell>
                   <TableCell className="text-right stat-number">
                     {formatBRL(totals.aReceber)}
                   </TableCell>
                 </TableRow>
                 {totals.atrasado > 0 && (
                   <TableRow className="bg-muted/20 text-sm">
-                    <TableCell colSpan={3} className="text-destructive">
+                    <TableCell colSpan={temExcluir ? 4 : 3} className="text-destructive">
                       Atrasado (dentro do a receber)
                     </TableCell>
                     <TableCell className="text-right stat-number text-destructive">

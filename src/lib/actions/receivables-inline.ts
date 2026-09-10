@@ -498,6 +498,46 @@ export async function deleteBillingPayments(billingId: string): Promise<ActionRe
   }
 }
 
+/**
+ * Exclui UM pagamento específico (estorno pontual): o dinheiro sai do caixa
+ * do mês em que foi pago e a cobrança volta a Em aberto/Vencida NA
+ * COMPETÊNCIA DELA. É o gesto da linha "recuperação de MM/AAAA" dos
+ * Recebimentos do Mês — excluir só aquele recebimento, sem tocar em outros
+ * pagamentos que a mesma cobrança tenha.
+ */
+export async function deleteReceiptPayment(paymentId: string): Promise<ActionResult> {
+  const viewer = await tryPermission("recebimentos.excluir");
+  if (!viewer) return NO_PERMISSION;
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        billing: { select: { id: true, clientId: true, competenceMonth: true, competenceYear: true } },
+      },
+    });
+    if (!payment) return { ok: false, error: "Pagamento não encontrado." };
+
+    const { revertPayment } = await import("@/lib/engines/payment-engine");
+    const res = await revertPayment(paymentId, `Recebimento excluído por ${viewer.email} na Gestão do Mês`);
+    if (!res.ok) return res;
+
+    await prisma.collectionHistory.create({
+      data: {
+        billingId: payment.billing.id,
+        clientId: payment.billing.clientId,
+        status: "NOT_CONTACTED",
+        message: `Pagamento excluído por ${viewer.email} — a cobrança de ${String(payment.billing.competenceMonth).padStart(2, "0")}/${payment.billing.competenceYear} voltou a ficar em aberto.`,
+      },
+    });
+    revalidateAll(payment.billing.clientId);
+    revalidateFinance();
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message ?? "Falha ao excluir o pagamento." };
+  }
+}
+
 // ===== Ações em massa da lista de Recebimentos =====
 
 /** Status do mês em massa (Pago fica de fora — pagamento é individual). */

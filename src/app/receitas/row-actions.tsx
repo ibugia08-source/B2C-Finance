@@ -5,6 +5,7 @@ import { IncomeDialog } from "./income-dialog";
 import { Pencil, Trash2 } from "lucide-react";
 import { deleteIncome } from "@/lib/actions/incomes";
 import { useTransition } from "react";
+import { showUndoToast } from "@/components/undo-toast";
 
 export function IncomeActions({
   income,
@@ -44,7 +45,10 @@ export function IncomeActions({
         disabled={pending}
         onClick={async () => {
           if (!(await confirmAction({ title: "Excluir receita?", destructive: true }))) return;
-          start(() => deleteIncome(income.id));
+          start(async () => {
+            const res = await deleteIncome(income.id);
+            if (res && !res.ok) showUndoToast({ message: res.error });
+          });
         }}
       >
         <Trash2 className="h-4 w-4 text-destructive" />

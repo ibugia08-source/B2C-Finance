@@ -112,7 +112,23 @@ export async function saveIncome(formData: FormData) {
 
 export async function deleteIncome(id: string) {
   await requirePermission("receitas.excluir");
+  const income = await prisma.income.findUnique({
+    where: { id },
+    select: { billingId: true, paymentId: true },
+  });
+  if (!income) return { ok: false as const, error: "Entrada não encontrada." };
+  // Entrada de CONCILIAÇÃO (espelho de um pagamento de cobrança) não se
+  // apaga por aqui: sumir com ela deixaria a cobrança "paga" com um caixa
+  // que não existe. O caminho certo é excluir o PAGAMENTO — o estorno
+  // remove o pagamento, esta entrada e reabre a cobrança, tudo junto.
+  if (income.billingId || income.paymentId)
+    return {
+      ok: false as const,
+      error:
+        "Esta entrada é o espelho de um pagamento de cobrança. Exclua o pagamento na Gestão do Mês (a cobrança reabre e o caixa é ajustado junto).",
+    };
   await prisma.income.delete({ where: { id } });
   revalidateFinance();
+  return { ok: true as const };
 }
 

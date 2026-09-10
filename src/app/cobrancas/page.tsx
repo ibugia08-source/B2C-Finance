@@ -145,6 +145,9 @@ async function RecebimentosPageInner({
     marcarPerda: can(viewer, "clientes.alterar_status"),
     agendarRenovacao: can(viewer, "clientes.editar"),
     gerarCobrancas: can(viewer, "recebimentos.gerar_cobranca"),
+    // Excluir recebimento (estorno) na lista unificada — mesma permissão
+    // sensível do "Excluir pagamento" da Lista de Clientes.
+    excluirPagamento: can(viewer, "recebimentos.excluir"),
   };
 
   // Manutenção do ciclo: marca vencidas + gera as mensalidades MRR que faltam.
@@ -505,6 +508,8 @@ async function RecebimentosPageInner({
             receivedAt: true,
             status: true,
             revenueType: true,
+            paymentId: true,
+            billingId: true,
             client: { select: { name: true } },
             billing: { select: { competenceMonth: true, competenceYear: true } },
           },
@@ -621,6 +626,12 @@ async function RecebimentosPageInner({
         status: r.cycleStatus,
         isRecovery: false,
         recoveryOf: null,
+        // Só linha com dinheiro recebido tem o que excluir: o estorno
+        // reabre a cobrança e devolve o valor do caixa.
+        excluir:
+          gates.excluirPagamento && r.billingId && paid > 0
+            ? { via: "billing" as const, id: r.billingId }
+            : null,
         _sort: due ? due.getTime() : 0,
       };
     });
@@ -652,6 +663,17 @@ async function RecebimentosPageInner({
         i.revenueType === "RECOVERY" && i.billing
           ? `${String(i.billing.competenceMonth).padStart(2, "0")}/${i.billing.competenceYear}`
           : null,
+      // Recuperação = espelho de um pagamento → excluir É estornar o
+      // pagamento (a cobrança reabre no mês DELA). Avulsa (sem cobrança)
+      // se apaga direto. Conciliação legada sem paymentId fica sem botão:
+      // apagar só o espelho dessincronizaria caixa e cobrança.
+      excluir: i.paymentId
+        ? gates.excluirPagamento
+          ? { via: "payment" as const, id: i.paymentId }
+          : null
+        : !i.billingId && gates.extrasExcluir
+          ? { via: "income" as const, id: i.id }
+          : null,
       _sort: new Date(i.receivedAt).getTime(),
     })),
     ...entradasExtras.map((e: any) => ({
@@ -666,6 +688,7 @@ async function RecebimentosPageInner({
       status: "RECEIVED",
       isRecovery: false,
       recoveryOf: null,
+      excluir: gates.extrasExcluir ? { via: "extra" as const, id: e.id } : null,
       _sort: new Date(e.receivedAt).getTime(),
     })),
   ];

@@ -333,13 +333,28 @@ export async function revertBillingPayment(
 ): Promise<{ ok: true; clientId: string } | { ok: false; error: string }> {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { billing: true },
+    include: { billing: true, applications: true },
   });
   if (!payment) return { ok: false, error: "Pagamento não encontrado." };
 
   const b = payment.billing;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  // Resolvido FORA da transação, como no registro: leitura de configuração.
+  const workspaceId = await currentWorkspaceId();
+
+  // O que este pagamento sustenta ALÉM da própria cobrança (F1.8):
+  //  · aplicações de crédito em OUTRAS cobranças — o delete abaixo as leva
+  //    junto (onDelete: Cascade), e sem reabrir essas cobranças aqui elas
+  //    ficariam "pagas" com um dinheiro que deixou de existir;
+  //  · a sobra ainda não aplicada — é o crédito em caixa do cliente, e o
+  //    cache CustomerCredit.balance não tem FK com o pagamento: sem a baixa
+  //    explícita, o estorno deixaria um crédito fantasma.
+  const aplicacoesEmOutras = payment.applications.filter((a) => a.billingId !== b.id);
+  const sobraDeCredito = Math.max(
+    0,
+    n(payment.amount) - payment.applications.reduce((s, a) => s + n(a.amount), 0)
+  );
 
   // Transação interativa: pagamento, Income de conciliação, saldo/status da
   // cobrança E a Receita Extra automática são revertidos de forma atômica —
@@ -378,8 +393,97 @@ export async function revertBillingPayment(
         paidAt: null,
         isLate: false,
         paidInDifferentMonth: false,
+        // A régua de cobrança volta ao início: deixar PAID aqui faria a
+        // fila e o kanban tratarem como quitada uma cobrança reaberta.
+        ...(b.collectionStatus === "PAID"
+          ? { collectionStatus: "NOT_CONTACTED" as const }
+          : {}),
       },
     });
+
+    // Cobranças que receberam CRÉDITO deste pagamento: a aplicação sumiu na
+    // cascata, então o saldo delas é recalculado e o status reaberto — com
+    // rastro, porque uma cobrança que "despaga sozinha" sem história é
+    // chamado de suporte na certa.
+    for (const ap of aplicacoesEmOutras) {
+      const alvo = await tx.billing.findUnique({ where: { id: ap.billingId } });
+      if (!alvo) continue;
+      const pagoAgora = await recomputePaidTotal(tx, alvo.id);
+      const quitada = pagoAgora >= n(alvo.amount) - MONEY_EPSILON;
+      const statusAlvo = quitada
+        ? "PAID"
+        : pagoAgora > MONEY_EPSILON
+          ? "PARTIAL"
+          : alvo.dueDate < today
+            ? "OVERDUE"
+            : "PENDING";
+      await tx.billing.update({
+        where: { id: alvo.id },
+        data: {
+          paidTotal: pagoAgora,
+          status: statusAlvo,
+          ...(quitada
+            ? {}
+            : {
+                paidAt: null,
+                isLate: false,
+                paidInDifferentMonth: false,
+                ...(alvo.collectionStatus === "PAID"
+                  ? { collectionStatus: "NOT_CONTACTED" as const }
+                  : {}),
+              }),
+        },
+      });
+      await tx.collectionHistory.create({
+        data: {
+          billingId: alvo.id,
+          clientId: alvo.clientId,
+          status: "NOT_CONTACTED",
+          message: `Estorno de pagamento do cliente desfez R$ ${n(ap.amount).toFixed(2)} de crédito aplicado nesta cobrança — saldo reaberto.`,
+        },
+      });
+      await auditUpdate(
+        tx as any, "Billing", alvo.id,
+        { paidTotal: n(alvo.paidTotal), status: alvo.status },
+        { paidTotal: pagoAgora, status: statusAlvo },
+        ctx
+      );
+    }
+
+    // Crédito ainda em caixa sustentado por este pagamento: sai do cache com
+    // movimento de SAÍDA — o saldo continua batendo com a conta derivada
+    // (Σ pagamentos − Σ aplicações), que é o invariante da F1.8.
+    if (sobraDeCredito > MONEY_EPSILON) {
+      const movimentoIn = await tx.customerCreditMovement.findFirst({
+        where: { sourcePaymentId: paymentId, kind: "IN" },
+        select: { creditId: true, credit: { select: { balance: true } } },
+      });
+      if (movimentoIn) {
+        const saldoAtual = n(movimentoIn.credit.balance);
+        const devolver = Math.min(saldoAtual, sobraDeCredito);
+        if (devolver > MONEY_EPSILON) {
+          await tx.customerCredit.update({
+            where: { id: movimentoIn.creditId },
+            data: { balance: { decrement: devolver } },
+          });
+          await tx.customerCreditMovement.create({
+            data: {
+              creditId: movimentoIn.creditId,
+              kind: "OUT",
+              amount: devolver,
+              sourcePaymentId: paymentId,
+              reason: "Estorno do pagamento que originou o crédito",
+            },
+          });
+          await auditUpdate(
+            tx as any, "CustomerCredit", movimentoIn.creditId,
+            { balance: saldoAtual },
+            { balance: saldoAtual - devolver },
+            ctx
+          );
+        }
+      }
+    }
 
     // ESTORNO NO RAZÃO (F3.1 · 01 §3.10 "Reversal", §2.14).
     //
@@ -397,6 +501,24 @@ export async function revertBillingPayment(
       const r = await reverter(lancamento.id, "Estorno de pagamento", tx as any);
       if (!r.ok) throw new SettleError(r.error);
     }
+
+    // O CRM recebeu "pagamento.registrado" quando o fato entrou; sem o
+    // contra-fato, a integração guardaria um pago que não existe mais.
+    // Mesmo canal, mesmo envelope — quem decide o que fazer é o provedor.
+    await publish(tx as any, {
+      workspaceId,
+      eventType: "pagamento.estornado",
+      channel: "crm",
+      sourceType: "Payment",
+      sourceId: paymentId,
+      payload: {
+        billingId: b.id,
+        clientId: b.clientId,
+        amount: n(payment.amount),
+        paidAt: payment.paidAt.toISOString(),
+        reason: ctx.reason,
+      },
+    });
 
     // Trilha do estorno, dentro da transação (03 §4.1).
     await auditEvent(tx as any, "Payment", paymentId, "REVERSE", ctx);
