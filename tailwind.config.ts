@@ -66,7 +66,6 @@ const config: Config = {
         },
         /* ---- território de marca: login, PDF, e-mail (nunca no produto) ---- */
         navy: { DEFAULT: "hsl(var(--navy))", deep: "hsl(var(--navy-deep))" },
-        gold: "hsl(var(--gold))",
         /* ---- semântica de estado ---- */
         success: {
           DEFAULT: "hsl(var(--success))",
@@ -124,6 +123,7 @@ const config: Config = {
         input: "var(--radius-input)",   // 12px inputs
         card: "var(--radius-card)",     // 16px cards
         modal: "var(--radius-modal)",   // 24px modais
+        panel: "var(--radius-panel)",   // 24px painéis ilustrados da marca
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { sendChatMessage } from "@/lib/actions/ai";
 import { SimpleMarkdown } from "./markdown";
-import { B2CAvatar, B2CMascot } from "@/components/mascot";
+import { AssistantAvatar, BrandIllustration } from "@/components/brand";
 import { Send, User } from "lucide-react";
 
 type Msg = { role: "user" | "assistant"; content: string; id?: string };
@@ -85,7 +85,10 @@ export function Chat({
       <div className="flex-1 overflow-y-auto space-y-4 pr-1">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
-            <B2CMascot pose="hero" width={150} className="drop-shadow-xl" />
+            <BrandIllustration name="assistente-inicial" width={240} />
+            <p className="text-emphasis font-medium text-foreground">
+              Como posso ajudar com seu financeiro hoje?
+            </p>
             <p className="text-sm max-w-sm">
               {agency
                 ? "Pergunte sobre a operação da agência: faturamento, MRR, inadimplência, contratos, folha, caixa e projeções — tudo com os dados reais."
@@ -110,9 +113,7 @@ export function Chat({
         {messages.map((m) => (
           <div key={m.id} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             {m.role === "assistant" && (
-              <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-                <B2CAvatar size={26} />
-              </div>
+              <AssistantAvatar size={28} className="mt-0.5" />
             )}
             <div
               className={`rounded-2xl px-3.5 py-2.5 max-w-[80%] ${
@@ -137,9 +138,7 @@ export function Chat({
 
         {pending && (
           <div className="flex gap-2 items-center text-muted-foreground text-sm">
-            <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
-              <B2CAvatar size={26} />
-            </div>
+            <AssistantAvatar size={28} />
             <span className="animate-pulse">Analisando seus dados…</span>
           </div>
         )}

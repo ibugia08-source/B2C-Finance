@@ -1,0 +1,94 @@
+{
+  "light": {
+    "brand": {
+      "hex": "#216FD3",
+      "hslChannels": "213.71 72.95% 47.84%"
+    },
+    "onBrand": {
+      "hex": "#FFFFFF",
+      "hslChannels": "0.00 0.00% 100.00%"
+    },
+    "ink": {
+      "hex": "#142B45",
+      "hslChannels": "211.84 55.06% 17.45%"
+    },
+    "muted": {
+      "hex": "#60738B",
+      "hslChannels": "213.49 18.30% 46.08%"
+    },
+    "background": {
+      "hex": "#F5F8FC",
+      "hslChannels": "214.29 53.85% 97.45%"
+    },
+    "surface": {
+      "hex": "#FFFFFF",
+      "hslChannels": "0.00 0.00% 100.00%"
+    },
+    "soft": {
+      "hex": "#E9F1FC",
+      "hslChannels": "214.74 76.00% 95.10%"
+    },
+    "border": {
+      "hex": "#73869F",
+      "hslChannels": "214.09 18.64% 53.73%"
+    },
+    "success": {
+      "hex": "#167044",
+      "hslChannels": "150.67 67.16% 26.27%"
+    },
+    "danger": {
+      "hex": "#BC3445",
+      "hslChannels": "352.50 56.67% 47.06%"
+    },
+    "warning": {
+      "hex": "#8A5A00",
+      "hslChannels": "39.13 100.00% 27.06%"
+    }
+  },
+  "dark": {
+    "brand": {
+      "hex": "#80B4FF",
+      "hslChannels": "215.43 100.00% 75.10%"
+    },
+    "onBrand": {
+      "hex": "#0B192B",
+      "hslChannels": "213.75 59.26% 10.59%"
+    },
+    "ink": {
+      "hex": "#F2F6FD",
+      "hslChannels": "218.18 73.33% 97.06%"
+    },
+    "muted": {
+      "hex": "#A4B6CE",
+      "hslChannels": "214.29 30.00% 72.55%"
+    },
+    "background": {
+      "hex": "#0B192B",
+      "hslChannels": "213.75 59.26% 10.59%"
+    },
+    "surface": {
+      "hex": "#10253E",
+      "hslChannels": "212.61 58.97% 15.29%"
+    },
+    "soft": {
+      "hex": "#172F4E",
+      "hslChannels": "213.82 54.46% 19.80%"
+    },
+    "border": {
+      "hex": "#6C84A3",
+      "hslChannels": "213.82 23.01% 53.14%"
+    },
+    "success": {
+      "hex": "#69D9A0",
+      "hslChannels": "149.46 59.57% 63.14%"
+    },
+    "danger": {
+      "hex": "#FF8F9B",
+      "hslChannels": "353.57 100.00% 78.04%"
+    },
+    "warning": {
+      "hex": "#F3C66D",
+      "hslChannels": "39.85 84.81% 69.02%"
+    }
+  }
+}

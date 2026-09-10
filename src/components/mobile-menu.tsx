@@ -7,7 +7,7 @@ import { useTransition } from "react";
 import { X, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { visibleAreas, type UserLike } from "./nav-items";
-import { B2CLogo } from "./mascot";
+import { BrandLogo } from "./brand";
 import { ThemeToggle } from "./theme-toggle";
 import { logoutAction } from "@/lib/actions/auth";
 import { ROLE_LABEL, type Role } from "@/lib/permissions";
@@ -52,16 +52,15 @@ export function MobileMenu({
         >
           {/* Cabeçalho */}
           <div className="flex items-center justify-between gap-3 border-b px-4 py-3.5">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <B2CLogo height={24} />
-              <div className="min-w-0">
-                <Dialog.Title className="text-base font-bold leading-none tracking-tight">
-                  B2C <span className="text-primary">Finance</span>
-                </Dialog.Title>
-                <Dialog.Description className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mt-1">
-                  Menu
-                </Dialog.Description>
-              </div>
+            {/* No menu mobile o manual pede a logo COMPLETA (160 × 40).
+                O título do diálogo continua existindo para o leitor de
+                tela — a imagem sozinha não nomeia o painel. */}
+            <div className="flex min-w-0 flex-col gap-1">
+              <BrandLogo height={30} />
+              <Dialog.Title className="sr-only">B2C Finance</Dialog.Title>
+              <Dialog.Description className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                Menu
+              </Dialog.Description>
             </div>
             <Dialog.Close className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
               <X className="h-5 w-5" />

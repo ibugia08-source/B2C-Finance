@@ -22,9 +22,14 @@ describe("F3.12 — o tema do e-mail", () => {
     rodape: ["Rodapé."],
   });
 
-  it("cabeçalho navy, corpo claro (02 §7.8)", () => {
-    expect(html).toContain("#0d1b2e");
+  it("tinta e faixa da identidade, corpo claro", () => {
+    expect(html).toContain("#142B45");   // azul profundo
+    expect(html).toContain("#E9F1FC");   // faixa clara do cabeçalho
     expect(html).toContain("background:#ffffff");
+  });
+
+  it("assina como o manual manda, em TEXTO", () => {
+    expect(html).toContain("B2C Finance · Um produto B2C Gestão");
   });
 
   it("TUDO inline: nada de <style> nem class — clientes de e-mail removem os dois", () => {
@@ -38,11 +43,34 @@ describe("F3.12 — o tema do e-mail", () => {
   });
 
   it("SEM IMAGEM decorativa — a maioria dos clientes bloqueia por padrão", () => {
+    // Sem domínio absoluto configurado (o caso destes testes), nem a logo
+    // entra: caminho relativo não resolve em cliente de e-mail.
     expect(html).not.toMatch(/<img/i);
   });
 
+  it("com domínio configurado, a ÚNICA imagem é a logo — e ela tem alt", () => {
+    const anterior = process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NEXT_PUBLIC_APP_URL = "https://exemplo.b2c/";
+    try {
+      const comLogo = renderEmail({
+        titulo: "T", preheader: "p", paragrafos: ["x"],
+      });
+      const imagens = comLogo.match(/<img/gi) ?? [];
+      expect(imagens).toHaveLength(1);
+      expect(comLogo).toContain('alt="B2C Finance"');
+      expect(comLogo).toContain(
+        "https://exemplo.b2c/brand/b2c-finance/logos/b2c-finance-logo-horizontal-light.png"
+      );
+      // Bloqueada a imagem, a assinatura em texto ainda identifica o remetente.
+      expect(comLogo).toContain("B2C Finance · Um produto B2C Gestão");
+    } finally {
+      if (anterior === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+      else process.env.NEXT_PUBLIC_APP_URL = anterior;
+    }
+  });
+
   it("UM botão de acento, nunca dois", () => {
-    const botoes = html.match(/border-radius:8px;background:#1e70d3/g) ?? [];
+    const botoes = html.match(/border-radius:8px;background:#216FD3/g) ?? [];
     expect(botoes).toHaveLength(1);
   });
 

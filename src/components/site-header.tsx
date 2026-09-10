@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Bell, Search, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { B2CLogo } from "./mascot";
+import { BrandLogo } from "./brand";
 import { UserMenu } from "./user-menu";
 import { ThemeToggle } from "./theme-toggle";
 import { MonthNav } from "./month-nav";
@@ -58,12 +58,11 @@ export function SiteHeader({
         <div className="mx-auto flex h-14 w-full max-w-content items-center gap-6 px-6">
           <Link
             href="/dashboard"
-            className="flex shrink-0 items-end gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="B2C Finance — ir para a Visão geral"
+            className="flex shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            <B2CLogo height={26} />
-            <span className="pb-0.5 text-lg font-semibold leading-none tracking-tight text-foreground">
-              Finance
-            </span>
+            {/* Assinatura completa, 160 × 40 no teto do manual de marca. */}
+            <BrandLogo height={30} loading="eager" />
           </Link>
 
           <nav className="flex items-center gap-1" aria-label="Espaços de trabalho">

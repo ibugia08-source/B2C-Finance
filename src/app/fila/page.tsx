@@ -81,7 +81,7 @@ async function FilaPageInner({
 
       {vazia && cobranca.suprimidas.length === 0 ? (
         <EmptyState
-          icon={CheckCheck}
+          ilustracao="rotina-concluida"
           title="Nada na fila hoje"
           description="Nenhuma cobrança no degrau da régua, nenhuma linha de extrato sem par e nenhuma linha de importação para revisar."
         />

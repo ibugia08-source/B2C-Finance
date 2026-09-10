@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { runWithOwner } from "@/lib/auth/owner-scope";
-import { B2CLogo } from "@/components/mascot";
+import { BrandLogo } from "@/components/brand";
 import { prefillValue, type PrefillClient } from "@/lib/docx/prefill";
 import type { TemplateVariable } from "@/lib/docx/template";
 import { PublicContractForm } from "./public-form";
@@ -16,7 +16,7 @@ function Unavailable() {
   return (
     <div className="min-h-screen app-shell flex items-center justify-center p-6 text-foreground">
       <div className="w-full max-w-md rounded-2xl border bg-card shadow-xl p-8 text-center space-y-4">
-        <B2CLogo height={36} className="mx-auto" />
+        <BrandLogo height={36} className="mx-auto" />
         <h1 className="text-lg font-semibold">Link indisponível</h1>
         <p className="text-sm text-muted-foreground">
           Este formulário não está mais disponível. Fale com a equipe da B2C
@@ -84,7 +84,7 @@ export default async function PublicContractFormPage({
       <div className="w-full max-w-xl py-8">
         <div className="rounded-2xl border bg-card shadow-xl overflow-hidden">
           <div className="px-6 sm:px-8 pt-7 pb-5 border-b">
-            <B2CLogo height={30} />
+            <BrandLogo height={32} />
             <h1 className="mt-4 text-xl font-semibold tracking-tight">
               {data.template.name}
             </h1>
@@ -102,7 +102,8 @@ export default async function PublicContractFormPage({
           </div>
         </div>
         <p className="mt-4 text-center text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-          B2C Gestão · dados usados apenas para a preparação do contrato
+          B2C Finance · Um produto B2C Gestão · dados usados apenas para a
+          preparação do contrato
         </p>
       </div>
     </div>

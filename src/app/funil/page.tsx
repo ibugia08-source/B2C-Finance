@@ -93,7 +93,7 @@ export default async function FunilPage() {
 
       {vazio ? (
         <EmptyState
-          icon={Target}
+          ilustracao="funil"
           title="Nenhuma venda em andamento"
           description="Cadastre um lead e abra a primeira oportunidade — o quadro mostra em que etapa cada venda está e há quanto tempo."
           action={

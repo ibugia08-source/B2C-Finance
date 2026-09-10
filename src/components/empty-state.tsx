@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandIllustration, type BrandIllustrationName } from "./brand";
 import { passoPorId, type PassoId } from "@/lib/setup-meta";
 
 /**
@@ -16,9 +17,14 @@ import { passoPorId, type PassoId } from "@/lib/setup-meta";
  * banco vazio (decisão 19.32), ele abre sete telas em branco e nenhuma diz o
  * que fazer — cada uma parece um erro. Com isto, cada tela vazia é o começo
  * de um caminho, e o caminho é sempre o mesmo do checklist da home.
+ *
+ * `ilustracao` troca o disco de ícone pela arte da identidade (240 × 180).
+ * Ela é DECORATIVA: entra com alt="" e quem informa o estado é o título.
+ * Use só onde a tela está de fato vazia — nunca entre filtro e tabela.
  */
 export function EmptyState({
   icon: Icon,
+  ilustracao,
   title,
   description,
   action,
@@ -26,6 +32,8 @@ export function EmptyState({
   className,
 }: {
   icon?: LucideIcon;
+  /** Arte da identidade em vez do disco de ícone (estado realmente vazio). */
+  ilustracao?: BrandIllustrationName;
   title: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
@@ -38,11 +46,17 @@ export function EmptyState({
 
   return (
     <div className={cn("py-12 px-6 text-center", className)}>
-      {Ilustra && (
+      {ilustracao ? (
+        <BrandIllustration
+          name={ilustracao}
+          width={200}
+          className="mx-auto mb-4"
+        />
+      ) : Ilustra ? (
         <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-muted">
           <Ilustra className="h-5 w-5 text-muted-foreground" />
         </div>
-      )}
+      ) : null}
       <p className="text-sm font-medium text-foreground">{title}</p>
       {(description ?? p?.descricao) && (
         <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">

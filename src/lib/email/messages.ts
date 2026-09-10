@@ -27,8 +27,10 @@ function montar(assunto: string, c: ConteudoDoEmail): EmailPronto {
   return { assunto, html: renderEmail(c), preheader: c.preheader };
 }
 
+// A assinatura institucional entra sozinha em todo rodapé (template.ts) —
+// aqui ficam só as linhas que mudam de e-mail para e-mail.
 const RODAPE_PADRAO = [
-  "B2C Gestão — este e-mail foi enviado automaticamente pelo sistema financeiro da agência.",
+  "Este e-mail foi enviado automaticamente pelo sistema financeiro da agência.",
   "Para falar com a gente, é só responder esta mensagem.",
 ];
 

@@ -1,15 +1,14 @@
-# B2C Finance — Brand Assets
+# B2C Finance — ativos de marca
 
-Logos, símbolo, mascote, ilustrações de empty state e ícones (SVG, fundo transparente).
+A identidade em uso é **"Clareza em movimento"**, e ela mora inteira em
+`b2c-finance/`. As URLs servidas pela aplicação começam em
+`/brand/b2c-finance/…`.
 
-## Em uso no app
-- `symbol.svg` — símbolo "B" (sidebar, login, favicon em `src/app/icon.svg`).
-- `b2c-avatar.svg` — avatar do Assistente IA.
-- `b2c-mascot-full.svg` — mascote completo (login/onboarding).
-- `empty-metas.svg` / `empty-receitas.svg` / `empty-faturas.svg` / `empty-dashboard.svg` — empty states.
+- Índice tipado: `src/lib/branding/b2c-finance-assets.ts`.
+- Ponto único de aplicação na interface: `src/components/brand.tsx`.
+- Inventário, dimensões e regras: `docs/branding/b2c-finance/`.
 
-## Disponíveis (não cableados por padrão)
-- `logo-horizontal.svg`, `logo-stacked.svg` — assinaturas da marca.
-- `symbol-mono-dark.svg`, `symbol-mono-light.svg` — versões monocromáticas.
-- `icons/` — ícones de navegação alternativos (o app usa lucide-react por padrão,
-  que adapta cor ao estado ativo/tema).
+A identidade anterior (mascote, wordmark "B2C" em texto, ilustrações
+`empty-*` e a pasta `icons/`) foi removida em 10/09/2026, depois que
+`git grep` confirmou zero referência restante a cada arquivo. O histórico
+do Git guarda os originais se algum dia forem necessários.

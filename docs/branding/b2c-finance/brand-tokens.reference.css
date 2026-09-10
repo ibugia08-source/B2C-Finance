@@ -1,0 +1,24 @@
+/* B2C Finance — proposta de tokens. Integrar ao design system existente. */
+:root {
+  --b2c-brand: #216fd3; --b2c-on-brand: #ffffff;
+  --b2c-ink: #142b45; --b2c-muted: #60738b;
+  --b2c-bg: #f5f8fc; --b2c-surface: #ffffff; --b2c-soft: #e9f1fc;
+  --b2c-border: #73869f; --b2c-success: #167044;
+  --b2c-danger: #bc3445; --b2c-warning: #8a5a00;
+  --b2c-radius-control: 8px; --b2c-radius-card: 12px;
+  --b2c-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.dark, [data-theme="dark"] {
+  --b2c-brand: #80b4ff; --b2c-on-brand: #0b192b;
+  --b2c-ink: #f2f6fd; --b2c-muted: #a4b6ce;
+  --b2c-bg: #0b192b; --b2c-surface: #10253e; --b2c-soft: #172f4e;
+  --b2c-border: #6c84a3; --b2c-success: #69d9a0;
+  --b2c-danger: #ff8f9b; --b2c-warning: #f3c66d;
+}
+.b2c-logo { display:block; width:160px; height:40px; object-fit:contain; }
+.b2c-logo-compact { display:block; width:112px; height:28px; object-fit:contain; }
+.b2c-empty-illustration { display:block; width:240px; max-width:100%; height:auto; aspect-ratio:4/3; object-fit:contain; }
+.b2c-primary { background:var(--b2c-brand); color:var(--b2c-on-brand); border:0; border-radius:var(--b2c-radius-control); min-height:44px; padding:10px 16px; font:600 14px/1.5 var(--b2c-font); }
+.b2c-primary:focus-visible { outline:3px solid var(--b2c-brand); outline-offset:3px; }
+.b2c-money { font-variant-numeric:tabular-nums; }
+@media(max-width:600px) { .b2c-empty-illustration { width:160px; } }

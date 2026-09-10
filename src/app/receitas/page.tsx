@@ -24,6 +24,7 @@ import {
 import { IncomeDialog } from "./income-dialog";
 import { IncomeActions } from "./row-actions";
 import { requirePagePermission } from "@/lib/auth/viewer";
+import { BrandIllustration } from "@/components/brand";
 
 type Search = {
   mes?: string;
@@ -227,11 +228,7 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
               {incomes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center text-muted-foreground py-10">
-                    <img
-                      src="/brand/empty-receitas.svg"
-                      alt=""
-                      className="mx-auto mb-3 w-56 max-w-full opacity-95"
-                    />
+                    <BrandIllustration name="sem-dados" width={220} className="mx-auto mb-3" />
                     Nenhuma receita registrada neste período. Adicione uma entrada para começar.
                   </TableCell>
                 </TableRow>
@@ -272,11 +269,7 @@ export default async function ReceitasPage({ searchParams }: { searchParams: Sea
           <MobileCards>
             {incomes.length === 0 ? (
               <MobileEmpty>
-                <img
-                  src="/brand/empty-receitas.svg"
-                  alt=""
-                  className="mx-auto mb-3 w-44 max-w-full opacity-95"
-                />
+                <BrandIllustration name="sem-dados" width={180} className="mx-auto mb-3" />
                 Nenhuma receita registrada neste período. Adicione uma entrada para começar.
               </MobileEmpty>
             ) : (

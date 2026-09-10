@@ -27,7 +27,7 @@ export function ReviewQueue({ itens }: { itens: ItemRevisao[] }) {
       <Card>
         <CardContent className="p-0">
           <EmptyState
-            icon={Check}
+            ilustracao="rotina-concluida"
             title="Nada para revisar"
             description="Toda linha importada entrou com o que precisava. Quando alguma vier incompleta ou ambígua, ela aparece aqui em vez de virar número oficial calada."
           />

@@ -14,6 +14,7 @@ import { ChartCard, HBarList } from "@/components/charts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/brand";
 
 export default async function RelatorioPage({
   params,
@@ -105,11 +106,11 @@ export default async function RelatorioPage({
         </Card>
       </div>
 
-      {/* Cabeçalho de impressão */}
-      <div className="hidden print:block mb-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/b2c-logo.svg" alt="B2C" className="h-7 mb-2" />
-        <h1 className="text-xl font-bold">{def.title} — B2C Finance</h1>
+      {/* Cabeçalho de impressão — logo, título e período, na ordem que o
+          manual de marca fixa para documento gerado. */}
+      <div className="mb-4 hidden print:block">
+        <BrandLogo height={32} className="mb-3" />
+        <h1 className="text-xl font-semibold">{def.title} — B2C Finance</h1>
         <p className="text-sm text-muted-foreground">
           {def.description} · {query.period.label} · gerado em {new Date().toLocaleDateString("pt-BR")}
         </p>
@@ -128,6 +129,13 @@ export default async function RelatorioPage({
           <ReportTable presented={presented} showTotals={pres.totais} />
         </CardContent>
       </Card>
+
+      {/* Rodapé de impressão — assinatura institucional. A paginação em si
+          fica com o diálogo de impressão do navegador: HTML não numera
+          página sem motor de mídia paginada. */}
+      <p className="mt-4 hidden border-t pt-2 text-caption text-muted-foreground print:block">
+        B2C Finance · Um produto B2C Gestão
+      </p>
     </div>
   );
 }

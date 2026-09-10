@@ -19,11 +19,17 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Gestão financeira da B2C Gestão — clientes, cobranças, caixa e comercial.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0d1b2e",
-    theme_color: "#0d1b2e",
+    lang: "pt-BR",
+    // Papel da identidade "Clareza em movimento" (#0B192B azul profundo).
+    background_color: "#0B192B",
+    theme_color: "#0B192B",
+    // O maskable é um arquivo À PARTE de propósito: o Android recorta o
+    // ícone em círculo/squircle, e reaproveitar o `any` cortaria o
+    // símbolo. Os PNG cobrem quem não instala a partir de SVG.
     icons: [
-      { src: "/brand/symbol.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-      { src: "/brand/symbol.svg", sizes: "any", type: "image/svg+xml", purpose: "maskable" },
+      { src: "/brand/b2c-finance/app/b2c-finance-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/brand/b2c-finance/app/b2c-finance-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/brand/b2c-finance/app/b2c-finance-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

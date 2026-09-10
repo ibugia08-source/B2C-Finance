@@ -99,7 +99,7 @@ export function PainelDeAgendamentos({
 
       {agendamentos.length === 0 ? (
         <EmptyState
-          icon={CalendarClock}
+          ilustracao="relatorios-agendados"
           title="Nenhum relatório agendado"
           description="Escolha um relatório acima e ele passa a chegar por e-mail no fim de cada período."
         />

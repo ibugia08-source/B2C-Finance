@@ -4,15 +4,17 @@ import { lerFotografia } from "@/lib/snapshots/read";
 import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
 import { METRIC_REGISTRY } from "@/lib/metrics/registry";
 import { BotaoImprimir } from "./imprimir";
+import { b2cFinanceAssets } from "@/lib/branding/b2c-finance-assets";
 import "./documento.css";
 
 /**
- * TEMA DOCUMENTO (F2.10 · ref. 02 §7.8).
+ * TEMA DOCUMENTO (F2.10) — identidade "Clareza em movimento".
  *
- * "Capa navy #0d1b2e com grão, quadrados sobrepostos, marca d'água B2C,
- * título condensado, dourado #F5C518 só nos valores de destaque da capa;
- * miolo claro no gabarito Documento; cabeçalho com competência e escopo;
- * rodapé com página, versão do snapshot e checksum; zebra 3%."
+ * Capa azul profundo (#142B45 → #0B192B) com a logo branca no alto e a
+ * mesma logo como marca d'água; azul-luz #80B4FF só nos valores de
+ * destaque da capa; miolo claro; cabeçalho com competência e escopo;
+ * rodapé com página, versão do snapshot, checksum e a assinatura
+ * institucional; zebra 3%.
  *
  * O PDF sai pela impressão do navegador, e é decisão: gerar PDF no servidor
  * exigiria um Chrome headless em produção — uns 300 MB de imagem e uma classe
@@ -56,11 +58,21 @@ export default async function DocumentoPage({
 
       {/* ===== CAPA ===== */}
       <section className="doc-capa">
-        <div className="doc-capa-grao" aria-hidden />
-        <div className="doc-capa-quadrados" aria-hidden>
-          <span /><span /><span />
-        </div>
-        <div className="doc-capa-marca" aria-hidden>B2C</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="doc-capa-logo"
+          src={b2cFinanceAssets["logos/b2c-finance-logo-branco"].svg}
+          alt="B2C Finance"
+          width={160}
+          height={40}
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="doc-capa-marca"
+          src={b2cFinanceAssets["logos/b2c-finance-logo-branco"].svg}
+          alt=""
+          aria-hidden
+        />
 
         <div className="doc-capa-conteudo">
           <p className="doc-capa-eyebrow">Fotografia do fechamento</p>
@@ -177,7 +189,8 @@ export default async function DocumentoPage({
 
       <footer className="doc-rodape">
         <span>
-          {titulo} · fotografia v{foto.versao}
+          B2C Finance · Um produto B2C Gestão · {titulo} · fotografia v
+          {foto.versao}
         </span>
         <span className="doc-mono">{foto.checksum.slice(0, 24)}</span>
       </footer>

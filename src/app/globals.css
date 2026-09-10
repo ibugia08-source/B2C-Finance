@@ -1,21 +1,27 @@
 /* =====================================================================
-   B2C FINANCE 2.2 — FUNDAÇÕES DE DESIGN (F1.13 · ref. 02 §7.1-7.4)
+   B2C FINANCE — FUNDAÇÕES DE DESIGN · identidade "Clareza em movimento"
    Fontes via next/font (src/app/layout.tsx) — sem @import bloqueante.
 
-   DIREÇÃO: "Precisão Editorial" (02 §7.1). Dois territórios:
-     · MARCA   → login, capas de PDF/fotografia, e-mails. Navy, dourado, grão.
-     · PRODUTO → telas de trabalho. Canvas neutro, UM acento azul, zero ornamento.
-   Dourado NUNCA entra em tela de trabalho (lá, âmbar = atenção).
+   FONTE DE VERDADE DAS CORES: docs/branding/b2c-finance/colors.json.
+   Este arquivo é o ÚNICO lugar onde aquele HEX vira token; a UI consome
+   sempre a classe Tailwind, nunca a cor. brand-tokens.reference.css é
+   orientação do pacote de marca e NÃO é importado (ele não conhece os
+   aliases shadcn dos quais ~200 arquivos dependem).
+
+   DIREÇÃO: azul institucional #216FD3 no claro, azul-luz #80B4FF no
+   escuro; tinta #142B45 / #F2F6FD; papel #F5F8FC / #0B192B. Um acento
+   por tela. Verde = recebido, vermelho = atraso, âmbar = atenção —
+   sempre acompanhados de rótulo ou ícone, nunca só a cor.
 
    ARQUITETURA EM 2 CAMADAS:
-     1. Escalas primitivas (--blue-*, --slate-*, --green-* ...) — NUNCA use
-        na UI. Existem só para os tokens semânticos derivarem delas.
-     2. Tokens semânticos — o que a UI consome, sempre via classe Tailwind.
+     1. Escalas primitivas (--blue-*, --slate-*) — NUNCA use na UI.
+        Existem só para os tokens semânticos derivarem delas.
+     2. Tokens semânticos — o que a UI consome, sempre via Tailwind.
 
    DE-PARA DE NOMES (leia antes de mexer): a spec chama o azul da marca de
-   "accent"; o shadcn, que o v1 inteiro usa em ~200 arquivos, chama de
-   "primary" e reserva "accent" para a superfície de hover. Renomear
-   quebraria o sistema todo sem ganho visual. Então:
+   "accent"; o shadcn, que o produto inteiro usa, chama de "primary" e
+   reserva "accent" para a superfície de hover. Renomear quebraria o
+   sistema todo sem ganho visual. Então:
         spec accent/accent-hover/accent-active/accent-subtle  ->  primary + brand
         spec canvas/surface/text/text-muted/text-faint        ->  background/card/foreground/muted-foreground
    Código novo deve usar `brand-*`, `canvas`, `surface*` e `text-*`; o
@@ -29,93 +35,96 @@
   :root {
     /* ============ 1. ESCALAS PRIMITIVAS (não consumir direto) ============ */
 
-    /* Azul institucional B2C — matiz 213-215, harmonizado com o navy da
-       marca (#0d1b2e = hsl(214.5 56% 11.6%)): a mesma família, do topo
-       claro até o navy, é o que faz marca e produto parecerem um só sistema. */
-    --blue-50:  213 100% 97%;
-    --blue-100: 213 96% 93%;
-    --blue-200: 213 94% 86%;
-    --blue-300: 213 91% 76%;
-    --blue-400: 214 88% 64%;
-    --blue-500: 214 84% 55%;
-    --blue-600: 215 82% 46%;
-    --blue-700: 215 80% 41%;
-    --blue-800: 215 74% 33%;
-    --blue-900: 214 66% 26%;
-    --blue-950: 214 58% 17%;
+    /* Azul institucional B2C Finance — matiz 213-215, ancorado em
+       #216FD3 (500) e #80B4FF (300), os dois azuis oficiais da marca.
+       A mesma família vai do papel #F5F8FC (50) até a tinta #142B45
+       (950): é o que faz marca e produto parecerem um só sistema. */
+    --blue-50:  214 54% 97%;   /* #F5F8FC papel claro */
+    --blue-100: 215 76% 95%;   /* #E9F1FC área ilustrada suave */
+    --blue-200: 214 63% 82%;   /* #B4CDED linha decorativa */
+    --blue-300: 215 100% 75%;  /* #80B4FF azul-luz (marca no escuro) */
+    --blue-400: 214 85% 63%;
+    --blue-500: 214 73% 48%;   /* #216FD3 azul institucional */
+    --blue-600: 214 75% 42%;
+    --blue-700: 214 78% 35%;
+    --blue-800: 213 70% 27%;
+    --blue-900: 212 62% 21%;
+    --blue-950: 212 55% 17%;   /* #142B45 azul profundo */
 
-    /* Neutro base slate — levemente azulado para casar com o acento.
-       Cinza puro leria como "não escolhido". */
-    --slate-50:  210 40% 98%;
-    --slate-100: 210 33% 96%;
-    --slate-200: 213 27% 91%;
-    --slate-300: 213 24% 84%;
-    --slate-400: 214 17% 65%;
-    --slate-500: 215 15% 50%;
-    --slate-600: 215 18% 38%;
-    --slate-700: 215 25% 28%;
-    --slate-800: 217 30% 19%;
-    --slate-900: 218 38% 13%;
-    --slate-950: 220 47% 8%;   /* canvas escuro #0B1220 (02 §7.2) */
+    /* Neutro base — azulado para casar com o acento; cinza puro leria
+       como "não escolhido". Ancorado em #60738B e #73869F. */
+    --slate-50:  214 54% 97%;
+    --slate-100: 215 40% 94%;
+    --slate-200: 214 32% 89%;
+    --slate-300: 214 25% 80%;
+    --slate-400: 214 19% 64%;
+    --slate-500: 214 19% 54%;  /* #73869F traço de controle */
+    --slate-600: 213 18% 44%;  /* família do #60738B, um passo mais escuro
+                                  para o texto secundário passar AA */
+    --slate-700: 212 26% 32%;
+    --slate-800: 212 40% 24%;
+    --slate-900: 212 55% 17%;  /* #142B45 */
+    --slate-950: 214 59% 11%;  /* #0B192B papel escuro */
 
     /* ============ 2. MARCA (exclusivo: login, PDF, e-mail) ============ */
-    --navy: 214 56% 12%;
-    --navy-deep: 214 60% 8%;
-    --gold: 46 91% 52%;        /* #F5C518 — proibido em tela de trabalho */
+    --navy: 212 55% 17%;       /* #142B45 azul profundo */
+    --navy-deep: 214 59% 11%;  /* #0B192B */
 
     /* ============ 3. TOKENS SEMÂNTICOS — TEMA CLARO ============ */
 
     /* Superfícies */
-    --canvas: 210 30% 97%;
+    --canvas: 214 54% 97%;
     --surface: 0 0% 100%;
     --surface-raised: 0 0% 100%;
-    --surface-sunken: 210 30% 94%;
+    --surface-sunken: 215 46% 94%;
 
-    /* Traços */
-    --border: 213 24% 87%;
-    --border-soft: 213 27% 92%;
-    --input: 213 24% 82%;
+    /* Traços — `input` é o traço de CONTROLE (campo, botão de contorno):
+       #73869F dá 3,9:1 sobre branco, o piso de 1.4.11 para componente.
+       `border`/`border-soft` são divisórias e podem ser mais leves. */
+    --border: 214 30% 87%;
+    --border-soft: 215 38% 92%;
+    --input: 214 19% 54%;
 
-    /* Tinta — todos os três passam AA sobre canvas e surface */
-    --text: 218 38% 12%;
-    --text-muted: 215 18% 38%;
-    --text-faint: 215 15% 48%;
+    /* Tinta — os três passam AA sobre canvas e surface */
+    --text: 212 55% 17%;
+    --text-muted: 213 18% 44%;
+    --text-faint: 213 17% 52%;
 
     /* Acento (um só por tela, além da semântica) */
-    --brand: 215 80% 41%;
-    --brand-hover: 215 82% 36%;
-    --brand-active: 215 84% 30%;
-    --brand-subtle: 213 94% 95%;
+    --brand: 214 73% 48%;
+    --brand-hover: 214 75% 42%;
+    --brand-active: 214 78% 35%;
+    --brand-subtle: 215 76% 95%;
     --brand-foreground: 0 0% 100%;
-    --ring: 215 82% 46%;
+    --ring: 214 73% 48%;
 
     /* Semântica de estado — sólido, suave e tinta, nos dois temas */
-    --success: 152 60% 30%;
-    --success-soft: 150 60% 94%;
+    --success: 151 67% 26%;
+    --success-soft: 150 55% 93%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 88% 36%;
-    --warning-soft: 40 92% 92%;
+    --warning: 39 100% 27%;
+    --warning-soft: 40 90% 92%;
     --warning-foreground: 0 0% 100%;
-    --danger: 0 72% 44%;
-    --danger-soft: 0 84% 96%;
+    --danger: 353 57% 47%;
+    --danger-soft: 353 80% 96%;
     --danger-foreground: 0 0% 100%;
-    --info: 199 88% 32%;
-    --info-soft: 199 85% 94%;
+    --info: 200 85% 30%;
+    --info-soft: 200 80% 94%;
     --info-foreground: 0 0% 100%;
 
-    /* Dataviz — 6 séries daltônico-seguras começando pelo acento (02 §7.4).
+    /* Dataviz — 6 séries daltônico-seguras começando pelo acento.
        Validadas por scripts/validate_palette.js: banda de luminosidade,
        piso de croma, separação em deuteranopia/protanopia/tritanopia,
        piso de visão normal e contraste. Ordem é contrato: a série 1 é
        sempre o acento e as 4 primeiras (teto de séries por gráfico)
        separam-se entre TODOS os pares, não só entre vizinhas. */
-    --chart-1: 215 75% 47%;    /* #1D64C4 azul (acento) */
+    --chart-1: 214 73% 48%;    /* #216FD3 azul (acento da marca) */
     --chart-2: 353 79% 67%;    /* #EE6677 vermelho */
     --chart-3: 130 60% 33%;    /* #228833 verde */
     --chart-4:  50 51% 50%;    /* #BFAE3E oliva */
     --chart-5: 194 72% 59%;    /* #4CBCE2 ciano */
     --chart-6: 322 53% 44%;    /* #AA3377 magenta */
-    --chart-grid: 213 24% 89%;
+    --chart-grid: 214 30% 89%;
 
     /* ---- Aliases shadcn: o legado inteiro depende destes nomes ---- */
     --background: var(--canvas);
@@ -127,27 +136,28 @@
     --primary: var(--brand);
     --primary-foreground: var(--brand-foreground);
     --primary-active: var(--brand-active);
-    --primary-disabled: 213 24% 78%;
-    --secondary: 210 30% 95%;
+    --primary-disabled: 214 25% 80%;
+    --secondary: 215 40% 95%;
     --secondary-foreground: var(--text);
-    --muted: 210 30% 95%;
+    --muted: 215 40% 95%;
     --muted-foreground: var(--text-muted);
-    --accent: 213 94% 95%;              /* superfície de hover (shadcn) */
-    --accent-foreground: 215 80% 30%;
+    --accent: 215 76% 95%;              /* superfície de hover (shadcn) */
+    --accent-foreground: 214 78% 33%;
     --destructive: var(--danger);
     --destructive-foreground: var(--danger-foreground);
-    --surface-soft: 210 30% 96%;
-    --surface-strong: 210 28% 92%;
+    --surface-soft: 215 40% 96%;
+    --surface-strong: 214 32% 92%;
 
-    /* ============ 4. FORMA (02 §7.2) ============ */
+    /* ============ 4. FORMA ============ */
     --radius-pill: 9999px;      /* botões, badges */
     --radius-cell: 0.5rem;      /* 8px  — células editáveis */
     --radius-input: 0.75rem;    /* 12px — inputs */
     --radius-card: 1rem;        /* 16px — cards */
     --radius-modal: 1.5rem;     /* 24px — modais */
+    --radius-panel: 1.5rem;     /* 24px — painéis ilustrados da marca */
     --radius: 0.75rem;          /* base shadcn: lg=12 · md=10 · sm=8 */
 
-    /* ============ 5. MOVIMENTO (02 §7.3) ============ */
+    /* ============ 5. MOVIMENTO ============ */
     --dur-instant: 80ms;   /* hover, foco, press */
     --dur-fast: 140ms;     /* dropdown, tooltip, chip */
     --dur-base: 200ms;     /* aba, expandir linha, drawer */
@@ -158,59 +168,61 @@
   }
 
   .dark {
-    /* Escuro de PRIMEIRA CLASSE (02 §7.2): passos próprios das mesmas
-       escalas, não uma inversão automática. Elevação por CLAREAMENTO +
-       borda — sombra não existe sobre fundo escuro. */
-    --canvas: 220 47% 8%;
-    --surface: 220 38% 11%;
-    --surface-raised: 220 32% 14%;
-    --surface-sunken: 220 50% 6%;
+    /* Escuro de PRIMEIRA CLASSE: passos próprios da mesma família, não
+       uma inversão automática. Papel #0B192B, superfície #10253E, área
+       suave #172F4E — os mesmos fundos que as artes `-dark` do pacote de
+       marca usam, para ilustração e tela terminarem sem emenda visível.
+       Elevação por CLAREAMENTO + borda: sombra não existe sobre escuro. */
+    --canvas: 214 59% 11%;
+    --surface: 213 59% 15%;
+    --surface-raised: 214 54% 20%;
+    --surface-sunken: 214 60% 8%;
 
-    --border: 218 22% 21%;
-    --border-soft: 219 26% 16%;
-    --input: 218 22% 24%;
+    --border: 214 24% 26%;
+    --border-soft: 214 30% 20%;
+    --input: 214 23% 53%;
 
-    --text: 210 30% 96%;
-    --text-muted: 214 16% 68%;
-    --text-faint: 214 14% 55%;
+    --text: 218 73% 97%;
+    --text-muted: 214 30% 73%;
+    --text-faint: 214 22% 60%;
 
-    --brand: 214 88% 64%;
-    --brand-hover: 213 91% 71%;
-    --brand-active: 214 84% 56%;
-    --brand-subtle: 215 60% 18%;
-    --brand-foreground: 220 50% 8%;
-    --ring: 214 88% 68%;
+    --brand: 215 100% 75%;
+    --brand-hover: 215 100% 82%;
+    --brand-active: 215 90% 68%;
+    --brand-subtle: 214 54% 20%;
+    --brand-foreground: 214 59% 11%;
+    --ring: 215 100% 78%;
 
-    --success: 152 56% 52%;
-    --success-soft: 152 42% 15%;
-    --success-foreground: 152 60% 8%;
-    --warning: 38 92% 58%;
-    --warning-soft: 38 48% 15%;
-    --warning-foreground: 32 70% 8%;
-    --danger: 0 78% 63%;
-    --danger-soft: 0 45% 17%;
-    --danger-foreground: 0 60% 8%;
-    --info: 199 85% 58%;
-    --info-soft: 199 45% 15%;
-    --info-foreground: 199 70% 8%;
+    --success: 149 60% 63%;
+    --success-soft: 150 40% 17%;
+    --success-foreground: 214 59% 11%;
+    --warning: 40 85% 69%;
+    --warning-soft: 38 45% 18%;
+    --warning-foreground: 214 59% 11%;
+    --danger: 354 100% 78%;
+    --danger-soft: 353 40% 22%;
+    --danger-foreground: 214 59% 11%;
+    --info: 199 85% 70%;
+    --info-soft: 199 45% 18%;
+    --info-foreground: 214 59% 11%;
 
     /* Mesma família, na banda de luminosidade do escuro (0.48-0.67):
        clarear demais faz a série florescer sobre o canvas. */
-    --chart-1: 214 65% 54%;    /* #3C7BD6 */
+    --chart-1: 214 65% 58%;    /* azul da marca, na banda do escuro */
     --chart-2: 352 71% 61%;    /* #E2556A */
     --chart-3: 130 54% 39%;    /* #2E9B41 */
     --chart-4:  50 56% 41%;    /* #A2922E */
     --chart-5: 194 60% 50%;    /* #34A2CB */
     --chart-6: 324 48% 50%;    /* #BC4285 */
-    --chart-grid: 218 22% 22%;
+    --chart-grid: 214 24% 27%;
 
-    --primary-disabled: 218 20% 32%;
-    --secondary: 220 32% 15%;
-    --muted: 220 32% 16%;
-    --accent: 215 45% 18%;
-    --accent-foreground: 213 91% 82%;
-    --surface-soft: 220 36% 12%;
-    --surface-strong: 220 32% 16%;
+    --primary-disabled: 214 20% 34%;
+    --secondary: 214 45% 19%;
+    --muted: 214 45% 19%;
+    --accent: 214 54% 22%;
+    --accent-foreground: 215 100% 82%;
+    --surface-soft: 213 55% 14%;
+    --surface-strong: 214 50% 21%;
   }
 }
 
@@ -228,7 +240,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Título de página: peso 600 e tracking -0.02em; NUNCA 700+ (02 §7.2). */
+  /* Título de página: peso 600 e tracking -0.02em; NUNCA 700+. */
   h1, h2, h3, h4 { letter-spacing: -0.02em; font-weight: 600; }
   ::selection { background: hsl(var(--brand) / 0.22); }
 
@@ -244,42 +256,34 @@
 }
 
 @layer components {
-  /* TODO número financeiro usa a mono tabular (02 §7.2) — dígitos de
-     largura fixa é o que deixa uma coluna de valores comparável a olho. */
+  /* TODO número financeiro usa a mono tabular — dígitos de largura fixa
+     é o que deixa uma coluna de valores comparável a olho. */
   .stat-number {
     font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
   }
-  /* Superfície de trabalho: canvas neutro e chapado. O gradiente da
-     identidade anterior saiu — 02 §7.1 pede "zero ornamento" no produto. */
+  /* Superfície de trabalho: canvas neutro e chapado, zero ornamento. */
   .app-shell { background: hsl(var(--canvas)); }
 
-  /* Território de MARCA: login, capas de PDF/fotografia, e-mails. */
+  /* Território de MARCA: login, capas de PDF/fotografia, e-mails. Fundo
+     profundo da identidade, sem grão nem brilho — "clareza em movimento"
+     é curva aberta e ar, não efeito. */
   .brand-canvas {
     background:
-      radial-gradient(1100px 620px at 12% -12%, hsl(var(--blue-900) / 0.55), transparent 62%),
+      radial-gradient(1100px 620px at 12% -12%, hsl(var(--blue-800) / 0.55), transparent 62%),
       hsl(var(--navy-deep));
     color: hsl(var(--slate-50));
-  }
-  /* Grão sutil da identidade — só sobre .brand-canvas. */
-  .brand-grain::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.5;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
   }
 }
 
 @layer utilities {
-  /* ELEVAÇÃO EM 4 NÍVEIS (02 §7.2): borda + sombra mínima. Nível 0 é
-     chapado (tabelas) e por isso não tem classe. */
-  .elev-1 { box-shadow: 0 1px 2px hsl(218 39% 11% / 0.06); }
-  .elev-2 { box-shadow: 0 4px 12px -2px hsl(218 39% 11% / 0.10), 0 2px 4px -2px hsl(218 39% 11% / 0.06); }
-  .elev-3 { box-shadow: 0 24px 48px -12px hsl(218 39% 11% / 0.18), 0 8px 16px -8px hsl(218 39% 11% / 0.10); }
+  /* ELEVAÇÃO EM 4 NÍVEIS: borda + sombra mínima. Nível 0 é chapado
+     (tabelas) e por isso não tem classe. */
+  .elev-1 { box-shadow: 0 1px 2px hsl(212 55% 17% / 0.06); }
+  .elev-2 { box-shadow: 0 4px 12px -2px hsl(212 55% 17% / 0.10), 0 2px 4px -2px hsl(212 55% 17% / 0.06); }
+  .elev-3 { box-shadow: 0 24px 48px -12px hsl(212 55% 17% / 0.18), 0 8px 16px -8px hsl(212 55% 17% / 0.10); }
   /* No escuro a sombra não se enxerga: a elevação vem da borda clara. */
   .dark .elev-1 { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04); }
   .dark .elev-2 { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 8px 24px -8px hsl(0 0% 0% / 0.6); }
@@ -287,12 +291,12 @@
 
   /* Aliases do legado — mesmos níveis, nomes antigos. @apply não serve
      aqui: elev-* é CSS puro, não utilitário gerado pelo Tailwind. */
-  .shadow-soft { box-shadow: 0 1px 2px hsl(218 39% 11% / 0.06); }
-  .shadow-modal { box-shadow: 0 24px 48px -12px hsl(218 39% 11% / 0.18), 0 8px 16px -8px hsl(218 39% 11% / 0.10); }
+  .shadow-soft { box-shadow: 0 1px 2px hsl(212 55% 17% / 0.06); }
+  .shadow-modal { box-shadow: 0 24px 48px -12px hsl(212 55% 17% / 0.18), 0 8px 16px -8px hsl(212 55% 17% / 0.10); }
   .dark .shadow-soft { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.04); }
   .dark .shadow-modal { box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.08), 0 28px 56px -16px hsl(0 0% 0% / 0.75); }
 
-  /* Troca de tela: 12px na direção do tempo, com fade (02 §7.3). */
+  /* Troca de tela: 12px na direção do tempo, com fade. */
   .page-enter { animation: page-enter var(--dur-slow) var(--ease-decelerate) both; }
   /* O keyframe final NÃO declara `transform`: um translateY(0) retido
      (fill-mode both) computa como matriz — ou seja ≠ none — e transforma o
@@ -313,9 +317,47 @@
   }
 }
 
-/* Impressão: só o conteúdo vai para o PDF. */
+/* Impressão: só o conteúdo vai para o PDF. O papel é sempre claro —
+   quem está no tema escuro imprimiria a arte `-dark` (desenhada para
+   fundo escuro) sobre folha branca e ela sumiria. */
 @media print {
   aside, nav, .print\:hidden { display: none !important; }
   main { padding: 0 !important; }
   body { background: white !important; }
+  .dark .brand-art-light { display: block !important; }
+  .dark .brand-art-dark { display: none !important; }
+
+  /* Papel é claro, sempre. Quem imprime no tema escuro levava tinta
+     #F2F6FD para folha branca — o navegador descarta o fundo escuro por
+     padrão (print-color-adjust: economy) e sobrava página em branco.
+     Aqui o tema escuro reverte aos tokens claros só na impressão; o
+     bloco `.dark` de verdade continua sendo o de @layer base. */
+  .dark {
+    --canvas: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-raised: 0 0% 100%;
+    --surface-sunken: 214 54% 97%;
+    --surface-soft: 0 0% 100%;
+    --surface-strong: 214 32% 92%;
+    --secondary: 215 40% 95%;
+    --muted: 215 40% 95%;
+    --accent: 215 76% 95%;
+    --accent-foreground: 214 78% 33%;
+    --border: 214 30% 87%;
+    --border-soft: 215 38% 92%;
+    --input: 214 19% 54%;
+    --text: 212 55% 17%;
+    --text-muted: 213 18% 44%;
+    --text-faint: 213 17% 52%;
+    --brand: 214 73% 48%;
+    --brand-hover: 214 75% 42%;
+    --brand-active: 214 78% 35%;
+    --brand-subtle: 215 76% 95%;
+    --brand-foreground: 0 0% 100%;
+    --success: 151 67% 26%;
+    --warning: 39 100% 27%;
+    --danger: 353 57% 47%;
+    --info: 200 85% 30%;
+    --chart-grid: 214 30% 89%;
+  }
 }

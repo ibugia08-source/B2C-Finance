@@ -23,7 +23,8 @@ import {
   GENERATED_STATUS_LABEL,
   generatedStatusVariant,
 } from "./_meta";
-import { Braces, FileText, AlertTriangle } from "lucide-react";
+import { Braces, AlertTriangle } from "lucide-react";
+import { BrandIllustration } from "@/components/brand";
 
 type Search = { status?: string; tipo?: string; para?: string };
 
@@ -111,7 +112,7 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
       {templates.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
-            <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+            <BrandIllustration name="contratos" width={220} className="mx-auto mb-4" />
             <p className="font-medium text-foreground">Nenhum modelo de contrato cadastrado.</p>
             <p className="text-sm mt-1">
               Envie um modelo em DOCX com variáveis entre chaves — ex.: {"{{Nome da empresa}}"} — para começar.

@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { BellOff, CheckCheck } from "lucide-react";
+import { CheckCheck } from "lucide-react";
 import { marcarLidaAction, marcarTodasLidasAction } from "@/lib/actions/notificacoes";
 import { useRouter } from "next/navigation";
 
@@ -69,7 +69,7 @@ export function PainelDeNotificacoes({ itens, naoLidas }: { itens: Item[]; naoLi
 
       {principais.length === 0 && resumo.length === 0 ? (
         <EmptyState
-          icon={BellOff}
+          ilustracao="notificacoes"
           title="Nada por aqui"
           description="Quando algo pedir sua atenção — cobrança vencida, contrato a renovar, avaliação pendente — aparece nesta lista, uma linha por assunto por dia."
         />

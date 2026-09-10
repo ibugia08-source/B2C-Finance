@@ -46,9 +46,12 @@ export function AppShell({
 
   return (
     <div className="app-shell flex min-h-screen flex-col">
-      <header className="sticky top-0 z-40 border-b bg-surface">
+      {/* print:hidden — barra de busca e menu não vão para o papel. O
+          seletor genérico de @media print não pode mirar `header`: o
+          cabeçalho corrido da Fotografia do mês também é um. */}
+      <header className="sticky top-0 z-40 border-b bg-surface print:hidden">
+        {/* Sem `title`: o cabeçalho mobile assina com a marca compacta. */}
         <MobileHeader
-          title="B2C Finance"
           user={user}
           menuSlot={
             <MobileMenu
