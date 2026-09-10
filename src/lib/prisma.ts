@@ -89,7 +89,10 @@ const OWNED_MODELS = new Set<string>([
   // F3.4 — rateio e suas regras.
   "Allocation",
   "AllocationRule",
-  // F3.5 — conciliação bancária.
+  // F3.5 — conciliação bancária, REMOVIDA em 10/09/2026. As tabelas seguem
+  // no banco com os dados antigos (nada é dropado); continuam escopadas por
+  // dono para que qualquer leitura futura (exportação, perícia) não atravesse
+  // a fronteira de ninguém.
   "BankStatement",
   "BankStatementEntry",
   "ReconciliationMatch",

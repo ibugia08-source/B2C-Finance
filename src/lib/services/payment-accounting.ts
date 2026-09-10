@@ -35,7 +35,7 @@ export type SettleInput = {
   accountId: string | null;
   notes: string | null;
   /**
-   * Identidade do fato EXTERNO (gateway, OFX). Achado da F5.2: a unique
+   * Identidade do fato EXTERNO (gateway, importação). Achado da F5.2: a unique
    * (externalSource, externalId) do Payment existia desde a F1.5, mas
    * ninguém GRAVAVA as colunas — a guarda de idempotência lia um campo
    * sempre nulo, e a trava do banco nunca podia agir. Pagamento externo sem

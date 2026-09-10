@@ -24,11 +24,11 @@ describe("F2.2 — checklist de fechamento", () => {
     await destroyOwner(dono);
   });
 
-  it("são exatamente os 16 itens de §5.3, numerados de 1 a 16", async () => {
+  it("são exatamente os 15 itens vivos de §5.3, numerados de 1 a 15", async () => {
     const itens = await asOwner(dono, async () => montarChecklist("2026-03"));
-    expect(itens).toHaveLength(16);
-    expect(itens.map((i) => i.numero)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
-    expect(new Set(itens.map((i) => i.id)).size).toBe(16);
+    expect(itens).toHaveLength(15);
+    expect(itens.map((i) => i.numero)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+    expect(new Set(itens.map((i) => i.id)).size).toBe(15);
   });
 
   it("todo item tem dono e explicação — a lista nunca só diz 'faltam 12'", async () => {
@@ -41,7 +41,7 @@ describe("F2.2 — checklist de fechamento", () => {
 
   it("toda pendência MEDÍVEL tem link para onde se resolve", async () => {
     const itens = await asOwner(dono, async () => montarChecklist("2026-03"));
-    // Os itens de razão (15/16) não têm tela própria — são do sistema, não
+    // Os itens de razão (14/15) não têm tela própria — são do sistema, não
     // de uma fila de trabalho; o resto tem de levar a algum lugar.
     const semTela = new Set(["ledger", "integridade"]);
     for (const i of itens) {
@@ -54,8 +54,8 @@ describe("F2.2 — checklist de fechamento", () => {
     const r = await asOwner(dono, async () => resumoDoFechamento("2026-03"));
     const naoMedidos = r.itens.filter((i) => i.situacao === "NAO_MEDIDO");
     // A lista ENCOLHEU até zerar: eram seis; na F3.4 saíram rateio, provisão,
-    // reserva e fiscal, na F3.5 a conciliação bancária e na F4.4 as vendas
-    // vinculadas. Os DEZESSEIS itens são medidos.
+    // reserva e fiscal, e na F4.4 as vendas vinculadas. Todos os itens vivos
+    // são medidos — a conciliação saiu da lista junto com a função (10/09/2026).
     //
     // O que este teste protege não é a quantidade — é a regra: item que não
     // dá para medir aparece como NÃO MEDIDO e DIZ por quê, nunca verde. Se

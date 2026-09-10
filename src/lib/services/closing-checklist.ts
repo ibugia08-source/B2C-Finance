@@ -4,11 +4,10 @@ import { ledgerHealth } from "@/lib/accounting/health";
 import { toNumber as n } from "@/lib/format";
 import { resumoDoRateio } from "@/lib/services/allocation";
 import { sugerirProvisoes } from "@/lib/services/tax-provision";
-import { MINIMO_CONCILIADO, resumoDaConciliacao } from "@/lib/services/reconciliation";
 import type { Competence } from "@/lib/competence";
 
 /**
- * CHECKLIST DE FECHAMENTO — os 16 itens de 01 §5.3 (F2.2).
+ * CHECKLIST DE FECHAMENTO — 15 itens (01 §5.3, menos a conciliação).
  *
  * "Cada pendência com dono e link" é o pedido inteiro: uma lista que só diz
  * "faltam 12 coisas" transfere o problema de volta para quem abriu a tela.
@@ -21,13 +20,16 @@ import type { Competence } from "@/lib/competence";
  * fecharia o mês confiando numa conferência que não aconteceu.
  *
  * A lista de não medidos ENCOLHE conforme as fases entregam: na F3.4 saíram
- * quatro (rateio, provisão, reserva e fiscal), na F3.5 a conciliação bancária
- * e na F4.4 as vendas vinculadas. **Os dezesseis itens são medidos.** Se um
- * dia voltar a aparecer NÃO MEDIDO aqui, é porque nasceu item novo — e ele
- * tem de dizer por quê, como estes disseram.
+ * quatro (rateio, provisão, reserva e fiscal) e na F4.4 as vendas vinculadas.
+ * **Todos os itens são medidos.** Se um dia voltar a aparecer NÃO MEDIDO
+ * aqui, é porque nasceu item novo — e ele tem de dizer por quê.
+ *
+ * O item "conciliação bancária no mínimo por conta" SAIU em 10/09/2026 com a
+ * função inteira: sem extrato importado não há percentual a exigir, e um item
+ * que nunca pode ficar verde ensina a ignorar a lista.
  *
  * NENHUM ITEM BLOQUEIA O FECHAMENTO por decisão explícita: a spec lista os
- * dezesseis e NÃO diz quais impedem fechar. Inventar essa regra seria
+ * itens e NÃO diz quais impedem fechar. Inventar essa regra seria
  * inventar regra financeira. O que o sistema faz é registrar, no fechamento,
  * exatamente o que estava pendente — quem fechou, fechou sabendo.
  */
@@ -91,7 +93,6 @@ export async function montarChecklist(competence: Competence | string): Promise<
     saude,
     rateio,
     provisoes,
-    conciliacao,
     vendasSoltas,
     notasEmRascunho,
   ] = await Promise.all([
@@ -134,15 +135,13 @@ export async function montarChecklist(competence: Competence | string): Promise<
       },
     }),
     ledgerHealth(workspaceId, { competence: competence as Competence }),
-    // 9. Rateio de mídia (F3.4).
+    // 8. Rateio de mídia (F3.4).
     resumoDoRateio(competence as Competence),
-    // 10 e 11. Provisão e reserva por entidade (F3.3).
+    // 9 e 10. Provisão e reserva por entidade (F3.3).
     sugerirProvisoes(competence),
-    // 8. Conciliação bancária (F3.5).
-    resumoDaConciliacao(competence as Competence),
-    // 13. Vendas ganhas que não foram entregues à operação (F4.4).
+    // 12. Vendas ganhas que não foram entregues à operação (F4.4).
     prisma.opportunity.count({ where: { stage: "GANHA", createdClientId: null } }),
-    // 12. Notas paradas em rascunho (F3.6).
+    // 11. Notas paradas em rascunho (F3.6).
     prisma.fiscalDocument.count({
       where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
     }),
@@ -237,28 +236,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: "/clientes",
     },
     {
-      id: "conciliacao", numero: 8,
-      titulo: "Conciliação bancária no mínimo por conta",
-      dono: "Financeiro",
-      // DECIDIDO 19.37: conta COM movimento se concilia até o dia 5; conta
-      // PARADA só tem o saldo confirmado. Por isso conta sem movimento nem
-      // extrato não entra na conta de pendências — cobrar conciliação de uma
-      // conta que não movimentou é a linha vermelha que ensina a ignorar a
-      // lista inteira.
-      situacao: conciliacao.pendentes === 0 ? "OK" : "PENDENTE",
-      quantidade: conciliacao.pendentes,
-      detalhe:
-        conciliacao.contas.length === 0
-          ? "Nenhuma conta cadastrada."
-          : conciliacao.pendentes === 0
-            ? conciliacao.percentualGeral === null
-              ? "Nenhuma conta teve movimento no mês."
-              : `${conciliacao.percentualGeral}% das linhas de extrato do mês estão resolvidas.`
-            : `${conciliacao.pendentes} ${conciliacao.pendentes === 1 ? "conta está" : "contas estão"} sem extrato ou abaixo de ${MINIMO_CONCILIADO}% conciliado.`,
-      href: `/conciliacao${q}`,
-    },
-    {
-      id: "rateios", numero: 9,
+      id: "rateios", numero: 8,
       titulo: "Rateios obrigatórios concluídos ou aceitos",
       dono: "Financeiro",
       // "Ou aceitos como não alocados" (01 §5.3) é o que faz este item ser
@@ -278,7 +256,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: `/rateio${q}`,
     },
     {
-      id: "provisao", numero: 10,
+      id: "provisao", numero: 9,
       titulo: "Provisão tributária confirmada",
       dono: "Contador",
       // Entidade SEM alíquota configurada não conta como pendência: não há
@@ -295,7 +273,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: `/impostos${q}`,
     },
     {
-      id: "reserva-impostos", numero: 11,
+      id: "reserva-impostos", numero: 10,
       titulo: "Reserva de impostos revisada",
       dono: "Administrador",
       // O sistema NUNCA transfere (01 §3.8): aqui ele pergunta se alguém
@@ -311,7 +289,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: `/impostos${q}`,
     },
     {
-      id: "fiscal", numero: 12,
+      id: "fiscal", numero: 11,
       titulo: "Documentos fiscais emitidos ou justificados",
       dono: "Financeiro",
       // DECIDIDO 19.38: nota é OPCIONAL — a maioria dos serviços não emite,
@@ -328,7 +306,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: `/relatorios`,
     },
     {
-      id: "vendas-vinculadas", numero: 13,
+      id: "vendas-vinculadas", numero: 12,
       titulo: "Vendas ganhas vinculadas a cliente",
       dono: "Comercial",
       // Uma venda pode ser marcada GANHA arrastando o card no quadro, sem
@@ -344,7 +322,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: "/funil",
     },
     {
-      id: "aprovacoes", numero: 14,
+      id: "aprovacoes", numero: 13,
       titulo: "Aprovações decididas",
       dono: "—",
       situacao: "NAO_SE_APLICA",
@@ -354,7 +332,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: null,
     },
     {
-      id: "ledger", numero: 15,
+      id: "ledger", numero: 14,
       titulo: "Razão contábil balanceado",
       dono: "Administrador",
       situacao: !saude.enabled ? "NAO_MEDIDO" : saude.balanceOk ? "OK" : "PENDENTE",
@@ -367,7 +345,7 @@ export async function montarChecklist(competence: Competence | string): Promise<
       href: null,
     },
     {
-      id: "integridade", numero: 16,
+      id: "integridade", numero: 15,
       titulo: "Todo pagamento tem lançamento no razão",
       dono: "Administrador",
       situacao: !saude.enabled

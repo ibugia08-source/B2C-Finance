@@ -333,15 +333,6 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
-    key: "conciliacao",
-    label: "Conciliação bancária",
-    permissions: [
-      { id: "conciliacao.visualizar", label: "Ver a conciliação", sensitive: true },
-      { id: "conciliacao.conciliar", label: "Conciliar lançamentos", sensitive: true },
-      { id: "conciliacao.ajustar", label: "Lançar ajuste de conciliação", sensitive: true },
-    ],
-  },
-  {
     key: "fiscal",
     label: "Notas fiscais",
     permissions: [
@@ -534,7 +525,6 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     // Novas da reestruturação:
     "creditos.visualizar",
     "creditos.operar",
-    "conciliacao.visualizar",
     "fiscal.visualizar",
     "fiscal.registrar",
     "avaliacao.visualizar",

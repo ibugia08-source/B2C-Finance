@@ -32,7 +32,7 @@ export type EngineResult<T> = ({ ok: true } & T) | { ok: false; error: string };
 
 export type SettleOptions = {
   reason?: string | null;
-  /** Pagamento vindo de fora (gateway, OFX): dispara a guarda de duplicidade. */
+  /** Pagamento vindo de fora (gateway, importação): dispara a guarda de duplicidade. */
   externalSource?: string | null;
   externalId?: string | null;
 };

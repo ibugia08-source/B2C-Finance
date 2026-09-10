@@ -2888,7 +2888,7 @@ model ImportedRecord {
   sourceRow    Int
   /// Aba de origem (modelo de 3 abas da Importação Total): CLIENTES | MENSAL | RENOVACOES.
   sourceSheet  String?
-  sourceSystem String @default("PLANILHA")
+  sourceSystem String  @default("PLANILHA")
 
   /// CRIOU | ATUALIZOU — a reversão do lote só desfaz o que o lote CRIOU.
   operation String @default("CRIOU")
@@ -3375,6 +3375,10 @@ model AllocationRule {
 // ============================================================================
 
 /// Situação de uma linha do extrato. Os cinco estados de 01 §4.7.
+/// @deprecated CONCILIAÇÃO BANCÁRIA REMOVIDA em 2026-09-10 (simplificação).
+/// Dados preservados: nada é dropado e nada é escrito aqui — não existe mais
+/// tela, serviço nem webhook que grave nestas tabelas. Manter o model é o que
+/// permite ler o histórico (exportação, perícia) sem migration de resgate.
 enum ReconciliationState {
   UNMATCHED
   MATCHED
@@ -3383,6 +3387,10 @@ enum ReconciliationState {
   REVIEW
 }
 
+/// @deprecated CONCILIAÇÃO BANCÁRIA REMOVIDA em 2026-09-10 (simplificação).
+/// Dados preservados: nada é dropado e nada é escrito aqui — não existe mais
+/// tela, serviço nem webhook que grave nestas tabelas. Manter o model é o que
+/// permite ler o histórico (exportação, perícia) sem migration de resgate.
 /// Um arquivo de extrato importado (OFX ou CSV), com o período que ele cobre.
 ///
 /// 01 §4.7 fala em "BankAccount (da LegalEntity)"; aqui a conta bancária é o
@@ -3418,6 +3426,10 @@ model BankStatement {
   @@index([ownerId])
 }
 
+/// @deprecated CONCILIAÇÃO BANCÁRIA REMOVIDA em 2026-09-10 (simplificação).
+/// Dados preservados: nada é dropado e nada é escrito aqui — não existe mais
+/// tela, serviço nem webhook que grave nestas tabelas. Manter o model é o que
+/// permite ler o histórico (exportação, perícia) sem migration de resgate.
 /// Uma linha do extrato do banco. É FATO EXTERNO: nunca é editada pelo
 /// produto, só casada, ignorada ou marcada para revisão.
 model BankStatementEntry {
@@ -3463,6 +3475,10 @@ model BankStatementEntry {
 
 /// A ligação entre uma linha do banco e um fato do sistema.
 ///
+/// @deprecated CONCILIAÇÃO BANCÁRIA REMOVIDA em 2026-09-10 (simplificação).
+/// Dados preservados: nada é dropado e nada é escrito aqui — não existe mais
+/// tela, serviço nem webhook que grave nestas tabelas. Manter o model é o que
+/// permite ler o histórico (exportação, perícia) sem migration de resgate.
 /// Suporta os três formatos de 01 §4.7 sem tabela extra: 1:N (uma linha do
 /// banco com vários matches), N:1 (várias linhas apontando para o mesmo fato)
 /// e PARCIAL (a soma dos matches não fecha o valor da linha).
@@ -3841,17 +3857,17 @@ model GatewayCharge {
 /// (relatorios:agendados), que publica o e-mail no Outbox — a entrega segue
 /// as regras de lá (recuo, dead-letter, espera por provedor).
 model ScheduledReport {
-  id        String  @id @default(cuid())
+  id         String    @id @default(cuid())
   /// key do relatório no registry (ex.: "margem-totalmente-alocada").
-  reportKey String
+  reportKey  String
   /// SEMANAL (semana anterior, seg-dom) | MENSAL (competência anterior).
-  frequency String
+  frequency  String
   /// Destinatários, um e-mail por linha.
   recipients String[]
-  enabled    Boolean  @default(true)
+  enabled    Boolean   @default(true)
   /// Última janela coberta — o guarda contra envio dobrado no mesmo período.
-  lastRunAt DateTime? @db.Timestamptz(3)
-  createdBy String?
+  lastRunAt  DateTime? @db.Timestamptz(3)
+  createdBy  String?
 
   ownerId   String?
   owner     User?    @relation("OwnerScheduledReport", fields: [ownerId], references: [id])
@@ -3879,7 +3895,7 @@ model Notification {
   detail   String?
   link     String?
   /// critica | alta | media — crítica fura o silêncio noturno (02 §4.7).
-  severity String @default("media")
+  severity String  @default("media")
 
   /// Dia do agrupamento (YYYY-MM-DD).
   day   String

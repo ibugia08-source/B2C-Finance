@@ -76,7 +76,7 @@ export async function guardPeriod(
 /**
  * 3. Idempotência — este fato externo já entrou?
  *
- * Só se aplica a pagamento de ORIGEM EXTERNA (webhook de gateway, OFX).
+ * Só se aplica a pagamento de ORIGEM EXTERNA (webhook de gateway, importação).
  * A trava real está no banco, nas uniques de externalSource+externalId e
  * idempotencyKey (F0.9); esta checagem existe para o segundo webhook
  * receber uma resposta limpa em vez de um erro de constraint.

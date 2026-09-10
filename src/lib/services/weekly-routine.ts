@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { competenceOf } from "@/lib/competence";
 import { resumoDoRateio } from "@/lib/services/allocation";
-import { resumoDaConciliacao } from "@/lib/services/reconciliation";
 import { getLiquidez } from "@/lib/services/liquidity";
 import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
 
@@ -107,7 +106,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
     renovadosRecentemente,
     promessas,
     rateio,
-    conciliacao,
     notasRascunho,
     liquidez,
     recebidoSemana,
@@ -160,7 +158,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       },
     }),
     resumoDoRateio(competence),
-    resumoDaConciliacao(competence),
     prisma.fiscalDocument.count({ where: { status: "DRAFT" } }),
     getLiquidez(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).toISOString()),
     somaRecebida(inicio, fim),
@@ -278,30 +275,7 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       href: `/rateio?mes=${competence}`,
     },
     {
-      id: "conciliacao", numero: 7,
-      titulo: "Conciliação da semana",
-      dono: "Financeiro",
-      situacao: conciliacao.pendentes === 0 ? "OK" : "ATENCAO",
-      resumo:
-        conciliacao.pendentes === 0
-          ? "Nenhuma conta fora do mínimo."
-          : `${conciliacao.pendentes} ${conciliacao.pendentes === 1 ? "conta está" : "contas estão"} sem extrato ou abaixo do mínimo.`,
-      itens: conciliacao.contas
-        .filter((c) => c.situacao === "SEM_EXTRATO" || c.situacao === "ABAIXO_DO_MINIMO")
-        .map((c) => ({
-          chave: `conciliacao:${c.accountId}`,
-          titulo: c.nome,
-          detalhe:
-            c.situacao === "SEM_EXTRATO"
-              ? "extrato do mês não foi importado"
-              : `${c.percentual}% conciliado`,
-          valor: null,
-          href: `/conciliacao?mes=${competence}&conta=${c.accountId}`,
-        })),
-      href: `/conciliacao?mes=${competence}`,
-    },
-    {
-      id: "fiscais", numero: 8,
+      id: "fiscais", numero: 7,
       titulo: "Notas fiscais paradas em rascunho",
       dono: "Financeiro",
       // DECIDIDO 19.38: emissão NÃO é obrigatória e não existe cadastro de
