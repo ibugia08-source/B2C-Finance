@@ -90,7 +90,7 @@ async function achadosDoDia(hoje: Date): Promise<Achado[]> {
       event: "cobranca_vencida",
       title: "Cobranças vencidas",
       detail: `${vencidas._count._all} em aberto somando ${formatBRL(totalVencido)}.`,
-      link: "/fila",
+      link: "/inadimplencia",
       severity: "alta",
       permissao: "recebimentos.ver_inadimplencia",
       count: vencidas._count._all,

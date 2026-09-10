@@ -240,9 +240,9 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
           ? `prometeu para ${new Intl.DateTimeFormat("pt-BR").format(p.nextActionAt)}`
           : null,
         valor: Math.round((n(p.billing.amount) - n(p.billing.paidTotal)) * 100) / 100,
-        href: "/fila",
+        href: "/inadimplencia",
       })),
-      href: "/fila",
+      href: "/inadimplencia",
     },
     naoMedido(4, "pipeline", "Pipeline parado há 7 dias ou mais", "Comercial",
       "O funil comercial chega na Fase 4 (F4.1-F4.4). Até lá este bloco não é medido — e é dito, em vez de aparecer verde."),

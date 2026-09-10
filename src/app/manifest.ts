@@ -4,7 +4,7 @@ import type { MetadataRoute } from "next";
  * PWA INSTALÁVEL (F5.7 · para SDR e cobrança).
  *
  * O caso de uso que a spec nomeia é o celular do SDR (S2: atividade em 30
- * segundos) e o do cobrador (Modo Fila): instalado, o sistema abre em tela
+ * segundos) e o do cobrador (régua na Inadimplência): instalado, abre em tela
  * cheia, sem barra de navegador, direto de um ícone.
  *
  * SEM service worker DE PROPÓSITO: instalabilidade não exige mais SW no

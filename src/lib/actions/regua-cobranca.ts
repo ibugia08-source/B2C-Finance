@@ -7,11 +7,15 @@ import {
 import type { EtapaDaRegua } from "@/lib/collection/regua";
 
 /**
- * Ações do Modo Fila (F3.9 · 02 §7.5, §7.7).
+ * AÇÕES DA RÉGUA DE COBRANÇA (F3.9 · 02 §4.3).
  *
- * Cada uma responde a UMA tecla. É isso que faz os 38 itens do cenário S25
- * caberem em doze minutos — e é por isso que nenhuma delas abre formulário
- * quando pode receber o valor pronto.
+ * A régua PRIORIZADA continua inteira — score, cinco degraus, tons e
+ * silêncios. O que saiu (simplificação de 10/09/2026) foi o gabarito de fila
+ * item-a-item: as mesmas ações agora vivem na LISTA de Inadimplência, por
+ * linha e em massa.
+ *
+ * Nenhuma delas abre formulário quando pode receber o valor pronto — é o que
+ * faz cinquenta cobranças caberem numa passada só.
  */
 
 export async function marcarEnviadaAction(
@@ -21,10 +25,10 @@ export async function marcarEnviadaAction(
 ) {
   await requirePermission("recebimentos.gerar_cobranca");
   const { medir } = await import("@/lib/observability");
-  const r = await medir("action:fila.marcar-enviada", () =>
+  const r = await medir("action:regua.marcar-enviada", () =>
     registrarEnvioDaRegua(billingId, etapa, { mensagem })
   );
-  revalidatePath("/fila");
+  revalidatePath("/inadimplencia");
   revalidatePath("/cobrancas");
   return r;
 }
@@ -41,10 +45,10 @@ export async function enviarPeloSistemaAction(
 ) {
   await requirePermission("recebimentos.gerar_cobranca");
   const { medir } = await import("@/lib/observability");
-  const r = await medir("action:fila.enviar", () =>
+  const r = await medir("action:regua.enviar", () =>
     despacharPelaRegua(billingId, etapa, mensagem)
   );
-  revalidatePath("/fila");
+  revalidatePath("/inadimplencia");
   revalidatePath("/cobrancas");
   return r;
 }
@@ -57,7 +61,7 @@ export async function gerarLinkDePagamentoAction(billingId: string) {
   await requirePermission("recebimentos.gerar_cobranca");
   const { emitirLinkDePagamento } = await import("@/lib/services/gateway-charges");
   const r = await emitirLinkDePagamento(billingId);
-  revalidatePath("/fila");
+  revalidatePath("/inadimplencia");
   revalidatePath("/cobrancas");
   return r;
 }
@@ -70,7 +74,7 @@ export async function registrarPromessaAction(
   await requirePermission("recebimentos.gerar_cobranca");
   const data = new Date(dataISO);
   const r = await registrarPromessa(billingId, data, observacao);
-  revalidatePath("/fila");
+  revalidatePath("/inadimplencia");
   revalidatePath("/cobrancas");
   return r;
 }
@@ -85,7 +89,39 @@ export async function silenciarCobrancaAction(
     silencioAte: ateISO ? new Date(ateISO) : null,
     ...(bloqueio !== undefined ? { bloqueio } : {}),
   });
-  revalidatePath("/fila");
+  revalidatePath("/inadimplencia");
   revalidatePath("/clientes");
   return r;
+}
+
+/**
+ * AÇÃO EM MASSA (a que substitui o "item a item por teclado").
+ *
+ * Processa as cobranças selecionadas na ordem da lista e devolve o PLACAR —
+ * quantas foram, quantas recusaram e por quê. Nunca aborta no primeiro erro:
+ * numa passada de cinquenta cobranças, parar na terceira porque um cliente
+ * está em silêncio faria a pessoa recomeçar tudo.
+ *
+ * As recusas legítimas (opt-out, teto de frequência, etapa já enviada)
+ * continuam sendo recusas do serviço — o massa não tem atalho para dentro da
+ * régua, só chama a mesma porta várias vezes.
+ */
+export async function despacharEmMassaAction(
+  itens: { billingId: string; etapa: EtapaDaRegua; mensagem: string }[],
+  modo: "enviar" | "marcar"
+) {
+  await requirePermission("recebimentos.gerar_cobranca");
+  let enviadas = 0;
+  const recusas: { billingId: string; erro: string }[] = [];
+  for (const item of itens) {
+    const r =
+      modo === "enviar"
+        ? await despacharPelaRegua(item.billingId, item.etapa, item.mensagem)
+        : await registrarEnvioDaRegua(item.billingId, item.etapa, { mensagem: item.mensagem });
+    if (r.ok) enviadas++;
+    else recusas.push({ billingId: item.billingId, erro: r.error });
+  }
+  revalidatePath("/inadimplencia");
+  revalidatePath("/cobrancas");
+  return { ok: true as const, enviadas, recusas };
 }

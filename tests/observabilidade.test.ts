@@ -15,19 +15,19 @@ describe("T7 — medições e orçamentos", () => {
   beforeEach(() => zerarMedicoes());
 
   it("p50/p95 saem da definição, e o estouro respeita o orçamento declarado", () => {
-    // 100 amostras: 1..100ms na chave da fila (orçamento 400ms).
-    for (let i = 1; i <= 100; i++) registrarMedicao("page:fila", i);
-    const fila = resumoDeMedicoes().find((r) => r.chave === "page:fila")!;
-    expect(fila.p50).toBe(50);
-    expect(fila.p95).toBe(95);
-    expect(fila.max).toBe(100);
-    expect(fila.orcamentoMs).toBe(ORCAMENTOS_MS["page:fila"]);
-    expect(fila.estourado).toBe(false);
+    // 100 amostras: 1..100ms na chave da tela (orçamento 1,5s).
+    for (let i = 1; i <= 100; i++) registrarMedicao("page:inadimplencia", i);
+    const tela = resumoDeMedicoes().find((r) => r.chave === "page:inadimplencia")!;
+    expect(tela.p50).toBe(50);
+    expect(tela.p95).toBe(95);
+    expect(tela.max).toBe(100);
+    expect(tela.orcamentoMs).toBe(ORCAMENTOS_MS["page:inadimplencia"]);
+    expect(tela.estourado).toBe(false);
 
     // Agora 100 amostras LENTAS: estoura.
     zerarMedicoes();
-    for (let i = 0; i < 100; i++) registrarMedicao("page:fila", 500 + i);
-    const lenta = resumoDeMedicoes().find((r) => r.chave === "page:fila")!;
+    for (let i = 0; i < 100; i++) registrarMedicao("page:inadimplencia", 2000 + i);
+    const lenta = resumoDeMedicoes().find((r) => r.chave === "page:inadimplencia")!;
     expect(lenta.estourado).toBe(true);
   });
 

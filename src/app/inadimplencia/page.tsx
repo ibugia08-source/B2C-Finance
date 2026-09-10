@@ -32,6 +32,10 @@ import { MessageDialog } from "@/app/cobrancas/message-dialog";
 import { PaymentDialog } from "@/app/cobrancas/payment-dialog";
 import { COLLECTION_STATUS_LABEL } from "@/app/cobrancas/_meta";
 import { MessageSquareText, DollarSign } from "lucide-react";
+import { filaDeCobranca } from "@/lib/services/collection-tasks";
+import { urlConfigurada, segredoConfigurado } from "@/lib/integrations/avancecrm";
+import { emissaoConfigurada } from "@/lib/integrations/gateway";
+import { ReguaDoDia } from "./regua-do-dia";
 
 const BUCKET_META: Record<AgingBucket, { label: string; variant: any }> = {
   "1-15": { label: "1–15 dias", variant: "warning" },
@@ -40,13 +44,14 @@ const BUCKET_META: Record<AgingBucket, { label: string; variant: any }> = {
   "60+": { label: "60+ dias", variant: "destructive" },
 };
 
-export default async function InadimplenciaPage() {
+async function InadimplenciaPageInner() {
   const viewer = await requirePagePermission("recebimentos.ver_inadimplencia");
   const canPay = can(viewer, "recebimentos.registrar_pagamento");
+  const podeCobrar = can(viewer, "recebimentos.gerar_cobranca");
   await markOverdueBillings();
 
   const { start, end } = monthRange();
-  const [clients, recoveredAgg] = await Promise.all([
+  const [clients, recoveredAgg, regua] = await Promise.all([
     getDelinquentClients(),
     // Recuperação: receitas RECOVERY recebidas no mês (pagamento de vencidas)
     prisma.income.aggregate({
@@ -57,6 +62,9 @@ export default async function InadimplenciaPage() {
       },
       _sum: { amount: true },
     }),
+    // A régua PRIORIZADA (F3.9) vive aqui desde que o Modo Fila saiu: é a
+    // mesma fila de score e tons, servida como lista de trabalho.
+    filaDeCobranca(),
   ]);
   // Contas para o dialog de recebimento (baixa direta na tela).
   const accounts = canPay
@@ -111,6 +119,17 @@ export default async function InadimplenciaPage() {
         ))}
       </div>
 
+      <ReguaDoDia
+        tarefas={regua.tarefas}
+        suprimidas={regua.suprimidas}
+        podeCobrar={podeCobrar}
+        envioIntegrado={!!urlConfigurada() && !!segredoConfigurado()}
+        gatewayAtivo={emissaoConfigurada()}
+      />
+
+      <h2 className="mb-2 text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Clientes com dívida vencida
+      </h2>
       <Card>
         <CardContent className="p-0">
           <div className="hidden md:block">
@@ -270,4 +289,11 @@ export default async function InadimplenciaPage() {
       </Card>
     </div>
   );
+}
+
+// T7 — o p95 desta tela é medido contra o orçamento de 03 §4.7. Ela herdou a
+// régua do dia quando o Modo Fila saiu, então herdou também o cronômetro.
+export default async function InadimplenciaPage() {
+  const { medir } = await import("@/lib/observability");
+  return medir("page:inadimplencia", () => InadimplenciaPageInner());
 }

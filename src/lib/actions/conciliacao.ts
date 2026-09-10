@@ -107,6 +107,5 @@ export async function conciliarAutomaticamenteAction(accountId: string, competen
   await requirePermission("conciliacao.conciliar");
   const r = await conciliarAutomaticamente(accountId, competence as Competence);
   revalidatePath("/conciliacao");
-  revalidatePath("/fila");
   return r;
 }

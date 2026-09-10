@@ -167,16 +167,4 @@ export const CATALOGO: EntradaDoCatalogo[] = [
       { nome: "desabilitado/limite", descricao: "Teto de 3 gráficos por home (02 §5.5) — o quarto não entra." },
     ],
   },
-  {
-    componente: "Modo Fila (gabarito 3)",
-    arquivo: "src/app/fila/modo-fila.tsx",
-    papel: "Um item em foco, ações por tecla, progresso n de m, pular sem culpa.",
-    estados: [
-      { nome: "padrão", descricao: "Item em foco + contexto ao lado + teclas j/k/Enter/p/s." },
-      { nome: "vazio", descricao: "EmptyState 'Nada na fila hoje' — zerar a fila é o objetivo." },
-      { nome: "carregando", descricao: "Ação em transição desabilita os botões do item." },
-      { nome: "erro/atenção", descricao: "Suprimidas aparecem COM o motivo — nada some em silêncio." },
-      { nome: "desabilitado/limite", descricao: "Sem permissão de cobrar, as ações não renderizam; a leitura fica." },
-    ],
-  },
 ];

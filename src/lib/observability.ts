@@ -26,10 +26,10 @@ const aneis = new Map<string, Anel>();
 export const ORCAMENTOS_MS: Record<string, number> = {
   "page:dashboard": 1500, // LCP das telas de trabalho ≤ 1,5s
   "page:cobrancas": 2500, // Gestão do Mês interativa ≤ 2,5s
-  "page:fila": 400, // item do Modo Fila (lado sistema) ≤ 400ms
+  "page:inadimplencia": 1500, // tela de trabalho (régua + aging) ≤ 1,5s
   "page:clientes": 1500,
-  "action:fila.enviar": 400,
-  "action:fila.marcar-enviada": 400,
+  "action:regua.enviar": 400, // despacho da régua (lado sistema) ≤ 400ms
+  "action:regua.marcar-enviada": 400,
 };
 
 export function registrarMedicao(chave: string, ms: number): void {

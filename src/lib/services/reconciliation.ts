@@ -474,7 +474,7 @@ export type MovimentoDoBanco = {
  * hash (reconexão de banco reenvia a mesma janela de dias — é o caso normal,
  * não a exceção), extrato com origem marcada, e a conciliação automática
  * rodando em seguida nas competências afetadas. O que ela não resolver cai
- * na trilha de conciliação do Modo Fila, como sempre.
+ * na tela de conciliação, como sempre.
  */
 export async function registrarMovimentosDoBanco(
   accountId: string,

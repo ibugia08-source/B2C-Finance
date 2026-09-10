@@ -59,14 +59,6 @@ export function ShortcutsDialog({ user }: { user: UserLike }) {
             <Linha teclas="p" descricao="Registrar pagamento na linha" />
           </Grupo>
 
-          <Grupo titulo="No Modo Fila">
-            <Linha teclas="j k" descricao="Próximo e anterior" />
-            <Linha teclas="Enter" descricao="Ação principal da trilha" />
-            <Linha teclas="s" descricao="Pular sem resolver" />
-            <Linha teclas="p" descricao="Registrar promessa" />
-            <Linha teclas="1 2 3" descricao="Trocar de trilha" />
-          </Grupo>
-
           {[...porGrupo.entries()].map(([grupo, cmds]) => (
             <Grupo key={grupo} titulo={grupo}>
               {cmds.map((c) => (
