@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ValorAusente, EstadoDaTela } from "@/components/ui/estado";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { montarDre } from "@/lib/services/dre";
 import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
@@ -93,6 +94,27 @@ export default async function DrePage({
         </div>
       ) : null}
 
+      {/* DA-02: razão desligado não é resultado zero — é resultado que não
+          existe. Mostrar a tabela zerada faria o prejuízo parecer equilíbrio. */}
+      {!dre.cobertura.ligado ? (
+        <Card>
+          <CardContent className="p-0">
+            <EstadoDaTela
+              tipo="indisponivel"
+              titulo="O resultado não está disponível neste ambiente"
+              descricao={
+                <>
+                  O razão contábil está desligado, então não há lançamento para
+                  somar. As linhas do DRE não valem zero — elas não existem
+                  ainda. Ligar em produção depende do lançamento de abertura.
+                </>
+              }
+              acaoHref="/configuracoes"
+              acaoLabel="Abrir configurações"
+            />
+          </CardContent>
+        </Card>
+      ) : (
       <Card>
         <CardContent className="p-0">
           <table className="w-full text-body">
@@ -136,16 +158,40 @@ export default async function DrePage({
           </table>
         </CardContent>
       </Card>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Resumo
           rotulo="Margem gerencial"
-          valor={dre.margem == null ? "—" : formatPercent(dre.margem)}
+          valor={
+            !dre.cobertura.ligado ? (
+              <ValorAusente tipo="indisponivel" motivo="razão desligado" />
+            ) : dre.margem == null ? (
+              <ValorAusente tipo="sem-resultado" motivo="sem receita no período" />
+            ) : (
+              formatPercent(dre.margem)
+            )
+          }
         />
-        <Resumo rotulo="Pró-labore no mês" valor={formatBRL(dre.proLabore)} />
+        <Resumo
+          rotulo="Pró-labore no mês"
+          valor={
+            !dre.cobertura.ligado ? (
+              <ValorAusente tipo="indisponivel" motivo="razão desligado" />
+            ) : (
+              formatBRL(dre.proLabore)
+            )
+          }
+        />
         <Resumo
           rotulo="Resultado sem pró-labore"
-          valor={formatBRL(dre.resultadoSemProLabore)}
+          valor={
+            !dre.cobertura.ligado ? (
+              <ValorAusente tipo="indisponivel" motivo="razão desligado" />
+            ) : (
+              formatBRL(dre.resultadoSemProLabore)
+            )
+          }
         />
       </div>
 
@@ -181,7 +227,7 @@ function Totalizador({
   );
 }
 
-function Resumo({ rotulo, valor }: { rotulo: string; valor: string }) {
+function Resumo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
   return (
     <Card>
       <CardContent className="p-3.5">

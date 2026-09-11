@@ -262,6 +262,21 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     sourceEntities: ["Account", "Transaction"],
     rounding: MOEDA, spec: "01 §7.2; 02 §5.1",
   },
+  {
+    key: "projecao_caixa_horizonte",
+    name: "Projeção de caixa no horizonte",
+    description:
+      "Onde o caixa chega em 30, 60 ou 90 dias. É previsão de CAIXA — não é resultado nem competência.",
+    formulaDescription:
+      "Saldo bruto das contas ativas + cobranças que vencem DENTRO do horizonte − contas a pagar até o limite (incluindo as já vencidas) − parcelas de passivo financiado no período.",
+    grain: "POINT_IN_TIME", dateBasis: "CURRENT_STATE",
+    sourceEntities: ["Account", "Billing", "Transaction", "Liability"],
+    filters:
+      "A cobrança JÁ VENCIDA não entra como entrada: ela é reportada à parte. Contá-la seria supor que o atrasado chega dentro do prazo — foi essa hipótese que fez a projeção divergir do card de Liquidez até 11/09/2026.",
+    rounding: MOEDA,
+    nullPolicy: "Sem conta ativa cadastrada, a partida é zero e a tela precisa dizer isso — não é caixa zerado, é caixa não configurado.",
+    spec: "01 §7.2; 02 §5.1",
+  },
 
   // ===================== 7.3 CARTEIRA E RETENÇÃO =====================
   {

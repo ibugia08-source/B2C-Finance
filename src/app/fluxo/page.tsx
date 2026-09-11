@@ -11,6 +11,7 @@ import { filtroLembradoDoFluxo } from "@/lib/actions/fluxo";
 import {
   HORIZONTES, HORIZONTE_PADRAO, fluxoProjetado, type Horizonte,
 } from "@/lib/services/cash-flow";
+import { EstadoDaTela, ValorAusente } from "@/components/ui/estado";
 import { FiltrosDoFluxo } from "./filtros";
 import { DiasDoFluxo } from "./dias-table";
 import { rotuloDoDia } from "./rotulo";
@@ -120,6 +121,10 @@ export default async function FluxoPage({
     agencyId: params.agencia || null,
   });
 
+  // DA-02/DA-12: "nenhuma conta ativa" e "contas somando zero" são estados
+  // diferentes, e só o primeiro é falta de configuração.
+  const semContas = f.contas.length === 0;
+
   const serie = f.dias.map((d) => ({
     dia: d.dia,
     rotulo: rotuloDoDia(d.dia),
@@ -165,11 +170,36 @@ export default async function FluxoPage({
         </Card>
       ) : null}
 
+      {/* DA-12: sem nenhuma conta ativa, o saldo de partida é DESCONHECIDO,
+          não zero — e a projeção inteira nasce dessa partida. Dizer isso
+          antes dos números evita ler "R$ 0,00" como "caixa zerado". */}
+      {semContas ? (
+        <Card className="mb-4 border-warning/40">
+          <CardContent className="p-0">
+            <EstadoDaTela
+              tipo="nao-configurado"
+              titulo="Nenhuma conta cadastrada — a projeção não tem de onde partir"
+              descricao={
+                <>
+                  O saldo de partida vem das contas bancárias ativas. Sem
+                  nenhuma, a curva abaixo começa do zero, o que não é o mesmo
+                  que o caixa estar zerado: é o saldo não estar configurado.
+                  As entradas e saídas previstas continuam válidas.
+                </>
+              }
+              acaoHref="/caixa"
+              acaoLabel="Cadastrar contas"
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard
           title="Saldo hoje"
-          value={formatBRL(f.saldoInicial)}
-          basis="caixa"
+          value={semContas ? null : formatBRL(f.saldoInicial)}
+          nullReason="nenhuma conta cadastrada"
+          metrica="caixa_total"
           hint={
             params.conta
               ? contas.find((c) => c.id === params.conta)?.name

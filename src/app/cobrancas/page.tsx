@@ -905,7 +905,7 @@ async function RecebimentosPageInner({
         <MetricCard
           title="Faturamento esperado"
           value={formatBRL(receipts.expectedTotal)}
-          basis="competencia"
+          metrica="faturamento_esperado"
           hint="tudo que foi cobrado na competência"
           help="Soma de TODA cobrança com competência neste mês que não foi cancelada — mensalidade (MRR), parcela de contrato (TCV), implantação (setup), avulsa e upsell entram todas. Pagas e em aberto contam igual: é o que se esperava faturar, não o que entrou."
         />

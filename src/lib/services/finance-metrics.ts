@@ -1,4 +1,5 @@
 import { computeOperationalMargin } from "@/lib/financial/calculations";
+import { projecaoDeCaixa } from "./liquidity";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
@@ -121,39 +122,18 @@ export type CashSummary = {
   projecao90: number;
 };
 
-async function projecao(caixa: number, dias: number): Promise<number> {
-  const limite = new Date();
-  limite.setDate(limite.getDate() + dias);
-  const meses = Math.ceil(dias / 30);
-
-  const [entradas, saidas, passivos] = await Promise.all([
-    prisma.billing.aggregate({
-      where: {
-        status: { in: [...BILLING_OPEN_STATUSES] },
-        dueDate: { lte: limite },
-      },
-      _sum: { amount: true, paidTotal: true },
-    }),
-    prisma.transaction.aggregate({
-      where: {
-        type: "despesa",
-        status: { in: ["pendente", "devendo"] },
-        OR: [{ dueDate: { lte: limite } }, { dueDate: null, date: { lte: limite } }],
-      },
-      _sum: { amount: true },
-    }),
-    prisma.liability.aggregate({
-      where: { monthlyPayment: { not: null }, remainingValue: { gt: 0 } },
-      _sum: { monthlyPayment: true },
-    }),
-  ]);
-
-  return (
-    caixa +
-    (n(entradas._sum.amount) - n(entradas._sum.paidTotal)) -
-    n(saidas._sum.amount) -
-    n(passivos._sum.monthlyPayment) * meses
-  );
+/**
+ * Projeção de caixa por horizonte.
+ *
+ * A conta NÃO mora mais aqui (DA-01): esta função tinha a sua própria versão
+ * de "projeção 30 dias" e discordava do card de Liquidez na mesma tela —
+ * −R$ 26.548,53 contra −R$ 107.643,06 na auditoria de 11/09/2026. A diferença
+ * vinha de somar como entrada garantida do horizonte TODA cobrança vencida do
+ * passado. Agora as duas leem `projecaoDeCaixa`, que deixa o vencido de fora
+ * da soma e o reporta à parte.
+ */
+async function projecao(dias: number): Promise<number> {
+  return (await projecaoDeCaixa(dias)).projecao;
 }
 
 async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
@@ -188,9 +168,9 @@ async function getCashSummaryImpl(period: Period): Promise<CashSummary> {
   const aPagar = n(pendingExpenses._sum.amount);
 
   const [p30, p60, p90] = await Promise.all([
-    projecao(caixaDisponivel, 30),
-    projecao(caixaDisponivel, 60),
-    projecao(caixaDisponivel, 90),
+    projecao(30),
+    projecao(60),
+    projecao(90),
   ]);
 
   return {

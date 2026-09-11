@@ -161,7 +161,8 @@ export default async function PainelAnualPage({
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4 mb-5">
-          <StatCard title="Faturamento do mês" value={formatBRL(baseline.receita)}
+          <StatCard title="Faturamento total" value={formatBRL(baseline.receita)}
+            metrica="faturamento_total"
             hint={`MRR ${formatBRL(baseline.mrr)} + TCV ${formatBRL(baseline.tcv)}`} />
           <StatCard title="Despesas + folha" value={formatBRL(baseline.despesas + baseline.folha)}
             intent="negative" hint={`folha ${formatBRL(baseline.folha)}`} />
@@ -170,8 +171,10 @@ export default async function PainelAnualPage({
             hint="recuperável" />
           <StatCard title="Pipeline de upsell" value={formatBRL(baseline.upsellPipeline)} />
           <StatCard title="Caixa atual" value={formatBRL(baseline.caixa)}
+            metrica="caixa_total"
             intent={baseline.caixa >= 0 ? "positive" : "negative"} />
           <StatCard title="Projeção de caixa 30d" value={formatBRL(baseline.projecao30)}
+            metrica="projecao_caixa_horizonte"
             intent={baseline.projecao30 >= 0 ? "positive" : "negative"} />
         </div>
 

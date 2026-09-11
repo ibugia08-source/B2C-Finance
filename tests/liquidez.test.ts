@@ -70,13 +70,39 @@ describe("liquidez disponível — contas ativas menos compromissos imediatos", 
     expect(compromisso?.value).toBe(-2_000);
   });
 
-  it("a projeção de 30 dias conta o que vence no período, não o que já venceu", async () => {
+  it("a projeção de 30 dias sai do saldo BRUTO e desconta tudo uma vez só", async () => {
     const l = await asOwner(dono, async () => getLiquidez(hoje.toISOString()));
-    // Saídas de 30d: 500 (3 dias) + 900 (20 dias). A vencida NÃO entra de
-    // novo — ela já saiu do disponível, e contá-la duas vezes seria pagar o
-    // aluguel duas vezes no papel.
+    // `saidas30d` segue sendo o que vence de hoje até 30 dias: 500 + 900.
     expect(l.saidas30d).toBe(1_400);
-    expect(l.projecao30d).toBe(l.disponivel + l.entradas30d - l.saidas30d);
+
+    // A projeção, porém, NÃO se monta a partir do `disponivel`.
+    //
+    // A fórmula antiga era `disponivel + entradas30d − saidas30d` e dava
+    // 6.600 — quinhentos reais a menos do que a aritmética do cenário. A
+    // energia de 500 vence em 3 dias, então cabia ao mesmo tempo na janela
+    // de compromisso imediato (7 dias) e na janela de 30 dias: saía do
+    // `disponivel` E do `saidas30d`, descontada DUAS VEZES. O comentário
+    // antigo aqui já desconfiava do problema, mas só olhou a parcela
+    // vencida; a que vence dentro da janela tinha o mesmo defeito.
+    //
+    // A conta certa é direta: 10.000 de saldo, 2.900 a pagar em 30 dias,
+    // nada a receber. Sobram 7.100.
+    expect(l.projecao30d).toBe(7_100);
+    expect(l.projecao.partida).toBe(10_000);
+    expect(l.projecao.aPagar).toBe(2_900);
+    expect(l.projecao.aReceber).toBe(0);
+    expect(l.projecao30d).toBe(
+      l.projecao.partida + l.projecao.aReceber - l.projecao.aPagar - l.projecao.passivoFinanciado
+    );
+  });
+
+  it("o vencido não é contado duas vezes nem somado como entrada", async () => {
+    const l = await asOwner(dono, async () => getLiquidez(hoje.toISOString()));
+    // O aluguel vencido aparece UMA vez, dentro de aPagar do horizonte.
+    expect(l.projecao.aPagar).toBe(2_900);
+    // E nenhuma cobrança vencida foi inventada como entrada garantida — era
+    // isso que fazia o alerta "Atenção hoje" divergir do card ao lado (DA-01).
+    expect(l.projecao.aReceberVencido).toBe(0);
   });
 
   it("a janela é configurável: com 30 dias, a conta do fim do mês já compromete", async () => {

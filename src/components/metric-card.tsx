@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MetricHelp } from "@/components/dashboard/metric-help";
+import { MetricExplainer, basisDoRegistry } from "@/components/metric-explainer";
 import { cn } from "@/lib/utils";
 
 /**
@@ -70,6 +71,14 @@ export type MetricCardProps = {
   goodWhenUp?: boolean;
   /** Selo de base temporal — obrigatório quando o valor é dinheiro. */
   basis?: TemporalBasis;
+  /**
+   * Chave do METRIC_REGISTRY (DA-01). Informando-a, o card ganha de graça o
+   * selo de base temporal e o botão "como este valor foi calculado", lidos do
+   * contrato da métrica. É o caminho preferido: `basis` solto é o legado.
+   */
+  metrica?: string;
+  /** Linhas de origem, exibidas dentro da composição da métrica. */
+  composicao?: React.ReactNode;
   /** Série de 12 meses para a sparkline. */
   sparkline?: number[];
   /** Abre a tela já filtrada. */
@@ -102,6 +111,8 @@ export function MetricCard({
   delta,
   goodWhenUp = true,
   basis,
+  metrica,
+  composicao,
   sparkline,
   href,
   detail,
@@ -114,6 +125,9 @@ export function MetricCard({
   const [open, setOpen] = useState(false);
   const empty = value === null;
   const shownHint = empty ? (nullReason ?? "Sem base para calcular") : hint;
+  // O contrato da métrica manda no selo: `basis` explícito só sobrevive
+  // enquanto o chamador não tiver chave de registry (DA-01).
+  const basisEfetiva = metrica ? (basisDoRegistry(metrica) ?? basis) : basis;
 
   const body = (
     <>
@@ -127,9 +141,10 @@ export function MetricCard({
         >
           {title}
         </p>
-        {help && (
-          <span className="relative z-10">
-            <MetricHelp title={title} text={help} />
+        {(help || metrica) && (
+          <span className="relative z-10 flex shrink-0 items-center gap-0.5">
+            {help && <MetricHelp title={title} text={help} />}
+            {metrica && <MetricExplainer metrica={metrica} composicao={composicao} />}
           </span>
         )}
       </div>
@@ -145,7 +160,7 @@ export function MetricCard({
         {empty ? "—" : value}
       </p>
 
-      {basis && !empty && <BasisBadge basis={basis} />}
+      {basisEfetiva && !empty && <BasisBadge basis={basisEfetiva} />}
 
       {delta !== undefined && !empty ? (
         <DeltaLine delta={delta} goodWhenUp={goodWhenUp} compact={size === "sm"} />
@@ -337,14 +352,26 @@ export function StatCard({
   hint,
   intent = "default",
   href,
+  metrica,
 }: {
   title: string;
   value: string;
   hint?: string;
   intent?: "default" | "positive" | "negative" | "warning";
   href?: string;
+  /** Chave do METRIC_REGISTRY — traz selo de base e composição (DA-01). */
+  metrica?: string;
 }) {
-  return <MetricCard title={title} value={value} hint={hint} tone={intent} href={href} />;
+  return (
+    <MetricCard
+      title={title}
+      value={value}
+      hint={hint}
+      tone={intent}
+      href={href}
+      metrica={metrica}
+    />
+  );
 }
 
 /** Card de métrica clicável com ajuda — usado na Carteira. */

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { SavedViews } from "@/components/saved-views";
-import { StatCard } from "@/components/metric-card";
+import { StatCard, MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR, formatPercent, parseMonthParam } from "@/lib/format";
 import { getPayrollSummary } from "@/lib/services/finance-metrics";
@@ -9,6 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { EstadoDaTela } from "@/components/ui/estado";
 import {
   MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field,
 } from "@/components/ui/record-card";
@@ -106,17 +107,25 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
-        <StatCard title="Total da folha" value={formatBRL(summary.total)} />
+        {/* DA-02: folha não gerada não é folha de R$ 0,00. Zero aqui lê como
+            economia — o oposto do que está acontecendo. */}
+        <MetricCard
+          title="Total da folha"
+          value={run ? formatBRL(summary.total) : null}
+          nullReason="folha não gerada nesta competência"
+        />
         <StatCard
           title="Comissões do mês"
           value={formatBRL(totalComissoes)}
           intent={comissoesPendentes > 0 ? "warning" : "default"}
           hint={comissoesPendentes > 0 ? `${comissoesPendentes} aguardando “Atualizar folha”` : `${commissions.length} registrada(s)`}
         />
-        <StatCard
+        <MetricCard
           title="Folha / receita do mês"
-          value={`${pct}%`}
-          intent={pct > 40 ? "negative" : pct > 25 ? "warning" : "positive"}
+          value={run ? `${pct}%` : null}
+          nullReason="depende da folha gerada"
+          metrica="percentual_folha"
+          tone={pct > 40 ? "negative" : pct > 25 ? "warning" : "positive"}
         />
         <StatCard title="Colaboradores ativos" value={String(activeEmployees.length)} />
         <StatCard
@@ -162,15 +171,25 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
           </div>
 
           {!run ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Folha ainda não gerada para esta competência. Clique em{" "}
-              <strong>Gerar folha do mês</strong> — os salários dos colaboradores
-              ativos entram automaticamente.
-            </p>
+            <EstadoDaTela
+              tipo="nao-gerado"
+              titulo="Folha ainda não gerada para esta competência"
+              descricao={
+                <>
+                  Nada foi apurado neste mês — não é uma folha de R$ 0,00. Ao
+                  gerar, os salários dos {activeEmployees.length} colaborador
+                  {activeEmployees.length === 1 ? "" : "es"} ativo
+                  {activeEmployees.length === 1 ? "" : "s"} entram automaticamente
+                  e as comissões do período são anexadas.
+                </>
+              }
+            />
           ) : run.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Folha sem itens. Adicione salários, comissões e bônus.
-            </p>
+            <EstadoDaTela
+              tipo="primeiro-uso"
+              titulo="Folha gerada, mas sem nenhum item"
+              descricao="Adicione salários, comissões e bônus para ela ter o que somar."
+            />
           ) : (
             <>
             <MobileCards>

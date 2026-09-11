@@ -254,7 +254,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MetricCard
           title="Faturamento total"
           value={formatBRL(previsto)}
-          basis="competencia"
+          metrica="faturamento_total"
           sparkline={yearly.faturamento}
           help="Soma do faturamento MRR previsto, TCV previsto e receitas extras manuais do mês selecionado."
           delta={main.deltas.faturamentoTotal}
@@ -277,7 +277,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MetricCard
           title="Recebido em caixa"
           value={formatBRL(recebido)}
-          basis="caixa"
+          metrica="recebido_caixa"
           sparkline={yearly.recebido}
           help="Dinheiro efetivamente recebido no mês selecionado: cobranças da competência, recuperações de meses anteriores recebidas agora e receitas extras/avulsas. É a mesma conta do Recebido no mês da Gestão do Mês."
           delta={main.deltas.recebido}
@@ -290,7 +290,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MetricCard
           title="Em aberto"
           value={formatBRL(emAberto)}
-          basis="competencia"
+          metrica="em_aberto"
           sparkline={sparkEmAberto}
           hint={vencido > 0 ? `${formatBRL(vencido)} já vencido` : "Nada vencido"}
           help="Valor que ainda falta receber no mês. Fórmula: Faturamento total − Recebido em caixa. Vencido é apenas a parte já vencida — está embutido aqui, não é outro número."
@@ -303,7 +303,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MetricCard
           title="Resultado do mês"
           value={formatBRL(resultado)}
-          basis="caixa"
+          metrica="resultado_mes"
           sparkline={yearly.resultado}
           help="Lucro ou prejuízo operacional do mês. Fórmula: Recebido em caixa − Total de despesas."
           delta={main.deltas.resultado}
@@ -315,7 +315,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MetricCard
           title="Liquidez disponível"
           value={formatBRL(liquidez.disponivel)}
-          basis="caixa"
+          metrica="liquidez_disponivel"
           hint={
             liquidez.compromissos > 0
               ? `${formatBRL(liquidez.compromissos)} de compromisso imediato · projeção 30d: ${formatBRL(liquidez.projecao30d)}`
@@ -336,19 +336,40 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
                 totalLabel="Disponível hoje"
                 emptyText="Nenhuma conta cadastrada — o saldo precisa vir do extrato."
               />
+              {/* Composição da projeção, linha a linha (DA-01). Sai do
+                  mesmo objeto que o alerta "Atenção hoje" usa — os dois
+                  números mostravam "projeção 30 dias" e discordavam. */}
               <div className="space-y-1 border-t pt-3 text-body">
                 <p className="flex justify-between">
-                  <span className="text-muted-foreground">A receber em 30 dias</span>
-                  <span className="stat-number text-success">+ {formatBRL(liquidez.entradas30d)}</span>
+                  <span className="text-muted-foreground">Saldo das contas hoje</span>
+                  <span className="stat-number">{formatBRL(liquidez.projecao.partida)}</span>
                 </p>
                 <p className="flex justify-between">
-                  <span className="text-muted-foreground">A pagar em 30 dias</span>
-                  <span className="stat-number text-destructive">− {formatBRL(liquidez.saidas30d)}</span>
+                  <span className="text-muted-foreground">A receber vencendo em 30 dias</span>
+                  <span className="stat-number text-success">+ {formatBRL(liquidez.projecao.aReceber)}</span>
                 </p>
+                <p className="flex justify-between">
+                  <span className="text-muted-foreground">A pagar até 30 dias (com o vencido)</span>
+                  <span className="stat-number text-destructive">− {formatBRL(liquidez.projecao.aPagar)}</span>
+                </p>
+                {liquidez.projecao.passivoFinanciado > 0 && (
+                  <p className="flex justify-between">
+                    <span className="text-muted-foreground">Parcelas de financiamento</span>
+                    <span className="stat-number text-destructive">− {formatBRL(liquidez.projecao.passivoFinanciado)}</span>
+                  </p>
+                )}
                 <p className="flex justify-between border-t pt-1 font-medium">
                   <span>Projeção em 30 dias</span>
                   <span className="stat-number">{formatBRL(liquidez.projecao30d)}</span>
                 </p>
+                {liquidez.projecao.aReceberVencido > 0 && (
+                  <p className="mt-2 rounded-card bg-surface-soft px-2.5 py-2 text-caption text-muted-foreground">
+                    Fora da soma: {formatBRL(liquidez.projecao.aReceberVencido)} de
+                    cobranças já vencidas. Elas não entram como entrada porque já
+                    deveriam ter chegado — contá-las seria a hipótese mais otimista
+                    possível. Acompanhe em Inadimplência.
+                  </p>
+                )}
               </div>
             </div>
           }
