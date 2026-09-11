@@ -1,7 +1,7 @@
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { formatBRL, formatDateBR } from "@/lib/format";
-import { resolvePeriod } from "@/lib/period";
+import { resolvePeriod, periodLabel } from "@/lib/period";
 import { getExecutiveDashboard } from "@/lib/services/dashboard-metrics";
 import { getDelinquentClients } from "@/lib/services/billing-metrics";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
@@ -64,7 +64,7 @@ export async function buildAgencySnapshotText(): Promise<string> {
   const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses, receipts } = dash;
   const L: string[] = [];
 
-  L.push(`PERÍODO DE REFERÊNCIA: ${period.label} (hoje: ${formatDateBR(new Date())})`);
+  L.push(`PERÍODO DE REFERÊNCIA: ${periodLabel(period)} (hoje: ${formatDateBR(new Date())})`);
 
   L.push(
     `SAÚDE FINANCEIRA (score do sistema): ${health.score}/100 — ${health.label}. Fatores: ` +

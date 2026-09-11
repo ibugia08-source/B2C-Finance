@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { periodLabel } from "@/lib/period";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getReport } from "@/lib/reports/registry";
@@ -272,7 +273,7 @@ html, body { background: #fff; }
             <p>
               <strong>Como este documento foi apurado.</strong> Fonte: {def.title} do
               B2C Finance. Recorte: {dataAbsoluta(query.period.start)} a{" "}
-              {dataAbsoluta(fim)} ({query.period.label}). Filtros:{" "}
+              {dataAbsoluta(fim)} ({periodLabel(query.period)}). Filtros:{" "}
               {filtros.length ? filtros.join("; ") : "nenhum além do período"}.
               Ordenação: {pres.ordenar ?? def.defaultSort.key} (
               {(pres.ordenar ? pres.dir : def.defaultSort.dir) === "asc" ? "crescente" : "decrescente"}).

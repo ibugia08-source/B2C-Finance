@@ -5,6 +5,13 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  PRESET_LABEL,
+  PRESET_LABEL_CURTO,
+  PERIODO_LEGADO,
+  presetRange,
+  type DateRangePreset,
+} from "@/lib/period";
 
 /**
  * <B2CDateRangePicker /> — filtro global de período (padrão Meta Ads).
@@ -15,11 +22,7 @@ import { Input } from "@/components/ui/input";
  * Semana começa na SEGUNDA. Datas exibidas em pt-BR (dd/mm/aaaa).
  */
 
-export type DateRangePreset =
-  | "today" | "yesterday" | "today_yesterday"
-  | "last_7_days" | "last_14_days" | "last_28_days" | "last_30_days"
-  | "this_week" | "last_week" | "this_month" | "last_month"
-  | "maximum" | "custom";
+export type { DateRangePreset };
 
 export type DateRangeValue = {
   startDate: Date;
@@ -38,26 +41,18 @@ export type B2CDateRangePickerProps = {
   queryParamPrefix?: string;
 };
 
-const PRESET_LABEL: Record<DateRangePreset, string> = {
-  today: "Hoje",
-  yesterday: "Ontem",
-  today_yesterday: "Hoje e ontem",
-  last_7_days: "Últimos 7 dias",
-  last_14_days: "Últimos 14 dias",
-  last_28_days: "Últimos 28 dias",
-  last_30_days: "Últimos 30 dias",
-  this_week: "Esta semana",
-  last_week: "Semana passada",
-  this_month: "Este mês",
-  last_month: "Mês passado",
-  maximum: "Máximo",
-  custom: "Personalizado",
-};
-
+/**
+ * Ordem dos presets na coluna, agrupada por natureza. Os três do fim do
+ * bloco de calendário (trimestre, ano, ano passado) entraram com a RP-01:
+ * `?periodo=trimestre` e `?periodo=ano` valiam no servidor e não tinham
+ * representação aqui, então o seletor anunciava "Este mês" enquanto o
+ * relatório somava o ano inteiro.
+ */
 const PRESET_ORDER: DateRangePreset[] = [
   "today", "yesterday", "today_yesterday",
   "last_7_days", "last_14_days", "last_28_days", "last_30_days",
-  "this_week", "last_week", "this_month", "last_month",
+  "this_week", "last_week",
+  "this_month", "last_month", "this_quarter", "this_year", "last_year",
   "maximum", "custom",
 ];
 
@@ -92,39 +87,6 @@ const fmtLong = (d: Date) =>
     .format(d)
     .replace(".", "");
 
-/** Intervalo [start,end] (inclusivo) de cada preset, relativo a hoje. */
-export function presetRange(preset: DateRangePreset, minDate?: Date): { start: Date; end: Date } {
-  const today = day(new Date());
-  switch (preset) {
-    case "today": return { start: today, end: today };
-    case "yesterday": { const y = addDays(today, -1); return { start: y, end: y }; }
-    case "today_yesterday": return { start: addDays(today, -1), end: today };
-    case "last_7_days": return { start: addDays(today, -6), end: today };
-    case "last_14_days": return { start: addDays(today, -13), end: today };
-    case "last_28_days": return { start: addDays(today, -27), end: today };
-    case "last_30_days": return { start: addDays(today, -29), end: today };
-    case "this_week": {
-      const dow = (today.getDay() + 6) % 7; // segunda = 0
-      return { start: addDays(today, -dow), end: today };
-    }
-    case "last_week": {
-      const dow = (today.getDay() + 6) % 7;
-      const start = addDays(today, -dow - 7);
-      return { start, end: addDays(start, 6) };
-    }
-    case "this_month":
-      return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: today };
-    case "last_month": {
-      const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      return { start, end: new Date(today.getFullYear(), today.getMonth(), 0) };
-    }
-    case "maximum":
-      return { start: minDate ?? new Date(2020, 0, 1), end: today };
-    default:
-      return { start: today, end: today };
-  }
-}
-
 export function B2CDateRangePicker({
   value,
   onChange,
@@ -143,16 +105,47 @@ export function B2CDateRangePicker({
   // ===== valor atual (URL → prop → padrão "este mês") =====
   const urlValue = React.useMemo<DateRangeValue | null>(() => {
     const raw = sp.get(p("date"));
-    if (!raw) return null;
-    const m = raw.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
-    if (!m) return null;
-    const s = fromIso(m[1]);
-    const e = fromIso(m[2]);
-    if (!s || !e) return null;
-    const preset = (sp.get(p("preset")) as DateRangePreset) ?? "custom";
-    return { startDate: s, endDate: e, preset: PRESET_LABEL[preset] ? preset : "custom" };
+    if (raw) {
+      const m = raw.match(/^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
+      if (m) {
+        const s = fromIso(m[1]);
+        const e = fromIso(m[2]);
+        if (s && e) {
+          const preset = (sp.get(p("preset")) as DateRangePreset) ?? "custom";
+          return { startDate: s, endDate: e, preset: PRESET_LABEL[preset] ? preset : "custom" };
+        }
+      }
+    }
+
+    // RP-01 — o servidor resolve `?periodo=` e este controle só conhecia
+    // `?date=`. Sem `?date=` na URL ele caía no padrão "este mês" e ANUNCIAVA
+    // isso, enquanto o relatório já estava somando o ano. Agora as duas
+    // leituras saem da mesma tabela, em lib/period.
+    const legado = PERIODO_LEGADO[sp.get("periodo") ?? ""];
+    if (legado) {
+      const r = presetRange(legado, minDate);
+      return { startDate: r.start, endDate: r.end, preset: legado };
+    }
+
+    // Intervalo livre legado (?de=&ate=) também tem representação aqui.
+    const de = sp.get("de");
+    const ate = sp.get("ate");
+    if (de || ate) {
+      const s = de ? fromIso(de) : null;
+      const e = ate ? fromIso(ate) : null;
+      if (s || e) {
+        const hoje = day(new Date());
+        return {
+          startDate: s ?? new Date(hoje.getFullYear(), 0, 1),
+          endDate: e ?? hoje,
+          preset: "custom",
+        };
+      }
+    }
+
+    return null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sp]);
+  }, [sp, minDate]);
 
   const current: DateRangeValue =
     urlValue ?? value ?? { ...toValue(presetRange("this_month", minDate), "this_month") };
@@ -310,10 +303,19 @@ export function B2CDateRangePicker({
     setViewMonth(new Date(d.getFullYear(), d.getMonth(), 1));
   }
 
-  const triggerLabel =
-    current.preset !== "custom"
-      ? `${PRESET_LABEL[current.preset]}: ${fmtLong(current.startDate)} a ${fmtLong(current.endDate)}`
-      : `${fmtLong(current.startDate)} a ${fmtLong(current.endDate)}`;
+  /**
+   * RP-07 — o botão media ~381 px numa viewport de 390 px e empurrava a
+   * página para 410 px, criando rolagem horizontal onde 1.4.10 (Reflow) não
+   * permite. O rótulo longo continua no desktop; no celular entra a versão
+   * curta, e o intervalo completo fica no `title` e no nome acessível.
+   */
+  const nomeDoPreset =
+    current.preset !== "custom" ? PRESET_LABEL[current.preset] : null;
+  const intervalo = `${fmtLong(current.startDate)} a ${fmtLong(current.endDate)}`;
+  const triggerLabel = nomeDoPreset ? `${nomeDoPreset}: ${intervalo}` : intervalo;
+  const triggerCurto = nomeDoPreset
+    ? (PRESET_LABEL_CURTO[current.preset] ?? nomeDoPreset)
+    : `${fmtBR(current.startDate)} – ${fmtBR(current.endDate)}`;
 
   const inRange = (d: Date) => d >= (draftStart <= draftEnd ? draftStart : draftEnd) && d <= (draftStart <= draftEnd ? draftEnd : draftStart);
   const isEdge = (d: Date) => sameDay(d, draftStart) || sameDay(d, draftEnd);
@@ -375,15 +377,26 @@ export function B2CDateRangePicker({
         onClick={() => (open ? closeDiscard() : openPopover())}
         aria-expanded={open}
         aria-controls="b2c-drp-popover"
+        title={triggerLabel}
+        aria-label={`Período: ${triggerLabel}`}
         className={cn(
-          "flex h-9 items-center gap-2 rounded-md border bg-background px-3 text-sm",
+          // `max-w-full` + `min-w-0` são o que impede o rótulo de empurrar a
+          // página: sem eles o conteúdo define a largura e o flex pai cresce.
+          "flex h-9 min-h-touch-sm max-w-full min-w-0 items-center gap-2 rounded-md border bg-background px-3 text-sm",
           "transition-colors hover:border-muted-foreground/40",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         )}
       >
-        <CalendarDays className="h-4 w-4 text-muted-foreground" />
-        <span className="whitespace-nowrap">{triggerLabel}</span>
-        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="truncate sm:hidden">{triggerCurto}</span>
+        <span className="hidden truncate sm:inline">{triggerLabel}</span>
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+          aria-hidden
+        />
       </button>
 
       {/* ===== Popover ===== */}

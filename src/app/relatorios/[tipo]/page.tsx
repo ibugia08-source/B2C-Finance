@@ -7,6 +7,7 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getReport } from "@/lib/reports/registry";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
+import { periodLabel } from "@/lib/period";
 import { presentReport } from "@/lib/reports/present";
 import { ReportControls } from "@/components/report/report-controls";
 import { ReportTable } from "@/components/report/report-table";
@@ -75,7 +76,7 @@ export default async function RelatorioPage({
       <div className="print:hidden">
         <PageHeader
           title={def.title}
-          description={`${def.description} · ${query.period.label}`}
+          description={`${def.description} · ${periodLabel(query.period)}`}
           actions={
             <Button variant="outline" size="sm" asChild>
               <Link href="/relatorios"><ArrowLeft className="h-4 w-4 mr-1" /> Relatórios</Link>
@@ -113,7 +114,7 @@ export default async function RelatorioPage({
         <BrandLogo height={32} className="mb-3" />
         <h1 className="text-xl font-semibold">{def.title} — B2C Finance</h1>
         <p className="text-sm text-muted-foreground">
-          {def.description} · {query.period.label} · gerado em {formatInstantBR(new Date())}
+          {def.description} · {periodLabel(query.period)} · gerado em {formatInstantBR(new Date())}
         </p>
       </div>
 

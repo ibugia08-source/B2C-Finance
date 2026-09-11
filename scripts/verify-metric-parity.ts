@@ -9,6 +9,7 @@
  * Uso: APP_ENV=local npx tsx scripts/verify-metric-parity.ts [ano]
  */
 import { loadEnv } from "./env";
+import { periodOfMonth } from "../src/lib/period";
 import { assertNotProduction } from "./guard";
 loadEnv();
 // Fora de uma request o unstable_cache do Next lança "incrementalCache
@@ -42,12 +43,7 @@ async function main() {
 
   await runWithOwner(admin.id, async () => {
     for (let mes = 1; mes <= 12; mes++) {
-      const period = {
-        key: "mes" as const,
-        start: new Date(ANO, mes - 1, 1),
-        end: new Date(ANO, mes, 1),
-        label: `${String(mes).padStart(2, "0")}/${ANO}`,
-      };
+      const period = periodOfMonth(ANO, mes);
 
       // ===== Caminho NOVO: o motor =====
       const motor = await computePeriodMetrics(period);

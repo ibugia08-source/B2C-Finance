@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { mostrarSetup } from "@/lib/services/setup";
 import { formatBRL } from "@/lib/format";
-import { resolvePeriod } from "@/lib/period";
+import { resolvePeriod, periodLabel } from "@/lib/period";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import {
@@ -213,7 +213,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
     <div>
       <PageHeader
         title={firstName ? `${saudacao}, ${firstName}` : saudacao}
-        description={`O essencial do mês — números oficiais, alertas e tendência · ${period.label}`}
+        description={`O essencial do mês — números oficiais, alertas e tendência · ${periodLabel(period)}`}
       />
 
       {/* Primeiro uso (02 §3): a lista fica na home ATÉ o sistema estar
@@ -241,7 +241,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           de 4 ou 5, e antes daqui eram cinco cards em cinco colunas. */}
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Decidir · {period.label}
+          Decidir · {periodLabel(period)}
         </h2>
         {/* 02 §5.1: "Cabeçalho explicita o modo temporal". O painel mistura
             as duas bases de propósito, então cada card declara a sua. */}
@@ -472,7 +472,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <MainChart title="Resultado mensal" variant="bar" diverging
           data={yearly.labels.map((l, i) => ({ label: l, value: yearly.resultado[i] }))}
           selectedIndex={selectedMonthIndex} />
-        <ChartCard title="De onde vem o faturamento?" hint={`MRR · TCV · Receita extra — ${period.label}`}>
+        <ChartCard title="De onde vem o faturamento?" hint={`MRR · TCV · Receita extra — ${periodLabel(period)}`}>
           <CompositionDonut
             data={[
               { label: "MRR", value: M.mrr, color: "hsl(var(--chart-1))" },
@@ -573,7 +573,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
 
           {/* ===== Análises complementares ===== */}
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-3">
-            Análises complementares · {period.label}
+            Análises complementares · {periodLabel(period)}
           </h2>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <ChartCard title="Despesas por categoria" hint="no período">
