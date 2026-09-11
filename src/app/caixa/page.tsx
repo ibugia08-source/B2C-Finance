@@ -25,7 +25,7 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { prisma } from "@/lib/prisma";
 import { formatBRL } from "@/lib/format";
 import { getLiquidez } from "@/lib/services/liquidity";
-import { TIPOS_DE_CONTA } from "@/lib/actions/contas";
+import { TIPO_DE_CONTA_LABEL } from "@/lib/conta-meta";
 import { ContaDialog } from "./conta-dialog";
 import { ContaActions } from "./row-actions";
 
@@ -48,10 +48,6 @@ import { ContaActions } from "./row-actions";
  * que impede esta página de virar a quarta versão de "projeção 30 dias".
  */
 export const dynamic = "force-dynamic";
-
-const TIPO_LABEL = Object.fromEntries(
-  TIPOS_DE_CONTA.map((t) => [t.valor, t.label])
-) as Record<string, string>;
 
 export default async function CaixaPage() {
   const viewer = await requirePagePermission("caixa.visualizar");
@@ -242,7 +238,7 @@ export default async function CaixaPage() {
                           {c.bank ?? "—"}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {TIPO_LABEL[c.type] ?? c.type}
+                          {TIPO_DE_CONTA_LABEL[c.type] ?? c.type}
                         </TableCell>
                         <TableCell className="stat-number text-right">
                           {formatBRL(c.balance)}
@@ -280,7 +276,7 @@ export default async function CaixaPage() {
                     />
                     <Field label="Saldo">{formatBRL(c.balance)}</Field>
                     <Field label="Banco">{c.bank ?? "—"}</Field>
-                    <Field label="Tipo">{TIPO_LABEL[c.type] ?? c.type}</Field>
+                    <Field label="Tipo">{TIPO_DE_CONTA_LABEL[c.type] ?? c.type}</Field>
                     {podeGerenciar && (
                       <MobileCardActions>
                         <ContaActions conta={paraLinha(c)} />

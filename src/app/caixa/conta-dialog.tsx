@@ -13,7 +13,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { salvarConta, TIPOS_DE_CONTA } from "@/lib/actions/contas";
+import { salvarConta } from "@/lib/actions/contas";
+import { TIPOS_DE_CONTA } from "@/lib/conta-meta";
 import { formatDecimalInput } from "@/lib/format";
 
 /**

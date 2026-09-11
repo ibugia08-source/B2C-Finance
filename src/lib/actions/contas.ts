@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/viewer";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ActionResult } from "./clients";
 import { clean, parseBRL } from "@/lib/format";
+// A lista de tipos mora em lib/conta-meta: "use server" só exporta função.
 
 /**
  * CONTAS DO CAIXA — UX-01 e DA-12 da auditoria de 11/09/2026.
