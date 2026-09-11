@@ -132,9 +132,13 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+      # Node 22 SÓ NESTE JOB: o extrator de texto de PDF (pdfjs-dist 6) usa
+      # Promise.withResolvers, que não existe no Node 20. O portão de
+      # qualidade continua no 20, que é a versão em que o produto roda —
+      # ferramenta de verificação não dita a versão da aplicação.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Instalar dependências
