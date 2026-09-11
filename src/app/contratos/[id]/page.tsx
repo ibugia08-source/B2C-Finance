@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, formatInstantBR } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,7 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
     active: l.active,
     submissions: l.submissions,
     clientName: l.client?.name ?? null,
-    createdAtBR: formatDateBR(l.createdAt),
+    createdAtBR: formatInstantBR(l.createdAt),
   }));
 
   const variables = (template.variables as unknown as TemplateVariable[]) ?? [];
@@ -93,8 +93,8 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
     ["Forma de pagamento", template.billingModel ? BILLING_MODEL_LABEL[template.billingModel] : "—"],
     ["Dia de vencimento", template.defaultDueDay != null ? `Dia ${template.defaultDueDay}` : "—"],
     ["Arquivo", template.originalFileName],
-    ["Enviado em", formatDateBR(template.createdAt)],
-    ["Última atualização", formatDateBR(template.updatedAt)],
+    ["Enviado em", formatInstantBR(template.createdAt)],
+    ["Última atualização", formatInstantBR(template.updatedAt)],
   ];
 
   return (
@@ -235,7 +235,7 @@ export default async function TemplateDetailPage({ params }: { params: { id: str
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell>{formatDateBR(g.generatedAt)}</TableCell>
+                    <TableCell>{formatInstantBR(g.generatedAt)}</TableCell>
                     <TableCell>
                       <Badge variant={generatedStatusVariant(g.status)}>
                         {GENERATED_STATUS_LABEL[g.status]}

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { lerFotografia } from "@/lib/snapshots/read";
-import { formatBRL, formatPercent, monthLabel } from "@/lib/format";
+import { formatBRL, formatPercent, monthLabel, formatInstantBR } from "@/lib/format";
 import { METRIC_REGISTRY } from "@/lib/metrics/registry";
 import { BotaoImprimir } from "./imprimir";
 import { b2cFinanceAssets } from "@/lib/branding/b2c-finance-assets";
@@ -80,7 +80,7 @@ export default async function DocumentoPage({
           <p className="doc-capa-sub">
             versão {foto.versao}
             {foto.fechadoPor ? ` · fechado por ${foto.fechadoPor}` : ""}
-            {` · ${foto.fechadoEm.toLocaleDateString("pt-BR")}`}
+            {` · ${formatInstantBR(foto.fechadoEm)}`}
           </p>
 
           <dl className="doc-capa-destaques">

@@ -113,7 +113,7 @@ export function ImportTotalClient() {
           {ok.avisos.length > 0 && (
             <Card className="border-warning/40">
               <CardContent className="p-4">
-                <p className="mb-2 text-dense font-medium text-warning-foreground">Avisos</p>
+                <p className="mb-2 text-dense font-medium text-warning-ink">Avisos</p>
                 <ul className="max-h-40 space-y-1 overflow-y-auto text-caption text-muted-foreground">
                   {ok.avisos.map((a, i) => (<li key={i}>{a}</li>))}
                 </ul>
@@ -236,7 +236,7 @@ export function ImportTotalClient() {
                       : ""}
                   </li>
                   {ok.confirmado.paraRevisar > 0 && (
-                    <li className="text-warning-foreground">
+                    <li className="text-warning-ink">
                       {ok.confirmado.paraRevisar} linha(s) na fila de conferência.
                     </li>
                   )}

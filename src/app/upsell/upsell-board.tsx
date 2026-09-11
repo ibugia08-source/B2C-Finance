@@ -1,7 +1,7 @@
 "use client";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatDateBR } from "@/lib/format";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ export type BoardUpsell = {
 };
 
 const dateBR = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("pt-BR") : null;
+  iso ? formatDateBR(iso) : null;
 
 /**
  * KANBAN DE UPSELL — as 4 etapas do funil em colunas; cards arrastáveis

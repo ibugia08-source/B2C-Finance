@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission } from "@/lib/auth/viewer";
-import { formatDateBR } from "@/lib/format";
+import { formatDateBR, formatInstantBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -58,7 +58,7 @@ export default async function ImportacaoTotalPage() {
                 <TableBody>
                   {lotes.map((l) => (
                     <TableRow key={l.id}>
-                      <TableCell>{formatDateBR(l.createdAt)}</TableCell>
+                      <TableCell>{formatInstantBR(l.createdAt)}</TableCell>
                       <TableCell className="max-w-[280px] truncate">{l.fileName ?? "—"}</TableCell>
                       <TableCell className="text-right tabular-nums">{l.total}</TableCell>
                       <TableCell className="text-right tabular-nums">{l.imported}</TableCell>

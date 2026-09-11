@@ -208,7 +208,7 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                 Total: {formatBRL(summary.total)}
               </p>
               {run.status === "PAID" && summary.pendingTotal > 0 && (
-                <p className="px-1 text-right text-dense font-medium text-warning-foreground">
+                <p className="px-1 text-right text-dense font-medium text-warning-ink">
                   Complemento a pagar: {formatBRL(summary.pendingTotal)}
                 </p>
               )}
@@ -268,10 +268,10 @@ export default async function FolhaPage({ searchParams }: { searchParams: Search
                 </TableRow>
                 {run.status === "PAID" && summary.pendingTotal > 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-right font-medium text-warning-foreground">
+                    <TableCell colSpan={3} className="text-right font-medium text-warning-ink">
                       Complemento a pagar (lançamentos pós-pagamento)
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-warning-foreground">
+                    <TableCell className="text-right font-semibold text-warning-ink">
                       {formatBRL(summary.pendingTotal)}
                     </TableCell>
                     <TableCell />

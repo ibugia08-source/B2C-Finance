@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { effectivePermissions } from "@/lib/permissions";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatDateBR } from "@/lib/format";
 
 /**
  * BUSCA GLOBAL (F1.14 · ref. 02 §3).
@@ -132,7 +132,7 @@ export async function globalSearch(termo: string): Promise<SearchGroup[]> {
       id: t.id,
       kind: "despesa" as const,
       title: t.description,
-      subtitle: `${formatBRL(t.amount)} · ${t.date.toLocaleDateString("pt-BR")}`,
+      subtitle: `${formatBRL(t.amount)} · ${formatDateBR(t.date)}`,
       href: `/despesas?mes=${t.date.getFullYear()}-${String(t.date.getMonth() + 1).padStart(2, "0")}`,
     })));
   }

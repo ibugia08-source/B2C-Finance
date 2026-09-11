@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatInstantBR } from "@/lib/format";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
@@ -112,7 +113,7 @@ export default async function RelatorioPage({
         <BrandLogo height={32} className="mb-3" />
         <h1 className="text-xl font-semibold">{def.title} — B2C Finance</h1>
         <p className="text-sm text-muted-foreground">
-          {def.description} · {query.period.label} · gerado em {new Date().toLocaleDateString("pt-BR")}
+          {def.description} · {query.period.label} · gerado em {formatInstantBR(new Date())}
         </p>
       </div>
 

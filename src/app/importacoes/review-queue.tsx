@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/empty-state";
 import { showUndoToast } from "@/components/undo-toast";
 import { encerrarPendenciaAction } from "@/lib/actions/import-review";
-import { formatDateBR } from "@/lib/format";
+import { formatDateBR, formatInstantBR } from "@/lib/format";
 import type { ItemRevisao } from "@/lib/services/import-review";
 
 /**
@@ -71,7 +71,7 @@ export function ReviewQueue({ itens }: { itens: ItemRevisao[] }) {
               <p className="mt-1 text-caption text-muted-foreground">
                 linha {item.sourceRow}
                 {item.arquivo ? ` de ${item.arquivo}` : ""} · importada em{" "}
-                {formatDateBR(item.quando)}
+                {formatInstantBR(item.quando)}
                 {item.entityId ? "" : " · não chegou a ser gravada"}
               </p>
             </div>

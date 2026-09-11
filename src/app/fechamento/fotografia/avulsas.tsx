@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { askReason } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { criarFotografiaAvulsaAction } from "@/lib/actions/closing";
-import { formatDateBR } from "@/lib/format";
+import { formatDateBR, formatInstantBR } from "@/lib/format";
 
 /**
  * FOTOGRAFIAS AVULSAS (F2.9 · 01 §5.7).
@@ -96,7 +96,7 @@ export function Avulsas({
                 <Camera className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                 <span className="flex-1 text-body font-medium">{f.name}</span>
                 <span className="text-caption text-muted-foreground">
-                  {formatDateBR(f.createdAt)}
+                  {formatInstantBR(f.createdAt)}
                   {f.closedBy ? ` · ${f.closedBy}` : ""}
                 </span>
                 <code className="font-mono text-caption text-text-faint">

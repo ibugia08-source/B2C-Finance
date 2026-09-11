@@ -1,7 +1,7 @@
 import { History, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatDateBR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,7 +44,7 @@ const ROLE_LABEL: Record<string, string> = {
   SDR_ORIGIN: "SDR de origem",
 };
 
-const data = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
+const data = (iso: string) => formatDateBR(iso);
 
 /** Valor de referência do termo: mensal no MRR, total no TCV. */
 function valorDe(t: TermoLinha): number {

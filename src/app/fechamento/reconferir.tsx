@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { askReason } from "@/components/ui/confirm-dialog";
 import { showUndoToast } from "@/components/undo-toast";
 import { marcarReconferidoAction } from "@/lib/actions/closing";
-import { formatDateBR } from "@/lib/format";
+import { formatDateBR, formatInstantBR } from "@/lib/format";
 
 /**
  * POR QUE ESTE MÊS PRECISA SER RECONFERIDO (F2.6 · 01 §5.5).
@@ -43,19 +43,19 @@ export function Reconferir({
             <TriangleAlert className="h-4 w-4 text-warning" aria-hidden />
           </span>
           <div>
-            <p className="text-body font-medium text-warning-foreground">
+            <p className="text-body font-medium text-warning-ink">
               Este mês merece uma reconferida
             </p>
             <ul className="mt-1 space-y-1">
               {motivos.map((m, i) => (
-                <li key={i} className="text-dense text-warning-foreground/90">
+                <li key={i} className="text-dense text-warning-ink/90">
                   {m.dependsOnCompetence} foi reaberto (versão {m.originVersion})
-                  {m.markedBy ? ` por ${m.markedBy}` : ""} em {formatDateBR(m.markedAt)}:
+                  {m.markedBy ? ` por ${m.markedBy}` : ""} em {formatInstantBR(m.markedAt)}:
                   <span className="italic"> “{m.reason}”</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-1.5 text-caption text-warning-foreground/80">
+            <p className="mt-1.5 text-caption text-warning-ink/80">
               Os números deste mês foram calculados sobre um passado que mudou
               depois. Eles não foram apagados — só precisam de uma segunda
               olhada.

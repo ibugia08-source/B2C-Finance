@@ -36,21 +36,21 @@ export function SnapshotBanner({
       role="status"
       className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-2.5"
     >
-      <span className="inline-flex items-center gap-1.5 text-dense font-semibold text-warning-foreground">
+      <span className="inline-flex items-center gap-1.5 text-dense font-semibold text-warning-ink">
         <Camera className="h-3.5 w-3.5" aria-hidden />
         Fotografia
       </span>
-      <span className="text-dense text-warning-foreground/90">
+      <span className="text-dense text-warning-ink/90">
         {monthLabel(new Date(ano, mes - 1, 1))} · versão {versao}
         {fechadoPor ? ` · fechado por ${fechadoPor}` : ""}
         {fechadoEm ? ` em ${formatDateBR(fechadoEm)}` : ""}
       </span>
       {origem === "IMPORTADA" ? (
-        <span className="rounded-pill border border-warning/40 px-2 py-0.5 text-caption font-medium text-warning-foreground">
+        <span className="rounded-pill border border-warning/40 px-2 py-0.5 text-caption font-medium text-warning-ink">
           origem: importação de planilha
         </span>
       ) : null}
-      <span className="text-caption text-warning-foreground/80">
+      <span className="text-caption text-warning-ink/80">
         {origem === "IMPORTADA"
           ? "Retrato reconstruído a partir da planilha importada. Um fechamento nativo deste mês, quando houver, passa a valer no lugar."
           : "Este mês está fechado: os números são os do fechamento e não mudam mais. Para alterá-los é preciso reabrir a competência."}

@@ -3,7 +3,7 @@ import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import type { Period } from "@/lib/period";
-import { formatBRL, formatDateBR, toNumber as n } from "@/lib/format";
+import { formatBRL, formatDateBR, toNumber as n, MONTHS_PT_SHORT } from "@/lib/format";
 import {
   getFinanceSummary,
   getCashSummary,
@@ -202,7 +202,7 @@ function lastMonths(count = 12): { y: number; m: number; label: string }[] {
     out.push({
       y: d.getFullYear(),
       m: d.getMonth() + 1,
-      label: d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", ""),
+      label: MONTHS_PT_SHORT[d.getMonth()],
     });
   }
   return out;

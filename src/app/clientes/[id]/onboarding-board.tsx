@@ -1,5 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
+import { formatDateBR } from "@/lib/format";
 import { CheckCircle2, Circle, Rocket, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -200,16 +201,16 @@ export function OnboardingBoard({
                     <div className="shrink-0 text-right text-caption">
                       {ok ? (
                         <span className="text-success">
-                          {t.doneAt ? new Date(t.doneAt).toLocaleDateString("pt-BR") : "concluída"}
+                          {t.doneAt ? formatDateBR(t.doneAt) : "concluída"}
                         </span>
                       ) : t.atrasada ? (
                         <span className="inline-flex items-center gap-1 text-destructive">
                           <TriangleAlert className="h-3 w-3" aria-hidden />
-                          venceu {t.dueAt ? new Date(t.dueAt).toLocaleDateString("pt-BR") : ""}
+                          venceu {t.dueAt ? formatDateBR(t.dueAt) : ""}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">
-                          até {t.dueAt ? new Date(t.dueAt).toLocaleDateString("pt-BR") : "—"}
+                          até {t.dueAt ? formatDateBR(t.dueAt) : "—"}
                         </span>
                       )}
                     </div>

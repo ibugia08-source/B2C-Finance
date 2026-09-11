@@ -54,7 +54,7 @@ export default async function ComparativoPage({
       <SeletorDeMeses a={compA} b={compB} />
 
       {!c.mesmaRegua ? (
-        <div className="mb-4 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-2.5 text-dense text-warning-foreground">
+        <div className="mb-4 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-2.5 text-dense text-warning-ink">
           Os dois meses foram medidos com versões diferentes do dicionário de
           métricas (v{c.a.versaoMetricas} e v{c.b.versaoMetricas}). A diferença
           entre eles inclui a mudança de fórmula, não só a mudança do negócio.

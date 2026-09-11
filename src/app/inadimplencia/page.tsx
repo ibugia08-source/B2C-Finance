@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR, monthRange } from "@/lib/format";
+import { formatBRL, formatDateBR, monthRange, formatInstantBR } from "@/lib/format";
 import {
   markOverdueBillings,
   getDelinquentClients,
@@ -172,7 +172,7 @@ async function InadimplenciaPageInner() {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {c.lastContactAt
-                        ? `${formatDateBR(c.lastContactAt)} · ${COLLECTION_STATUS_LABEL[c.lastContactStatus ?? ""] ?? ""}`
+                        ? `${formatInstantBR(c.lastContactAt)} · ${COLLECTION_STATUS_LABEL[c.lastContactStatus ?? ""] ?? ""}`
                         : "nunca contatado"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -244,7 +244,7 @@ async function InadimplenciaPageInner() {
                     </Field>
                     <Field label="Cobranças">{c.billingCount}</Field>
                     <Field label="Último contato">
-                      {c.lastContactAt ? formatDateBR(c.lastContactAt) : "nunca"}
+                      {c.lastContactAt ? formatInstantBR(c.lastContactAt) : "nunca"}
                     </Field>
                   </div>
                   <MobileCardActions>

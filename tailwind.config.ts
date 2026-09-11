@@ -67,25 +67,33 @@ const config: Config = {
         /* ---- território de marca: login, PDF, e-mail (nunca no produto) ---- */
         navy: { DEFAULT: "hsl(var(--navy))", deep: "hsl(var(--navy-deep))" },
         /* ---- semântica de estado ---- */
+        /* Trio pareado (DS-01): `foreground` é a tinta do preenchimento
+           SÓLIDO; `ink` é a tinta de texto sobre `soft`, canvas ou card.
+           Trocar um pelo outro é o defeito de contraste que o gate de AA
+           agora reprova. */
         success: {
           DEFAULT: "hsl(var(--success))",
           soft: "hsl(var(--success-soft))",
           foreground: "hsl(var(--success-foreground))",
+          ink: "hsl(var(--success-ink))",
         },
         warning: {
           DEFAULT: "hsl(var(--warning))",
           soft: "hsl(var(--warning-soft))",
           foreground: "hsl(var(--warning-foreground))",
+          ink: "hsl(var(--warning-ink))",
         },
         danger: {
           DEFAULT: "hsl(var(--danger))",
           soft: "hsl(var(--danger-soft))",
           foreground: "hsl(var(--danger-foreground))",
+          ink: "hsl(var(--danger-ink))",
         },
         info: {
           DEFAULT: "hsl(var(--info))",
           soft: "hsl(var(--info-soft))",
           foreground: "hsl(var(--info-foreground))",
+          ink: "hsl(var(--info-ink))",
         },
         /* ---- dataviz: 6 séries validadas (02 §7.4) ---- */
         chart: {

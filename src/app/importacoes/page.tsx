@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { IMPORT_DEFS } from "@/lib/imports/definitions";
-import { formatDateBR } from "@/lib/format";
+import { formatDateBR, formatInstantBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -91,7 +91,7 @@ export default async function ImportacoesPage() {
               )}
               {history.map((b) => (
                 <TableRow key={b.id}>
-                  <TableCell className="text-sm">{formatDateBR(b.createdAt)}</TableCell>
+                  <TableCell className="text-sm">{formatInstantBR(b.createdAt)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{titles.get(b.module ?? "") ?? b.module}</Badge>
                   </TableCell>

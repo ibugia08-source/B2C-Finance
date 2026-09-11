@@ -6,7 +6,7 @@ import { periodoDe } from "@/lib/services/closing-period";
 import { lerFotografia } from "@/lib/snapshots/read";
 import { MetricCard } from "@/components/metric-card";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatBRL0, formatDateBR, parseBRL, parseMonthParam } from "@/lib/format";
+import { formatBRL, formatBRL0, formatDateBR, parseBRL, parseMonthParam, formatInstantBR } from "@/lib/format";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import {
@@ -270,7 +270,7 @@ async function RecebimentosPageInner({
       responsible: b.collector ?? b.client.salesOwner ?? null,
       removedInfo:
         status === "REMOVED"
-          ? `Removido${b.canceledAt ? ` em ${formatDateBR(b.canceledAt)}` : ""}${b.canceledBy ? ` por ${b.canceledBy}` : ""}${b.cancelReason ? ` — ${b.cancelReason}` : ""}. Continua na Gestão de Carteira.`
+          ? `Removido${b.canceledAt ? ` em ${formatInstantBR(b.canceledAt)}` : ""}${b.canceledBy ? ` por ${b.canceledBy}` : ""}${b.cancelReason ? ` — ${b.cancelReason}` : ""}. Continua na Gestão de Carteira.`
           : null,
       msg: msgOf(
         b.client.name,

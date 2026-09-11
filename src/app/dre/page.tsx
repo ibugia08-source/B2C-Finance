@@ -72,13 +72,13 @@ export default async function DrePage({
 
       {/* A cobertura vem ANTES dos números, de propósito. */}
       {!dre.cobertura.ligado || semCobertura > 0 ? (
-        <div className="mb-4 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-3 text-dense text-warning-foreground">
+        <div className="mb-4 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-3 text-dense text-warning-ink">
           <p className="font-medium">
             {!dre.cobertura.ligado
               ? "O razão está desligado neste ambiente."
               : `${semCobertura} dos 17 tipos de lançamento ainda não são gerados pelo produto.`}
           </p>
-          <p className="mt-0.5 text-warning-foreground/90">
+          <p className="mt-0.5 text-warning-ink/90">
             {!dre.cobertura.ligado
               ? "Sem ele não há lançamentos, e este DRE fica vazio. Ligar em produção depende do lançamento de abertura."
               : "As linhas correspondentes aparecem zeradas aqui — não porque valem zero, mas porque ainda não existe tela que as origine. Cada uma entra com a tarefa dela."}

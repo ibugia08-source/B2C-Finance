@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { requirePermission, can } from "@/lib/auth/viewer";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
-import { parseBRL, parseMonthParam, toNumber as n } from "@/lib/format";
+import { parseBRL, parseMonthParam, toNumber as n, formatDateBR } from "@/lib/format";
 import { getValidDueDateForMonth, addMonthsClamped } from "@/lib/financial/due-date";
 import { settleBilling as settleViaEngine } from "@/lib/engines/payment-engine";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
@@ -122,7 +122,7 @@ export async function renewClientFlow(
 
     // ===== 1-2-5) Contrato + cadastro + histórico numa TRANSAÇÃO =====
     const renewNote =
-      `Renovado em ${today.toLocaleDateString("pt-BR")}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
+      `Renovado em ${formatDateBR(today)}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
       (paymentMethod ? `, ${paymentMethod}` : "") +
       (details ? ` — ${details}` : "");
 

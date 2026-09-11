@@ -1,5 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
+import { formatInstantBR } from "@/lib/format";
 import { runWithOwner } from "@/lib/auth/owner-scope";
 import { revalidateAgency } from "@/lib/revalidate";
 import { generateContractCore } from "@/lib/services/contract-generation";
@@ -63,7 +64,7 @@ export async function submitPublicContractForm(
       const nameVar = variables.find((v) => v.clientField === "client.name");
       const respondent = nameVar ? (values[nameVar.rawName] ?? "").trim() : "";
       const name = `${template.name} — ${
-        respondent || `formulário ${new Date().toLocaleDateString("pt-BR")}`
+        respondent || `formulário ${formatInstantBR(new Date())}`
       }`;
 
       const result = await generateContractCore({

@@ -9,7 +9,7 @@ import {
   RevenueType,
 } from "@prisma/client";
 import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
-import { formatBRL, parseBRL, parseDateBR, toNumber as n, clean } from "@/lib/format";
+import { formatBRL, parseBRL, parseDateBR, toNumber as n, clean, formatDateBR } from "@/lib/format";
 import type { ActionResult } from "./clients";
 
 
@@ -766,7 +766,7 @@ export async function rescheduleBilling(
         billingId: id,
         clientId: b.clientId,
         status: b.collectionStatus,
-        message: `Vencimento reagendado para ${newDue.toLocaleDateString("pt-BR")}.`,
+        message: `Vencimento reagendado para ${formatDateBR(newDue)}.`,
       },
     });
     revalidateBilling(b.clientId);

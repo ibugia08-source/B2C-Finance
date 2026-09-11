@@ -1,4 +1,4 @@
-import { MONTHS_PT } from "@/lib/format";
+import { MONTHS_PT, WORKSPACE_TIMEZONE } from "@/lib/format";
 /**
  * COMPETÊNCIA — dimensão temporal do resultado (ref. 01 §3.15).
  *
@@ -23,10 +23,11 @@ export type Competence = string;
 const RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 /**
- * Fuso do workspace (01 §3.4). Enquanto houver um único workspace, é
- * constante; a partir da Fase 1 vem de Workspace.timezone.
+ * Fuso do workspace (01 §3.4). Declarado em lib/format — que é onde os
+ * formatadores de instante precisam dele — e reexportado aqui para os ~20
+ * módulos que já importavam daqui.
  */
-export const WORKSPACE_TIMEZONE = "America/Bahia";
+export { WORKSPACE_TIMEZONE };
 const MESES = MONTHS_PT;
 
 /** `(2026, 3)` → `"2026-03"`. Mês 1-12. */

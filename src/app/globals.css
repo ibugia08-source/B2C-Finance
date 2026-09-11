@@ -98,19 +98,32 @@
     --brand-foreground: 0 0% 100%;
     --ring: 214 73% 48%;
 
-    /* Semântica de estado — sólido, suave e tinta, nos dois temas */
+    /* Semântica de estado — TRIO PAREADO, nos dois temas (DS-01).
+       Cada estado tem três papéis e eles NÃO se substituem:
+         --x            preenchimento sólido / traço / ícone
+         --x-soft       superfície suave de aviso
+         --x-foreground tinta que só vale SOBRE o preenchimento sólido
+         --x-ink        tinta de TEXTO sobre soft, canvas ou card
+       Usar `foreground` fora do preenchimento sólido é o defeito que a
+       auditoria de 11/09/2026 mediu no DRE: branco sobre âmbar claro dá
+       1,12:1 e a tinta escura sobre âmbar escuro dá 1,44:1. O gate
+       scripts/auditoria-aa.mjs agora reprova esse par. */
     --success: 151 67% 26%;
     --success-soft: 150 55% 93%;
     --success-foreground: 0 0% 100%;
+    --success-ink: 151 67% 26%;
     --warning: 39 100% 27%;
     --warning-soft: 40 90% 92%;
     --warning-foreground: 0 0% 100%;
+    --warning-ink: 39 100% 27%;
     --danger: 353 57% 47%;
     --danger-soft: 353 80% 96%;
     --danger-foreground: 0 0% 100%;
+    --danger-ink: 353 57% 47%;
     --info: 200 85% 30%;
     --info-soft: 200 80% 94%;
     --info-foreground: 0 0% 100%;
+    --info-ink: 200 85% 30%;
 
     /* Dataviz — 6 séries daltônico-seguras começando pelo acento.
        Validadas por scripts/validate_palette.js: banda de luminosidade,
@@ -196,15 +209,19 @@
     --success: 149 60% 63%;
     --success-soft: 150 40% 17%;
     --success-foreground: 214 59% 11%;
+    --success-ink: 149 60% 63%;
     --warning: 40 85% 69%;
     --warning-soft: 38 45% 18%;
     --warning-foreground: 214 59% 11%;
+    --warning-ink: 40 85% 69%;
     --danger: 354 100% 78%;
     --danger-soft: 353 40% 22%;
     --danger-foreground: 214 59% 11%;
+    --danger-ink: 354 100% 78%;
     --info: 199 85% 70%;
     --info-soft: 199 45% 18%;
     --info-foreground: 214 59% 11%;
+    --info-ink: 199 85% 70%;
 
     /* Mesma família, na banda de luminosidade do escuro (0.48-0.67):
        clarear demais faz a série florescer sobre o canvas. */
@@ -358,6 +375,14 @@
     --warning: 39 100% 27%;
     --danger: 353 57% 47%;
     --info: 200 85% 30%;
+    --success-ink: 151 67% 26%;
+    --warning-ink: 39 100% 27%;
+    --danger-ink: 353 57% 47%;
+    --info-ink: 200 85% 30%;
+    --success-soft: 150 55% 93%;
+    --warning-soft: 40 90% 92%;
+    --danger-soft: 353 80% 96%;
+    --info-soft: 200 80% 94%;
     --chart-grid: 214 30% 89%;
   }
 }

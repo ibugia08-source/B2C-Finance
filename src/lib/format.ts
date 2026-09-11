@@ -96,17 +96,82 @@ export function parseBRL(value: string): number {
   return isNaN(n) ? 0 : n;
 }
 
-export function formatDateBR(date: Date | string | null | undefined): string {
-  if (!date) return "";
+/**
+ * FUSO DO WORKSPACE (01 §3.4). Vive aqui porque é o formatador que mais
+ * precisa dele; `lib/competence` reexporta para não duplicar a constante.
+ */
+export const WORKSPACE_TIMEZONE = "America/Bahia";
+
+/**
+ * DATA CIVIL × INSTANTE DE EVENTO (DA-03 · auditoria de 11/09/2026).
+ *
+ * O sistema guarda dois tipos de data no mesmo tipo `DateTime`, e confundir
+ * os dois foi o que fez a MESMA renovação aparecer como 29/09 na ficha e
+ * 30/09 no contrato:
+ *
+ *   DATA CIVIL — vencimento, renovação, competência, início de contrato.
+ *     É um dia do calendário, sem hora. Fica ancorada em MEIA-NOITE UTC.
+ *     Formatar no fuso do LEITOR volta um dia: 2026-09-30T00:00Z lido em
+ *     São Paulo (UTC−3) é 29/09 às 21h. Como o servidor da Vercel roda em
+ *     UTC e o navegador do usuário roda em São Paulo, a mesma data saía
+ *     certa no componente de servidor e errada no de cliente — exatamente
+ *     a divergência que a auditoria mediu entre ficha e contrato.
+ *     → formatDateBR fixa UTC e passa a valer igual nos dois lados.
+ *
+ *   INSTANTE DE EVENTO — createdAt, generatedAt, markedAt, lastContactAt.
+ *     É um momento no tempo. Aí o fuso do workspace é o certo: quem gravou
+ *     às 23h de Salvador gravou no dia 10, não no dia 11.
+ *     → formatInstantBR / formatInstantTimeBR.
+ *
+ * Na dúvida entre as duas, pergunte: "se eu mudar de fuso, esse dia muda?"
+ * Vencimento não muda. Horário de gravação muda.
+ */
+const FMT_DATA_CIVIL = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+function paraData(date: Date | string | null | undefined): Date | null {
+  if (!date) return null;
   const d = typeof date === "string" ? new Date(date) : date;
-  if (isNaN(d.getTime())) return "";
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/** DATA CIVIL (vencimento, renovação, início) — sempre em UTC. */
+export function formatDateBR(date: Date | string | null | undefined): string {
+  const d = paraData(date);
+  return d ? FMT_DATA_CIVIL.format(d) : "";
+}
+
+/** INSTANTE DE EVENTO → só o dia, no fuso do workspace. */
+export function formatInstantBR(date: Date | string | null | undefined): string {
+  const d = paraData(date);
+  if (!d) return "";
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: WORKSPACE_TIMEZONE,
   }).format(d);
 }
 
+/** INSTANTE DE EVENTO → dia e hora, no fuso do workspace. */
+export function formatInstantTimeBR(date: Date | string | null | undefined): string {
+  const d = paraData(date);
+  if (!d) return "";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: WORKSPACE_TIMEZONE,
+  }).format(d);
+}
+
+/** DATA CIVIL → "YYYY-MM-DD" para <input type="date">. UTC de propósito. */
 export function formatDateInput(date: Date | string | null | undefined): string {
   if (!date) return "";
   const d = typeof date === "string" ? new Date(date) : date;

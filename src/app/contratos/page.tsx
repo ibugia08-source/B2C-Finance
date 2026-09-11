@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, formatInstantBR } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -180,7 +180,7 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
                 )}
 
                 <p className="text-xs text-muted-foreground mt-auto">
-                  Criado em {formatDateBR(t.createdAt)} · atualizado {formatDateBR(t.updatedAt)}
+                  Criado em {formatInstantBR(t.createdAt)} · atualizado {formatInstantBR(t.updatedAt)}
                 </p>
 
                 <div className="border-t pt-2 -mx-1">
@@ -224,7 +224,7 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
                       "—"
                     )}
                   </Field>
-                  <Field label="Gerado em">{formatDateBR(g.generatedAt)}</Field>
+                  <Field label="Gerado em">{formatInstantBR(g.generatedAt)}</Field>
                   <MobileCardActions>
                     <GeneratedContractActions contract={g} />
                   </MobileCardActions>
@@ -264,7 +264,7 @@ export default async function ContratosPage({ searchParams }: { searchParams: Se
                       )}
                     </TableCell>
                     <TableCell className="max-w-[180px] truncate">{g.template?.name ?? "—"}</TableCell>
-                    <TableCell>{formatDateBR(g.generatedAt)}</TableCell>
+                    <TableCell>{formatInstantBR(g.generatedAt)}</TableCell>
                     <TableCell>
                       <Badge variant={generatedStatusVariant(g.status)}>
                         {GENERATED_STATUS_LABEL[g.status]}

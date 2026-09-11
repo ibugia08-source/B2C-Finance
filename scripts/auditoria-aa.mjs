@@ -6,7 +6,7 @@
  *
  * O que uma máquina CONSEGUE auditar, auditado sempre; a sessão com leitor
  * de tela e a navegação 100% por teclado continuam sendo validação com
- * gente (mesma honestidade de S25/S2/S24). Cinco verificações:
+ * gente (mesma honestidade de S25/S2/S24). Seis verificações:
  *
  *  1. <img> sem alt (alt="" decorativo é correto; AUSENTE é grave).
  *  2. Botão só-de-ícone sem nome acessível (aria-label, title ou sr-only).
@@ -14,6 +14,7 @@
  *  4. Fundamentos do documento: lang, prefers-reduced-motion, foco visível.
  *  5. CONTRASTE AA (4,5:1) dos pares de texto centrais do tema, claro e
  *     escuro, calculado dos tokens de verdade — não de uma tabela à parte.
+ *  6. Tinta de estado usada fora do preenchimento sólido (DS-01).
  */
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
@@ -124,6 +125,8 @@ const claro = coletarTokens(rootBloco);
 const escuro = new Map([...claro, ...coletarTokens(darkBloco)]);
 
 // Os pares de TEXTO que carregam o produto (AA texto normal = 4,5:1).
+// O trio de cada estado entra aqui desde DS-01: a auditoria de 11/09/2026
+// achou 1,12:1 no DRE porque o gate só olhava os 6 pares neutros.
 const PARES = [
   ["foreground", "background"],
   ["foreground", "card"],
@@ -131,6 +134,25 @@ const PARES = [
   ["muted-foreground", "card"],
   ["primary-foreground", "primary"],
   ["destructive-foreground", "destructive"],
+  // tinta de estado sobre a própria superfície suave
+  ["success-ink", "success-soft"],
+  ["warning-ink", "warning-soft"],
+  ["danger-ink", "danger-soft"],
+  ["info-ink", "info-soft"],
+  // e a mesma tinta sobre canvas e card, onde ela também aparece
+  ["success-ink", "background"],
+  ["warning-ink", "background"],
+  ["danger-ink", "background"],
+  ["info-ink", "background"],
+  ["success-ink", "card"],
+  ["warning-ink", "card"],
+  ["danger-ink", "card"],
+  ["info-ink", "card"],
+  // tinta do preenchimento sólido sobre o sólido
+  ["success-foreground", "success"],
+  ["warning-foreground", "warning"],
+  ["danger-foreground", "danger"],
+  ["info-foreground", "info"],
 ];
 for (const [tema, tokens] of [["claro", claro], ["escuro", escuro]]) {
   for (const [fg, bg] of PARES) {
@@ -147,6 +169,40 @@ for (const [tema, tokens] of [["claro", claro], ["escuro", escuro]]) {
       graves.push(
         `tema ${tema}: contraste ${fg} sobre ${bg} = ${c.toFixed(2)}:1 (AA exige 4,5:1).`
       );
+  }
+}
+
+// ---------- 6. `-foreground` de estado fora do preenchimento sólido ----------
+// A tinta `--x-foreground` só é legível SOBRE `bg-x`. Num fundo suave ou
+// neutro ela dá ~1,1:1. Quem quer texto colorido usa `text-x-ink`.
+const ESTADOS = ["success", "warning", "danger", "info"];
+for (const p of [...arquivos("src", [".tsx"])]) {
+  const s = readFileSync(p, "utf8");
+  for (const est of ESTADOS) {
+    const marca = `text-${est}-foreground`;
+    let i = -1;
+    while ((i = s.indexOf(marca, i + 1)) !== -1) {
+      // Delimita a className onde a marca vive: entre as aspas mais próximas.
+      const ini = Math.max(
+        s.lastIndexOf('"', i), s.lastIndexOf("'", i), s.lastIndexOf("`", i)
+      );
+      const fim = Math.min(
+        ...['"', "'", "`"].map((q) => {
+          const j = s.indexOf(q, i);
+          return j === -1 ? Infinity : j;
+        })
+      );
+      const classe = s.slice(ini + 1, fim === Infinity ? i + marca.length : fim);
+      // Legítimo só quando o MESMO bloco pinta o fundo sólido do estado.
+      const temSolido = new RegExp(`bg-${est}(?![\\w-])`).test(classe);
+      if (!temSolido) {
+        const linha = s.slice(0, i).split("\n").length;
+        graves.push(
+          `${p}:${linha}: ${marca} fora de bg-${est} (DS-01: tinta do sólido ` +
+            `sobre fundo suave dá ~1,1:1 — use text-${est}-ink).`
+        );
+      }
+    }
   }
 }
 

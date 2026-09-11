@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBRL, formatDateBR } from "@/lib/format";
+import { formatBRL, formatDateBR, formatInstantBR } from "@/lib/format";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { FileSignature, Download } from "lucide-react";
 import { ClientDialog } from "../client-dialog";
@@ -368,7 +368,7 @@ export default async function ClientDetailPage({
                           <p className="font-medium text-sm truncate">{g.name}</p>
                           <p className="text-xs text-muted-foreground">
                             {g.template?.name ? `modelo ${g.template.name} · ` : ""}
-                            gerado em {formatDateBR(g.generatedAt)}
+                            gerado em {formatInstantBR(g.generatedAt)}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -406,7 +406,7 @@ export default async function ClientDetailPage({
                         <div className="min-w-0">
                           <p className="font-medium text-sm truncate">{d.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {DOCUMENT_TYPE_LABEL[d.documentType]} · {formatDateBR(d.createdAt)}
+                            {DOCUMENT_TYPE_LABEL[d.documentType]} · {formatInstantBR(d.createdAt)}
                             {d.description ? ` · ${d.description}` : ""}
                           </p>
                         </div>
@@ -640,7 +640,7 @@ export default async function ClientDetailPage({
                             <p className="font-medium text-sm">{n.title}</p>
                             <p className="text-xs text-muted-foreground">
                               {(n.type && NOTE_TYPE_LABEL[n.type]) || "Observação"} ·{" "}
-                              {formatDateBR(n.updatedAt)}
+                              {formatInstantBR(n.updatedAt)}
                             </p>
                           </div>
                           <NoteActions clientId={client.id} note={n} />
