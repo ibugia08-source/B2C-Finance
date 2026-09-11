@@ -28,7 +28,9 @@
     "verify:snapshots": "tsx scripts/verify-snapshots.ts",
     "outbox:worker": "tsx scripts/outbox-worker.ts",
     "relatorios:agendados": "tsx scripts/relatorios-agendados.ts",
-    "audit:aa": "node scripts/auditoria-aa.mjs --ci"
+    "audit:aa": "node scripts/auditoria-aa.mjs --ci",
+    "seed:relatorios": "tsx scripts/semear-relatorios-estresse.ts",
+    "verificar:pdfs": "node scripts/verificar-pdfs.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed-dev.ts"
@@ -62,6 +64,8 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
+    "pdfjs-dist": "^6.3.289",
+    "playwright-core": "^1.63.0",
     "postcss": "^8.4.49",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.14",

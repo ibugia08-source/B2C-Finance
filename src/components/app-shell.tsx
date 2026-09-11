@@ -16,6 +16,10 @@ import type { ScopeOptions } from "@/lib/services/org-scope";
 
 // /f = formulário público de contratos (sem casca, como o login).
 const NO_SHELL = ["/login", "/f"];
+// Documento de exportação (P0.1): qualquer rota terminada em /pdf é papel,
+// não tela — casca, busca e navegação não existem nele. É sufixo e não
+// prefixo porque o documento mora dentro da rota do relatório que o gerou.
+const SUFIXO_DOCUMENTO = "/pdf";
 
 /**
  * CASCA DO B2C FINANCE: barra global (SiteHeader) + conteúdo + navegação
@@ -41,7 +45,9 @@ export function AppShell({
   naoLidas?: number;
 }) {
   const path = usePathname() ?? "";
-  const bare = NO_SHELL.some((p) => path === p || path.startsWith(p + "/"));
+  const bare =
+    NO_SHELL.some((p) => path === p || path.startsWith(p + "/")) ||
+    path.endsWith(SUFIXO_DOCUMENTO);
   if (bare) return <>{children}</>;
 
   return (

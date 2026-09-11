@@ -100,3 +100,83 @@ jobs:
       - name: Integridade das fotografias
         run: npm run verify:snapshots
 
+  # P0.1 da auditoria de relatórios (10/09/2026): os PDFs perdiam coluna e
+  # linha, e o defeito só aparecia ABRINDO o arquivo. Esta etapa gera os 18
+  # documentos num Chrome de verdade, extrai o TEXTO de dentro do PDF e
+  # confere colunas, contagem de linhas, páginas órfãs e transbordo. Fica em
+  # job próprio porque baixa um navegador — o portão de qualidade principal
+  # não pode ficar mais lento por causa disto.
+  pdfs:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: b2cdev
+          POSTGRES_PASSWORD: b2cdev
+          POSTGRES_DB: b2c_finance_test
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: local
+      ALLOW_DESTRUCTIVE: 'true'
+      SESSION_SECRET: ci-secret-nao-usado-em-runtime-32-caracteres
+      POSTGRES_PRISMA_URL: postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_test
+      POSTGRES_URL_NON_POOLING: postgres://b2cdev:b2cdev@127.0.0.1:55432/b2c_finance_test
+      ADMIN_PASSWORD: senha-descartavel-do-ci-nao-usada-em-runtime
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Preparar roles do banco
+        run: |
+          PGPASSWORD=b2cdev psql -h 127.0.0.1 -p 55432 -U b2cdev -d b2c_finance_test \
+            -c "DO \$\$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+                END \$\$;"
+
+      - name: Migrations e seeds
+        run: |
+          npx prisma migrate deploy
+          npx tsx prisma/seed-dev.ts
+
+      # Os cinco tamanhos do teste 12 (0, 1, 8, 9 e 130 registros), com nomes
+      # longos, acentos e valor negativo. Sem eles a verificação passaria num
+      # banco de três linhas e não provaria paginação nenhuma.
+      - name: Dataset de estresse dos relatórios
+        run: npm run seed:relatorios
+
+      - name: Navegador headless
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Build e servidor
+        run: |
+          npm run build:ci
+          npx next start -p 3100 &
+          until curl -sf -o /dev/null http://127.0.0.1:3100/login; do sleep 2; done
+        env:
+          NODE_ENV: production
+
+      - name: Integridade dos PDFs (18 relatórios + 5 tamanhos)
+        run: npm run verificar:pdfs -- --base http://127.0.0.1:3100 --saida docs/pdfs-v2/ci
+
+      - name: Guardar os PDFs gerados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdfs-relatorios
+          path: docs/pdfs-v2/ci
+          if-no-files-found: ignore

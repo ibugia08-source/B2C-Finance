@@ -45,3 +45,9 @@ docs/B2C-Finance-Documentacao-Consolidada.html
 .backups/
 # Relatórios gerados com dados de clientes — ficam fora do repositório.
 relatorios-julho/
+
+# PDFs gerados pela verificação de relatórios: são para COMPARAR localmente
+# com docs/pdfs-originais da auditoria, e carregam nome, valor e situação de
+# clientes reais do banco de trabalho. Ficam no disco, nunca no repositório —
+# mesma regra de .backups/ e relatorios-julho/.
+docs/pdfs-v2/

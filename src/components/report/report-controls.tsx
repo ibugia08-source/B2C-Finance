@@ -223,8 +223,18 @@ export function ReportControls(cfg: ReportControlsConfig) {
             </Button>
           </>
         )}
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => window.print()}>
-          <Printer className="h-3.5 w-3.5 mr-1" /> Imprimir / PDF
+        {/* PDF = documento próprio, não a impressão desta tela. A tela tem
+            a tabela num contêiner com rolagem horizontal, e o que rola no
+            monitor SOME no papel — foi a causa dos nove relatórios cortados
+            na auditoria de 10/09/2026 (P0.1). */}
+        <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+          <a
+            href={`/relatorios/${cfg.reportKey}/pdf${exportQS ? `?${exportQS}` : ""}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Printer className="h-3.5 w-3.5 mr-1" /> PDF
+          </a>
         </Button>
       </div>
     </div>
