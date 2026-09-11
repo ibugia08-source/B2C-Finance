@@ -57,12 +57,54 @@ describe("F3.10 — os blocos da semana", () => {
     });
   });
 
-  it("o funil ainda não é medido — e o bloco DIZ isso", async () => {
+  it("o pipeline é medido de verdade — sem funil parado, o bloco fica OK", async () => {
+    // Até 11/09/2026 este bloco vinha como NAO_MEDIDO e o resumo dizia que
+    // "o funil comercial chega na Fase 4" — texto de planejamento que ficou
+    // em produção depois de o módulo existir. A auditoria flagrou (UX-13).
     await asOwner(dono, async () => {
       const r = await rotinaSemanal(new Date(2027, 3, 14));
       const pipeline = r.blocos.find((b) => b.id === "pipeline")!;
-      expect(pipeline.situacao).toBe("NAO_MEDIDO");
-      expect(pipeline.resumo).toMatch(/Fase 4/);
+      expect(pipeline.situacao).toBe("OK");
+      expect(pipeline.resumo).not.toMatch(/Fase 4|F4\./);
+      expect(pipeline.href).toBe("/funil");
+    });
+  });
+
+  it("oportunidade parada há mais de 7 dias acende o bloco do pipeline", async () => {
+    await asOwner(dono, async () => {
+      const hoje = new Date(2027, 3, 14);
+      const criada = await prisma.opportunity.create({
+        data: {
+          title: "Proposta esquecida",
+          amount: 4_500,
+          stage: "PROPOSTA",
+          closer: "Ana",
+        },
+      });
+      // `updatedAt` é @updatedAt: o Prisma o reescreve em toda gravação, então
+      // envelhecer a linha exige SQL cru — é o mesmo motivo pelo qual o
+      // serviço usa esse campo como relógio de "parada".
+      await prisma.$executeRaw`
+        UPDATE "Opportunity" SET "updatedAt" = ${new Date(2027, 2, 20)}
+        WHERE id = ${criada.id}`;
+
+      const r = await rotinaSemanal(hoje);
+      const pipeline = r.blocos.find((b) => b.id === "pipeline")!;
+      expect(pipeline.situacao).toBe("ATENCAO");
+      expect(pipeline.resumo).toMatch(/1 oportunidade parada/);
+      expect(pipeline.itens[0].titulo).toBe("Proposta esquecida");
+      expect(pipeline.itens[0].detalhe).toContain("Proposta");
+      expect(pipeline.itens[0].valor).toBe(4_500);
+
+      // Ganha ou perdida não é pipeline parado: a venda acabou.
+      await prisma.opportunity.update({
+        where: { id: criada.id },
+        data: { stage: "GANHA", wonAt: hoje },
+      });
+      const depois = await rotinaSemanal(hoje);
+      expect(depois.blocos.find((b) => b.id === "pipeline")!.situacao).toBe("OK");
+
+      await prisma.opportunity.delete({ where: { id: criada.id } });
     });
   });
 

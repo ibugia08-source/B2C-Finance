@@ -82,6 +82,7 @@ export const NAV_AREAS: NavArea[] = [
       { href: "/cobrancas", label: "Mês (Recebimentos)", permission: "recebimentos.visualizar" },
       { href: "/inadimplencia", label: "Inadimplência", permission: "recebimentos.ver_inadimplencia" },
       { href: "/despesas", label: "Contas a Pagar", permission: "despesas.visualizar" },
+      { href: "/caixa", label: "Caixa e contas", permission: "caixa.visualizar" },
       { href: "/folha", label: "Folha", permission: "folha.visualizar" },
       { href: "/fechamento", label: "Fechamento do mês", permission: "fechamento.fechar" },
       { href: "/fechamento/fotografia", label: "Fotografia do mês", permission: "fechamento.fechar" },

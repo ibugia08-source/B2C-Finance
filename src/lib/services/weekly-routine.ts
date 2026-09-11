@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { toNumber as n } from "@/lib/format";
+import { toNumber as n, toNumber, formatBRL, formatDateBR } from "@/lib/format";
 import { competenceOf } from "@/lib/competence";
 import { getLiquidez } from "@/lib/services/liquidity";
 import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
@@ -65,6 +65,17 @@ export type RotinaSemanal = {
   totalDeItens: number;
 };
 
+/** Etapas do funil em português — o enum não vai para a tela (RP-06). */
+const ETAPA_LABEL: Record<string, string> = {
+  NOVA: "Nova",
+  QUALIFICACAO: "Qualificação",
+  REUNIAO: "Reunião",
+  PROPOSTA: "Proposta",
+  NEGOCIACAO: "Negociação",
+  GANHA: "Ganha",
+  PERDIDA: "Perdida",
+};
+
 /** A segunda-feira da semana de uma data (domingo pertence à semana anterior). */
 export function segundaDa(d: Date): Date {
   const base = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -103,7 +114,8 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
     renovacoes,
     renovadosRecentemente,
     promessas,
-    notasRascunho,
+    pipelineParado,
+    notasEmRascunho,
     liquidez,
     recebidoSemana,
     recebidoAnterior,
@@ -154,7 +166,38 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
         billing: { select: { id: true, amount: true, paidTotal: true, status: true } },
       },
     }),
-    prisma.fiscalDocument.count({ where: { status: "DRAFT" } }),
+    // 4. Pipeline parado: oportunidade aberta cuja etapa não muda há 7 dias.
+    //
+    // O bloco dizia "o funil chega na Fase 4" e aparecia como NÃO MEDIDO —
+    // texto de desenvolvimento que sobreviveu à entrega do módulo e que a
+    // auditoria de 11/09/2026 flagrou (UX-13). O funil existe; a medida
+    // passa a ser real.
+    //
+    // `updatedAt` é o relógio certo aqui: a gravação de etapa toca a linha.
+    // Uma oportunidade recém-criada e ainda não mexida entra pela mesma
+    // régua — sete dias sem andar é sete dias sem andar.
+    prisma.opportunity.findMany({
+      where: {
+        stage: { notIn: ["GANHA", "PERDIDA"] },
+        updatedAt: { lt: new Date(hoje.getTime() - 7 * 86_400_000) },
+      },
+      orderBy: { updatedAt: "asc" },
+      select: {
+        id: true, title: true, amount: true, stage: true,
+        closer: true, updatedAt: true,
+      },
+    }),
+    // 6. Notas em rascunho. Buscamos a LISTA, não a contagem: a nota se liga
+    // a um cliente, e é a ficha dele que resolve a pendência. O bloco
+    // apontava para /relatorios, que não tem nada a ver com a tarefa (UX-13).
+    prisma.fiscalDocument.findMany({
+      where: { status: "DRAFT" },
+      orderBy: { issuedAt: "asc" },
+      select: {
+        id: true, number: true, type: true, amount: true, issuedAt: true,
+        clientId: true, client: { select: { name: true } },
+      },
+    }),
     getLiquidez(new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).toISOString()),
     somaRecebida(inicio, fim),
     somaRecebida(inicioAnterior, inicio),
@@ -237,8 +280,32 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       })),
       href: "/inadimplencia",
     },
-    naoMedido(4, "pipeline", "Pipeline parado há 7 dias ou mais", "Comercial",
-      "O funil comercial chega na Fase 4 (F4.1-F4.4). Até lá este bloco não é medido — e é dito, em vez de aparecer verde."),
+    {
+      id: "pipeline", numero: 4,
+      titulo: "Pipeline parado há 7 dias ou mais",
+      dono: "Comercial",
+      situacao: pipelineParado.length === 0 ? "OK" : "ATENCAO",
+      resumo:
+        pipelineParado.length === 0
+          ? "Nenhuma oportunidade aberta parada há uma semana."
+          : `${pipelineParado.length} ${pipelineParado.length === 1 ? "oportunidade parada" : "oportunidades paradas"} há sete dias ou mais, somando ${formatBRL(
+              pipelineParado.reduce((t, o) => t + toNumber(o.amount), 0)
+            )} em negociação.`,
+      itens: pipelineParado.slice(0, 8).map((o) => ({
+        chave: `pipeline:${o.id}`,
+        titulo: o.title,
+        detalhe: `${ETAPA_LABEL[o.stage] ?? o.stage} · parada desde ${formatDateBR(o.updatedAt)}${
+          o.closer ? ` · ${o.closer}` : ""
+        }`,
+        valor: toNumber(o.amount),
+        // O quadro do funil ainda não aceita filtro por etapa na URL, então
+        // o item leva ao quadro e o detalhe acima diz em qual coluna procurar.
+        // Prometer `?etapa=` que a página ignora seria o mesmo defeito que a
+        // auditoria achou nos alertas que "abrem" numa lista geral (UX-12).
+        href: "/funil",
+      })),
+      href: "/funil",
+    },
     {
       id: "caixa", numero: 5,
       titulo: "Caixa projetado",
@@ -249,7 +316,7 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
           ? "A projeção de 30 dias fica NEGATIVA — decidir esta semana o que adiar ou antecipar."
           : "A projeção de 30 dias segue positiva.",
       itens: [
-        { chave: "caixa:disponivel", titulo: "Disponível hoje", detalhe: "sem as reservas restritas", valor: liquidez.disponivel, href: "/caixa" },
+        { chave: "caixa:disponivel", titulo: "Disponível hoje", detalhe: "saldo das contas menos o compromisso imediato", valor: liquidez.disponivel, href: "/caixa" },
         { chave: "caixa:entradas", titulo: "A receber em 30 dias", detalhe: null, valor: liquidez.entradas30d, href: "/cobrancas" },
         { chave: "caixa:saidas", titulo: "A pagar em 30 dias", detalhe: null, valor: -liquidez.saidas30d, href: "/despesas" },
         { chave: "caixa:projecao", titulo: "Projeção em 30 dias", detalhe: null, valor: liquidez.projecao30d, href: "/caixa" },
@@ -263,13 +330,25 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       // DECIDIDO 19.38: emissão NÃO é obrigatória e não existe cadastro de
       // obrigatoriedade. O bloco cobra o que dá para cobrar sem inventar a
       // regra que a direção descartou: nota começada e não terminada.
-      situacao: notasRascunho === 0 ? "OK" : "ATENCAO",
+      situacao: notasEmRascunho.length === 0 ? "OK" : "ATENCAO",
       resumo:
-        notasRascunho === 0
+        notasEmRascunho.length === 0
           ? "Nenhuma nota em rascunho. Emissão não é obrigatória."
-          : `${notasRascunho} ${notasRascunho === 1 ? "nota ficou" : "notas ficaram"} em rascunho.`,
-      itens: [],
-      href: "/relatorios",
+          : `${notasEmRascunho.length} ${
+              notasEmRascunho.length === 1 ? "nota ficou" : "notas ficaram"
+            } em rascunho, somando ${formatBRL(
+              notasEmRascunho.reduce((t, d) => t + toNumber(d.amount), 0)
+            )}. Cada uma abre na ficha do cliente a que pertence.`,
+      itens: notasEmRascunho.slice(0, 8).map((d) => ({
+        chave: `fiscal:${d.id}`,
+        titulo: d.client?.name ?? "Nota sem cliente",
+        detalhe: `${d.type} ${d.number} · emitida em ${formatDateBR(d.issuedAt)}`,
+        valor: toNumber(d.amount),
+        // Link profundo até a entidade (UX-12). Sem cliente ligado não há
+        // destino melhor que a carteira, e o rótulo diz por quê.
+        href: d.clientId ? `/clientes/${d.clientId}` : "/clientes",
+      })),
+      href: "/clientes",
     },
   ];
 

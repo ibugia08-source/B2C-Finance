@@ -168,10 +168,17 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
+    // O rótulo era "Reservas (caixa)"; as reservas saíram do produto em
+    // 10/09/2026 e o grupo passou a ser o do caixa e das contas.
     key: "caixa",
-    label: "Reservas (caixa)",
+    label: "Caixa e contas",
     permissions: [
       { id: "caixa.visualizar", label: "Ver caixa e fluxo", sensitive: true },
+      {
+        id: "caixa.gerenciar_contas",
+        label: "Cadastrar e editar contas bancárias",
+        sensitive: true,
+      },
     ],
   },
   {
@@ -455,6 +462,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "receitas.criar",
     "receitas.editar",
     "caixa.visualizar",
+    "caixa.gerenciar_contas",
     "contratos.visualizar",
     "contratos.criar",
     "contratos.editar",
@@ -506,6 +514,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "receitas.criar",
     "receitas.editar",
     "caixa.visualizar",
+    "caixa.gerenciar_contas",
     "rotina.visualizar",
     "rotina.registrar_pagamento",
     "rotina.gerar_cobranca",
