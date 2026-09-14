@@ -30,7 +30,8 @@
     "relatorios:agendados": "tsx scripts/relatorios-agendados.ts",
     "audit:aa": "node scripts/auditoria-aa.mjs --ci",
     "seed:relatorios": "tsx scripts/semear-relatorios-estresse.ts",
-    "verificar:pdfs": "node scripts/verificar-pdfs.mjs"
+    "verificar:pdfs": "node scripts/verificar-pdfs.mjs",
+    "docs": "node scripts/docs/gerar.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed-dev.ts"

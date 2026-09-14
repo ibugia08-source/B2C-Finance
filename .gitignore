@@ -51,3 +51,6 @@ relatorios-julho/
 # clientes reais do banco de trabalho. Ficam no disco, nunca no repositório —
 # mesma regra de .backups/ e relatorios-julho/.
 docs/pdfs-v2/
+
+# Documentação gerada (refaça com: node scripts/docs/gerar.mjs)
+docs/gerado/
