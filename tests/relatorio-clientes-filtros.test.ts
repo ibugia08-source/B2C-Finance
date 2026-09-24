@@ -17,9 +17,17 @@ beforeAll(async () => {
     const c = await createMrrClient(owner, { name });
     await asOwner(owner, async () => prisma.client.update({ where: { id: c.id }, data }));
   };
-  await mk("Clínica A", { segment: "Clínica", modality: "MRR", origin: "Indicação", state: "BA", salesOwner: "Ana Paula", renewalMonth: 3 });
-  await mk("Clínica B", { segment: "Clínica", modality: "TCV", origin: "Tráfego", state: "SP", salesOwner: "Bruno", opsOwner: "Ana Paula", renewalMonth: 9, monthlyValue: null, totalContractValue: 9000 });
-  await mk("Loja C", { segment: "Varejo", modality: "MRR", origin: "Indicação", state: "ba", salesOwner: "ana paula", renewalMonth: 3 });
+  // Nichos vêm do CATÁLOGO (24/09/2026): cliente aponta para o nicho e
+  // carrega o nome denormalizado em segment.
+  const clinica = await asOwner(owner, async () =>
+    prisma.niche.create({ data: { name: "Clínica", slug: "clínica" }, select: { id: true } })
+  );
+  const varejo = await asOwner(owner, async () =>
+    prisma.niche.create({ data: { name: "Varejo", slug: "varejo" }, select: { id: true } })
+  );
+  await mk("Clínica A", { nicheId: clinica.id, segment: "Clínica", modality: "MRR", origin: "Indicação", state: "BA", salesOwner: "Ana Paula", renewalMonth: 3 });
+  await mk("Clínica B", { nicheId: clinica.id, segment: "Clínica", modality: "TCV", origin: "Tráfego", state: "SP", salesOwner: "Bruno", opsOwner: "Ana Paula", renewalMonth: 9, monthlyValue: null, totalContractValue: 9000 });
+  await mk("Loja C", { nicheId: varejo.id, segment: "Varejo", modality: "MRR", origin: "Indicação", state: "ba", salesOwner: "ana paula", renewalMonth: 3 });
   await asOwner(owner, async () =>
     prisma.employee.create({ data: { name: "Carla", active: true } })
   );

@@ -4,6 +4,21 @@ import {
 } from "@/lib/commercial/dedupe";
 import type { LeadStatus } from "@prisma/client";
 
+
+import { nicheDisplayName, nicheSlug } from "@/lib/niches";
+
+/** Igual a resolverNicho, mas dentro da transação do handoff (`tx`). */
+async function nichoDoLead(tx: any, nome: string | null | undefined) {
+  const display = nicheDisplayName(nome ?? "");
+  if (!display) return { nicheId: null, segment: null };
+  const slug = nicheSlug(display);
+  const found =
+    (await tx.niche.findFirst({ where: { slug }, select: { id: true, name: true } })) ??
+    (await tx.niche.create({ data: { name: display, slug }, select: { id: true, name: true } }));
+  return { nicheId: found.id, segment: found.name };
+}
+
+
 /**
  * LEADS E CONVERSÃO (F4.1 · ref. 01 §4.6).
  *
@@ -205,7 +220,8 @@ export async function converterLead(
           document: lead.document,
           phone: lead.phone,
           email: lead.email,
-          segment: lead.niche,
+          // Nicho do lead vira nicho do catálogo (cria se ainda não existe).
+          ...(await nichoDoLead(tx, lead.niche)),
           origin: lead.source ?? (lead.indicadoPor ? "indicação" : null),
           status: "PROSPECT",
         },

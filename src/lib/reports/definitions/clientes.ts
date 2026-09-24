@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { type ReportQuery, amountRange } from "../query";
 import { MONTHS_PT } from "@/lib/format";
+import { SEM_NICHO } from "@/lib/niches";
 import { CLIENT_STATUS_LABEL, MODALITY_LABEL, type ReportDef, type ReportRow } from "../shared";
 
 /**
@@ -20,7 +21,8 @@ async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
       { opsOwner: { equals: q.responsavel, mode: "insensitive" } },
     ];
   if (q.modalidade) where.modality = q.modalidade;
-  if (q.segmento) where.segment = { equals: q.segmento, mode: "insensitive" };
+  if (q.segmento === SEM_NICHO) where.nicheId = null;
+  else if (q.segmento) where.segment = { equals: q.segmento, mode: "insensitive" };
   if (q.origem) where.origin = { equals: q.origem, mode: "insensitive" };
   if (q.uf) where.state = { equals: q.uf, mode: "insensitive" };
   if (q.mesRenovacao) where.renewalMonth = q.mesRenovacao;

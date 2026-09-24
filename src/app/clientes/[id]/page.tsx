@@ -214,7 +214,7 @@ export default async function ClientDetailPage({
                 </Info>
                 <Info label="Razão social">{client.legalName ?? "—"}</Info>
                 <Info label="CNPJ / CPF">{client.document ?? "—"}</Info>
-                <Info label="Segmento">{client.segment ?? "—"}</Info>
+                <Info label="Nicho">{client.segment ?? "—"}</Info>
                 <Info label="Cidade/UF">
                   {client.city ? `${client.city}${client.state ? `/${client.state}` : ""}` : "—"}
                 </Info>

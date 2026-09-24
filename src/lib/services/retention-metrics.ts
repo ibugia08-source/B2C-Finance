@@ -198,7 +198,7 @@ async function getRetentionPanelImpl(year: number): Promise<RetentionPanel> {
   const segAgg = new Map<string, { count: number; mrr: number }>();
   for (const l of losses) {
     const owner = l.salesOwner ?? clientById.get(l.clientId)?.salesOwner ?? "Sem responsável";
-    const seg = clientById.get(l.clientId)?.segment ?? "Sem segmento";
+    const seg = clientById.get(l.clientId)?.segment ?? "Sem nicho";
     const o = ownerAgg.get(owner) ?? { count: 0, mrr: 0 };
     o.count++; o.mrr += n(l.monthlyValue);
     ownerAgg.set(owner, o);

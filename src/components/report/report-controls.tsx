@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Columns3, Download, Printer, X } from "lucide-react";
 import { MONTHS_PT } from "@/lib/format";
+import { SEM_NICHO, SEM_NICHO_LABEL } from "@/lib/niches";
 
 type Opt = { id: string; name: string };
 type VL = { value: string; label: string };
@@ -149,6 +150,7 @@ export function ReportControls(cfg: ReportControlsConfig) {
         {has("segmento") && (
           <FilterSelect label="Nicho" value={sp.get("segmento") ?? ""} onChange={(v) => set("segmento", v)} className={selectCls}>
             <option value="">Todos</option>
+            <option value={SEM_NICHO}>{SEM_NICHO_LABEL}</option>
             {(cfg.segmentos ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
           </FilterSelect>
         )}

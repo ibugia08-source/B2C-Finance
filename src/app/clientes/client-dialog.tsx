@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveClient, getClientForEdit, listEmployeeOptions } from "@/lib/actions/clients";
+import { listNicheOptions } from "@/lib/actions/niches";
 import { Plus } from "lucide-react";
 import { formatDateInput, parseBRL } from "@/lib/format";
 import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
@@ -33,7 +34,7 @@ const FormSchema = z
       .union([z.string().trim().email("E-mail inválido."), z.literal("")])
       .default(""),
     phone: z.string(),
-    segment: z.string(),
+    nicheId: z.string(),
     city: z.string(),
     state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA)"),
     address: z.string(),
@@ -110,7 +111,7 @@ function toFormValues(src: any): FormValues {
     document: src?.document ?? "",
     email: src?.email ?? "",
     phone: src?.phone ?? "",
-    segment: src?.segment ?? "",
+    nicheId: src?.nicheId ?? "",
     city: src?.city ?? "",
     state: src?.state ?? "",
     address: src?.address ?? "",
@@ -171,6 +172,19 @@ export function ClientDialog({
       active = false;
     };
   }, [open, employees]);
+
+  // Nichos do catálogo (Configurações) — o campo é lista, nunca texto livre.
+  const [niches, setNiches] = useState<{ id: string; name: string }[] | null>(null);
+  useEffect(() => {
+    if (!open || niches) return;
+    let active = true;
+    listNicheOptions().then((list) => {
+      if (active) setNiches(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, niches]);
 
   useEffect(() => {
     if (!open || isNew || loaded) return;
@@ -416,8 +430,21 @@ export function ClientDialog({
                 <Input name="document" defaultValue={dv.document} placeholder="00.000.000/0000-00" />
               </div>
               <div>
-                <Label>Segmento / nicho</Label>
-                <Input name="segment" defaultValue={dv.segment} placeholder="ex.: odontologia" />
+                <Label>Nicho</Label>
+                <Select name="nicheId" defaultValue={dv.nicheId}>
+                  <option value="">— sem nicho —</option>
+                  {dv.nicheId && !(niches ?? []).some((n) => n.id === dv.nicheId) && (
+                    <option value={dv.nicheId}>{data?.segment ?? "(nicho atual)"}</option>
+                  )}
+                  {(niches ?? []).map((n) => (
+                    <option key={n.id} value={n.id}>{n.name}</option>
+                  ))}
+                </Select>
+                {niches && niches.length === 0 && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Nenhum nicho cadastrado. O administrador cadastra em Configurações.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">

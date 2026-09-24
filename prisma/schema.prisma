@@ -244,6 +244,7 @@ model User {
   notificacoes             Notification[]      @relation("NotificacoesDoUsuario")
   ownedBillingPayments     Payment[]           @relation("OwnerPayment")
   ownedEmployees           Employee[]          @relation("OwnerEmployee")
+  ownedNiches              Niche[]             @relation("OwnerNiche")
   ownedPayrolls            Payroll[]           @relation("OwnerPayroll")
   ownedPayrollItems        PayrollItem[]       @relation("OwnerPayrollItem")
   ownedCommissions         Commission[]        @relation("OwnerCommission")
@@ -1178,7 +1179,12 @@ model Client {
   document            String? // CNPJ / CPF
   email               String?
   phone               String?
-  segment             String? // segmento / nicho de atuação
+  // Nicho/segmento: CATÁLOGO administrado (Niche). `segment` é o nome
+  // denormalizado (mesmo padrão de salesOwner/salesOwnerId) — quem lê
+  // continua lendo o texto; quem escreve passa pelo catálogo.
+  segment             String? // nome do nicho (espelho de niche.name)
+  nicheId             String?
+  niche               Niche?          @relation(fields: [nicheId], references: [id], onDelete: SetNull)
   city                String?
   state               String? // UF
   // Dados usados nos contratos gerados (pré-preenchimento de variáveis)
@@ -1968,6 +1974,26 @@ model CollectionHistory {
 // ===== Folha e comissões ============================================
 
 // Colaborador da agência (CLT, PJ ou freelancer).
+/// Nicho de atuação do cliente — categoria da plataforma (24/09/2026).
+/// Cadastrado uma vez pelo ADMIN; `slug` é o nome normalizado (minúsculas,
+/// sem acento, espaços colapsados) e a unicidade por dono vale sobre ele —
+/// "Clínica", "clinica" e "CLÍNICA " são o MESMO nicho.
+model Niche {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  active    Boolean  @default(true)
+  ownerId   String?
+  owner     User?    @relation("OwnerNiche", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  clients Client[]
+
+  @@unique([ownerId, slug])
+  @@index([ownerId])
+}
+
 model Employee {
   id         String       @id @default(cuid())
   name       String

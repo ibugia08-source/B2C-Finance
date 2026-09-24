@@ -83,7 +83,9 @@ const ClientSchema = z
       .union([z.string().trim().email("E-mail inválido."), z.literal(""), z.null()])
       .transform((v) => (v ? v : null)),
     phone: z.string().trim().nullable(),
-    segment: z.string().trim().nullable(),
+    // Nicho: vínculo com o catálogo (Niche); o texto `segment` é derivado do
+    // nome do nicho (denormalização para filtros/relatórios/documentos).
+    nicheId: z.string().trim().nullable(),
     city: z.string().trim().nullable(),
     state: z.string().trim().max(2, "Use a sigla da UF (ex.: BA).").nullable(),
     address: z.string().trim().nullable(),
@@ -189,7 +191,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       document: clean(formData.get("document")),
       email: clean(formData.get("email")),
       phone: clean(formData.get("phone")),
-      segment: clean(formData.get("segment")),
+      nicheId: clean(formData.get("nicheId")),
       city: clean(formData.get("city")),
       state: clean(formData.get("state"))?.toUpperCase() ?? null,
       address: clean(formData.get("address")),
@@ -271,13 +273,24 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       salesOwnerEmployee = { id: emp.id, name: emp.name };
     }
 
+    // Nicho escolhido da lista: precisa existir no catálogo deste dono.
+    let niche: { id: string; name: string } | null = null;
+    if (parsed.nicheId) {
+      niche = await prisma.niche.findFirst({
+        where: { id: parsed.nicheId },
+        select: { id: true, name: true },
+      });
+      if (!niche) return { ok: false, error: "Nicho não encontrado no catálogo." };
+    }
+
     const base = {
       name: parsed.name,
       legalName: parsed.legalName,
       document: parsed.document,
       email: parsed.email,
       phone: parsed.phone,
-      segment: parsed.segment,
+      nicheId: niche?.id ?? null,
+      segment: niche?.name ?? null,
       city: parsed.city,
       state: parsed.state,
       address: parsed.address,
@@ -434,6 +447,7 @@ export type ClientEditData = {
   email: string | null;
   phone: string | null;
   segment: string | null;
+  nicheId: string | null;
   city: string | null;
   state: string | null;
   address: string | null;
@@ -465,6 +479,7 @@ export async function getClientForEdit(id: string): Promise<ClientEditData | nul
     email: c.email,
     phone: c.phone,
     segment: c.segment,
+    nicheId: c.nicheId,
     city: c.city,
     state: c.state,
     address: c.address,

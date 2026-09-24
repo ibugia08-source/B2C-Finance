@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { listarNichos } from "@/lib/services/niches";
 
 /**
  * Opções dos filtros de carteira nos relatórios — lidas do que JÁ está
@@ -50,15 +51,15 @@ export async function responsaveisCadastrados(): Promise<string[]> {
 
 export type CarteiraOptions = { segmentos: string[]; origens: string[]; ufs: string[] };
 
-/** Valores distintos de nicho, origem e UF presentes na carteira. */
+/** Nichos do catálogo; origem e UF distintas presentes na carteira. */
 export async function opcoesDaCarteira(): Promise<CarteiraOptions> {
-  const [seg, ori, uf] = await Promise.all([
-    prisma.client.findMany({ where: { segment: { not: null } }, distinct: ["segment"], select: { segment: true } }),
+  const [nichos, ori, uf] = await Promise.all([
+    listarNichos(),
     prisma.client.findMany({ where: { origin: { not: null } }, distinct: ["origin"], select: { origin: true } }),
     prisma.client.findMany({ where: { state: { not: null } }, distinct: ["state"], select: { state: true } }),
   ]);
   return {
-    segmentos: mergeNames(seg.map((c) => c.segment)),
+    segmentos: nichos.map((n) => n.name),
     origens: mergeNames(ori.map((c) => c.origin)),
     ufs: mergeNames(uf.map((c) => c.state?.toUpperCase())),
   };

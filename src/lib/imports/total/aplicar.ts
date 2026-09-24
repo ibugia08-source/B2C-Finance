@@ -12,6 +12,20 @@ import {
   type LinhaCliente, type LinhaMensal, type LinhaRenovacao, type PlanilhaTotal,
 } from "./parser";
 
+
+import { resolverNicho } from "@/lib/services/niches";
+
+/**
+ * Nicho da planilha entra pelo CATÁLOGO: casa com o existente (sem
+ * distinguir caixa/espaços) ou cadastra a grafia recebida. Assim a
+ * importação não recria a duplicata que o catálogo veio eliminar.
+ */
+async function nichoDaLinha(nome: string | null | undefined) {
+  const n = await resolverNicho(nome, { criar: true });
+  return { nicheId: n?.id ?? null, segment: n?.name ?? null };
+}
+
+
 /**
  * MOTOR DA IMPORTAÇÃO TOTAL (F1.12 v2 · seção IMPORTAÇÃO TOTAL do plano).
  *
@@ -301,7 +315,7 @@ export async function aplicarPlanilhaTotal(
         data: {
           name: linha.nome,
           document: linha.documentoBruto,
-          segment: linha.nicho,
+          ...(await nichoDaLinha(linha.nicho)),
           city: linha.cidade,
           state: linha.uf,
           origin: linha.canalOrigem,
@@ -359,7 +373,7 @@ export async function aplicarPlanilhaTotal(
       await prisma.client.update({
         where: { id: clientId },
         data: {
-          segment: linha.nicho ?? undefined,
+          ...(linha.nicho ? await nichoDaLinha(linha.nicho) : {}),
           city: linha.cidade ?? undefined,
           state: linha.uf ?? undefined,
           origin: linha.canalOrigem ?? undefined,

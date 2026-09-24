@@ -41,6 +41,7 @@ const OWNED_MODELS = new Set<string>([
   "Payment",
   "CollectionHistory",
   "Employee",
+  "Niche",
   "Payroll",
   "PayrollItem",
   "Commission",

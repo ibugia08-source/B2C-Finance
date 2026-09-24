@@ -12,6 +12,8 @@ import Link from "next/link";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
+import { SEM_NICHO } from "@/lib/niches";
+import { listarNichos } from "@/lib/services/niches";
 import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
 import { PageSizeSelect } from "./page-size-select";
@@ -82,7 +84,12 @@ async function ClientesPageInner({
       },
     ];
   }
-  if (searchParams.segmento) where.segment = searchParams.segmento;
+  // Nicho: id do catálogo, ou o sentinela "sem nicho" (cadastro ainda sem
+  // nicho atribuído). Valor antigo por nome continua casando pelo texto.
+  if (searchParams.segmento === SEM_NICHO) where.nicheId = null;
+  else if (searchParams.segmento) {
+    where.OR = [{ nicheId: searchParams.segmento }, { segment: searchParams.segmento }];
+  }
   if (searchParams.modalidade) where.modality = searchParams.modalidade;
   if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
   if (searchParams.mesRenovacao) {
@@ -147,12 +154,7 @@ async function ClientesPageInner({
         where: { year: curYear, month: curMonth },
         select: { clientId: true, status: true, setBy: true },
       }),
-      prisma.client.findMany({
-        where: { segment: { not: null } },
-        distinct: ["segment"],
-        select: { segment: true },
-        orderBy: { segment: "asc" },
-      }),
+      listarNichos(),
       prisma.client.findMany({
         where: { salesOwner: { not: null } },
         distinct: ["salesOwner"],
@@ -326,7 +328,7 @@ async function ClientesPageInner({
       };
     });
 
-  const segments = segmentRows.map((r) => r.segment!).filter(Boolean);
+  const segments = segmentRows;
   const owners = ownerRows.map((r) => r.salesOwner!).filter(Boolean);
 
   // Sufixo de competência para os links dos cards (preserva o mês selecionado).
@@ -406,7 +408,7 @@ async function ClientesPageInner({
 
       <Card className="mb-3">
         <CardContent className="p-4">
-          <ClientFilters segments={segments} owners={owners} />
+          <ClientFilters niches={segments} owners={owners} />
         </CardContent>
       </Card>
 

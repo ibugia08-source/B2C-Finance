@@ -39,7 +39,7 @@ export const mrrReport: ReportDef = {
   columns: [
     { key: "cliente", label: "Cliente", kind: "text" },
     { key: "status", label: "Status", kind: "text" },
-    { key: "segmento", label: "Segmento", kind: "text" },
+    { key: "segmento", label: "Nicho", kind: "text" },
     { key: "responsavel", label: "Responsável", kind: "text" },
     { key: "mensal", label: "MRR mensal", kind: "money", total: true },
     { key: "anualizado", label: "Anualizado", kind: "money", total: true },

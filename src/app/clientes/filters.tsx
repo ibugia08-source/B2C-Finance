@@ -13,18 +13,20 @@ import {
   CLIENT_MODALITY_LABEL,
   MONTHS,
 } from "./_meta";
+import { SEM_NICHO, SEM_NICHO_LABEL, type NicheOption } from "@/lib/niches";
 
 /**
  * Filtros do módulo Clientes — simples e diretos: busca (nome/razão social/
  * CNPJ), Status, Modalidade, Responsável, Inadimplência, Mês de renovação e
- * Segmento. Os filtros só são aplicados ao clicar em FILTRAR; LIMPAR FILTROS
+ * Nicho. Os filtros só são aplicados ao clicar em FILTRAR; LIMPAR FILTROS
  * restaura a lista padrão.
  */
 export function ClientFilters({
-  segments,
+  niches,
   owners,
 }: {
-  segments: string[];
+  /** Catálogo de nichos (Configurações) — o filtro é lista, com "Sem nicho". */
+  niches: NicheOption[];
   owners: string[];
 }) {
   const router = useRouter();
@@ -133,11 +135,12 @@ export function ClientFilters({
         </div>
 
         <div>
-          <Label className="text-xs">Segmento</Label>
+          <Label className="text-xs">Nicho</Label>
           <Select value={segmento} onChange={(e) => setSegmento(e.target.value)}>
             <option value="">Todos</option>
-            {segments.map((s) => (
-              <option key={s} value={s}>{s}</option>
+            <option value={SEM_NICHO}>{SEM_NICHO_LABEL}</option>
+            {niches.map((n) => (
+              <option key={n.id} value={n.id}>{n.name}</option>
             ))}
           </Select>
         </div>

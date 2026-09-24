@@ -219,7 +219,7 @@ export const ALL_COLUMNS: ClientColumn[] = [
   },
   {
     key: "segment",
-    header: "Segmento",
+    header: "Nicho",
     tdClass: "text-sm whitespace-nowrap",
     render: (c) => c.segment ?? muted("—"),
   },

@@ -4,6 +4,22 @@ import { parseCompetence, type ImportColumn, type ValidatedRow } from "./engine"
 import { toNumber as n } from "@/lib/format";
 
 /**
+ * Nicho da planilha passa pelo CATÁLOGO (24/09/2026): o texto da coluna
+ * casa com o nicho existente (sem distinguir caixa/espaços) ou cadastra a
+ * grafia recebida — nunca grava texto solto em Client.segment.
+ */
+async function comNicho<T extends Record<string, unknown>>(rows: T[]): Promise<T[]> {
+  const { resolverNicho } = await import("@/lib/services/niches");
+  const out: T[] = [];
+  for (const row of rows) {
+    const nome = typeof row.segment === "string" ? row.segment : null;
+    const n = await resolverNicho(nome, { criar: true });
+    out.push({ ...row, segment: n?.name ?? null, nicheId: n?.id ?? null });
+  }
+  return out;
+}
+
+/**
  * Definições de importação em massa — uma por módulo.
  * Cada definição declara colunas (com exemplos p/ o template), resolve
  * relacionamentos por NOME (cliente/serviço/contrato/colaborador),
@@ -185,7 +201,7 @@ export const IMPORT_DEFS: ImportDef[] = [
       { key: "document", header: "CNPJ/CPF", kind: "text", example: "12.345.678/0001-00" },
       { key: "email", header: "E-mail", kind: "text", example: "contato@alfa.com" },
       { key: "phone", header: "Telefone", kind: "text", example: "(71) 99999-0000" },
-      { key: "segment", header: "Segmento", kind: "text", example: "E-commerce" },
+      { key: "segment", header: "Nicho", kind: "text", example: "E-commerce", description: "Entra no catálogo de nichos (casa com o existente ou cadastra)" },
       { key: "city", header: "Cidade", kind: "text", example: "Salvador" },
       { key: "state", header: "UF", kind: "text", example: "BA" },
       { key: "origin", header: "Origem", kind: "text", example: "Indicação" },
@@ -207,7 +223,7 @@ export const IMPORT_DEFS: ImportDef[] = [
       return new Set(rows.map((r) => norm(r.name)));
     },
     create: async (rows) => {
-      const r = await prisma.client.createMany({ data: rows as any[] });
+      const r = await prisma.client.createMany({ data: (await comNicho(rows)) as any[] });
       return r.count;
     },
     // F1.21: cliente importado nasce COMPLETO. Antes disto a planilha usava
@@ -216,7 +232,7 @@ export const IMPORT_DEFS: ImportDef[] = [
     // caminho errado era justamente o mais usado.
     createEach: async (rows) => {
       const out: { id: string | null; observacao?: string | null }[] = [];
-      for (const data of rows) {
+      for (const data of await comNicho(rows)) {
         try {
           const c = await prisma.client.create({ data: data as any, select: { id: true } });
           const vida = await abrirVidaDoCliente(c.id, {
