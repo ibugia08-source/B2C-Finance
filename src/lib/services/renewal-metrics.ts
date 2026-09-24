@@ -1,5 +1,7 @@
-import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
+import {
+  scheduledRenewals, monthKey, zonedMonthBounds, SCHEDULE_CLIENT_SELECT,
+} from "./renewal-schedule";
 import { toNumber as n } from "@/lib/format";
 import { ownerCached } from "@/lib/owner-cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
@@ -9,9 +11,10 @@ import { expectedRenewalValues } from "./revenue-metrics";
  * PAINEL DE RENOVAÇÕES — fonte única da seção "Renovações do Mês" (Gestão do
  * Mês) e do módulo /renovacoes. Para uma competência (mês/ano):
  *
- *  - Clientes ativos com renovação prevista no mês: união de
- *    Client.renewalMonth === mês (agenda editável da carteira) e
- *    Contract.renewalDate dentro do mês (vigência real do contrato).
+ *  - Clientes ativos com renovação prevista no mês: a AGENDA única de
+ *    renewal-schedule (Client.renewalMonth, Contract.renewalDate do contrato
+ *    vigente e, na falta dos dois, entrada + prazo). O card do painel
+ *    principal, a faixa de próximos meses e o relatório leem a MESMA agenda.
  *  - Valor esperado pela regra central `expectedRenewalValues` (TCV = valor
  *    cheio da última adesão; MRR = mensalidade atual).
  *  - Cruza com ClientRenewal para marcar quem JÁ renovou no mês (e quando) e
@@ -65,8 +68,6 @@ export type RenewalPanel = {
   pendingCount: number;
 };
 
-const ACTIVE_STATUSES = PORTFOLIO_ACTIVE_STATUSES;
-
 function monthsBetween(from: Date | null, toYear: number, toMonth: number): number | null {
   if (!from) return null;
   const key = toYear * 12 + (toMonth - 1);
@@ -74,40 +75,22 @@ function monthsBetween(from: Date | null, toYear: number, toMonth: number): numb
   return Math.max(0, key - fromKey);
 }
 
-const CLIENT_SELECT = {
-  id: true, name: true, status: true, modality: true, salesOwner: true,
-  monthlyValue: true, paymentDay: true, contractMonths: true, startedAt: true,
-} as const;
+const CLIENT_SELECT = SCHEDULE_CLIENT_SELECT;
 
 export async function getRenewalPanel(month: number, year: number): Promise<RenewalPanel> {
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
+  const { start: monthStart, end: monthEnd } = zonedMonthBounds(year, month);
 
-  // FASE 1 — quatro fontes da lista do mês:
-  //  (a) agenda da carteira (Client.renewalMonth) — clientes em atividade;
-  //  (b) contratos vigentes com renewalDate dentro do mês;
-  //  (c) renovações JÁ registradas para o mês (por data OU pela competência
+  // FASE 1 — três fontes da lista do mês:
+  //  (a) agenda única de renovações (renewal-schedule): mês de renovação do
+  //      cadastro, data do contrato vigente ou entrada + prazo;
+  //  (b) renovações JÁ registradas para o mês (por data OU pela competência
   //      de lançamento escolhida) — mantém a linha verde mesmo que a
   //      renovação tenha mudado o renewalMonth do cliente, e marca como
   //      renovada a renovação antecipada feita noutro mês;
-  //  (d) perdas do mês — o "Não renovou" vira CHURNED e ainda assim precisa
+  //  (c) perdas do mês — o "Não renovou" vira CHURNED e ainda assim precisa
   //      aparecer como linha vermelha.
-  const [byMonth, contractsInMonth, renewals, losses] = await Promise.all([
-    prisma.client.findMany({
-      where: {
-        renewalMonth: month,
-        status: { in: ACTIVE_STATUSES as any },
-      },
-      orderBy: { name: "asc" },
-      select: CLIENT_SELECT,
-    }),
-    prisma.contract.findMany({
-      where: {
-        renewalDate: { gte: monthStart, lt: monthEnd },
-        status: { in: ["ACTIVE", "RENEWAL"] },
-      },
-      select: { clientId: true, client: { select: CLIENT_SELECT } },
-    }),
+  const [schedule, renewals, losses] = await Promise.all([
+    scheduledRenewals([{ month, year }]),
     prisma.clientRenewal.findMany({
       where: {
         OR: [
@@ -127,19 +110,17 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
       select: { clientId: true, lostAt: true, client: { select: CLIENT_SELECT } },
     }),
   ]);
+  const scheduled = schedule.get(monthKey({ month, year })) ?? [];
 
-  // União (dedup por cliente). Contratos exigem cliente em atividade;
+  // União (dedup por cliente). A agenda já exige cliente em atividade;
   // renovados/perdidos do mês entram SEMPRE (o desfecho é a própria linha).
-  const clientById = new Map<string, (typeof byMonth)[number]>();
-  for (const c of byMonth) clientById.set(c.id, c);
-  for (const ct of contractsInMonth) {
-    if (
-      !clientById.has(ct.clientId) &&
-      (ACTIVE_STATUSES as readonly string[]).includes(ct.client.status)
-    ) {
-      clientById.set(ct.clientId, ct.client);
-    }
-  }
+  type PanelClient = {
+    id: string; name: string; status: string; modality: string | null;
+    salesOwner: string | null; monthlyValue: unknown; totalContractValue: unknown;
+    paymentDay: number | null; contractMonths: number | null; startedAt: Date | null;
+  };
+  const clientById = new Map<string, PanelClient>();
+  for (const c of scheduled) clientById.set(c.id, c);
   for (const r of renewals) {
     if (!clientById.has(r.clientId)) clientById.set(r.clientId, r.client);
   }
@@ -234,7 +215,7 @@ export async function getRenewalPanel(month: number, year: number): Promise<Rene
 
 // ===================================================================
 // Faixa de previsibilidade — contagem/valor esperado dos próximos meses
-// (agenda Client.renewalMonth), para o módulo /renovacoes.
+// (agenda única de renewal-schedule), para o módulo /renovacoes.
 // ===================================================================
 
 export type RenewalStripItem = {
@@ -249,28 +230,22 @@ async function getRenewalStripImpl(
   fromYear: number,
   span = 6
 ): Promise<RenewalStripItem[]> {
-  const clients = await prisma.client.findMany({
-    where: {
-      renewalMonth: { not: null },
-      status: { in: ACTIVE_STATUSES as any },
-    },
-    select: { id: true, modality: true, monthlyValue: true, renewalMonth: true },
-  });
-  const expected = await expectedRenewalValues(clients);
-
-  const byMonth = new Map<number, { count: number; expectedTotal: number }>();
-  for (const c of clients) {
-    const cur = byMonth.get(c.renewalMonth!) ?? { count: 0, expectedTotal: 0 };
-    cur.count += 1;
-    cur.expectedTotal += expected.get(c.id) ?? 0;
-    byMonth.set(c.renewalMonth!, cur);
-  }
-
-  return Array.from({ length: span }, (_, i) => {
+  const window = Array.from({ length: span }, (_, i) => {
     const ref = new Date(fromYear, fromMonth - 1 + i, 1);
-    const month = ref.getMonth() + 1;
-    const bucket = byMonth.get(month) ?? { count: 0, expectedTotal: 0 };
-    return { month, year: ref.getFullYear(), ...bucket };
+    return { month: ref.getMonth() + 1, year: ref.getFullYear() };
+  });
+  const schedule = await scheduledRenewals(window);
+  const all = Array.from(schedule.values()).flat();
+  const expected = await expectedRenewalValues(all);
+
+  return window.map((w) => {
+    const clients = schedule.get(monthKey(w)) ?? [];
+    return {
+      month: w.month,
+      year: w.year,
+      count: clients.length,
+      expectedTotal: clients.reduce((s, c) => s + (expected.get(c.id) ?? 0), 0),
+    };
   });
 }
 

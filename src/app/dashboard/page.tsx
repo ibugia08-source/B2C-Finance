@@ -132,7 +132,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
     getMrrClientsDetail(),
     getTcvClientsDetail(period),
     getNewClientsDetail(period),
-    getRenewalClientsDetail(selectedMonth),
+    getRenewalClientsDetail(selectedMonth, selectedYear),
   ]);
   // Sexto card do painel executivo (02 §5.1). Com as reservas removidas
   // (10/09/2026), a conta é: contas ativas − compromissos imediatos.
@@ -555,7 +555,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
               detailTitle="Novos clientes do mês"
               detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
             <SecondaryStat label="Renovações do mês" value={String(renewalClientsDetail.length)}
-              help="Clientes cujo mês de renovação é o mês selecionado."
+              help="Clientes com renovação prevista no mês selecionado (agenda da carteira, data do contrato ou entrada + prazo), incluindo quem já renovou e quem não renovou. É a mesma lista do módulo Renovações."
               tone={renewalClientsDetail.length > 0 ? "warn" : "default"}
               detailTitle="Renovações do mês"
               detail={<NamedValueList items={renewalClientsDetail} emptyText="Nenhuma renovação neste mês." />} />

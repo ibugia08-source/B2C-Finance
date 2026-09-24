@@ -14,7 +14,7 @@ export type ReportQuery = {
   serviceId?: string;
   contractId?: string;
   categoryId?: string;
-  responsavel?: string; // texto livre (salesOwner/collector/responsável)
+  responsavel?: string; // nome escolhido na lista de responsáveis (salesOwner/opsOwner/colaborador)
   status?: string; // status do domínio do relatório
   tipo?: string; // RevenueType | ExpenseType | ContractType conforme o relatório
   valorMin?: number;
@@ -24,6 +24,12 @@ export type ReportQuery = {
   competencia?: { month: number; year: number };
   pago?: boolean; // true=pago | false=não pago | undefined=todos
   situacao?: "inadimplente" | "a_vencer" | "vencido";
+  // ===== Carteira (clientes) =====
+  modalidade?: "MRR" | "TCV";
+  segmento?: string; // nicho / segmento de atuação (valor exato do cadastro)
+  origem?: string; // origem comercial
+  uf?: string; // estado (UF)
+  mesRenovacao?: number; // 1-12
 };
 
 export type ReportPresentation = {
@@ -72,6 +78,14 @@ export function parseReportQuery(sp: SearchParams): ReportQuery {
       sp.situacao === "inadimplente" || sp.situacao === "a_vencer" || sp.situacao === "vencido"
         ? sp.situacao
         : undefined,
+    modalidade: sp.modalidade === "MRR" || sp.modalidade === "TCV" ? sp.modalidade : undefined,
+    segmento: sp.segmento || undefined,
+    origem: sp.origem || undefined,
+    uf: sp.uf ? sp.uf.toUpperCase() : undefined,
+    mesRenovacao: (() => {
+      const m = Number(sp.mesRenovacao);
+      return Number.isInteger(m) && m >= 1 && m <= 12 ? m : undefined;
+    })(),
   };
 }
 

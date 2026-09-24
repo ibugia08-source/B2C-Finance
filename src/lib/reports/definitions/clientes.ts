@@ -1,21 +1,37 @@
 import { prisma } from "@/lib/prisma";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { type ReportQuery, amountRange } from "../query";
-import { CLIENT_STATUS_LABEL, type ReportDef, type ReportRow } from "../shared";
+import { MONTHS_PT } from "@/lib/format";
+import { CLIENT_STATUS_LABEL, MODALITY_LABEL, type ReportDef, type ReportRow } from "../shared";
 
+/**
+ * Filtros da carteira — todos COMBINÁVEIS (E lógico): responsável escolhido
+ * na lista, modalidade, nicho/segmento, origem, UF e mês de renovação, além
+ * de cliente, status, situação e faixa de valor. A exportação (CSV/XLSX/PDF)
+ * recebe a mesma querystring da tela, então sai exatamente o que se vê.
+ */
 async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
   const where: Record<string, unknown> = {};
   if (q.status) where.status = q.status;
   if (q.clientId) where.id = q.clientId;
   if (q.responsavel)
     where.OR = [
-      { salesOwner: { contains: q.responsavel, mode: "insensitive" } },
-      { opsOwner: { contains: q.responsavel, mode: "insensitive" } },
+      { salesOwner: { equals: q.responsavel, mode: "insensitive" } },
+      { opsOwner: { equals: q.responsavel, mode: "insensitive" } },
     ];
+  if (q.modalidade) where.modality = q.modalidade;
+  if (q.segmento) where.segment = { equals: q.segmento, mode: "insensitive" };
+  if (q.origem) where.origin = { equals: q.origem, mode: "insensitive" };
+  if (q.uf) where.state = { equals: q.uf, mode: "insensitive" };
+  if (q.mesRenovacao) where.renewalMonth = q.mesRenovacao;
   const clients = await prisma.client.findMany({
     where,
     orderBy: { name: "asc" },
-    select: { id: true, name: true, status: true, city: true, state: true, salesOwner: true, createdAt: true },
+    select: {
+      id: true, name: true, status: true, city: true, state: true, salesOwner: true,
+      opsOwner: true, modality: true, segment: true, origin: true, renewalMonth: true,
+      createdAt: true,
+    },
   });
   const summaries = await getClientSummaries(clients.map((c) => c.id));
   let rows = clients.map((c) => {
@@ -24,7 +40,13 @@ async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
       cliente: c.name,
       status: CLIENT_STATUS_LABEL[c.status] ?? c.status,
       cidade: c.city ? `${c.city}${c.state ? "/" + c.state : ""}` : null,
+      uf: c.state,
       responsavel: c.salesOwner,
+      responsavelOperacional: c.opsOwner,
+      modalidade: c.modality ? MODALITY_LABEL[c.modality] ?? c.modality : null,
+      segmento: c.segment,
+      origem: c.origin,
+      mesRenovacao: c.renewalMonth ? MONTHS_PT[c.renewalMonth - 1] : null,
       contratosAtivos: s.activeContracts,
       valorMensal: s.monthlyValue,
       receitaTotal: s.totalRevenue,
@@ -49,7 +71,13 @@ export const clientesReport: ReportDef = {
     { key: "cliente", label: "Cliente", kind: "text" },
     { key: "status", label: "Status", kind: "text" },
     { key: "cidade", label: "Cidade", kind: "text" },
+    { key: "uf", label: "UF", kind: "text" },
     { key: "responsavel", label: "Responsável", kind: "text" },
+    { key: "responsavelOperacional", label: "Resp. operacional", kind: "text" },
+    { key: "modalidade", label: "Modalidade", kind: "text" },
+    { key: "segmento", label: "Nicho", kind: "text" },
+    { key: "origem", label: "Origem", kind: "text" },
+    { key: "mesRenovacao", label: "Mês de renovação", kind: "text" },
     { key: "contratosAtivos", label: "Contratos ativos", kind: "int", total: true },
     { key: "valorMensal", label: "Valor mensal", kind: "money", total: true },
     { key: "receitaTotal", label: "Receita total", kind: "money", total: true },
@@ -57,8 +85,11 @@ export const clientesReport: ReportDef = {
     { key: "vencido", label: "Vencido", kind: "money", total: true },
     { key: "desde", label: "Cliente desde", kind: "date" },
   ],
-  filterFields: ["cliente", "status", "responsavel", "situacao", "valor"],
-  groupOptions: ["status", "responsavel", "cidade"],
+  filterFields: [
+    "cliente", "status", "responsavel", "modalidade", "segmento", "origem", "uf",
+    "mesRenovacao", "situacao", "valor",
+  ],
+  groupOptions: ["status", "responsavel", "modalidade", "segmento", "origem", "uf", "cidade", "mesRenovacao"],
   statusOptions: Object.entries(CLIENT_STATUS_LABEL).map(([value, label]) => ({ value, label })),
   defaultSort: { key: "receitaTotal", dir: "desc" },
   build: buildClientes,

@@ -29,7 +29,13 @@ export type FilterField =
   | "vencimento"
   | "competencia"
   | "pago"
-  | "situacao";
+  | "situacao"
+  // Carteira (relatório de clientes): combináveis entre si e com os demais.
+  | "modalidade"
+  | "segmento"
+  | "origem"
+  | "uf"
+  | "mesRenovacao";
 
 export type ReportRow = Record<string, string | number | Date | null>;
 

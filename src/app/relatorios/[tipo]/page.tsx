@@ -9,6 +9,7 @@ import { getReport } from "@/lib/reports/registry";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
 import { periodLabel } from "@/lib/period";
 import { presentReport } from "@/lib/reports/present";
+import { responsaveisCadastrados, opcoesDaCarteira } from "@/lib/reports/options";
 import { ReportControls } from "@/components/report/report-controls";
 import { ReportTable } from "@/components/report/report-table";
 import { SavedViews } from "@/components/saved-views";
@@ -39,11 +40,15 @@ export default async function RelatorioPage({
 
   // Opções dos selects (pequenas, só id+nome)
   const needs = (f: string) => def.filterFields.includes(f as any);
-  const [clients, services, contracts, categories] = await Promise.all([
+  const precisaCarteira = needs("segmento") || needs("origem") || needs("uf");
+  const [clients, services, contracts, categories, responsaveis, carteira] = await Promise.all([
     needs("cliente") ? prisma.client.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
     needs("servico") ? prisma.service.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
     needs("contrato") ? prisma.contract.findMany({ select: { id: true, title: true }, orderBy: { title: "asc" } }) : [],
     needs("categoria") ? prisma.category.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }) : [],
+    // Responsável é LISTA do que já existe na plataforma, não campo livre.
+    needs("responsavel") ? responsaveisCadastrados() : ([] as string[]),
+    precisaCarteira ? opcoesDaCarteira() : { segmentos: [], origens: [], ufs: [] },
   ]);
 
   // Gráfico: distribuição da 1ª coluna monetária pela 1ª coluna de texto
@@ -103,6 +108,10 @@ export default async function RelatorioPage({
               services={services}
               contracts={contracts.map((c: any) => ({ id: c.id, name: c.title }))}
               categories={categories}
+              responsaveis={responsaveis}
+              segmentos={carteira.segmentos}
+              origens={carteira.origens}
+              ufs={carteira.ufs}
             />
           </CardContent>
         </Card>

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Columns3, Download, Printer, X } from "lucide-react";
+import { MONTHS_PT } from "@/lib/format";
 
 type Opt = { id: string; name: string };
 type VL = { value: string; label: string };
@@ -25,11 +26,17 @@ export type ReportControlsConfig = {
   services: Opt[];
   contracts: Opt[];
   categories: Opt[];
+  /** Nomes já cadastrados (colaboradores + responsáveis gravados em clientes). */
+  responsaveis?: string[];
+  segmentos?: string[];
+  origens?: string[];
+  ufs?: string[];
 };
 
 const FILTER_PARAM_KEYS = [
   "cliente", "servico", "contrato", "status", "categoria", "responsavel",
   "tipo", "valorMin", "valorMax", "vencDe", "vencAte", "competencia", "pago", "situacao",
+  "modalidade", "segmento", "origem", "uf", "mesRenovacao",
 ];
 
 /**
@@ -127,7 +134,41 @@ export function ReportControls(cfg: ReportControlsConfig) {
           </FilterSelect>
         )}
         {has("responsavel") && (
-          <BlurInput label="Responsável" placeholder="nome…" defaultValue={sp.get("responsavel") ?? ""} onCommit={(v) => set("responsavel", v)} />
+          <FilterSelect label="Responsável" value={sp.get("responsavel") ?? ""} onChange={(v) => set("responsavel", v)} className={selectCls}>
+            <option value="">Todos</option>
+            {(cfg.responsaveis ?? []).map((nome) => <option key={nome} value={nome}>{nome}</option>)}
+          </FilterSelect>
+        )}
+        {has("modalidade") && (
+          <FilterSelect label="Modalidade" value={sp.get("modalidade") ?? ""} onChange={(v) => set("modalidade", v)} className={selectCls}>
+            <option value="">Todas</option>
+            <option value="MRR">MRR (mensal)</option>
+            <option value="TCV">TCV (contrato fechado)</option>
+          </FilterSelect>
+        )}
+        {has("segmento") && (
+          <FilterSelect label="Nicho" value={sp.get("segmento") ?? ""} onChange={(v) => set("segmento", v)} className={selectCls}>
+            <option value="">Todos</option>
+            {(cfg.segmentos ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </FilterSelect>
+        )}
+        {has("origem") && (
+          <FilterSelect label="Origem" value={sp.get("origem") ?? ""} onChange={(v) => set("origem", v)} className={selectCls}>
+            <option value="">Todas</option>
+            {(cfg.origens ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </FilterSelect>
+        )}
+        {has("uf") && (
+          <FilterSelect label="UF" value={sp.get("uf") ?? ""} onChange={(v) => set("uf", v)} className="h-8 text-xs min-w-[80px]">
+            <option value="">Todas</option>
+            {(cfg.ufs ?? []).map((v) => <option key={v} value={v}>{v}</option>)}
+          </FilterSelect>
+        )}
+        {has("mesRenovacao") && (
+          <FilterSelect label="Mês de renovação" value={sp.get("mesRenovacao") ?? ""} onChange={(v) => set("mesRenovacao", v)} className={selectCls}>
+            <option value="">Todos</option>
+            {MONTHS_PT.map((nome, i) => <option key={nome} value={String(i + 1)}>{nome}</option>)}
+          </FilterSelect>
         )}
         {has("valor") && (
           <>

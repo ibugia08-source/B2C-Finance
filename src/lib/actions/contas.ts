@@ -7,7 +7,6 @@ import { requirePermission } from "@/lib/auth/viewer";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import type { ActionResult } from "./clients";
 import { clean, parseBRL } from "@/lib/format";
-// A lista de tipos mora em lib/conta-meta: "use server" só exporta função.
 
 /**
  * CONTAS DO CAIXA — UX-01 e DA-12 da auditoria de 11/09/2026.
@@ -18,16 +17,13 @@ import { clean, parseBRL } from "@/lib/format";
  * e "nenhuma conta disponível" no filtro — que a auditoria leu, com razão,
  * como projeção sem origem de dados.
  *
- * TIPOS DE CONTA: os mesmos quatro que o schema já documenta em
- * Account.type. Não é lista livre de propósito — segmento digitado à mão foi
- * o que gerou "Imobiliária" e "IMOBILIÁRIA" no cadastro de clientes (DS-13).
+ * TIPOS DE CONTA: a lista fechada vive em lib/conta-meta (TIPOS_DE_CONTA).
+ * Ela NÃO pode ser exportada daqui: este arquivo é "use server", e o Next
+ * registra TODO export como server action — um objeto exportado derruba o
+ * módulo inteiro em tempo de execução ("A 'use server' file can only export
+ * async functions, found object"), e o sintoma era "Nova conta" falhando em
+ * produção com erro genérico (24/09/2026). O build passa; só a chamada quebra.
  */
-export const TIPOS_DE_CONTA = [
-  { valor: "corrente", label: "Conta corrente" },
-  { valor: "poupanca", label: "Poupança" },
-  { valor: "dinheiro", label: "Dinheiro em espécie" },
-  { valor: "investimento", label: "Investimento" },
-] as const;
 
 const ContaSchema = z.object({
   id: z.string().optional(),

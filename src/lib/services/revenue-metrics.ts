@@ -416,10 +416,22 @@ export type RenewalWindow = {
  * Exportada para o painel de renovações (renewal-metrics) usar a MESMA regra.
  */
 export async function expectedRenewalValues(
-  clients: { id: string; modality: string | null; monthlyValue: unknown }[]
+  clients: {
+    id: string;
+    modality: string | null;
+    monthlyValue: unknown;
+    /** Valor de referência do cadastro (TCV). Quando vem, é a 1ª fonte. */
+    totalContractValue?: unknown;
+  }[]
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
-  const tcvIds = clients.filter((c) => c.modality === "TCV").map((c) => c.id);
+  // TCV: o cadastro guarda o valor do contrato ATUAL (a renovação grava o
+  // valor renovado ali). Contract.totalValue ACUMULA a cada renovação
+  // (histórico do vínculo), então não serve como "valor esperado" — dobrava
+  // a previsão do cliente depois da 1ª renovação (24/09/2026).
+  const tcvIds = clients
+    .filter((c) => c.modality === "TCV" && !(n(c.totalContractValue) > 0))
+    .map((c) => c.id);
 
   const lastTcvByClient = new Map<string, number>();
   if (tcvIds.length > 0) {
@@ -449,7 +461,8 @@ export async function expectedRenewalValues(
 
   for (const c of clients) {
     if (c.modality === "TCV") {
-      map.set(c.id, lastTcvByClient.get(c.id) ?? n(c.monthlyValue));
+      const own = n(c.totalContractValue);
+      map.set(c.id, own > 0 ? own : lastTcvByClient.get(c.id) ?? n(c.monthlyValue));
     } else {
       map.set(c.id, n(c.monthlyValue));
     }
@@ -459,46 +472,32 @@ export async function expectedRenewalValues(
 
 /**
  * Janela de renovações por offset de mês (0 = atual, 1..3 = à frente;
- * negativos = histórico). Usa Client.renewalMonth (editável na carteira).
+ * negativos = histórico). Lê a AGENDA ÚNICA de renewal-schedule (mês de
+ * renovação do cadastro + data do contrato vigente + entrada/prazo), a mesma
+ * do painel /renovacoes — antes olhava só Client.renewalMonth e divergia.
  */
 export async function getRenewalOutlook(
   offsets: number[] = [0, 1, 2, 3]
 ): Promise<RenewalWindow[]> {
-  const now = new Date();
-
-  const clients = await prisma.client.findMany({
-    where: {
-      renewalMonth: { not: null },
-      status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] },
-    },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      salesOwner: true,
-      modality: true,
-      status: true,
-      renewalMonth: true,
-      monthlyValue: true,
-    },
+  const { scheduledRenewals, monthKey, zonedMonthOf } = await import("./renewal-schedule");
+  const today = zonedMonthOf(new Date());
+  const window = offsets.map((offset) => {
+    const ref = new Date(today.year, today.month - 1 + offset, 1);
+    return { offset, month: ref.getMonth() + 1, year: ref.getFullYear() };
   });
+  const schedule = await scheduledRenewals(window);
+  const all = Array.from(schedule.values()).flat();
+  const expected = await expectedRenewalValues(all);
 
-  const expected = await expectedRenewalValues(clients);
-
-  return offsets.map((offset) => {
-    const ref = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-    const month = ref.getMonth() + 1;
-    const year = ref.getFullYear();
-    const windowClients: RenewalClient[] = clients
-      .filter((c) => c.renewalMonth === month)
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        salesOwner: c.salesOwner,
-        modality: c.modality,
-        status: c.status,
-        expected: expected.get(c.id) ?? 0,
-      }));
+  return window.map(({ offset, month, year }) => {
+    const windowClients: RenewalClient[] = (schedule.get(monthKey({ month, year })) ?? []).map((c) => ({
+      id: c.id,
+      name: c.name,
+      salesOwner: c.salesOwner,
+      modality: c.modality,
+      status: c.status,
+      expected: expected.get(c.id) ?? 0,
+    }));
     return {
       offset,
       month,

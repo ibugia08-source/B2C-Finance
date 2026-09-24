@@ -665,22 +665,24 @@ async function getNewClientsDetailImpl(period: Period): Promise<NamedValue[]> {
     .sort((a, b) => b.value - a.value);
 }
 
-/** Clientes com renovação no mês selecionado (mês-calendário). */
-async function getRenewalClientsDetailImpl(month: number): Promise<NamedValue[]> {
-  const rows = await prisma.client.findMany({
-    where: {
-      renewalMonth: month,
-      status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] },
-    },
-    select: { id: true, name: true, modality: true, monthlyValue: true, totalContractValue: true, salesOwner: true },
-    orderBy: { name: "asc" },
-    take: 60,
-  });
-  return rows.map((r) => ({
-    id: r.id,
+/**
+ * Clientes com renovação no mês selecionado — a MESMA lista do módulo
+ * /renovacoes (getRenewalPanel): agenda única + quem já renovou + quem se
+ * perdeu no mês. Antes lia só Client.renewalMonth, e por isso o card do
+ * painel divergia do módulo e "esquecia" quem já tinha renovado (a renovação
+ * move o renewalMonth do cadastro para a próxima janela).
+ */
+async function getRenewalClientsDetailImpl(month: number, year: number): Promise<NamedValue[]> {
+  const { getRenewalPanel } = await import("./renewal-metrics");
+  const panel = await getRenewalPanel(month, year);
+  return panel.rows.map((r) => ({
+    id: r.clientId,
     name: r.name,
-    sub: r.salesOwner ?? r.modality ?? undefined,
-    value: r.modality === "TCV" ? n(r.totalContractValue) : n(r.monthlyValue),
+    sub: [
+      r.renewal ? "renovou" : r.lostAtISO ? "não renovou" : "pendente",
+      r.salesOwner ?? r.modality ?? null,
+    ].filter(Boolean).join(" · "),
+    value: r.renewal ? r.renewal.totalValue : r.expected,
   }));
 }
 

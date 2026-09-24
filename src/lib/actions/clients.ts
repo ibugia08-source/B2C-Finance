@@ -395,11 +395,17 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
           "@/lib/services/contract-metrics"
         );
         await generateBillingsForContract(contract.id);
-        // Garante a data de entrada no cadastro quando não informada.
-        if (!parsed.startedAt) {
+        // Garante a data de entrada no cadastro quando não informada e
+        // preenche o MÊS DE RENOVAÇÃO a partir do fim do contrato: sem isso
+        // o cliente nascia com contrato e renewalDate, mas fora da agenda
+        // da carteira (filtro "Mês de renovação", card do painel).
+        const complemento: { startedAt?: Date; renewalMonth?: number } = {};
+        if (!parsed.startedAt) complemento.startedAt = entry;
+        if (endDate) complemento.renewalMonth = endDate.getMonth() + 1;
+        if (Object.keys(complemento).length > 0) {
           await prisma.client.update({
             where: { id: created.id },
-            data: { startedAt: entry },
+            data: complemento,
           });
         }
       }
