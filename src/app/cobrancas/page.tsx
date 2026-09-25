@@ -486,7 +486,7 @@ async function RecebimentosPageInner({
   // realização do faturamento esperado deste mês.
   const pctRealizacao =
     receipts.expectedTotal > 0
-      ? receipts.receiptsCorrectMonth / receipts.expectedTotal
+      ? receipts.receivedForCompetence / receipts.expectedTotal
       : null;
   // PROJEÇÃO do mês (02 §5.2) = FATURAMENTO ESPERADO − despesas (regra da planilha do
   // dono: o resultado projeta o mês cheio, não só o que já caiu na conta).

@@ -77,7 +77,13 @@ function buildMetrics(
   const despesas = finance.despesas;
   // EM ABERTO continua na base de COMPETÊNCIA: recuperação de julho recebida
   // em agosto não abate o que agosto ainda tem a receber.
-  const emAberto = Math.max(0, faturamentoTotal - (recebido - recuperado));
+  // Adiantamento conta no Recebido do mês em que foi PAGO (decisão do dono,
+  // 25/09/2026); o Em aberto é da COMPETÊNCIA — tira o adiantamento que é de
+  // outro mês e soma o que já entrou antes para este mês.
+  const emAberto = Math.max(
+    0,
+    faturamentoTotal - (recebido - recuperado - receipts.advanceOutValue + receipts.advanceInValue)
+  );
   const resultado = recebido - despesas;
 
   return {
@@ -237,10 +243,14 @@ export type YearlySeries = {
   labels: string[]; // Jan..Dez
   faturamento: number[]; // total previsto por mês (MRR+TCV+extra)
   despesas: number[]; // total de despesas por mês
-  /** recebido em caixa: competência do mês + recuperações recebidas no mês + extras */
+  /** recebido em caixa: tudo o que foi PAGO no mês (no prazo, adiantado ou atrasado) + extras */
   recebido: number[];
   /** recuperações de competências anteriores, no mês do RECEBIMENTO (⊂ recebido) */
   recuperado: number[];
+  /** adiantamentos pagos no mês para competências futuras (⊂ recebido) */
+  adiantadoSaida: number[];
+  /** adiantamentos pagos ANTES para a competência do mês (fora do recebido dele) */
+  adiantadoEntrada: number[];
   resultado: number[]; // recebido − despesas por mês
 };
 
@@ -255,7 +265,7 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const yEnd = new Date(year + 1, 0, 1);
   const now = new Date();
 
-  const [mrrClients, tcvBillings, extraRevenues, looseIncomes, payments, expenses] =
+  const [mrrClients, tcvBillings, extraRevenues, looseIncomes, payments, expenses, adiantadosAntes] =
     await Promise.all([
       prisma.client.findMany({
         where: { modality: "MRR" },
@@ -284,28 +294,40 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
         select: { amount: true, receivedAt: true },
       }),
       prisma.payment.findMany({
-        // Pagamentos de cobranças da COMPETÊNCIA do ano (recebido no mês
-        // certo) OU pagos DENTRO do ano (recuperações — contam no mês do
-        // caixa, inclusive as de competências do ano anterior).
+        // Tudo o que foi PAGO dentro do ano — cada pagamento conta no mês em
+        // que entrou (decisão do dono, 25/09/2026). É a regra do card
+        // "Recebido em caixa": série e card não podem divergir.
         where: {
           status: "CONFIRMED",
-          OR: [
-            { billing: { status: { not: "CANCELED" }, competenceYear: year } },
-            {
-              paidAt: { gte: yStart, lt: yEnd },
-              billing: { status: { not: "CANCELED" } },
-            },
-          ],
+          paidAt: { gte: yStart, lt: yEnd },
+          billing: { status: { not: "CANCELED" } },
         },
         select: {
           amount: true,
           paidAt: true,
-          billing: { select: { competenceMonth: true, competenceYear: true } },
+          billing: { select: { amount: true, competenceMonth: true, competenceYear: true } },
+          // Como no card: conta só o que foi APLICADO em cobranças; o
+          // excedente não aplicado é crédito do cliente.
+          applications: {
+            select: {
+              amount: true,
+              billing: { select: { status: true, competenceMonth: true, competenceYear: true } },
+            },
+          },
         },
       }),
       prisma.transaction.findMany({
         where: { type: "despesa", status: { not: "cancelado" }, date: { gte: yStart, lt: yEnd } },
         select: { amount: true, date: true },
+      }),
+      // Pago no ano anterior para competências deste ano (ex.: dezembro
+      // adiantando janeiro) — entra no "Em aberto" de janeiro como já pago.
+      prisma.paymentApplication.findMany({
+        where: {
+          payment: { status: "CONFIRMED", paidAt: { lt: yStart } },
+          billing: { status: { not: "CANCELED" }, competenceYear: year },
+        },
+        select: { amount: true, billing: { select: { competenceMonth: true } } },
       }),
     ]);
 
@@ -315,6 +337,8 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const extra = zero();
   const recebido = zero();
   const recuperado = zero();
+  const adiantadoSaida = zero();
+  const adiantadoEntrada = zero();
   const despesas = zero();
 
   // MRR previsto por mês: cliente MRR ativo naquele mês (regra única).
@@ -338,20 +362,32 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
     extra[(e.competenceMonth ?? e.receivedAt.getMonth() + 1) - 1] += n(e.amount);
   for (const i of looseIncomes) extra[i.receivedAt.getMonth()] += n(i.amount);
 
-  // Recebido: pago on-time/adiantado entra na COMPETÊNCIA; pago depois da
-  // competência é RECUPERAÇÃO e entra no mês do CAIXA — a mesma regra do
-  // totalRevenue que os cards do mês usam.
+  // Recebido: TODO pagamento entra no mês em que foi PAGO — no prazo,
+  // adiantado (competência futura) ou em atraso. Decisão do dono em
+  // 25/09/2026, a mesma regra do card "Recebido em caixa" (getReceiptsSummary).
+  // Pago depois da competência também é RECUPERAÇÃO (marcada à parte, porque
+  // o "Em aberto" do mês não é abatido por ela). paidAt é data civil: mês
+  // pelas partes UTC.
   for (const p of payments) {
-    const compKey = p.billing.competenceYear * 12 + (p.billing.competenceMonth - 1);
-    const paidKey = p.paidAt.getFullYear() * 12 + p.paidAt.getMonth();
-    if (paidKey <= compKey) {
-      if (p.billing.competenceYear === year)
-        recebido[p.billing.competenceMonth - 1] += n(p.amount);
-    } else if (p.paidAt >= yStart && p.paidAt < yEnd) {
-      recebido[p.paidAt.getMonth()] += n(p.amount);
-      recuperado[p.paidAt.getMonth()] += n(p.amount);
+    const mes = p.paidAt.getUTCMonth();
+    const paidKey = p.paidAt.getUTCFullYear() * 12 + mes;
+    const aplicadas = p.applications.filter((a) => a.billing.status !== "CANCELED");
+    const parcelas =
+      p.applications.length > 0
+        ? aplicadas.map((a) => ({ v: n(a.amount), b: a.billing }))
+        : [{ v: Math.min(n(p.amount), n(p.billing.amount)), b: p.billing }];
+    for (const { v, b } of parcelas) {
+      if (v <= 0) continue;
+      recebido[mes] += v;
+      const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
+      if (paidKey > compKey) recuperado[mes] += v;
+      if (paidKey < compKey) {
+        adiantadoSaida[mes] += v;
+        if (b.competenceYear === year) adiantadoEntrada[b.competenceMonth - 1] += v;
+      }
     }
   }
+  for (const a of adiantadosAntes) adiantadoEntrada[a.billing.competenceMonth - 1] += n(a.amount);
   // Receita Extra também é recebimento.
   for (let m = 0; m < 12; m++) recebido[m] += extra[m];
 
@@ -361,7 +397,10 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const faturamento = mrr.map((v, i) => v + tcv[i] + extra[i]);
   const resultado = recebido.map((r, i) => r - despesas[i]);
 
-  return { year, labels: MONTHS_SHORT, faturamento, despesas, recebido, recuperado, resultado };
+  return {
+    year, labels: MONTHS_SHORT, faturamento, despesas, recebido, recuperado,
+    adiantadoSaida, adiantadoEntrada, resultado,
+  };
 }
 
 // ===================================================================
@@ -590,7 +629,14 @@ export function buildDashboardSummary(i: SummaryInput): string[] {
 // Detalhes internos dos cards secundários — §11
 // ===================================================================
 
-export type NamedValue = { id?: string; name: string; sub?: string; value: number };
+export type NamedValue = {
+  id?: string;
+  name: string;
+  sub?: string;
+  value: number;
+  /** Modalidade (MRR | TCV), quando a lista é de clientes. */
+  modality?: string | null;
+};
 
 
 /**
@@ -744,6 +790,7 @@ async function getRenewalClientsDetailImpl(months: YearMonth[]): Promise<NamedVa
           .filter(Boolean)
           .join(" · "),
         value: r.expected,
+        modality: r.modality,
       });
     }
   }

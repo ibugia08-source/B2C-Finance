@@ -152,7 +152,14 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   const renewalHistory = await getRenewalHistory(ultimoMes, 6);
   const renovacaoEsperada =
     Math.round(renewalClientsDetail.reduce((s, r) => s + r.value, 0) * 100) / 100;
-  const faturamentoTotalEsperado = Math.round((main.current.faturamentoTotal + renovacaoEsperada) * 100) / 100;
+  // "Faturamento total esperado" soma só as renovações TCV (decisão do dono,
+  // 25/09/2026): a mensalidade de quem renova em MRR já está dentro do MRR do
+  // mês — somá-la de novo contaria duas vezes. O TCV renovado é contrato novo.
+  const renovacoesTcv = renewalClientsDetail.filter((r) => r.modality === "TCV");
+  const renovacaoTcvEsperada =
+    Math.round(renovacoesTcv.reduce((s, r) => s + r.value, 0) * 100) / 100;
+  const faturamentoTotalEsperado =
+    Math.round((main.current.faturamentoTotal + renovacaoTcvEsperada) * 100) / 100;
   // Sexto card do painel executivo (02 §5.1). Com as reservas removidas
   // (10/09/2026), a conta é: contas ativas − compromissos imediatos.
   const liquidez = await getLiquidez(new Date().toISOString());
@@ -182,7 +189,10 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   // "Em aberto" não tem série própria: é esperado − recebido DA COMPETÊNCIA,
   // mês a mês (recuperação entra no recebido mas não abate o aberto do mês).
   const sparkEmAberto = yearly.faturamento.map((v, i) =>
-    Math.max(0, v - (yearly.recebido[i] - yearly.recuperado[i]))
+    Math.max(
+      0,
+      v - (yearly.recebido[i] - yearly.recuperado[i] - yearly.adiantadoSaida[i] + yearly.adiantadoEntrada[i])
+    )
   );
 
   // Última atualização (horário de Brasília — servidor roda em UTC).
@@ -286,18 +296,28 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           title="Faturamento total esperado"
           value={formatBRL(faturamentoTotalEsperado)}
           metrica="faturamento_total_esperado"
-          hint={`${formatBRL(previsto)} faturamento + ${formatBRL(renovacaoEsperada)} renovações`}
-          help={`Tudo o que se espera faturar ${noRecorte}: o Faturamento total (MRR + TCV + receitas extras) somado ao valor esperado de renovação dos mesmos meses.`}
+          hint={`${formatBRL(previsto)} faturamento + ${formatBRL(renovacaoTcvEsperada)} renovações TCV`}
+          help={`Tudo o que se espera faturar ${noRecorte}: o Faturamento total (MRR + TCV + avulsas + receitas extras) somado ao valor esperado das renovações TCV dos mesmos meses. Renovação MRR não entra: a mensalidade dela já está no MRR.`}
           detailTitle={`Faturamento total esperado ${doRecorte}`}
           detail={
-            <NamedValueList
-              items={[
-                { name: "Faturamento total (MRR + TCV + extras)", value: previsto },
-                { name: `Renovações esperadas ${doRecorte}`, value: renovacaoEsperada },
-              ]}
-              total={faturamentoTotalEsperado}
-              totalLabel="Faturamento total esperado"
-            />
+            <div className="space-y-3">
+              <NamedValueList
+                items={[
+                  { name: "Faturamento total (MRR + TCV + avulsas + extras)", value: previsto },
+                  { name: `Renovações TCV esperadas ${doRecorte}`, value: renovacaoTcvEsperada },
+                ]}
+                total={faturamentoTotalEsperado}
+                totalLabel="Faturamento total esperado"
+              />
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">Renovações TCV consideradas</p>
+                <NamedValueList
+                  items={renovacoesTcv}
+                  limit={Infinity}
+                  emptyText="Nenhuma renovação TCV esperada no período."
+                />
+              </div>
+            </div>
           }
         />
         <MetricCard

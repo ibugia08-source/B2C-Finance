@@ -238,6 +238,18 @@ export type ReceiptsSummary = {
   extraRevenueTotal: number; // recuperações + manuais
   totalRevenue: number; // receiptsCorrectMonth + extraRevenueTotal
   openAmount: number; // em aberto (competência no período, não quitado)
+  /**
+   * ADIANTAMENTOS (decisão do dono, 25/09/2026: pagamento conta no mês em que
+   * foi PAGO). `advanceOutValue`: pago NESTE período para competência futura
+   * — está no Recebido daqui. `advanceInValue`: pago ANTES do período para
+   * competência deste período — está no Recebido do mês em que entrou. O
+   * "Em aberto" é da competência, então usa os dois para não dizer que falta
+   * receber o que já entrou (nem abater o que é de outro mês).
+   */
+  advanceOutValue: number;
+  advanceInValue: number;
+  /** Quanto da competência do período já foi pago, quando quer que tenha sido. */
+  receivedForCompetence: number;
 
   // ===== Métricas OFICIAIS do mês (fórmulas do dicionário) =====
   /** Faturamento total previsto: Σ cobranças da competência (exceto canceladas) */
@@ -257,7 +269,7 @@ async function getReceiptsSummaryImpl(
   const entity = clientEntityWhere(filters);
   const clientFilter = Object.keys(entity).length ? { client: entity } : {};
 
-  const [payments, extraRevenues, looseIncomes, openBillings] = await Promise.all([
+  const [payments, extraRevenues, looseIncomes, openBillings, advancesIn] = await Promise.all([
     prisma.payment.findMany({
       where: {
         status: "CONFIRMED",
@@ -330,6 +342,21 @@ async function getReceiptsSummaryImpl(
       : Promise.resolve(
           [] as { amount: unknown; paidTotal: unknown; dueDate: Date }[]
         ),
+    // Adiantamentos que ENTRARAM antes do período para cobranças da
+    // competência do período (só o valor aplicado nelas).
+    months.length
+      ? prisma.paymentApplication.findMany({
+          where: {
+            payment: { status: "CONFIRMED", paidAt: { lt: start } },
+            billing: {
+              status: { not: "CANCELED" },
+              OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+              ...(clientFilter as any),
+            },
+          },
+          select: { amount: true },
+        })
+      : Promise.resolve([] as { amount: unknown }[]),
   ]);
 
   // Faturamento total previsto do período: Σ cobranças da competência,
@@ -353,6 +380,7 @@ async function getReceiptsSummaryImpl(
   let lateSameMonthCount = 0;
   let paidDifferentMonthValue = 0;
   let paidDifferentMonthCount = 0;
+  let advanceOutValue = 0;
 
   // Cada pagamento vira as PARCELAS que ele quitou (PaymentApplication).
   // Antes somava Payment.amount: um pagamento acima do saldo inflava o
@@ -397,7 +425,9 @@ async function getReceiptsSummaryImpl(
       paidDifferentMonthValue += v;
       paidDifferentMonthCount += 1;
     } else {
-      // Adiantamento (pagou antes da competência): conta como recebimento.
+      // Adiantamento (pagou antes da competência): conta como recebimento
+      // NESTE mês — o do pagamento (decisão do dono, 25/09/2026).
+      advanceOutValue += v;
       receiptsCorrectMonth += v;
       if (b.revenueType === "MRR") mrrReceived += v;
       else if (b.revenueType === "TCV") tcvReceived += v;
@@ -420,7 +450,9 @@ async function getReceiptsSummaryImpl(
   // Em aberto = Faturamento total previsto − Recebido do mês.
   // Clamp em 0: recebido pode superar o previsto (adiantamento de competência
   // futura contado como recebimento) — nunca exibir "em aberto" negativo.
-  const openMonth = Math.max(0, expectedTotal - receiptsCorrectMonth);
+  const advanceInValue = advancesIn.reduce((s, a) => s + n(a.amount), 0);
+  const receivedForCompetence = receiptsCorrectMonth - advanceOutValue + advanceInValue;
+  const openMonth = Math.max(0, expectedTotal - receivedForCompetence);
   // Vencido = parte do em aberto cuja data de vencimento já passou (⊂ Em aberto).
   const today = hojeCivil();
   const overdueOpenAmount = openBillings.reduce(
@@ -444,6 +476,9 @@ async function getReceiptsSummaryImpl(
     extraRevenueTotal,
     totalRevenue: receiptsCorrectMonth + extraRevenueTotal,
     openAmount,
+    advanceOutValue,
+    advanceInValue,
+    receivedForCompetence,
     expectedTotal,
     openMonth,
     overdueOpenAmount,

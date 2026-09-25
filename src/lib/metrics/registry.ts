@@ -115,13 +115,13 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     key: "faturamento_total_esperado",
     name: "Faturamento total esperado",
     description:
-      "Tudo o que se espera faturar no mês: o faturamento total previsto somado ao valor esperado de renovação do mês.",
+      "Tudo o que se espera faturar no mês: o faturamento total previsto somado ao valor esperado das renovações TCV do mês.",
     formulaDescription:
-      "Faturamento total (MRR + TCV + receita extra do mês) + Renovações esperadas do mês.",
+      "Faturamento total (MRR + TCV + avulsas + receita extra do mês) + Σ valor esperado das renovações TCV com expectativa no mês. Renovação MRR não entra: a mensalidade já está no MRR.",
     grain: "COMPETENCE", dateBasis: "COMPETENCE",
     sourceEntities: ["Billing", "ExtraRevenue", "Client", "ClientRenewal", "ClientLoss"],
     filters:
-      "fórmula definida pelo dono; renovação MRR já tem a mensalidade dentro do MRR do mês, e renovação TCV lançada já aparece no TCV — o card mostra as duas parcelas separadas",
+      "decisão do dono 25/09/2026: só TCV entra na parcela de renovação (evita contar a mensalidade MRR duas vezes)",
     rounding: MOEDA, spec: "01 §7.1 — decisão do dono 25/09/2026",
   },
   {
