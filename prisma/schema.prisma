@@ -1232,6 +1232,10 @@ model Client {
   totalContractValue  Decimal?        @db.Decimal(14, 2)
   // Prazo do contrato em meses — editável inline em Recebimentos/Carteira.
   contractMonths      Int?
+  /// PRAZO INDETERMINADO (25/09/2026): sem data de término — o cliente fica
+  /// ativo até ser dado como perdido/inativo. contractMonths fica nulo e não
+  /// há expectativa de renovação automática (só a agendada à mão).
+  contractIndefinite  Boolean         @default(false)
   startedAt           DateTime?       @db.Timestamptz(3) // início da relação comercial
   churnedAt           DateTime?       @db.Timestamptz(3) // data de saída (preenchida quando CHURNED)
   notes               String?
@@ -1347,7 +1351,7 @@ model ClientRenewal {
   client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   contractId      String? // contrato estendido (null = renovação só pelo cadastro)
   renewedAt       DateTime        @default(now()) @db.Timestamptz(3)
-  months          Int // prazo do novo ciclo
+  months          Int? // prazo do novo ciclo; nulo = renovou com prazo indeterminado
   totalValue      Decimal         @db.Decimal(14, 2) // valor do novo ciclo
   monthlyValue    Decimal?        @db.Decimal(14, 2) // mensal resultante (MRR)
   modality        ClientModality? // snapshot da modalidade na renovação

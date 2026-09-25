@@ -168,7 +168,7 @@ async function RecebimentosPageInner({
           client: {
             select: {
               id: true, name: true, phone: true, modality: true,
-              paymentDay: true, salesOwner: true, contractMonths: true, status: true,
+              paymentDay: true, salesOwner: true, contractMonths: true, contractIndefinite: true, status: true,
             },
           },
           _count: { select: { history: true } },
@@ -179,7 +179,7 @@ async function RecebimentosPageInner({
         where: { status: { in: [...REVENUE_ACTIVE_STATUSES] } },
         select: {
           id: true, name: true, phone: true, modality: true, paymentDay: true,
-          salesOwner: true, contractMonths: true, monthlyValue: true,
+          salesOwner: true, contractMonths: true, contractIndefinite: true, monthlyValue: true,
         },
         orderBy: { name: "asc" },
         take: 1000,
@@ -259,6 +259,7 @@ async function RecebimentosPageInner({
       modality: b.client.modality,
       paymentDay: b.client.paymentDay,
       contractMonths: b.client.contractMonths,
+      contractIndefinite: b.client.contractIndefinite,
       amountDue: amount,
       openAmount,
       description: b.description,
@@ -311,6 +312,7 @@ async function RecebimentosPageInner({
         modality: c.modality,
         paymentDay: c.paymentDay,
         contractMonths: c.contractMonths,
+        contractIndefinite: c.contractIndefinite,
         amountDue: Number(c.monthlyValue ?? 0),
         openAmount: 0,
         description: null,

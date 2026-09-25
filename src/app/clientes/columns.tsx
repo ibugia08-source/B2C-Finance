@@ -199,7 +199,7 @@ export const ALL_COLUMNS: ClientColumn[] = [
         value={c.renewalCompetence ?? ""}
         options={renewalCompetenceOptions(c.renewalCompetence)}
         allowEmpty
-        emptyLabel="— definir —"
+        emptyLabel={c.contractIndefinite ? "Indeterminado" : "— definir —"}
         action={(v) => setClientRenewalExpectation(c.id, v || null)}
       />
     ),

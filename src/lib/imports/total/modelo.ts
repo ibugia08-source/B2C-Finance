@@ -90,6 +90,8 @@ export function montarModeloXlsx(): Buffer {
     ["CLIENTES — 1 linha por cliente. O documento (CNPJ/CPF) é a chave que"],
     ["evita duplicar; sem ele, o casamento é pelo nome exato."],
     ["modalidade: MRR | TCV · status_atual: " + STATUS_ATUAL.join(" | ")],
+    ["prazo_meses: número de meses, ou Indeterminado (só MRR: sem término e fora"],
+    ["de Renovações até ser agendado)."],
     [""],
     ["MENSAL — 1 linha por cliente × mês. É esta aba que constrói o passado:"],
     ["cobranças, pagamentos e avaliação de cada competência."],

@@ -44,6 +44,8 @@ export type LinhaCliente = {
   valorMensal: number | null;
   valorTotal: number | null;
   prazoMeses: number | null;
+  /** "Indeterminado" na coluna prazo: sem término, sem renovação automática. */
+  prazoIndeterminado: boolean;
   diaVencimento: number | null;
   servicos: string[];
   gestor1: string | null;
@@ -273,8 +275,11 @@ function parseClientes(aba: Aba, erros: ErroDeLinha[]): LinhaCliente[] {
       err("data_churn", "data inválida");
 
     const prazoRaw = coluna(raw, "prazo_meses", "prazomeses");
+    const prazoIndeterminado = /^indeterminad[oa]$/i.test(String(prazoRaw ?? "").trim());
     const prazoMeses =
-      String(prazoRaw ?? "").trim() === "" ? null : Math.max(1, Math.trunc(Number(prazoRaw)) || 0) || null;
+      String(prazoRaw ?? "").trim() === "" || prazoIndeterminado
+        ? null
+        : Math.max(1, Math.trunc(Number(prazoRaw)) || 0) || null;
 
     out.push({
       sourceRow: linha,
@@ -294,6 +299,7 @@ function parseClientes(aba: Aba, erros: ErroDeLinha[]): LinhaCliente[] {
       valorMensal,
       valorTotal,
       prazoMeses,
+      prazoIndeterminado,
       diaVencimento,
       servicos: String(coluna(raw, "servicos") ?? "")
         .split(";")

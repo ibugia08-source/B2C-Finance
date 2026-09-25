@@ -11,6 +11,8 @@ export type ClientRow = {
   salesOwner: string | null;
   /** Expectativa de renovação, "YYYY-MM" (null = sem expectativa). */
   renewalCompetence: string | null;
+  /** Prazo indeterminado: sem expectativa automática (só agendada). */
+  contractIndefinite: boolean;
   // ===== Financeiro na linha (Fase A) =====
   monthlyValue: number | null; // mensal (MRR)
   totalContractValue: number | null; // total do contrato (TCV)

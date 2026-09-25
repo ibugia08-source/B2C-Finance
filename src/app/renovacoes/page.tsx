@@ -190,7 +190,7 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
                         {r.client.name}
                       </Link>
                       <p className="text-xs text-muted-foreground">
-                        {formatDateBR(r.renewedAt)} · {r.months} mês(es)
+                        {formatDateBR(r.renewedAt)} · {r.months != null ? `${r.months} mês(es)` : "prazo indeterminado"}
                         {r.modality ? ` · ${r.modality}` : ""}
                         {r.paymentMethod ? ` · ${r.paymentMethod}` : ""}
                         {r.billingMonth

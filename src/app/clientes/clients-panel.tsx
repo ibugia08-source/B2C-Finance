@@ -73,7 +73,9 @@ function rotuloGrupo(c: ClientRow, by: GroupKey): string {
     case "renewalCompetence":
       return c.renewalCompetence
         ? competenceShortLabel(c.renewalCompetence)
-        : "Sem expectativa de renovação";
+        : c.contractIndefinite
+          ? "Prazo indeterminado"
+          : "Sem expectativa de renovação";
     default:
       return "";
   }
@@ -394,7 +396,7 @@ export function ClientsPanel({
                     value={c.renewalCompetence ?? ""}
                     options={renewalCompetenceOptions(c.renewalCompetence)}
                     allowEmpty
-                    emptyLabel="— definir —"
+                    emptyLabel={c.contractIndefinite ? "Indeterminado" : "— definir —"}
                     action={(v) => setClientRenewalExpectation(c.id, v || null)}
                   />
                 </Field>

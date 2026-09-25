@@ -1,5 +1,5 @@
 "use server";
-import { expectationFromBase } from "@/lib/renewal-expectation";
+import { PRAZO_INDETERMINADO, expectationFromBase } from "@/lib/renewal-expectation";
 import { BILLING_OPEN_STATUSES, MONEY_EPSILON } from "@/lib/billing-status";
 import { hojeCivil, hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
 import { prisma } from "@/lib/prisma";
@@ -131,27 +131,45 @@ export async function setClientChargeAmount(
   }
 }
 
-/** Prazo do contrato (meses) — atributo do cadastro do cliente. */
+/**
+ * Prazo do contrato — atributo do cadastro do cliente. Meses (1-120), nulo
+ * (a definir) ou "indeterminado": sem término, ativo até ser dado como
+ * perdido, e sem expectativa de renovação automática.
+ */
 export async function setClientContractMonths(
   clientId: string,
-  months: number | null
+  months: number | null | typeof PRAZO_INDETERMINADO
 ): Promise<ActionResult> {
   if (!(await tryPermission("recebimentos.editar"))) return NO_PERMISSION;
   try {
-    if (months != null && (!Number.isInteger(months) || months < 1 || months > 120))
+    const indeterminado = months === PRAZO_INDETERMINADO;
+    const meses = indeterminado ? null : (months as number | null);
+    if (meses != null && (!Number.isInteger(meses) || meses < 1 || meses > 120))
       return { ok: false, error: "Prazo inválido (1 a 120 meses)." };
     const client = await prisma.client.findFirst({ where: { id: clientId } });
     if (!client) return { ok: false, error: "Cliente não encontrado." };
+    if (indeterminado && client.modality === "TCV")
+      return { ok: false, error: "TCV é um valor fechado por um prazo: Indeterminado vale só para MRR." };
+    if (!indeterminado && meses == null && client.modality === "TCV")
+      return { ok: false, error: "TCV exige o prazo do contrato em meses." };
     // Prazo é metade da BASE da expectativa de renovação (entrada + prazo):
-    // mudou o prazo, refaz a expectativa. Sem prazo, não há expectativa.
-    const mudou = client.contractMonths !== months;
+    // mudou o prazo, refaz a expectativa. Sem prazo ou indeterminado, não há
+    // expectativa automática.
+    const mudou = client.contractMonths !== meses || client.contractIndefinite !== indeterminado;
     await prisma.client.update({
       where: { id: clientId },
       data: {
-        contractMonths: months,
-        ...(mudou ? { expectedRenewalAt: expectationFromBase(client.startedAt, months) } : {}),
+        contractMonths: meses,
+        contractIndefinite: indeterminado,
+        ...(mudou
+          ? { expectedRenewalAt: indeterminado ? null : expectationFromBase(client.startedAt, meses) }
+          : {}),
       },
     });
+    if (indeterminado && !client.contractIndefinite) {
+      const { liberarTerminoDosContratos } = await import("@/lib/services/lifecycle");
+      await liberarTerminoDosContratos(clientId);
+    }
     revalidateAll(clientId);
     return { ok: true };
   } catch (e: any) {

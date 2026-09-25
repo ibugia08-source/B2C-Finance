@@ -324,10 +324,15 @@ export async function aplicarPlanilhaTotal(
           monthlyValue: linha.modalidade === "MRR" ? linha.valorMensal : null,
           totalContractValue: linha.modalidade === "TCV" ? linha.valorTotal : null,
           contractMonths: linha.prazoMeses,
+          // Indeterminado só em MRR (TCV é valor fechado por prazo).
+          contractIndefinite: linha.prazoIndeterminado && linha.modalidade === "MRR",
           paymentDay: linha.diaVencimento,
           startedAt: linha.dataEntrada,
-          // Entrada + prazo = expectativa de renovação (regra do cadastro).
-          expectedRenewalAt: expectationFromBase(linha.dataEntrada, linha.prazoMeses),
+          // Entrada + prazo = expectativa de renovação (regra do cadastro);
+          // prazo indeterminado não tem expectativa automática.
+          expectedRenewalAt: linha.prazoIndeterminado
+            ? null
+            : expectationFromBase(linha.dataEntrada, linha.prazoMeses),
           status: STATUS_CLIENTE[linha.statusAtual] ?? "ACTIVE",
           churnedAt: linha.statusAtual === "Churn" ? linha.dataChurn : null,
           notes: linha.obs,

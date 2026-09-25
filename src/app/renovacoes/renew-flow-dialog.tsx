@@ -12,6 +12,7 @@ import { renewClientFlow } from "@/lib/actions/renewals";
 import { showUndoToast } from "@/components/undo-toast";
 import { parseBRL, formatBRL } from "@/lib/format";
 import { RefreshCw } from "lucide-react";
+import { PRAZO_INDETERMINADO } from "@/lib/renewal-expectation";
 
 /**
  * "SIM, RENOVOU" — o pop-up completo da renovação. A MODALIDADE do contrato
@@ -27,6 +28,7 @@ import { RefreshCw } from "lucide-react";
 export function RenewFlowDialog({
   client,
   modality,
+  indefinite = false,
   contract,
   expectedValue = 0,
   defaults,
@@ -36,6 +38,8 @@ export function RenewFlowDialog({
 }: {
   client: { id: string; name: string };
   modality: string | null; // modalidade ATUAL (MRR | TCV | null)
+  /** Cliente hoje com prazo indeterminado — a renovação sugere manter. */
+  indefinite?: boolean;
   contract: {
     id: string;
     type: string;
@@ -58,6 +62,8 @@ export function RenewFlowDialog({
   const [pending, start] = useTransition();
   const [mod, setMod] = useState<"MRR" | "TCV">(currentIsMrr ? "MRR" : "TCV");
   const [months, setMonths] = useState(12);
+  // Prazo em lista: meses prontos, Indeterminado (só MRR) ou outro valor.
+  const [term, setTerm] = useState<string>(indefinite ? PRAZO_INDETERMINADO : "12");
   const [monthlyStr, setMonthlyStr] = useState("");
   const [launch, setLaunch] = useState(true);
   const [payStatus, setPayStatus] = useState("aberto");
@@ -73,6 +79,7 @@ export function RenewFlowDialog({
     setError(null);
     setMod(currentIsMrr ? "MRR" : "TCV");
     setMonths(12);
+    setTerm(indefinite && currentIsMrr ? PRAZO_INDETERMINADO : "12");
     // Mensalidade pré-preenchida com o valor atual do cadastro (editável).
     setMonthlyStr(
       defaultMonthly != null ? defaultMonthly.toFixed(2).replace(".", ",") : ""
@@ -84,7 +91,9 @@ export function RenewFlowDialog({
   const monthlyNum = monthlyStr.trim()
     ? parseBRL(monthlyStr)
     : defaultMonthly ?? 0;
-  const cycleTotal = monthlyNum > 0 ? monthlyNum * Math.max(1, months) : 0;
+  const isIndefinite = mod === "MRR" && term === PRAZO_INDETERMINADO;
+  const effectiveMonths = term === "outro" ? months : term === PRAZO_INDETERMINADO ? 12 : parseInt(term, 10) || 12;
+  const cycleTotal = monthlyNum > 0 && !isIndefinite ? monthlyNum * Math.max(1, effectiveMonths) : 0;
 
   return (
     <Dialog
@@ -149,15 +158,39 @@ export function RenewFlowDialog({
           </div>
 
           <div>
-            <Label>Prazo do novo contrato (meses) *</Label>
-            <Input
-              type="number"
-              min={1}
+            <Label>Prazo do novo contrato *</Label>
+            <Select
+              aria-label="Prazo do novo contrato"
+              value={mod === "TCV" && term === PRAZO_INDETERMINADO ? "12" : term}
+              onChange={(e) => setTerm(e.target.value)}
+            >
+              {["1", "3", "6", "12", "24"].map((m) => (
+                <option key={m} value={m}>{m} {m === "1" ? "mês" : "meses"}</option>
+              ))}
+              {mod === "MRR" && <option value={PRAZO_INDETERMINADO}>Indeterminado</option>}
+              <option value="outro">Outro prazo…</option>
+            </Select>
+            {term === "outro" && (
+              <Input
+                className="mt-1.5"
+                type="number"
+                min={1}
+                aria-label="Prazo em meses"
+                required
+                value={months}
+                onChange={(e) => setMonths(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              />
+            )}
+            <input
+              type="hidden"
               name="months"
-              required
-              value={months}
-              onChange={(e) => setMonths(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              value={isIndefinite ? PRAZO_INDETERMINADO : String(effectiveMonths)}
             />
+            {isIndefinite && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sem término: segue ativo até ser dado como perdido e só volta a Renovações se for agendado.
+              </p>
+            )}
           </div>
 
           {mod === "MRR" ? (
@@ -178,7 +211,7 @@ export function RenewFlowDialog({
                 />
                 {cycleTotal > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Ciclo: {formatBRL(cycleTotal)} ({months}× {formatBRL(monthlyNum)})
+                    Ciclo: {formatBRL(cycleTotal)} ({effectiveMonths}× {formatBRL(monthlyNum)})
                   </p>
                 )}
               </div>

@@ -223,7 +223,11 @@ export default async function ClientDetailPage({
                 <Info label="Resp. operacional">{client.opsOwner ?? "—"}</Info>
                 <Info label="Expectativa de renovação">
                   {client.expectedRenewalAt ? formatDateBR(client.expectedRenewalAt) : "—"}
-                  {client.startedAt && client.contractMonths ? (
+                  {client.contractIndefinite ? (
+                    <span className="block text-caption text-muted-foreground">
+                      prazo indeterminado — só entra em Renovações se for agendado
+                    </span>
+                  ) : client.startedAt && client.contractMonths ? (
                     <span className="block text-caption text-muted-foreground">
                       entrada {formatDateBR(client.startedAt)} + {client.contractMonths} meses
                     </span>
@@ -527,7 +531,7 @@ export default async function ClientDetailPage({
                     >
                       <div className="min-w-0">
                         <p className="font-medium">
-                          {formatDateBR(r.renewedAt)} — {r.months} mês(es)
+                          {formatDateBR(r.renewedAt)} — {r.months != null ? `${r.months} mês(es)` : "prazo indeterminado"}
                           {r.modality ? ` · ${r.modality}` : ""}
                         </p>
                         <p className="text-xs text-muted-foreground">

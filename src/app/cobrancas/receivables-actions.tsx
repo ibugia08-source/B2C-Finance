@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { PRAZO_INDETERMINADO } from "@/lib/renewal-expectation";
 import {
   Dialog,
   DialogContent,
@@ -134,13 +135,18 @@ export function StatusCell({
 }
 
 export function TermSelect({ row }: { row: ReceivableRow }) {
-  const current = row.contractMonths != null ? String(row.contractMonths) : "";
-  const isPreset = TERM_OPTIONS.some((o) => o.value === current);
+  const current = row.contractIndefinite
+    ? PRAZO_INDETERMINADO
+    : row.contractMonths != null ? String(row.contractMonths) : "";
+  const isPreset = current === PRAZO_INDETERMINADO || TERM_OPTIONS.some((o) => o.value === current);
+  // Indeterminado (sem término) só existe para MRR: TCV é valor fechado por prazo.
+  const indeterminado = row.modality === "TCV" ? [] : [{ value: PRAZO_INDETERMINADO, label: "Indeterminado" }];
   const options = isPreset || !current
-    ? [...TERM_OPTIONS, { value: "custom", label: "Personalizado…" }]
+    ? [...TERM_OPTIONS, ...indeterminado, { value: "custom", label: "Personalizado…" }]
     : [
         ...TERM_OPTIONS,
         { value: current, label: `${current} meses` },
+        ...indeterminado,
         { value: "custom", label: "Personalizado…" },
       ];
   return (
@@ -152,11 +158,12 @@ export function TermSelect({ row }: { row: ReceivableRow }) {
       emptyLabel="— definir —"
       action={async (v) => {
         if (v === "custom") {
-          const raw = prompt("Prazo do contrato em meses (1 a 120):", current || "12");
+          const raw = prompt("Prazo do contrato em meses (1 a 120):", /^\d+$/.test(current) ? current : "12");
           if (raw === null) return { ok: false, error: "Alteração cancelada." };
           const months = parseInt(raw, 10);
           return setClientContractMonths(row.clientId, Number.isFinite(months) ? months : null);
         }
+        if (v === PRAZO_INDETERMINADO) return setClientContractMonths(row.clientId, PRAZO_INDETERMINADO);
         return setClientContractMonths(row.clientId, v ? parseInt(v, 10) : null);
       }}
     />

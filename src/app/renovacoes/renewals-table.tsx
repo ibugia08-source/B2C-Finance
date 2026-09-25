@@ -8,6 +8,7 @@ import {
   MobileCards, MobileCard, MobileCardHeader, MobileCardActions, Field, MobileEmpty,
 } from "@/components/ui/record-card";
 import { formatBRL, formatDateBR } from "@/lib/format";
+import { contractTermLabel } from "@/lib/renewal-expectation";
 import { ROW_PAID, ROW_OVERDUE } from "@/lib/status-meta";
 import { CLIENT_STATUS_LABEL, clientStatusVariant } from "@/app/clientes/_meta";
 import { RenewFlowDialog } from "./renew-flow-dialog";
@@ -46,7 +47,7 @@ export function RenewalsTable({
         <div className="text-right">
           <Badge variant="success">Renovado</Badge>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {formatDateBR(new Date(r.renewal.renewedAtISO))} · {r.renewal.months}m ·{" "}
+            {formatDateBR(new Date(r.renewal.renewedAtISO))} · {r.renewal.months != null ? `${r.renewal.months}m` : "indeterminado"} ·{" "}
             {formatBRL(r.renewal.totalValue)}
           </p>
         </div>
@@ -68,6 +69,7 @@ export function RenewalsTable({
           <RenewFlowDialog
             client={{ id: r.clientId, name: r.name }}
             modality={r.modality}
+            indefinite={r.contractIndefinite}
             contract={r.contract}
             expectedValue={r.expected}
             defaultCompetence={defaultCompetence}
@@ -142,7 +144,9 @@ export function RenewalsTable({
                 <TableCell className="tabular-nums">
                   {r.startedAtISO ? formatDateBR(new Date(r.startedAtISO)) : "—"}
                   <span className="block text-[10px] text-muted-foreground">
-                    {r.contractMonths != null ? `prazo ${r.contractMonths} meses` : "sem prazo"}
+                    {r.contractIndefinite
+                      ? "prazo indeterminado"
+                      : r.contractMonths != null ? `prazo ${contractTermLabel(r.contractMonths)}` : "sem prazo"}
                     {r.monthsActive != null ? ` · ${r.monthsActive} meses de casa` : ""}
                   </span>
                 </TableCell>
@@ -181,7 +185,9 @@ export function RenewalsTable({
                 </Field>
                 <Field label="Entrada + prazo">
                   {r.startedAtISO ? formatDateBR(new Date(r.startedAtISO)) : "—"}
-                  {r.contractMonths != null ? ` · ${r.contractMonths} meses` : ""}
+                  {r.contractIndefinite || r.contractMonths != null
+                    ? ` · ${contractTermLabel(r.contractMonths, r.contractIndefinite).toLowerCase()}`
+                    : ""}
                 </Field>
                 <Field label="Responsável">{r.salesOwner ?? "—"}</Field>
                 <Field label="Valor esperado">{r.expected > 0 ? formatBRL(r.expected) : "—"}</Field>

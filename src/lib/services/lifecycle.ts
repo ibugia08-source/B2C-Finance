@@ -125,10 +125,11 @@ async function voltarAtivo(
   // ciclos até o mês corrente — a mesma regra do select de status.
   const exp = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { expectedRenewalAt: true, contractMonths: true },
+    select: { expectedRenewalAt: true, contractMonths: true, contractIndefinite: true },
   });
   const { rollForward } = await import("@/lib/renewal-expectation");
-  const novaExpectativa = exp?.expectedRenewalAt
+  // Prazo indeterminado não anda em ciclos: a volta não inventa renovação.
+  const novaExpectativa = exp?.expectedRenewalAt && !exp.contractIndefinite
     ? rollForward(exp.expectedRenewalAt, exp.contractMonths ?? 12)
     : null;
 
@@ -273,5 +274,22 @@ export async function encerrarRelacoes(
       );
     }
     await cancelarCobrancasFuturas(tx, { clientId }, mesSaida, "Cliente saiu da carteira");
+  });
+}
+
+/**
+ * PRAZO INDETERMINADO (25/09/2026): o cliente passou a não ter término. Os
+ * contratos vivos dele perdem a data de fim/renovação — senão apareceriam
+ * como "contrato vencido" e o cliente parece estar saindo, quando a regra é
+ * seguir ativo até ser dado como perdido.
+ */
+export async function liberarTerminoDosContratos(clientId: string): Promise<void> {
+  await prisma.contract.updateMany({
+    where: { clientId, status: { in: ["ACTIVE", "RENEWAL", "OVERDUE"] as any } },
+    data: { endDate: null, renewalDate: null },
+  });
+  await prisma.contract.updateMany({
+    where: { clientId, status: "OVERDUE" as any },
+    data: { status: "ACTIVE" as any },
   });
 }

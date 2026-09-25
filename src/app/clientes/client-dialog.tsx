@@ -18,6 +18,7 @@ import { saveClient, getClientForEdit, listEmployeeOptions } from "@/lib/actions
 import { listNicheOptions } from "@/lib/actions/niches";
 import { Plus } from "lucide-react";
 import { formatDateInput, parseBRL } from "@/lib/format";
+import { PRAZO_INDETERMINADO } from "@/lib/renewal-expectation";
 import { CLIENT_STATUSES, CLIENT_STATUS_LABEL } from "./_meta";
 
 /** Parse tolerante de dinheiro pt-BR ("1.500,00" → 1500) só para validar > 0. */
@@ -80,7 +81,13 @@ const FormSchema = z
           path: ["totalContractValue"],
           message: "Informe o valor total do contrato (maior que zero).",
         });
-      if (v.contractMonths === "")
+      if (v.contractMonths === PRAZO_INDETERMINADO)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contractMonths"],
+          message: "TCV é um valor fechado por um prazo: escolha o prazo em meses.",
+        });
+      else if (v.contractMonths === "")
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["contractMonths"],
@@ -128,7 +135,9 @@ function toFormValues(src: any): FormValues {
     // Aceita `totalContractValue` (cadastro) ou `contractTotal` (pré-fill da IA).
     totalContractValue: moneyStr(src?.totalContractValue ?? src?.contractTotal),
     paymentDay: src?.paymentDay != null ? String(src.paymentDay) : "",
-    contractMonths: src?.contractMonths != null ? String(src.contractMonths) : "",
+    contractMonths: src?.contractIndefinite
+      ? PRAZO_INDETERMINADO
+      : src?.contractMonths != null ? String(src.contractMonths) : "",
     startedAt: src?.startedAt ? formatDateInput(src.startedAt) : "",
     tags: Array.isArray(src?.tags) ? src.tags.join(", ") : "",
     notes: src?.notes ?? "",
@@ -372,14 +381,9 @@ export function ClientDialog({
                   {errors.paymentDay && <FieldError msg={errors.paymentDay} />}
                 </div>
                 <div>
-                  <Label>Prazo do contrato (meses)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    name="contractMonths"
-                    defaultValue={dv.contractMonths}
-                    placeholder="ex.: 12"
-                  />
+                  <Label>Prazo do contrato</Label>
+                  <TermField defaultValue={dv.contractMonths} allowIndefinite />
+                  {errors.contractMonths && <FieldError msg={errors.contractMonths} />}
                 </div>
                 <p className="col-span-full text-xs text-muted-foreground">
                   MRR é uma mensalidade recorrente. Este cliente entra todos os
@@ -403,14 +407,8 @@ export function ClientDialog({
                   )}
                 </div>
                 <div>
-                  <Label>Prazo do contrato (meses) *</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    name="contractMonths"
-                    defaultValue={dv.contractMonths}
-                    placeholder="ex.: 3"
-                  />
+                  <Label>Prazo do contrato *</Label>
+                  <TermField defaultValue={dv.contractMonths} />
                   {errors.contractMonths && <FieldError msg={errors.contractMonths} />}
                 </div>
                 <p className="col-span-full text-xs text-muted-foreground">
@@ -521,6 +519,53 @@ export function ClientDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const TERM_PRESETS = ["1", "3", "6", "12", "24"];
+
+/**
+ * Prazo do contrato em lista suspensa: meses prontos, "Indeterminado" (só
+ * MRR — sem término, ativo até ser dado como perdido, fora de Renovações
+ * até ser agendado) ou outro número de meses. Envia `contractMonths`.
+ */
+function TermField({ defaultValue, allowIndefinite = false }: { defaultValue: string; allowIndefinite?: boolean }) {
+  const inicial =
+    defaultValue === "" || TERM_PRESETS.includes(defaultValue) ||
+    (allowIndefinite && defaultValue === PRAZO_INDETERMINADO)
+      ? defaultValue
+      : "outro";
+  const [choice, setChoice] = useState(inicial);
+  const [custom, setCustom] = useState(inicial === "outro" && /^\d+$/.test(defaultValue) ? defaultValue : "");
+  const value = choice === "outro" ? custom : choice;
+  return (
+    <>
+      <Select aria-label="Prazo do contrato" value={choice} onChange={(e) => setChoice(e.target.value)}>
+        <option value="">— não informado —</option>
+        {TERM_PRESETS.map((m) => (
+          <option key={m} value={m}>{m} {m === "1" ? "mês" : "meses"}</option>
+        ))}
+        {allowIndefinite && <option value={PRAZO_INDETERMINADO}>Indeterminado</option>}
+        <option value="outro">Outro prazo…</option>
+      </Select>
+      {choice === "outro" && (
+        <Input
+          className="mt-1.5"
+          type="number"
+          min={1}
+          aria-label="Prazo em meses"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder="meses, ex.: 18"
+        />
+      )}
+      <input type="hidden" name="contractMonths" value={value} />
+      {choice === PRAZO_INDETERMINADO && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Sem término: fica ativo até ser dado como perdido e só entra em Renovações se for agendado.
+        </p>
+      )}
+    </>
   );
 }
 

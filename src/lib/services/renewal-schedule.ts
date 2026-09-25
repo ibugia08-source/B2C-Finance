@@ -43,6 +43,8 @@ export type RenewalLedgerRow = {
   monthlyValue: number | null;
   paymentDay: number | null;
   contractMonths: number | null;
+  /** Prazo indeterminado: só está aqui porque foi agendado à mão. */
+  contractIndefinite: boolean;
   startedAtISO: string | null;
   /** Data de expectativa (pendente: a atual do cliente; desfecho: nula). */
   expectedRenewalAtISO: string | null;
@@ -50,7 +52,7 @@ export type RenewalLedgerRow = {
   monthsActive: number | null;
   expected: number;
   outcome: RenewalOutcome;
-  renewal: { id: string; renewedAtISO: string; months: number; totalValue: number } | null;
+  renewal: { id: string; renewedAtISO: string; months: number | null; totalValue: number } | null;
   lostAtISO: string | null;
   lostValue: number;
 };
@@ -76,13 +78,13 @@ export type RenewalLedgerMonth = {
 export const LEDGER_CLIENT_SELECT = {
   id: true, name: true, status: true, modality: true, salesOwner: true,
   monthlyValue: true, totalContractValue: true, paymentDay: true,
-  contractMonths: true, startedAt: true, expectedRenewalAt: true,
+  contractMonths: true, contractIndefinite: true, startedAt: true, expectedRenewalAt: true,
 } as const;
 
 type LedgerClient = {
   id: string; name: string; status: string; modality: string | null;
   salesOwner: string | null; monthlyValue: unknown; totalContractValue: unknown;
-  paymentDay: number | null; contractMonths: number | null;
+  paymentDay: number | null; contractMonths: number | null; contractIndefinite: boolean;
   startedAt: Date | null; expectedRenewalAt: Date | null;
 };
 
@@ -149,6 +151,7 @@ export async function renewalLedger(months: YearMonth[]): Promise<Map<string, Re
       monthlyValue: c.monthlyValue != null ? n(c.monthlyValue) : null,
       paymentDay: c.paymentDay,
       contractMonths: c.contractMonths,
+      contractIndefinite: c.contractIndefinite,
       startedAtISO: c.startedAt ? c.startedAt.toISOString() : null,
       monthsActive: mesesDeRelacao(c.startedAt, ym),
     });

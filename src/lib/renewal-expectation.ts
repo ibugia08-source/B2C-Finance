@@ -194,3 +194,17 @@ export function renewalCompetenceOptions(
   }
   return keys.map((k) => ({ value: k, label: competenceShortLabel(k) }));
 }
+
+/**
+ * PRAZO INDETERMINADO (25/09/2026): valor do campo "prazo" nos formulários e
+ * selects. O cliente não tem término — fica ativo até ser dado como perdido —
+ * e não entra em Renovações sozinho: só quando agendado à mão.
+ */
+export const PRAZO_INDETERMINADO = "indeterminado";
+
+/** Rótulo único do prazo do contrato em toda a plataforma. */
+export function contractTermLabel(months: number | null | undefined, indefinite?: boolean | null): string {
+  if (indefinite) return "Indeterminado";
+  if (months && months > 0) return `${months} ${months === 1 ? "mês" : "meses"}`;
+  return "—";
+}

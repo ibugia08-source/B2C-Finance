@@ -8,7 +8,7 @@ import { settleBilling as settleViaEngine } from "@/lib/engines/payment-engine";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
 import {
-  addCalendarMonths, civilCompetenceKey, civilToday, competenceKeyOf, currentYearMonth, expectationInMonth,
+  PRAZO_INDETERMINADO, addCalendarMonths, civilCompetenceKey, civilToday, competenceKeyOf, currentYearMonth, expectationInMonth,
   monthIndex, parseCompetenceKey, rollForward,
 } from "@/lib/renewal-expectation";
 
@@ -48,7 +48,10 @@ export async function renewClientFlow(
   try {
     const clientId = String(formData.get("clientId") ?? "");
     const contractId = String(formData.get("contractId") ?? "").trim() || null;
-    const months = Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
+    // Prazo do novo ciclo em meses, ou INDETERMINADO (só MRR): sem término e
+    // sem próxima expectativa automática.
+    const indeterminado = String(formData.get("months") ?? "").trim().toLowerCase() === PRAZO_INDETERMINADO;
+    const months = indeterminado ? 1 : Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
     const paymentMethod = String(formData.get("paymentMethod") ?? "").trim() || null;
     const details = String(formData.get("details") ?? "").trim() || null;
     const launch = String(formData.get("launch") ?? "") === "1";
@@ -127,6 +130,8 @@ export async function renewClientFlow(
         return { ok: false, error: "Informe o dia de pagamento mensal (1-31)." };
       total = Math.round(monthly * months * 100) / 100;
     } else {
+      if (indeterminado)
+        return { ok: false, error: "TCV é um valor fechado por um prazo: Indeterminado vale só para MRR." };
       total = parseBRL(String(formData.get("totalValue") ?? "").trim());
       if (!(total > 0))
         return { ok: false, error: "Informe o valor total do contrato renovado." };
@@ -135,11 +140,11 @@ export async function renewClientFlow(
     const base =
       contract?.endDate && contract.endDate > today ? contract.endDate : today;
     const previousEndDate = contract?.endDate ?? null;
-    const newEnd = addMonthsClamped(base, months);
+    const newEnd = indeterminado ? null : addMonthsClamped(base, months);
 
     // ===== 1-2-5) Contrato + cadastro + histórico numa TRANSAÇÃO =====
     const renewNote =
-      `Renovado em ${formatDateBR(today)}: ${months} mês(es), R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
+      `Renovado em ${formatDateBR(today)}: ${indeterminado ? "prazo indeterminado" : `${months} mês(es)`}, R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
       (paymentMethod ? `, ${paymentMethod}` : "") +
       (details ? ` — ${details}` : "");
 
@@ -171,15 +176,19 @@ export async function renewClientFlow(
         data: {
           status: "ACTIVE",
           churnedAt: null,
-          contractMonths: months,
+          contractMonths: indeterminado ? null : months,
+          contractIndefinite: indeterminado,
           // Próxima expectativa = a expectativa atendida + o novo prazo (o
           // ciclo segue a data do cliente, não o dia em que se registrou).
           // Renovação registrada com atraso anda até o mês corrente.
-          expectedRenewalAt: rollForward(
-            addCalendarMonths(client.expectedRenewalAt ?? civilToday(today), months),
-            months,
-            today
-          ),
+          // Indeterminado: nenhuma — só volta a Renovações se agendado.
+          expectedRenewalAt: indeterminado
+            ? null
+            : rollForward(
+                addCalendarMonths(client.expectedRenewalAt ?? civilToday(today), months),
+                months,
+                today
+              ),
           // Normalização por modalidade — a MESMA regra do saveClient:
           // MRR zera o valor total; TCV zera mensalidade e dia recorrente.
           ...(staysMonthly
@@ -203,7 +212,7 @@ export async function renewClientFlow(
         data: {
           clientId,
           contractId: contract?.id ?? null,
-          months,
+          months: indeterminado ? null : months,
           totalValue: total,
           monthlyValue: monthly,
           modality: staysMonthly ? "MRR" : "TCV",

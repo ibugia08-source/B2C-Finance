@@ -8,7 +8,7 @@ import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { abrirVidaDoCliente } from "@/lib/services/client-lifecycle";
 import {
-  calendarParts, civilCompetenceKey, civilParts, currentYearMonth, expectationFromBase, expectationInMonth,
+  PRAZO_INDETERMINADO, calendarParts, civilCompetenceKey, civilParts, currentYearMonth, expectationFromBase, expectationInMonth,
   monthBounds, monthIndex, parseCompetenceKey, rollForward,
 } from "@/lib/renewal-expectation";
 
@@ -28,19 +28,29 @@ function mesmoDia(a: Date | null | undefined, b: Date | null | undefined): boole
  * expectativa já vencida anda em ciclos até o mês corrente.
  */
 function expectativaAoSalvar(
-  antes: { startedAt: Date | null; contractMonths: number | null; expectedRenewalAt: Date | null; status: string } | null,
-  depois: { startedAt: Date | null; contractMonths: number | null; status: string }
+  antes: {
+    startedAt: Date | null; contractMonths: number | null; contractIndefinite?: boolean;
+    expectedRenewalAt: Date | null; status: string;
+  } | null,
+  depois: { startedAt: Date | null; contractMonths: number | null; contractIndefinite?: boolean; status: string }
 ): Date | null | undefined {
-  const calculada = expectationFromBase(depois.startedAt, depois.contractMonths);
+  // Prazo INDETERMINADO não gera expectativa: o cliente só aparece em
+  // Renovações se alguém agendar à mão.
+  const calculada = depois.contractIndefinite
+    ? null
+    : expectationFromBase(depois.startedAt, depois.contractMonths);
   if (!antes) return calculada;
   const baseMudou =
-    !mesmoDia(antes.startedAt, depois.startedAt) || antes.contractMonths !== depois.contractMonths;
+    !mesmoDia(antes.startedAt, depois.startedAt) ||
+    antes.contractMonths !== depois.contractMonths ||
+    !!antes.contractIndefinite !== !!depois.contractIndefinite;
   if (baseMudou) return calculada;
   if (!antes.expectedRenewalAt) return calculada ?? undefined;
   const reativou =
     (antes.status === "CHURNED" || antes.status === "INACTIVE") &&
     depois.status !== "CHURNED" && depois.status !== "INACTIVE";
-  if (reativou) return rollForward(antes.expectedRenewalAt, depois.contractMonths ?? 12);
+  if (reativou)
+    return depois.contractIndefinite ? null : rollForward(antes.expectedRenewalAt, depois.contractMonths ?? 12);
   return undefined; // não mexe
 }
 
@@ -148,6 +158,8 @@ const ClientSchema = z
     monthlyValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
     totalContractValue: z.number().nonnegative("Valor não pode ser negativo.").nullable(),
     contractMonths: z.number().int().positive("Prazo deve ser maior que zero.").nullable(),
+    // Prazo INDETERMINADO: sem término; contractMonths fica nulo.
+    contractIndefinite: z.boolean().default(false),
     startedAt: z.date().nullable(),
     notes: z.string().trim().nullable(),
   })
@@ -174,7 +186,13 @@ const ClientSchema = z
           path: ["totalContractValue"],
           message: "TCV exige o valor total do contrato (maior que zero).",
         });
-      if (v.contractMonths == null)
+      if (v.contractIndefinite)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["contractMonths"],
+          message: "TCV é um valor fechado por um prazo: informe o prazo em meses (Indeterminado vale só para MRR).",
+        });
+      else if (v.contractMonths == null)
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["contractMonths"],
@@ -291,8 +309,10 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       })(),
       contractMonths: (() => {
         const raw = clean(formData.get("contractMonths"));
-        return raw == null ? null : Math.max(1, parseInt(raw, 10) || 0) || null;
+        if (raw == null || raw.toLowerCase() === PRAZO_INDETERMINADO) return null;
+        return Math.max(1, parseInt(raw, 10) || 0) || null;
       })(),
+      contractIndefinite: clean(formData.get("contractMonths"))?.toLowerCase() === PRAZO_INDETERMINADO,
       startedAt: (() => {
         const raw = clean(formData.get("startedAt"));
         return raw == null ? null : parseDateBR(raw);
@@ -313,6 +333,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
             totalContractValue: null,
             paymentDay: parsed.paymentDay,
             contractMonths: parsed.contractMonths,
+            contractIndefinite: parsed.contractIndefinite,
           }
         : modality === "TCV"
           ? {
@@ -321,6 +342,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
               totalContractValue: parsed.totalContractValue,
               paymentDay: null, // TCV não tem dia recorrente de pagamento
               contractMonths: parsed.contractMonths,
+              contractIndefinite: false,
             }
           : {
               modality: null,
@@ -328,6 +350,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
               totalContractValue: parsed.totalContractValue,
               paymentDay: parsed.paymentDay,
               contractMonths: parsed.contractMonths,
+              contractIndefinite: parsed.contractIndefinite,
             };
 
     // Resolve o colaborador responsável. findUnique é pós-filtrado por dono →
@@ -410,6 +433,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         {
           startedAt: parsed.startedAt,
           contractMonths: modalityFields.contractMonths ?? null,
+          contractIndefinite: modalityFields.contractIndefinite,
           status: existing.status, // a troca de status vem depois, pelo caminho único
         }
       );
@@ -424,6 +448,10 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
           ...(expectativa !== undefined ? { expectedRenewalAt: expectativa } : {}),
         },
       });
+      if (modalityFields.contractIndefinite && !existing.contractIndefinite) {
+        const { liberarTerminoDosContratos } = await import("@/lib/services/lifecycle");
+        await liberarTerminoDosContratos(id);
+      }
       if (parsed.status !== existing.status) {
         await transicionarStatus(atualizado, parsed.status);
       }
@@ -441,7 +469,9 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
           ...base,
           churnedAt: parsed.status === "CHURNED" ? new Date() : null,
           // Entrada + prazo = expectativa de renovação (regra do dono).
-          expectedRenewalAt: expectationFromBase(parsed.startedAt, modalityFields.contractMonths ?? null),
+          expectedRenewalAt: modalityFields.contractIndefinite
+            ? null
+            : expectationFromBase(parsed.startedAt, modalityFields.contractMonths ?? null),
         },
       });
       id = created.id;
@@ -567,6 +597,7 @@ export type ClientEditData = {
   monthlyValue: number | null;
   totalContractValue: number | null;
   contractMonths: number | null;
+  contractIndefinite: boolean;
   startedAt: string | null; // ISO
   tags: string[];
   notes: string | null;
@@ -599,6 +630,7 @@ export async function getClientForEdit(id: string): Promise<ClientEditData | nul
     monthlyValue: c.monthlyValue != null ? Number(c.monthlyValue) : null,
     totalContractValue: c.totalContractValue != null ? Number(c.totalContractValue) : null,
     contractMonths: c.contractMonths,
+    contractIndefinite: c.contractIndefinite,
     startedAt: c.startedAt ? c.startedAt.toISOString() : null,
     tags: c.tags,
     notes: c.notes,
@@ -671,7 +703,7 @@ const ehAtivo = (s: string) => (ATIVOS as readonly string[]).includes(s);
 async function transicionarStatus(
   existing: {
     id: string; status: string; churnedAt: Date | null; startedAt: Date | null;
-    contractMonths: number | null; expectedRenewalAt: Date | null;
+    contractMonths: number | null; contractIndefinite?: boolean; expectedRenewalAt: Date | null;
   },
   novo: ClientStatus,
   opts: { reason?: string | null; lostAt?: Date; renewalCompetence?: string | null } = {}
@@ -709,6 +741,7 @@ async function transicionarStatus(
   const expectativa = expectativaAoSalvar(existing, {
     startedAt: existing.startedAt,
     contractMonths: existing.contractMonths,
+    contractIndefinite: existing.contractIndefinite,
     status: novo,
   });
   await prisma.client.update({

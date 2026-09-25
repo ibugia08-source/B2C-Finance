@@ -19,6 +19,7 @@ export type ReceivableRow = {
   modality: string | null;
   paymentDay: number | null;
   contractMonths: number | null;
+  contractIndefinite: boolean;
   amountDue: number;
   openAmount: number;
   description: string | null;
