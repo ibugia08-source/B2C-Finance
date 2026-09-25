@@ -30,6 +30,10 @@ import { scopeKeyParts, scopeFromSession, type CacheScope } from "@/lib/cache-sc
  * domínio não pode depender de haver um servidor HTTP por perto — a mesma
  * correção que a F1.6 fez no contexto dos motores.
  */
+/** Identidade do deploy (Vercel) — separa o cache de versões diferentes do código. */
+const CACHE_VERSION =
+  process.env.VERCEL_DEPLOYMENT_ID ?? process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.B2C_CACHE_VERSION ?? "local";
+
 export function ownerCached<A extends unknown[], R>(
   keyBase: string,
   fn: (...args: A) => Promise<R>,
@@ -41,7 +45,12 @@ export function ownerCached<A extends unknown[], R>(
     // Prisma; os demais existem só para SEPARAR entradas.
     (chave: string[], ownerId: string | null, ...args: A) =>
       runWithOwner(ownerId, () => fn(...args)),
-    [keyBase],
+    // VERSÃO DO DEPLOY na chave (25/09/2026). O cache de dados sobrevive a
+    // novos deploys e a chave não mudava com o código: quando o FORMATO de
+    // um resultado mudava, a tela lia a entrada antiga (campo novo
+    // undefined → NaN ou exceção) até o TTL vencer. Cada deploy agora
+    // começa com cache próprio.
+    [keyBase, CACHE_VERSION],
     opts
   );
   return async (...args: A) => {

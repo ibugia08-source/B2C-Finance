@@ -191,7 +191,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   const sparkEmAberto = yearly.faturamento.map((v, i) =>
     Math.max(
       0,
-      v - (yearly.recebido[i] - yearly.recuperado[i] - yearly.adiantadoSaida[i] + yearly.adiantadoEntrada[i])
+      v - (yearly.recebido[i] - yearly.recuperado[i] - (yearly.adiantadoSaida?.[i] ?? 0) + (yearly.adiantadoEntrada?.[i] ?? 0))
     )
   );
 

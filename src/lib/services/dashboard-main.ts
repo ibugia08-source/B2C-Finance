@@ -82,7 +82,7 @@ function buildMetrics(
   // outro mês e soma o que já entrou antes para este mês.
   const emAberto = Math.max(
     0,
-    faturamentoTotal - (recebido - recuperado - receipts.advanceOutValue + receipts.advanceInValue)
+    faturamentoTotal - (recebido - recuperado - (receipts.advanceOutValue ?? 0) + (receipts.advanceInValue ?? 0))
   );
   const resultado = recebido - despesas;
 
