@@ -265,10 +265,10 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
       </Card>
 
       {/* ===== PAINEL EXECUTIVO — DECIDIR (02 §5.1) =====
-          Oito cards, cada um com clique abrindo o detalhe no contexto. Em
-          fileiras de TRÊS: o §7.2 proíbe fileiras de 4 ou 5. Desde 25/09/2026
-          entram "Faturamento total esperado" e "Renovações esperadas" logo
-          depois do Faturamento total (decisão do dono). */}
+          Cards com clique abrindo o detalhe no contexto. Em fileiras de
+          TRÊS: o §7.2 proíbe fileiras de 4 ou 5. "Faturamento total
+          esperado" e "Renovações esperadas" moram nos Indicadores do mês
+          (decisão do dono, 25/09/2026). */}
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Decidir · {periodLabel(period)}
@@ -291,60 +291,6 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           detailTitle="Faturamento total do mês"
           detail={<FaturamentoDetail mrr={M.mrr} tcv={M.tcv} extra={M.extraManual} avulso={M.avulso}
             total={M.faturamentoTotal} mrrClients={M.mrrClients} tcvClients={M.tcvClients} />}
-        />
-        <MetricCard
-          title="Faturamento total esperado"
-          value={formatBRL(faturamentoTotalEsperado)}
-          metrica="faturamento_total_esperado"
-          hint={`${formatBRL(previsto)} faturamento + ${formatBRL(renovacaoTcvEsperada)} renovações TCV`}
-          help={`Tudo o que se espera faturar ${noRecorte}: o Faturamento total (MRR + TCV + avulsas + receitas extras) somado ao valor esperado das renovações TCV dos mesmos meses. Renovação MRR não entra: a mensalidade dela já está no MRR.`}
-          detailTitle={`Faturamento total esperado ${doRecorte}`}
-          detail={
-            <div className="space-y-3">
-              <NamedValueList
-                items={[
-                  { name: "Faturamento total (MRR + TCV + avulsas + extras)", value: previsto },
-                  { name: `Renovações TCV esperadas ${doRecorte}`, value: renovacaoTcvEsperada },
-                ]}
-                total={faturamentoTotalEsperado}
-                totalLabel="Faturamento total esperado"
-              />
-              <div>
-                <p className="mb-1 text-xs text-muted-foreground">Renovações TCV consideradas</p>
-                <NamedValueList
-                  items={renovacoesTcv}
-                  limit={Infinity}
-                  emptyText="Nenhuma renovação TCV esperada no período."
-                />
-              </div>
-            </div>
-          }
-        />
-        <MetricCard
-          title="Renovações esperadas"
-          value={formatBRL(renovacaoEsperada)}
-          metrica="renovacao_esperada"
-          sparkline={renewalHistory.map((h) => h.expected)}
-          hint={`${renewalClientsDetail.length} expectativa(s) de renovação ${noRecorte}`}
-          help={`Soma dos valores esperados de todos os clientes com data de expectativa de renovação ${noRecorte} (entrada + prazo do contrato, ou agendada). TCV conta o valor cheio do contrato; MRR, a mensalidade. Clique para ver a lista.`}
-          detailTitle={`Renovações esperadas — ${periodLabel(period)}`}
-          detail={
-            <div className="space-y-2">
-              <NamedValueList
-                items={renewalClientsDetail}
-                total={renovacaoEsperada}
-                totalLabel="Valor esperado de renovação"
-                limit={Infinity}
-                emptyText={`Nenhum cliente com expectativa de renovação ${isFullMonth ? "neste mês" : "neste período"}.`}
-              />
-              <Link
-                href={`/renovacoes?mes=${ultimoMes.year}-${String(ultimoMes.month).padStart(2, "0")}`}
-                className="inline-block text-caption text-muted-foreground underline-offset-2 hover:underline"
-              >
-                Abrir o módulo Renovações
-              </Link>
-            </div>
-          }
         />
         <MetricCard
           title="Total de despesas"
@@ -583,7 +529,8 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
       </div>
 
       {/* ===== PAINEL EXECUTIVO — SECUNDÁRIOS VISÍVEIS (02 §5.1) =====
-          Exatamente os OITO que a spec nomeia, nesta ordem. Inadimplência
+          Os OITO que a spec nomeia, nesta ordem, mais Faturamento total
+          esperado e Renovações esperadas no final (decisão do dono, 25/09/2026). Inadimplência
           e Margem NÃO entram: "nunca repetir (já estão nos cards)" — o
           vencido está embutido no card Em aberto e a margem, no detalhe do
           Resultado. Antes desta tarefa os dois apareciam de novo aqui, o
@@ -625,6 +572,51 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         <SecondaryStat label="% Folha no faturamento" value={folhaPct == null ? "—" : `${folhaPct}%`}
           help={metrics.percentual_folha.spec.formulaDescription}
           tone={folhaPct == null ? "default" : folhaPct > 40 ? "neg" : folhaPct > 25 ? "warn" : "pos"} />
+        <SecondaryStat label="Faturamento total esperado" value={formatBRL(faturamentoTotalEsperado)}
+          help={`Tudo o que se espera faturar ${noRecorte}: o Faturamento total (MRR + TCV + avulsas + receitas extras) somado ao valor esperado das renovações TCV dos mesmos meses. Renovação MRR não entra: a mensalidade dela já está no MRR.`}
+          hint={`${formatBRL(previsto)} faturamento + ${formatBRL(renovacaoTcvEsperada)} renovações TCV`}
+          detailTitle={`Faturamento total esperado ${doRecorte}`}
+          detail={
+            <div className="space-y-3">
+              <NamedValueList
+                items={[
+                  { name: "Faturamento total (MRR + TCV + avulsas + extras)", value: previsto },
+                  { name: `Renovações TCV esperadas ${doRecorte}`, value: renovacaoTcvEsperada },
+                ]}
+                total={faturamentoTotalEsperado}
+                totalLabel="Faturamento total esperado"
+              />
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">Renovações TCV consideradas</p>
+                <NamedValueList
+                  items={renovacoesTcv}
+                  limit={Infinity}
+                  emptyText="Nenhuma renovação TCV esperada no período."
+                />
+              </div>
+            </div>
+          } />
+        <SecondaryStat label="Renovações esperadas" value={formatBRL(renovacaoEsperada)}
+          help={`Soma dos valores esperados de todos os clientes com data de expectativa de renovação ${noRecorte} (entrada + prazo do contrato, ou agendada). TCV conta o valor cheio do contrato; MRR, a mensalidade. Clique para ver a lista.`}
+          hint={`${renewalClientsDetail.length} expectativa(s) de renovação`}
+          detailTitle={`Renovações esperadas — ${periodLabel(period)}`}
+          detail={
+            <div className="space-y-2">
+              <NamedValueList
+                items={renewalClientsDetail}
+                total={renovacaoEsperada}
+                totalLabel="Valor esperado de renovação"
+                limit={Infinity}
+                emptyText={`Nenhum cliente com expectativa de renovação ${isFullMonth ? "neste mês" : "neste período"}.`}
+              />
+              <Link
+                href={`/renovacoes?mes=${ultimoMes.year}-${String(ultimoMes.month).padStart(2, "0")}`}
+                className="inline-block text-caption text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Abrir o módulo Renovações
+              </Link>
+            </div>
+          } />
       </div>
 
       {/* ===== Todos os indicadores (recolhido por padrão) =====
