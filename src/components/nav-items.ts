@@ -3,6 +3,7 @@ import {
   Building2,
   Wallet,
   Handshake,
+  FileBarChart,
   Settings2,
   type LucideIcon,
 } from "lucide-react";
@@ -17,9 +18,11 @@ import {
  *   Hoje       → visão do dia, rotina e assistente
  *   Clientes   → gerir a carteira por completo (carteira + retenção)
  *   Financeiro → gerir o financeiro por completo (mês, inadimplência,
- *                contas, folha, fluxo de caixa, relatórios) e o HISTÓRICO
- *                mês a mês do ano (pilar "meses anteriores")
+ *                contas, folha, fluxo de caixa) e o HISTÓRICO mês a mês do
+ *                ano (pilar "meses anteriores")
  *   Comercial  → upsell, renovações, contratos, serviços e planos
+ *   Relatórios → espaço próprio desde 24/09/2026 (antes era uma página do
+ *                Financeiro); relatórios de todos os pilares moram aqui
  *   Sistema    → configurações, usuários, regras e importações
  *
  * pages[0] é a página principal do espaço (o clique no nome leva a ela).
@@ -90,7 +93,6 @@ export const NAV_AREAS: NavArea[] = [
       { href: "/fluxo", label: "Fluxo de caixa", permission: "caixa.visualizar" },
       { href: "/dre", label: "Resultado (DRE)", permission: "contabil.visualizar" },
       { href: "/comparativo", label: "Comparar meses", permission: "relatorios.visualizar" },
-      { href: "/relatorios", label: "Relatórios", permission: "relatorios.visualizar" },
     ],
   },
   {
@@ -100,17 +102,20 @@ export const NAV_AREAS: NavArea[] = [
     icon: Handshake,
     primary: true,
     pages: [
-      { href: "/funil", label: "Funil de vendas", permission: "comercial.visualizar" },
-      { href: "/atividade", label: "Atividade do dia", permission: "comercial.visualizar" },
-      { href: "/funil/closer", label: "Painel do closer", permission: "comercial.visualizar" },
-      { href: "/funil/metricas", label: "Métricas comerciais", permission: "comercial.visualizar" },
-      { href: "/configuracoes/metas", label: "Metas comerciais", permission: "comercial.visualizar" },
-      { href: "/funil/leads", label: "Leads", permission: "comercial.visualizar" },
       { href: "/upsell", label: "Upsell", permission: "upsell.visualizar" },
       { href: "/renovacoes", label: "Renovações", permission: "clientes.visualizar" },
       { href: "/contratos", label: "Contratos", permission: "contratos.visualizar" },
       { href: "/servicos", label: "Serviços", permission: "servicos.visualizar" },
       { href: "/ofertas", label: "Planos", permission: "ofertas.visualizar" },
+    ],
+  },
+  {
+    key: "relatorios",
+    label: "Relatórios",
+    short: "Relat",
+    icon: FileBarChart,
+    pages: [
+      { href: "/relatorios", label: "Relatórios", permission: "relatorios.visualizar" },
     ],
   },
   {

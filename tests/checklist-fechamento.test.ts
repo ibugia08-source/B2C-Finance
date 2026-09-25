@@ -31,6 +31,14 @@ describe("F2.2 — checklist de fechamento", () => {
     expect(new Set(itens.map((i) => i.id)).size).toBe(12);
   });
 
+  it("item 9 não se aplica mais: o funil saiu da plataforma (24/09/2026)", async () => {
+    const itens = await asOwner(dono, async () => montarChecklist("2026-03"));
+    const nove = itens.find((i) => i.numero === 9)!;
+    expect(nove.situacao).toBe("NAO_SE_APLICA");
+    expect(nove.href).toBeNull();
+    for (const i of itens) expect(i.href ?? "").not.toMatch(/^\/funil/);
+  });
+
   it("todo item tem dono e explicação — a lista nunca só diz 'faltam 12'", async () => {
     const itens = await asOwner(dono, async () => montarChecklist("2026-03"));
     for (const i of itens) {

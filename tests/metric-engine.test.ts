@@ -39,7 +39,7 @@ describe("registry de métricas", () => {
   it("toda métrica de razão declara o que fazer com denominador zero", () => {
     const razoes = ["margem_gerencial", "percentual_recorrencia", "percentual_realizacao",
       "churn_rate", "revenue_churn", "nrr", "ticket_medio", "custo_por_cliente",
-      "percentual_folha", "cac", "roas", "conversao_upsell"];
+      "percentual_folha", "cac", "conversao_upsell"];
     for (const k of razoes) {
       const m = getMetricSpec(k);
       expect(m, k).toBeDefined();
@@ -61,8 +61,15 @@ describe("registry de métricas", () => {
     expect(v1.formulaDescription).toMatch(/reservado/i);
   });
 
-  it("o ROAS exige base de valoração explícita", () => {
-    expect(getMetricSpec("roas")!.filters).toMatch(/base de valoração/i);
+  it("as métricas do funil comercial saíram com o módulo (24/09/2026)", () => {
+    for (const k of ["roas", "cpl", "cpmql", "comparecimento", "pipeline_coverage", "novo_mrr", "tcv_comercial"]) {
+      expect(getMetricSpec(k), k).toBeUndefined();
+    }
+    for (const m of METRIC_REGISTRY) {
+      for (const e of ["Lead", "Opportunity", "AtividadeDiaria", "GastoAdsDiario", "CommercialGoal", "PipelineEvent"]) {
+        expect(m.sourceEntities, m.key).not.toContain(e);
+      }
+    }
   });
 
   it("a versão do registry é 1", () => {

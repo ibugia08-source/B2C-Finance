@@ -5,12 +5,20 @@ mensal que o dono já usava, e essa origem explica a forma do produto: a tela
 Anual** é o indicador × JAN–DEZ com meta e simulador.
 
 A entrega operacional dos clientes não vive aqui — ela fica no AvanceCRM.
-Este sistema cuida do dinheiro, do contrato e da carteira.
+Este sistema cuida do dinheiro, do contrato e da carteira. A prospecção
+também não: o funil comercial (Funil, Leads, Atividade do dia, Painel do
+closer, Métricas e Metas comerciais) foi removido em 24/09/2026 e todo
+cliente nasce direto na Carteira. Os dados antigos do funil continuam no
+banco, sem tela.
+
+Os espaços de trabalho são Hoje, Clientes, Financeiro, Comercial
+(upsell, renovações, contratos, serviços e planos), **Relatórios** — espaço
+próprio desde 24/09/2026 — e Sistema.
 
 ## O fluxo que o sistema modela
 
 ```
-Lead → Cliente → Contrato → Cobrança (competência) → Pagamento → Caixa → Razão → DRE
+Cliente → Contrato → Cobrança (competência) → Pagamento → Caixa → Razão → DRE
 Despesa · Folha · Comissão · Cartões                                    → Resultado
 ```
 

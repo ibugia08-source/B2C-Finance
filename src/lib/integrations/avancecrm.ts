@@ -45,8 +45,15 @@ export type ResultadoDaEntrada =
   | { ok: true; situacao: "PROCESSADO" | "IGNORADO" | "REPETIDO"; nota?: string }
   | { ok: false; error: string; status: number };
 
-/** Tipos que o produto sabe tratar hoje. */
-export const TIPOS_CONHECIDOS = ["lead.created", "lead.updated"] as const;
+/**
+ * Tipos que o produto sabe tratar hoje: NENHUM. A entrada existia para criar
+ * leads no funil comercial; o módulo foi removido da plataforma em 24/09/2026
+ * (Funil, Leads, Atividade, Closer, Métricas e Metas comerciais). O webhook
+ * continua no ar — assinatura, idempotência e caixa de entrada valem — e todo
+ * evento é GUARDADO como ignorado, sem falhar: falhar faria o provedor
+ * reenviar para sempre. A SAÍDA (cobrança → CRM) não depende do funil e segue.
+ */
+export const TIPOS_CONHECIDOS: readonly string[] = [];
 
 // ---------------------------------------------------------------------------
 // Assinatura
@@ -249,33 +256,15 @@ async function processarComDono(
 async function processar(
   e: EnvelopeDeWebhook
 ): Promise<{ situacao: "PROCESSADO" | "IGNORADO"; nota?: string }> {
-  if (!(TIPOS_CONHECIDOS as readonly string[]).includes(e.type)) {
+  if (!TIPOS_CONHECIDOS.includes(e.type)) {
     return {
       situacao: "IGNORADO",
-      nota: `Tipo “${e.type}” não é tratado pelo produto. O evento fica guardado.`,
+      nota: e.type.startsWith("lead.")
+        ? `Tipo “${e.type}” não é mais tratado: o módulo de Leads foi removido da plataforma. O evento fica guardado.`
+        : `Tipo “${e.type}” não é tratado pelo produto. O evento fica guardado.`,
     };
   }
-
-  const d = (e.data ?? {}) as Record<string, any>;
-  const nome = String(d.name ?? d.nome ?? "").trim();
-  if (!nome) return { situacao: "IGNORADO", nota: "Evento de lead sem nome." };
-
-  const { criarLead } = await import("@/lib/services/leads");
-  const r = await criarLead({
-    name: nome,
-    company: d.company ?? d.empresa ?? null,
-    phone: d.phone ?? d.telefone ?? null,
-    email: d.email ?? null,
-    document: d.document ?? d.documento ?? null,
-    niche: d.niche ?? d.nicho ?? null,
-    channel: d.channel ?? d.canal ?? null,
-    campaign: d.campaign ?? d.campanha ?? null,
-    source: FONTE,
-    sdr: d.sdr ?? null,
-  });
-  return r.ok
-    ? { situacao: "PROCESSADO", nota: `Lead ${r.lead.id} criado.` }
-    : { situacao: "IGNORADO", nota: r.error };
+  return { situacao: "IGNORADO", nota: `Tipo “${e.type}” sem tratamento.` };
 }
 
 // ---------------------------------------------------------------------------

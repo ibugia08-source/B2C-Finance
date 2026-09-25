@@ -53,8 +53,8 @@ export const ROLE_DESCRIPTION: Record<Role, string> = {
   ADMINISTRATIVO: "Cadastro de clientes, acompanhamento e rotina diária.",
   COMERCIAL: "Clientes, contratos, upsell e catálogo de serviços.",
   COBRANCA: "Cobrança do dia a dia: recebimentos, mensagens e rotina.",
-  CLOSER: "Funil, proposta e fechamento de venda. Não vê financeiro nem folha.",
-  SDR: "Prospecção e agendamento. Registra atividade do dia; não vê valores.",
+  CLOSER: "Clientes, contratos, upsell e catálogo. Não vê financeiro nem folha.",
+  SDR: "Painel e rotina do dia, sem valores.",
   SUPORTE: "Onboarding e rotina operacional do cliente. Não vê valores.",
   CONTADOR: "Só leitura do contábil e dos relatórios, para exportação. Não opera nada.",
   LEITURA: "Só olha: dashboard e carteira, sem nenhum valor sensível.",
@@ -347,16 +347,6 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
-    key: "comercial",
-    label: "Comercial (funil)",
-    permissions: [
-      { id: "comercial.visualizar", label: "Ver o funil" },
-      { id: "comercial.operar", label: "Mover e editar oportunidades" },
-      { id: "comercial.registrar_venda", label: "Registrar venda (marcar ganho)" },
-      { id: "comercial.metas", label: "Definir metas", sensitive: true },
-    ],
-  },
-  {
     key: "auditoria",
     label: "Auditoria",
     permissions: [
@@ -487,7 +477,6 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "avaliacao.editar",
     "onboarding.visualizar",
     "onboarding.operar",
-    "comercial.visualizar",
     "fiscal.visualizar",
   ],
 
@@ -566,9 +555,6 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "servicos.visualizar",
     "ofertas.visualizar",
     "termos.visualizar",
-    "comercial.visualizar",
-    "comercial.operar",
-    "comercial.registrar_venda",
   ],
 
   // Cobrança e rotina.
@@ -587,7 +573,8 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "creditos.visualizar",
   ],
 
-  // Fecha venda: funil, contrato e catálogo. Sem financeiro e sem folha.
+  // Fecha venda: contrato e catálogo. Sem financeiro e sem folha.
+  // (O funil comercial saiu da plataforma em 24/09/2026.)
   CLOSER: [
     "assistente.visualizar",
     "dashboard.visualizar",
@@ -597,9 +584,6 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "contratos.criar",
     "contratos.gerar_contrato",
     "contratos.baixar_contrato",
-    "comercial.visualizar",
-    "comercial.operar",
-    "comercial.registrar_venda",
     "servicos.visualizar",
     "ofertas.visualizar",
     "upsell.visualizar",
@@ -608,12 +592,11 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "upsell.marcar_vendido",
   ],
 
-  // Prospecta e agenda. Registra a própria atividade; não vê valor nenhum.
+  // Papel mantido para os usuários que já o têm; a atividade do dia e o
+  // funil saíram da plataforma em 24/09/2026. Não vê valor nenhum.
   SDR: [
     "assistente.visualizar",
     "dashboard.visualizar",
-    "comercial.visualizar",
-    "comercial.operar",
     "rotina.visualizar",
     "rotina.concluir_acao",
   ],

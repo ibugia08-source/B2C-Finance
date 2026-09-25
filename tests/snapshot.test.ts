@@ -93,7 +93,7 @@ describe("F2.3 — a fotografia", () => {
     // meses depois, quando é tarde.
     const areas: any = await asOwner(dono, async () => montarAreas("2026-02"));
     expect(areas.funil.indisponivel).toBe(true);
-    expect(areas.funil.motivo).toMatch(/Fase 4/);
+    expect(areas.funil.motivo).toMatch(/removido da plataforma/);
     expect(areas.dre_razao_resumido.indisponivel).toBe(true);
   });
 

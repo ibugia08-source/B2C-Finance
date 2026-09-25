@@ -9,15 +9,35 @@ import { listarNichos } from "@/lib/services/niches";
 
 const collator = new Intl.Collator("pt-BR", { sensitivity: "base" });
 
-/** Une listas de nomes, removendo vazios e duplicatas (sem distinguir caixa). */
+/** Quantas letras maiúsculas a grafia tem — "Ana Paula" (2) > "ana paula" (0). */
+function capitals(name: string): number {
+  let n = 0;
+  for (const ch of name) if (ch !== ch.toLocaleLowerCase("pt-BR")) n++;
+  return n;
+}
+
+/**
+ * Une listas de nomes, removendo vazios e duplicatas (sem distinguir caixa).
+ * Quando a mesma pessoa aparece com grafias diferentes, a escolha é
+ * DETERMINÍSTICA — independe da ordem em que o banco devolve as linhas:
+ * vence a grafia com mais maiúsculas ("Ana Paula" sobre "ana paula") e, no
+ * empate, a primeira em ordem alfabética.
+ */
 export function mergeNames(...lists: (string | null | undefined)[][]): string[] {
   const seen = new Map<string, string>();
   for (const list of lists) {
     for (const raw of list) {
-      const name = (raw ?? "").trim();
+      const name = (raw ?? "").trim().replace(/\s+/g, " ");
       if (!name) continue;
       const key = name.toLocaleLowerCase("pt-BR");
-      if (!seen.has(key)) seen.set(key, name);
+      const atual = seen.get(key);
+      if (
+        atual === undefined ||
+        capitals(name) > capitals(atual) ||
+        (capitals(name) === capitals(atual) && name < atual)
+      ) {
+        seen.set(key, name);
+      }
     }
   }
   return Array.from(seen.values()).sort(collator.compare);

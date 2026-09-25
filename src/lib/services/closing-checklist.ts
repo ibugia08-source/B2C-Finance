@@ -90,7 +90,6 @@ export async function montarChecklist(competence: Competence | string): Promise<
     avaliados,
     semGestor,
     saude,
-    vendasSoltas,
     notasEmRascunho,
   ] = await Promise.all([
     // 1. MRR ativo sem cobrança na competência.
@@ -132,8 +131,6 @@ export async function montarChecklist(competence: Competence | string): Promise<
       },
     }),
     ledgerHealth(workspaceId, { competence: competence as Competence }),
-    // 9. Vendas ganhas que não foram entregues à operação (F4.4).
-    prisma.opportunity.count({ where: { stage: "GANHA", createdClientId: null } }),
     // 8. Notas paradas em rascunho (F3.6).
     prisma.fiscalDocument.count({
       where: { issuedAt: { gte: inicio, lt: fim }, status: "DRAFT" },
@@ -244,18 +241,15 @@ export async function montarChecklist(competence: Competence | string): Promise<
     {
       id: "vendas-vinculadas", numero: 9,
       titulo: "Vendas ganhas vinculadas a cliente",
-      dono: "Comercial",
-      // Uma venda pode ser marcada GANHA arrastando o card no quadro, sem
-      // passar pelo fluxo que entrega para a operação. A venda fica
-      // registrada e a operação não sabe dela — é exatamente isso que este
-      // item procura, e por isso ele mede o que NÃO gerou cliente.
-      situacao: vendasSoltas === 0 ? "OK" : "PENDENTE",
-      quantidade: vendasSoltas,
+      dono: "—",
+      // O funil comercial saiu da plataforma em 24/09/2026: não há mais venda
+      // ganha fora da Carteira para conferir. O item fica, com a numeração,
+      // para o checklist continuar comparável com os meses anteriores.
+      situacao: "NAO_SE_APLICA",
+      quantidade: 0,
       detalhe:
-        vendasSoltas === 0
-          ? "Toda venda ganha virou cliente na operação."
-          : `${vendasSoltas} ${vendasSoltas === 1 ? "venda ganha não virou" : "vendas ganhas não viraram"} cliente, contrato nem cobrança.`,
-      href: "/funil",
+        "Não se aplica: o funil comercial foi removido da plataforma em 24/09/2026. Todo cliente nasce direto na Carteira.",
+      href: null,
     },
     {
       id: "aprovacoes", numero: 10,

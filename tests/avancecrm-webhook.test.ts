@@ -5,9 +5,6 @@ import {
 import {
   assinar, assinaturaConfere, receberEvento, TIPOS_CONHECIDOS,
 } from "@/lib/integrations/avancecrm";
-import { criarLead } from "@/lib/services/leads";
-import { criarOportunidade } from "@/lib/services/pipeline";
-import { fecharVenda } from "@/lib/services/sale-handoff";
 
 /**
  * F4.8 — integração AvanceCRM (03 §4.2, §4.3; cenário S20).
@@ -17,6 +14,10 @@ import { fecharVenda } from "@/lib/services/sale-handoff";
  * o comportamento CORRETO dele. Sem a unique de entrada, uma resposta lenta
  * nossa vira um segundo fato — e o cliente aparece com dois pagamentos que
  * ele fez uma vez.
+ *
+ * 24/09/2026: o módulo de Leads/Funil saiu da plataforma. A entrada continua
+ * no ar (assinatura + idempotência + caixa), mas evento de lead é GUARDADO
+ * como ignorado e não cria nada.
  */
 const SEGREDO = "segredo-de-teste-com-mais-de-16-caracteres";
 
@@ -56,21 +57,16 @@ describe("F4.8 — entrada de webhook", () => {
   beforeEach(async () => {
     await runWithoutScope(async () => {
       await prisma.webhookInbox.deleteMany({});
-      // O lead que entra por webhook pertence ao DONO DA CONTA, não ao dono
-      // do teste — o webhook não tem usuário logado. Por isso a limpeza (e as
-      // contagens abaixo) rodam fora de escopo, filtrando pela origem.
-      await prisma.lead.deleteMany({ where: { source: "avancecrm" } });
     });
   });
 
-  /** Leads criados pelo webhook, independentemente de quem é o dono. */
+  /** Leads com origem no webhook — não podem mais nascer. */
   const leadsDoWebhook = () =>
     runWithoutScope(async () => prisma.lead.count({ where: { source: "avancecrm" } }));
 
   afterAll(async () => {
     await runWithoutScope(async () => {
       await prisma.webhookInbox.deleteMany({});
-      await prisma.lead.deleteMany({ where: { source: "avancecrm" } });
     });
     if (segredoAntes === undefined) delete process.env.AVANCECRM_WEBHOOK_SECRET;
     else process.env.AVANCECRM_WEBHOOK_SECRET = segredoAntes;
@@ -80,12 +76,29 @@ describe("F4.8 — entrada de webhook", () => {
   const envelope = (id: string, type = "lead.created", data: any = { name: "Fulano da Silva" }) =>
     JSON.stringify({ id, type, data });
 
+  const caixa = () => runWithoutScope(async () => prisma.webhookInbox.count({}));
+
   it("sem assinatura, 401 — e nada entra na caixa", async () => {
     const corpo = envelope("e1");
     const r = await receberEvento(corpo, null);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.status).toBe(401);
-    expect(await runWithoutScope(async () => prisma.webhookInbox.count({}))).toBe(0);
+    expect(await caixa()).toBe(0);
+  });
+
+  it("evento de lead é GUARDADO como ignorado e não cria lead (módulo removido)", async () => {
+    await asOwner(dono, async () => {
+      const antes = await leadsDoWebhook();
+      const corpo = envelope("e-lead", "lead.created", { name: "Fulano", company: "Padaria X" });
+      const r = await receberEvento(corpo, assinar(corpo, SEGREDO));
+      expect(r.ok && r.situacao).toBe("IGNORADO");
+      const linha = await runWithoutScope(async () =>
+        prisma.webhookInbox.findFirstOrThrow({ where: { eventId: "e-lead" } })
+      );
+      expect(linha.status).toBe("IGNORED");
+      expect(linha.note).toMatch(/Leads foi removido/);
+      expect(await leadsDoWebhook()).toBe(antes);
+    });
   });
 
   it("S20: o MESMO evento reenviado entra UMA vez e responde 200", async () => {
@@ -94,26 +107,24 @@ describe("F4.8 — entrada de webhook", () => {
       const assinatura = assinar(corpo, SEGREDO);
 
       const primeira = await receberEvento(corpo, assinatura);
-      expect(primeira.ok && primeira.situacao).toBe("PROCESSADO");
+      expect(primeira.ok && primeira.situacao).toBe("IGNORADO");
 
       const segunda = await receberEvento(corpo, assinatura);
       expect(segunda.ok).toBe(true);
       if (segunda.ok) expect(segunda.situacao).toBe("REPETIDO");
 
-      // Um registro na caixa, UM lead. É o cenário inteiro.
-      expect(await runWithoutScope(async () => prisma.webhookInbox.count({}))).toBe(1);
-      expect(await leadsDoWebhook()).toBe(1);
+      expect(await caixa()).toBe(1);
     });
   });
 
-  it("dez reenvios SIMULTÂNEOS ainda criam um lead só", async () => {
+  it("dez reenvios SIMULTÂNEOS ainda viram um registro só", async () => {
     await asOwner(dono, async () => {
       const corpo = envelope("evento-concorrente");
       const assinatura = assinar(corpo, SEGREDO);
       await Promise.all(
         Array.from({ length: 10 }, () => receberEvento(corpo, assinatura).catch(() => null))
       );
-      expect(await leadsDoWebhook()).toBe(1);
+      expect(await caixa()).toBe(1);
     });
   });
 
@@ -128,8 +139,6 @@ describe("F4.8 — entrada de webhook", () => {
       );
       expect(linha.status).toBe("IGNORED");
       expect(linha.note).toMatch(/não é tratado/i);
-      // Falhar faria o provedor reenviar para sempre; aceitar em silêncio
-      // esconderia que chegou coisa que ninguém trata.
       expect(linha.payload).toBeTruthy();
     });
   });
@@ -148,28 +157,10 @@ describe("F4.8 — entrada de webhook", () => {
     if (!r.ok) expect(r.status).toBe(400);
   });
 
-  it("o lead criado pelo webhook nasce com a origem marcada", async () => {
+  it("evento que ficou sem desfecho é tentado de novo — repetido não é sinônimo de resolvido", async () => {
     await asOwner(dono, async () => {
-      const corpo = envelope("e-origem", "lead.created", {
-        name: "Maria", empresa: "Padaria X", telefone: "71 99999-0000",
-      });
-      await receberEvento(corpo, assinar(corpo, SEGREDO));
-      const lead = await runWithoutScope(async () =>
-        prisma.lead.findFirstOrThrow({ where: { source: "avancecrm" } })
-      );
-      expect(lead.source).toBe("avancecrm");
-      expect(lead.company).toBe("Padaria X");
-    });
-  });
-
-  it("evento que FALHOU é tentado de novo no reenvio — repetido não é sinônimo de resolvido", async () => {
-    await asOwner(dono, async () => {
-      const corpo = envelope("e-que-falhou");
+      const corpo = envelope("e-que-falhou", "deal.qualquer", {});
       const assinatura = assinar(corpo, SEGREDO);
-
-      // Simula a primeira tentativa que entrou na caixa e não teve desfecho
-      // (foi o que aconteceu de verdade: o webhook não tem usuário logado e a
-      // criação do lead falhava na chave estrangeira do dono).
       const ws = await runWithoutScope(async () =>
         prisma.workspace.findFirstOrThrow({ select: { id: true } })
       );
@@ -177,66 +168,21 @@ describe("F4.8 — entrada de webhook", () => {
         prisma.webhookInbox.create({
           data: {
             workspaceId: ws.id, source: "avancecrm", eventId: "e-que-falhou",
-            eventType: "lead.created", payload: {}, status: "RECEIVED",
+            eventType: "deal.qualquer", payload: {}, status: "RECEIVED",
           },
         })
       );
 
       const r = await receberEvento(corpo, assinatura);
-      // NÃO é "repetido": não houve desfecho, então processa.
-      expect(r.ok && r.situacao).toBe("PROCESSADO");
-      expect(await leadsDoWebhook()).toBe(1);
+      // NÃO é "repetido": não houve desfecho, então processa (e ignora).
+      expect(r.ok && r.situacao).toBe("IGNORADO");
 
-      // Agora sim, o próximo reenvio é repetição de verdade.
       const depois = await receberEvento(corpo, assinatura);
       expect(depois.ok && depois.situacao).toBe("REPETIDO");
-      expect(await leadsDoWebhook()).toBe(1);
     });
   });
 
-  it("os tipos tratados estão declarados", () => {
-    expect(TIPOS_CONHECIDOS).toContain("lead.created");
-  });
-});
-
-describe("F4.8 — saída pelo Outbox", () => {
-  let dono: TestOwner;
-
-  beforeAll(async () => {
-    dono = await createOwner();
-  });
-
-  afterAll(async () => {
-    await destroyOwner(dono);
-  });
-
-  it("fechar a venda PUBLICA no outbox, no canal do CRM", async () => {
-    await asOwner(dono, async () => {
-      const lead = await criarLead({ name: "Contato", company: "Empresa do Outbox" });
-      if (!lead.ok) throw new Error(lead.error);
-      const op = await criarOportunidade({
-        title: "Venda do outbox", leadId: lead.lead.id, amount: 5000, modality: "TCV",
-      });
-      if (!op.ok) throw new Error(op.error);
-
-      const r = await fecharVenda(op.id, { quando: new Date(2027, 8, 10) });
-      expect(r.ok).toBe(true);
-
-      const evento = await runWithoutScope(async () =>
-        prisma.outboxEvent.findFirst({
-          where: { sourceType: "Opportunity", sourceId: op.id },
-        })
-      );
-      expect(evento).not.toBeNull();
-      expect(evento!.channel).toBe("crm");
-      expect(evento!.eventType).toBe("SALE_WON");
-      // Conteúdo MÍNIMO (03 §4.2): o CRM não precisa do valor do contrato.
-      expect(Object.keys(evento!.payload as any)).not.toContain("amount");
-      expect(Object.keys(evento!.payload as any)).not.toContain("valor");
-
-      await runWithoutScope(async () =>
-        prisma.outboxEvent.deleteMany({ where: { sourceId: op.id } })
-      );
-    });
+  it("nenhum tipo de entrada é tratado depois da remoção do funil", () => {
+    expect(TIPOS_CONHECIDOS).toEqual([]);
   });
 });

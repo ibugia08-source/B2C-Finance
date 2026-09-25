@@ -21,9 +21,9 @@ import type { Competence } from "@/lib/competence";
  * acusaria divergência sempre.
  *
  * ÁREAS de §5.4 que não têm fonte NÃO entram como objeto vazio: entram
- * declarando que não existiam nesta fase. Vale para o funil (ainda sem
- * fonte) e para rateio e conciliação, que existiram e foram REMOVIDOS em
- * 10/09/2026 — a fotografia diz "não existia aqui", não "estava zerado".
+ * declarando que não existiam nesta fase. Vale para o funil comercial
+ * (REMOVIDO da plataforma em 24/09/2026) e para rateio e conciliação, que
+ * existiram e foram REMOVIDOS em 10/09/2026 — a fotografia diz "não existia aqui", não "estava zerado".
  * Uma área vazia dentro de uma fotografia é indistinguível de uma área que
  * zerou — e essa confusão só aparece meses depois, quando é tarde.
  */
@@ -196,7 +196,7 @@ export async function montarAreas(
     ),
     // Áreas que 01 §5.4 nomeia e cuja fonte só nasce depois. Declaradas, não
     // omitidas nem zeradas: área vazia é indistinguível de área que zerou.
-    funil: indisponivel("O funil comercial nasce na Fase 4 (F4.1)."),
+    funil: indisponivel("O funil comercial foi removido da plataforma em 24/09/2026."),
     dre_razao_resumido: indisponivel(
       "O DRE por competência nasce na Fase 3 (F3.2). O razão em si já existe e é conferido pelo job de integridade."
     ),

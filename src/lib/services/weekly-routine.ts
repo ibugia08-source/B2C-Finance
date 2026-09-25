@@ -11,6 +11,9 @@ import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
  * promessas da semana, pipeline parado 7+ dias, caixa projetado, fiscais
  * faltantes, comparativo da semana anterior; gera as tarefas da semana."
  *
+ * O bloco "pipeline parado" saiu em 24/09/2026 junto com o funil comercial,
+ * que foi removido da plataforma. Ficam cinco blocos, renumerados.
+ *
  * A DIFERENÇA ENTRE ESTA E A ROTINA DIÁRIA, que é a razão de as duas
  * existirem: a diária é sobre HOJE — quem cobrar, o que pagar, o que já
  * venceu. A semanal é sobre o que está ANDANDO NA DIREÇÃO ERRADA e ainda dá
@@ -65,17 +68,6 @@ export type RotinaSemanal = {
   totalDeItens: number;
 };
 
-/** Etapas do funil em português — o enum não vai para a tela (RP-06). */
-const ETAPA_LABEL: Record<string, string> = {
-  NOVA: "Nova",
-  QUALIFICACAO: "Qualificação",
-  REUNIAO: "Reunião",
-  PROPOSTA: "Proposta",
-  NEGOCIACAO: "Negociação",
-  GANHA: "Ganha",
-  PERDIDA: "Perdida",
-};
-
 /** A segunda-feira da semana de uma data (domingo pertence à semana anterior). */
 export function segundaDa(d: Date): Date {
   const base = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -114,7 +106,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
     renovacoes,
     renovadosRecentemente,
     promessas,
-    pipelineParado,
     notasEmRascunho,
     liquidez,
     recebidoSemana,
@@ -164,27 +155,6 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
         id: true, nextActionAt: true, clientId: true,
         client: { select: { name: true } },
         billing: { select: { id: true, amount: true, paidTotal: true, status: true } },
-      },
-    }),
-    // 4. Pipeline parado: oportunidade aberta cuja etapa não muda há 7 dias.
-    //
-    // O bloco dizia "o funil chega na Fase 4" e aparecia como NÃO MEDIDO —
-    // texto de desenvolvimento que sobreviveu à entrega do módulo e que a
-    // auditoria de 11/09/2026 flagrou (UX-13). O funil existe; a medida
-    // passa a ser real.
-    //
-    // `updatedAt` é o relógio certo aqui: a gravação de etapa toca a linha.
-    // Uma oportunidade recém-criada e ainda não mexida entra pela mesma
-    // régua — sete dias sem andar é sete dias sem andar.
-    prisma.opportunity.findMany({
-      where: {
-        stage: { notIn: ["GANHA", "PERDIDA"] },
-        updatedAt: { lt: new Date(hoje.getTime() - 7 * 86_400_000) },
-      },
-      orderBy: { updatedAt: "asc" },
-      select: {
-        id: true, title: true, amount: true, stage: true,
-        closer: true, updatedAt: true,
       },
     }),
     // 6. Notas em rascunho. Buscamos a LISTA, não a contagem: a nota se liga
@@ -281,33 +251,7 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       href: "/inadimplencia",
     },
     {
-      id: "pipeline", numero: 4,
-      titulo: "Pipeline parado há 7 dias ou mais",
-      dono: "Comercial",
-      situacao: pipelineParado.length === 0 ? "OK" : "ATENCAO",
-      resumo:
-        pipelineParado.length === 0
-          ? "Nenhuma oportunidade aberta parada há uma semana."
-          : `${pipelineParado.length} ${pipelineParado.length === 1 ? "oportunidade parada" : "oportunidades paradas"} há sete dias ou mais, somando ${formatBRL(
-              pipelineParado.reduce((t, o) => t + toNumber(o.amount), 0)
-            )} em negociação.`,
-      itens: pipelineParado.slice(0, 8).map((o) => ({
-        chave: `pipeline:${o.id}`,
-        titulo: o.title,
-        detalhe: `${ETAPA_LABEL[o.stage] ?? o.stage} · parada desde ${formatDateBR(o.updatedAt)}${
-          o.closer ? ` · ${o.closer}` : ""
-        }`,
-        valor: toNumber(o.amount),
-        // O quadro do funil ainda não aceita filtro por etapa na URL, então
-        // o item leva ao quadro e o detalhe acima diz em qual coluna procurar.
-        // Prometer `?etapa=` que a página ignora seria o mesmo defeito que a
-        // auditoria achou nos alertas que "abrem" numa lista geral (UX-12).
-        href: "/funil",
-      })),
-      href: "/funil",
-    },
-    {
-      id: "caixa", numero: 5,
+      id: "caixa", numero: 4,
       titulo: "Caixa projetado",
       dono: "Administrador",
       situacao: liquidez.projecao30d < 0 ? "ATENCAO" : "OK",
@@ -324,7 +268,7 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
       href: "/caixa",
     },
     {
-      id: "fiscais", numero: 6,
+      id: "fiscais", numero: 5,
       titulo: "Notas fiscais paradas em rascunho",
       dono: "Financeiro",
       // DECIDIDO 19.38: emissão NÃO é obrigatória e não existe cadastro de

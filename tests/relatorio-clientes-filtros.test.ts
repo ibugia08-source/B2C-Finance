@@ -106,7 +106,11 @@ describe("listas dos filtros", () => {
     expect(o.origens).toEqual(["Indicação", "Tráfego"]);
     expect(o.ufs).toEqual(["BA", "SP"]);
   });
-  it("mergeNames ignora vazios e duplicatas por caixa", () => {
-    expect(mergeNames(["b", " ", null], ["B", "a"])).toEqual(["a", "b"]);
+  it("mergeNames ignora vazios e duplicatas por caixa, escolhendo a grafia de forma estável", () => {
+    expect(mergeNames(["b", " ", null], ["B", "a"])).toEqual(["a", "B"]);
+    // A ordem de chegada não muda o resultado.
+    expect(mergeNames(["ana paula", "Ana Paula"])).toEqual(["Ana Paula"]);
+    expect(mergeNames(["Ana Paula", "ana paula"])).toEqual(["Ana Paula"]);
+    expect(mergeNames(["Ana  Paula"])).toEqual(["Ana Paula"]);
   });
 });
