@@ -1,5 +1,5 @@
 import { computeOperationalMargin } from "@/lib/financial/calculations";
-import { clientActiveInMonth, REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
+import { clientActiveInMonth } from "@/lib/client-status";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { ownerCached } from "@/lib/owner-cache";
@@ -12,6 +12,7 @@ import {
   getReceiptsSummary,
 } from "./revenue-metrics";
 import { getFinanceSummary } from "./finance-metrics";
+import type { YearMonth } from "@/lib/renewal-expectation";
 
 /**
  * CAMADA CENTRAL DO DASHBOARD (redesign Parte 1).
@@ -40,7 +41,8 @@ import { getFinanceSummary } from "./finance-metrics";
 // ===================================================================
 
 export type DashboardMainMetrics = {
-  faturamentoTotal: number; // MRR + TCV + Receita Extra manual
+  faturamentoTotal: number; // MRR + TCV + avulsas + Receita Extra manual
+  avulso: number; // cobranças avulsas da competência (upsell, setup, pontual)
   mrr: number;
   tcv: number;
   extraManual: number;
@@ -80,6 +82,7 @@ function buildMetrics(
 
   return {
     faturamentoTotal,
+    avulso: revenue.avulso,
     mrr: revenue.mrr,
     tcv: revenue.tcv,
     extraManual,
@@ -258,8 +261,10 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
         where: { modality: "MRR" },
         select: { monthlyValue: true, startedAt: true, churnedAt: true, status: true, createdAt: true },
       }),
+      // TCV e AVULSAS (tudo que não é MRR) por competência — a mesma base do
+      // card Faturamento total, para a série anual não divergir dele.
       prisma.billing.findMany({
-        where: { revenueType: "TCV", status: { not: "CANCELED" }, competenceYear: year },
+        where: { revenueType: { not: "MRR" }, status: { not: "CANCELED" }, competenceYear: year },
         select: { amount: true, competenceMonth: true },
       }),
       prisma.extraRevenue.findMany({
@@ -588,17 +593,53 @@ export function buildDashboardSummary(i: SummaryInput): string[] {
 export type NamedValue = { id?: string; name: string; sub?: string; value: number };
 
 
-/** Clientes MRR que compõem o faturamento recorrente do período. */
-async function getMrrClientsDetailImpl(): Promise<NamedValue[]> {
+/**
+ * Competências (ano/mês 1-12) que o período cobre — MESMA leitura (e mesmo
+ * teto de 24 meses) de getPeriodRevenue, para os detalhes somarem igual aos
+ * cards.
+ */
+export function periodMonths(period: Pick<Period, "start" | "end">): YearMonth[] {
+  const out: YearMonth[] = [];
+  const cur = new Date(period.start.getFullYear(), period.start.getMonth(), 1);
+  const endRef = new Date(period.end);
+  endRef.setDate(endRef.getDate() - 1);
+  const lastRef = new Date(endRef.getFullYear(), endRef.getMonth(), 1);
+  while (cur <= lastRef && out.length < 24) {
+    out.push({ year: cur.getFullYear(), month: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return out;
+}
+
+/**
+ * Clientes MRR que compõem o faturamento recorrente do período — a MESMA
+ * regra do card (clientActiveInMonth, mês a mês). `value` = Σ mensalidade
+ * nos meses do período em que o cliente estava ativo; a soma da lista é o
+ * MRR do card. Antes a lista lia o status de HOJE, sem período e cortada em
+ * 60 — e não fechava com o card.
+ */
+async function getMrrClientsDetailImpl(period: Period): Promise<NamedValue[]> {
+  const months = periodMonths(period);
+  if (months.length === 0) return [];
   const rows = await prisma.client.findMany({
-    where: { modality: "MRR", status: { in: REVENUE_ACTIVE_STATUSES as any } },
-    select: { id: true, name: true, monthlyValue: true, salesOwner: true },
-    orderBy: { monthlyValue: "desc" },
-    take: 60,
+    where: { modality: "MRR" },
+    select: {
+      id: true, name: true, monthlyValue: true, salesOwner: true,
+      startedAt: true, churnedAt: true, status: true, createdAt: true,
+    },
   });
-  return rows
-    .map((r) => ({ id: r.id, name: r.name, sub: r.salesOwner ?? undefined, value: n(r.monthlyValue) }))
-    .filter((r) => r.value > 0);
+  const now = new Date();
+  const out: NamedValue[] = [];
+  for (const r of rows) {
+    const mensal = n(r.monthlyValue);
+    if (mensal <= 0) continue;
+    let value = 0;
+    for (const { year, month } of months) {
+      if (clientActiveInMonth(r, year, month, now)) value += mensal;
+    }
+    if (value > 0) out.push({ id: r.id, name: r.name, sub: r.salesOwner ?? undefined, value });
+  }
+  return out.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, "pt-BR"));
 }
 
 /** Clientes TCV com fechamento/renovação (cobrança TCV) na competência do período. */
@@ -657,33 +698,56 @@ async function getNewClientsDetailImpl(period: Period): Promise<NamedValue[]> {
       id: c.id,
       name: c.name,
       sub: c.modality ?? undefined,
+      // TCV: valor total do CLIENTE primeiro, depois o do contrato mais
+      // recente — a mesma ordem de expectedRenewalValues.
       value:
         c.modality === "TCV"
-          ? lastTcv.get(c.id) ?? n(c.totalContractValue) ?? n(c.monthlyValue)
+          ? n(c.totalContractValue) > 0
+            ? n(c.totalContractValue)
+            : lastTcv.get(c.id) ?? 0
           : n(c.monthlyValue),
     }))
     .sort((a, b) => b.value - a.value);
 }
 
 /**
- * Clientes com renovação no mês selecionado — a MESMA lista do módulo
- * /renovacoes (getRenewalPanel): agenda única + quem já renovou + quem se
- * perdeu no mês. Antes lia só Client.renewalMonth, e por isso o card do
- * painel divergia do módulo e "esquecia" quem já tinha renovado (a renovação
- * move o renewalMonth do cadastro para a próxima janela).
+ * Renovações das competências pedidas — a MESMA lista do módulo /renovacoes
+ * (livro de renovações): expectativas, quem renovou e quem não renovou.
+ * Recebe TODOS os meses do período filtrado (um trimestre traz as linhas
+ * dos três meses); `value` é o valor ESPERADO da linha e a soma da lista é
+ * "Renovações esperadas" do período. Com mais de um mês, a competência entra
+ * no subtítulo.
  */
-async function getRenewalClientsDetailImpl(month: number, year: number): Promise<NamedValue[]> {
-  const { getRenewalPanel } = await import("./renewal-metrics");
-  const panel = await getRenewalPanel(month, year);
-  return panel.rows.map((r) => ({
-    id: r.clientId,
-    name: r.name,
-    sub: [
-      r.renewal ? "renovou" : r.lostAtISO ? "não renovou" : "pendente",
-      r.salesOwner ?? r.modality ?? null,
-    ].filter(Boolean).join(" · "),
-    value: r.renewal ? r.renewal.totalValue : r.expected,
-  }));
+async function getRenewalClientsDetailImpl(months: YearMonth[]): Promise<NamedValue[]> {
+  if (months.length === 0) return [];
+  const { renewalLedger } = await import("./renewal-schedule");
+  const { monthIndex, toCompetenceKey } = await import("@/lib/renewal-expectation");
+  const ordenados = [...months].sort((a, b) => monthIndex(a) - monthIndex(b));
+  const livro = await renewalLedger(ordenados);
+  const rotulo = { pendente: "pendente", renovou: "renovou", nao_renovou: "não renovou" } as const;
+  const varios = ordenados.length > 1;
+  const out: NamedValue[] = [];
+  for (const ym of ordenados) {
+    const mes = livro.get(toCompetenceKey(ym));
+    if (!mes) continue;
+    const comp = `${MONTHS_PT_SHORT[ym.month - 1]}/${ym.year}`;
+    for (const r of mes.rows) {
+      out.push({
+        id: r.clientId,
+        name: r.name,
+        sub: [
+          varios ? comp : null,
+          rotulo[r.outcome],
+          r.modality === "TCV" ? "TCV · valor cheio" : r.modality ? "MRR · mensalidade" : null,
+          r.salesOwner,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        value: r.expected,
+      });
+    }
+  }
+  return out;
 }
 
 /** Versão cacheada por (usuário, argumentos) — TTL 300s, invalidada pelas tags de mutação. */

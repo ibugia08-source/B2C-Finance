@@ -34,7 +34,6 @@ async function buildContratos(q: ReportQuery): Promise<ReportRow[]> {
     rows = rows.filter(
       (r) => (range.gte == null || r.valorTotal >= range.gte) && (range.lte == null || r.valorTotal <= range.lte)
     );
-  if (q.situacao === "vencido") rows = rows.filter((r) => r.status === CONTRACT_STATUS_LABEL.OVERDUE);
   return rows;
 }
 
@@ -53,7 +52,10 @@ export const contratosReport: ReportDef = {
     { key: "fim", label: "Fim", kind: "date" },
     { key: "renovacao", label: "Renovação", kind: "date" },
   ],
-  filterFields: ["cliente", "status", "tipo", "valor", "situacao"],
+  // Sem "situacao": o seletor genérico oferece inadimplente/a vencer/vencido,
+  // e para acordo só "vencido" tinha leitura — que já é o status "Vencido"
+  // (filtro status). Os outros dois eram ignorados em silêncio.
+  filterFields: ["cliente", "status", "tipo", "valor"],
   groupOptions: ["cliente", "tipo", "status"],
   statusOptions: Object.entries(CONTRACT_STATUS_LABEL).map(([value, label]) => ({ value, label })),
   tipoOptions: [

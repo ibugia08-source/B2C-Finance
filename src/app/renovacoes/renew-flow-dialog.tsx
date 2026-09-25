@@ -124,6 +124,8 @@ export function RenewFlowDialog({
           className="grid grid-cols-2 gap-3"
         >
           <input type="hidden" name="clientId" value={client.id} />
+          {/* A expectativa que esta renovação atende = o mês em exibição. */}
+          <input type="hidden" name="forCompetence" value={defaultCompetence} />
           {contract && <input type="hidden" name="contractId" value={contract.id} />}
 
           {/* ===== Modalidade do contrato renovado (mesma lógica do cadastro) ===== */}

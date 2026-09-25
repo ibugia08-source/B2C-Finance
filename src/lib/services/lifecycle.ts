@@ -121,10 +121,25 @@ async function voltarAtivo(
     reason: motivo ?? (modo === "RETOMADA" ? "Retomada após pausa." : "Reativação após churn."),
   });
 
+  // Expectativa de renovação que venceu durante a pausa/saída anda em
+  // ciclos até o mês corrente — a mesma regra do select de status.
+  const exp = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { expectedRenewalAt: true, contractMonths: true },
+  });
+  const { rollForward } = await import("@/lib/renewal-expectation");
+  const novaExpectativa = exp?.expectedRenewalAt
+    ? rollForward(exp.expectedRenewalAt, exp.contractMonths ?? 12)
+    : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.client.update({
       where: { id: clientId },
-      data: { status: "ACTIVE", churnedAt: null },
+      data: {
+        status: "ACTIVE",
+        churnedAt: null,
+        ...(novaExpectativa ? { expectedRenewalAt: novaExpectativa } : {}),
+      },
     });
     for (const r of relacoes) {
       // O último termo (fechado na pausa/churn) dá o valor da volta. Se a
@@ -180,4 +195,83 @@ export async function retomarCliente(clientId: string, motivo?: string | null): 
 
 export async function reativarCliente(clientId: string, motivo?: string | null): Promise<Resultado> {
   return voltarAtivo(clientId, "REATIVACAO", motivo ?? null);
+}
+
+/**
+ * COBRANÇAS FUTURAS de quem saiu (auditoria 25/09/2026). O cadastro MRR com
+ * prazo gera todas as mensalidades do contrato de uma vez; sem isto, o
+ * cliente perdido em novembro seguia com dezembro…agosto em aberto, virando
+ * OVERDUE e inadimplência de quem já não é cliente. Cancela (com motivo, e
+ * sem apagar) as cobranças SEM NENHUM PAGAMENTO com competência depois do
+ * mês de saída. Cobrança já paga ou parcial fica: é fato de caixa.
+ */
+export async function cancelarCobrancasFuturas(
+  db: any,
+  filtro: { clientId?: string; contractId?: string },
+  aPartirDe: { year: number; month: number },
+  motivo: string
+): Promise<number> {
+  const depois = {
+    OR: [
+      { competenceYear: { gt: aPartirDe.year } },
+      { competenceYear: aPartirDe.year, competenceMonth: { gt: aPartirDe.month } },
+    ],
+  };
+  const r = await db.billing.updateMany({
+    where: {
+      ...filtro,
+      status: { in: ["PENDING", "OVERDUE"] },
+      paidTotal: 0,
+      ...depois,
+    },
+    data: { status: "CANCELED", canceledAt: new Date(), cancelReason: motivo },
+  });
+  return r.count;
+}
+
+/**
+ * ENCERRAR A RELAÇÃO (churn) — o par de pausarCliente para a saída.
+ *
+ * Antes, "Perdido" pela carteira (select, botão Perda, ação em massa ou
+ * edição) mudava só Client.status: a relação com a agência seguia ACTIVE, o
+ * termo seguia vigente e o NRR, a grade de avaliações, o painel do gestor e
+ * as notificações continuavam contando o cliente (auditoria 25/09/2026).
+ * Aqui: relação vira CHURNED com a data da saída, o termo vigente fecha
+ * nela, e as mensalidades futuras sem pagamento são canceladas.
+ */
+export async function encerrarRelacoes(
+  clientId: string,
+  saida: Date,
+  motivo: string | null
+): Promise<void> {
+  const relacoes = await relacoesDe(clientId);
+  const { contextFromRequest } = await import("@/lib/engines/context");
+  const { auditUpdate } = await import("@/lib/audit");
+  const ctx = await contextFromRequest({ reason: motivo ?? "Saída do cliente." });
+  const mesSaida = { year: saida.getUTCFullYear(), month: saida.getUTCMonth() + 1 };
+
+  await prisma.$transaction(async (tx) => {
+    for (const r of relacoes) {
+      if (r.lifecycleStatus === "CHURNED") continue;
+      await tx.clientAgencyRelationship.update({
+        where: { id: r.id },
+        data: { lifecycleStatus: "CHURNED", churnedAt: saida, currentCommercialTermId: null },
+      });
+      if (r.currentCommercialTermId) {
+        await tx.commercialTerm.update({
+          where: { id: r.currentCommercialTermId },
+          data: { validTo: saida },
+        });
+      }
+      await auditUpdate(
+        tx as any,
+        "ClientAgencyRelationship",
+        r.id,
+        { lifecycleStatus: r.lifecycleStatus, churnedAt: r.churnedAt },
+        { lifecycleStatus: "CHURNED", churnedAt: saida },
+        ctx
+      );
+    }
+    await cancelarCobrancasFuturas(tx, { clientId }, mesSaida, "Cliente saiu da carteira");
+  });
 }

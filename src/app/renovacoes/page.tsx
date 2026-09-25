@@ -9,12 +9,17 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { getRenewalPanel, getRenewalStrip } from "@/lib/services/renewal-metrics";
 import { RenewalsTable } from "./renewals-table";
 import { ScheduleRenewalDialog } from "./schedule-renewal-dialog";
+import { currentYearMonth } from "@/lib/renewal-expectation";
 
 /**
- * RENOVAÇÕES — módulo do CRM dedicado às renovações de contrato:
- * o mês em foco (quem renova, quem renovou, quem se perdeu), a
- * previsibilidade dos próximos meses e o histórico auditável de renovações.
- * Fonte única: getRenewalPanel (a mesma da seção da Gestão do Mês).
+ * RENOVAÇÕES — módulo dedicado às renovações de contrato (25/09/2026).
+ *
+ * A lista do mês é a de clientes com DATA DE EXPECTATIVA de renovação no mês
+ * selecionado (entrada + prazo do contrato, ou agendada à mão), mais os
+ * desfechos registrados contra essas expectativas. Os cards do topo são as
+ * métricas PRÓPRIAS do módulo: valor esperado, valor ganho, valor perdido e
+ * quantidade de renovações ganhas. Fonte única: o livro de renovações
+ * (services/renewal-schedule), o mesmo da Gestão do Mês e da Visão geral.
  */
 
 type Search = { mes?: string };
@@ -28,11 +33,9 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
     registrarPagamento: can(viewer, "recebimentos.registrar_pagamento"),
   };
 
-  const now = new Date();
-  const mes = parseMonthParam(searchParams.mes) ?? {
-    month: now.getMonth() + 1,
-    year: now.getFullYear(),
-  };
+  // Mês padrão no calendário do workspace — o servidor roda em UTC e, às
+  // 22h do último dia do mês na Bahia, já estaria no mês seguinte.
+  const mes = parseMonthParam(searchParams.mes) ?? currentYearMonth();
   const competence = `${mes.year}-${String(mes.month).padStart(2, "0")}`;
   const monthLabelStr = new Intl.DateTimeFormat("pt-BR", {
     month: "long",
@@ -75,39 +78,49 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
         description={`Renovações de ${monthLabelStr}: quem renova, quem renovou e a previsibilidade dos próximos meses`}
         actions={
           gates.agendar ? (
-            <ScheduleRenewalDialog clients={scheduleClients} defaultMonth={mes.month} />
+            <ScheduleRenewalDialog clients={scheduleClients} defaultCompetence={competence} />
           ) : undefined
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
-      </div>
-
-      {/* ===== Resumo do mês ===== */}
+      {/* ===== Métricas do mês (próprias do módulo) ===== */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <StatCard
-          title="Renovações no mês"
-          value={String(panel.rows.length)}
-          hint={`${panel.pendingCount} pendente(s)`}
-        />
-        <StatCard
-          title="Valor esperado"
+          title="Valor esperado de renovação"
           value={formatBRL(panel.expectedTotal)}
-          hint="TCV cheio · MRR mensalidade"
+          hint={`${panel.rows.length} cliente(s) com expectativa · ${panel.pendingCount} pendente(s)`}
         />
         <StatCard
-          title="Renovadas"
+          title="Valor ganho"
+          value={formatBRL(panel.gainedValue)}
+          intent={panel.gainedValue > 0 ? "positive" : "default"}
+          hint="soma das renovações registradas"
+        />
+        <StatCard
+          title="Valor perdido"
+          value={formatBRL(panel.lostValue)}
+          intent={panel.lostValue > 0 ? "negative" : "default"}
+          hint={`${panel.lostCount} cliente(s) não renovaram`}
+        />
+        <StatCard
+          title="Renovações ganhas"
           value={String(panel.renewedCount)}
-          intent="positive"
-          hint={formatBRL(panel.renewedValue)}
-        />
-        <StatCard
-          title="Não renovadas"
-          value={String(panel.lostCount)}
-          intent={panel.lostCount > 0 ? "negative" : "default"}
-          hint="perdas registradas no mês"
+          intent={panel.renewedCount > 0 ? "positive" : "default"}
+          hint={
+            panel.rows.length > 0
+              ? `${Math.round((panel.renewedCount / panel.rows.length) * 100)}% das expectativas do mês`
+              : "sem expectativas no mês"
+          }
         />
       </div>
+
+      {panel.overdue && panel.overdue.count > 0 && (
+        <p role="status" className="mb-4 rounded-card border border-warning/30 bg-warning-soft px-3.5 py-3 text-dense text-warning-ink">
+          {panel.overdue.count} expectativa(s) de meses anteriores continuam sem desfecho,
+          somando {formatBRL(panel.overdue.value)}. Volte aos meses anteriores pela barra de
+          mês e registre &quot;Sim, renovou&quot; ou &quot;Não renovou&quot;.
+        </p>
+      )}
 
       {/* ===== Tabela do mês ===== */}
       <Card>
@@ -118,7 +131,7 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
             canMarkLost={gates.marcarPerda}
             canRegisterPayment={gates.registrarPagamento}
             defaultCompetence={competence}
-            emptyMessage="Nenhuma renovação prevista para este mês. Agende manualmente ou ajuste o mês de renovação na carteira."
+            emptyMessage="Nenhum cliente com expectativa de renovação neste mês. A expectativa vem da data de entrada + prazo do contrato; use Agendar renovação para incluir um cliente."
           />
         </CardContent>
       </Card>
@@ -197,10 +210,11 @@ export default async function RenovacoesPage({ searchParams }: { searchParams: S
       </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        A lista une a agenda da carteira (mês de renovação do cliente) com a
-        data de renovação dos contratos vigentes. &quot;Sim, renovou&quot;
-        atualiza contrato + cadastro, pode lançar a cobrança no mês escolhido
-        e fica gravado no histórico do cliente.
+        Expectativa de renovação = data de entrada + prazo do contrato (a cada
+        ciclo). &quot;Sim, renovou&quot; atualiza contrato e cadastro, move a
+        próxima expectativa para frente pelo novo prazo, pode lançar a cobrança
+        no mês escolhido e conta como ganha NESTE mês. &quot;Não renovou&quot;
+        conta como perdida neste mês.
       </p>
     </div>
   );

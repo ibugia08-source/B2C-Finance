@@ -43,7 +43,7 @@ export function UserDialog({
 }) {
   const [open, setOpen] = useState(false);
   const editing = !!initial?.id;
-  const [role, setRole] = useState<Role>((initial?.role as Role) ?? "FINANCEIRO");
+  const [role, setRole] = useState<Role>((initial?.role as Role) ?? (canManagePermissions ? "FINANCEIRO" : "LEITURA"));
   const [dataScope, setDataScope] = useState<string>(initial?.dataScope ?? "WORKSPACE");
   const [overrides, setOverrides] = useState<OverrideMap>(() =>
     overridesFromRows(initial?.permissions)
@@ -57,7 +57,7 @@ export function UserDialog({
   function reset(next: boolean) {
     setOpen(next);
     if (next) {
-      setRole((initial?.role as Role) ?? "FINANCEIRO");
+      setRole((initial?.role as Role) ?? (canManagePermissions ? "FINANCEIRO" : "LEITURA"));
       setDataScope(initial?.dataScope ?? "WORKSPACE");
       setOverrides(overridesFromRows(initial?.permissions));
     }

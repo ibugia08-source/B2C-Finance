@@ -230,6 +230,9 @@ model User {
   ownedCashMovements      CashBoxMovement[]        @relation("OwnerCashMovement")
   ownedConversations      AIConversation[]         @relation("OwnerAIConversation")
   ownedMemories           AIMemory[]               @relation("OwnerAIMemory")
+  // Autor da conversa/memória do Assistente (privado POR USUÁRIO, não por workspace).
+  aiConversations         AIConversation[]         @relation("UserAIConversation")
+  aiMemories              AIMemory[]               @relation("UserAIMemory")
   ownedClients            Client[]                 @relation("OwnerClient")
 
   // ===== ERP de agência (fundação) =====
@@ -1091,10 +1094,16 @@ model AIConversation {
   // Dono da conversa (conta multiusuário). Cada usuário só vê o próprio histórico.
   ownerId   String?
   owner     User?       @relation("OwnerAIConversation", fields: [ownerId], references: [id])
+  // Usuário que conversou. O ownerId é o DONO do workspace (compartilhado pela
+  // equipe); o userId é quem de fato escreveu — é ele que isola o histórico.
+  // null = conversa legada (anterior a 25/09/2026): só o ADMIN enxerga.
+  userId    String?
+  user      User?       @relation("UserAIConversation", fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now()) @db.Timestamptz(3)
   updatedAt DateTime    @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
+  @@index([userId])
 }
 
 model AIMessage {
@@ -1119,10 +1128,14 @@ model AIMemory {
   // Dono da memória (conta multiusuário). Cada usuário tem a própria base.
   ownerId   String?
   owner     User?    @relation("OwnerAIMemory", fields: [ownerId], references: [id])
+  // Usuário autor da memória (ver AIConversation.userId). null = legada, só ADMIN.
+  userId    String?
+  user      User?    @relation("UserAIMemory", fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId])
+  @@index([userId])
 }
 
 // ===================================================================
@@ -1202,8 +1215,13 @@ model Client {
   // Modalidade de faturamento (MRR/TCV) — editável na linha, alimenta filtros,
   // dashboard e relatórios. Independente dos contratos (que guardam valores).
   modality            ClientModality?
-  // Mês de renovação (1-12) — editável na linha; alimenta KPIs de renovação.
+  /// LEGADO (até 25/09/2026): mês 1-12 sem ano. Ninguém mais lê nem grava;
+  /// a fonte é expectedRenewalAt. Mantido só para não apagar dado.
   renewalMonth        Int?
+  /// DATA DE EXPECTATIVA DE RENOVAÇÃO — fonte única de "quando este cliente
+  /// renova". Base: data de entrada + prazo do contrato (ciclos); movida
+  /// para frente pela renovação registrada; ajustável à mão (agendar).
+  expectedRenewalAt   DateTime?       @db.Timestamptz(3)
   // Valor mensal recorrente — usado SOMENTE em MRR (base da mensalidade).
   /// CACHE do valor atual (01 §4.4). A fonte temporal é CommercialTerm:
   /// métrica histórica NUNCA lê este campo, porque reajuste o sobrescreve
@@ -1285,6 +1303,7 @@ model Client {
   renegotiations   RenegotiationAgreement[]
 
   @@index([ownerId])
+  @@index([expectedRenewalAt])
   @@index([status])
   @@index([modality])
   @@index([renewalMonth])
@@ -1336,6 +1355,11 @@ model ClientRenewal {
   paymentMode     String? // à vista | parcelado | mensal
   previousEndDate DateTime?       @db.Timestamptz(3) // fim de vigência antes da renovação
   newEndDate      DateTime?       @db.Timestamptz(3) // novo fim de vigência
+  /// Competência (YYYY-MM) da EXPECTATIVA que esta renovação atendeu — é o
+  /// mês em que ela conta como "ganha" no módulo e na Visão geral.
+  expectedCompetence String?
+  /// Valor que se esperava renovar (snapshot antes da renovação).
+  expectedValue   Decimal?        @db.Decimal(14, 2)
   billingId       String? // cobrança lançada nos recebimentos (se houver)
   billingMonth    Int? // competência escolhida para o lançamento (1-12)
   billingYear     Int?
@@ -1367,6 +1391,11 @@ model ClientLoss {
   monthlyValue   Decimal?                  @db.Decimal(14, 2) // MRR mensal perdido
   referenceValue Decimal?                  @db.Decimal(14, 2) // TCV de referência (última adesão)
   reason         String? // motivo da perda (opcional)
+  /// Competência (YYYY-MM) da expectativa de renovação que esta perda
+  /// frustrou. Nulo = saída no meio do contrato, não conta como renovação perdida.
+  renewalCompetence String?
+  /// Valor que se esperava renovar (snapshot na perda).
+  expectedValue  Decimal?                  @db.Decimal(14, 2)
   salesOwner     String? // snapshot do responsável na perda
   // 01 §4.3: "ClientLoss pertence à relação". Nulo só no legado
   // anterior ao backfill da F1.1.

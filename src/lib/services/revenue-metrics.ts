@@ -5,6 +5,7 @@ import { ownerCached } from "@/lib/owner-cache";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { toNumber as n, MONTHS_PT } from "@/lib/format";
 import { resolveOwnerId, runWithOwner } from "@/lib/auth/owner-scope";
+import { chaveDiaCivil, chaveMesCivil, hojeCivil } from "@/lib/civil-date";
 
 /**
  * Camada CENTRAL de faturamento MRR/TCV, renovações e perdas.
@@ -40,7 +41,16 @@ export type PeriodRevenue = {
   mrrClients: number; // clientes MRR ativos no último mês do período
   tcv: number; // Σ cobranças TCV com competência no período
   tcvClients: number; // clientes TCV fechados/renovados no período (distintos)
-  total: number; // mrr + tcv
+  /**
+   * Cobranças AVULSAS da competência (upsell, setup, pontual — tudo que não é
+   * MRR nem TCV). O contrato da métrica faturamento_total já as incluía
+   * ("MRR + TCV + Setup + Avulso + Upsell + Receita Extra"), mas o cálculo
+   * não: um upsell pago entrava no Recebido e não no Faturamento, e o "Em
+   * aberto" (faturamento − recebido) caía sem nada ter sido quitado
+   * (auditoria 25/09/2026).
+   */
+  avulso: number;
+  total: number; // mrr + tcv + avulso
 };
 
 /** Meses (1º dia) que intersectam o período. Cap de segurança. */
@@ -90,14 +100,14 @@ async function getPeriodRevenueImpl(
 ): Promise<PeriodRevenue> {
   const months = monthsInRange(start, end);
   if (months.length === 0) {
-    return { mrr: 0, mrrClients: 0, tcv: 0, tcvClients: 0, total: 0 };
+    return { mrr: 0, mrrClients: 0, tcv: 0, tcvClients: 0, avulso: 0, total: 0 };
   }
 
   const wantMrr = !filters.modality || filters.modality === "MRR";
   const wantTcv = !filters.modality || filters.modality === "TCV";
   const entity = clientEntityWhere(filters);
 
-  const [mrrClientsRows, tcvBillings] = await Promise.all([
+  const [mrrClientsRows, tcvBillings, avulsoBillings] = await Promise.all([
     wantMrr
       ? prisma.client.findMany({
           where: { ...entity, modality: "MRR" },
@@ -122,6 +132,18 @@ async function getPeriodRevenueImpl(
           select: { clientId: true, amount: true },
         })
       : Promise.resolve([] as { clientId: string; amount: unknown }[]),
+    // Avulsas não têm modalidade: entram só quando o filtro não é de modalidade.
+    !filters.modality
+      ? prisma.billing.findMany({
+          where: {
+            revenueType: { notIn: ["MRR", "TCV"] },
+            status: { not: "CANCELED" },
+            OR: months.map(({ y, m }) => ({ competenceYear: y, competenceMonth: m })),
+            ...(Object.keys(entity).length ? { client: entity } : {}),
+          },
+          select: { amount: true },
+        })
+      : Promise.resolve([] as { amount: unknown }[]),
   ]);
 
   // ---- MRR mês a mês ----
@@ -152,12 +174,15 @@ async function getPeriodRevenueImpl(
     tcvClientIds.add(b.clientId);
   }
 
+  const avulso = Math.round(avulsoBillings.reduce((s, b) => s + n(b.amount), 0) * 100) / 100;
+
   return {
     mrr,
     mrrClients,
     tcv,
     tcvClients: tcvClientIds.size,
-    total: mrr + tcv,
+    avulso,
+    total: mrr + tcv + avulso,
   };
 }
 
@@ -244,10 +269,27 @@ async function getReceiptsSummaryImpl(
         paidAt: true,
         billing: {
           select: {
+            amount: true,
             competenceMonth: true,
             competenceYear: true,
             dueDate: true,
             revenueType: true,
+          },
+        },
+        // Só o que foi APLICADO em cobranças conta como recebimento: o
+        // excedente não aplicado é crédito do cliente, não faturamento.
+        applications: {
+          select: {
+            amount: true,
+            billing: {
+              select: {
+                status: true,
+                competenceMonth: true,
+                competenceYear: true,
+                dueDate: true,
+                revenueType: true,
+              },
+            },
           },
         },
       },
@@ -312,16 +354,40 @@ async function getReceiptsSummaryImpl(
   let paidDifferentMonthValue = 0;
   let paidDifferentMonthCount = 0;
 
+  // Cada pagamento vira as PARCELAS que ele quitou (PaymentApplication).
+  // Antes somava Payment.amount: um pagamento acima do saldo inflava o
+  // "Recebido" da competência com o excedente, que é crédito do cliente.
+  // Pagamento legado sem aplicação (anterior à F1.4 / fixture): conta no
+  // máximo o valor da própria cobrança.
+  type Parcela = {
+    v: number;
+    paidAt: Date;
+    b: { competenceMonth: number; competenceYear: number; dueDate: Date; revenueType: string };
+  };
+  const parcelas: Parcela[] = [];
   for (const p of payments) {
-    const b = p.billing;
+    const aps = p.applications.filter((a) => a.billing.status !== "CANCELED");
+    if (p.applications.length > 0) {
+      for (const a of aps) parcelas.push({ v: n(a.amount), paidAt: p.paidAt, b: a.billing });
+    } else {
+      parcelas.push({
+        v: Math.min(n(p.amount), n(p.billing.amount)),
+        paidAt: p.paidAt,
+        b: p.billing,
+      });
+    }
+  }
+
+  for (const { v, paidAt, b } of parcelas) {
+    if (v <= 0) continue;
     const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
-    const paidKey = p.paidAt.getFullYear() * 12 + p.paidAt.getMonth();
-    const v = n(p.amount);
+    // paidAt e dueDate são DATAS CIVIS: mês/dia pelas partes UTC.
+    const paidKey = chaveMesCivil(paidAt);
     if (paidKey === compKey) {
       receiptsCorrectMonth += v;
       if (b.revenueType === "MRR") mrrReceived += v;
       else if (b.revenueType === "TCV") tcvReceived += v;
-      if (p.paidAt > b.dueDate) {
+      if (chaveDiaCivil(paidAt) > chaveDiaCivil(b.dueDate)) {
         lateSameMonthValue += v;
         lateSameMonthCount += 1;
       }
@@ -356,8 +422,7 @@ async function getReceiptsSummaryImpl(
   // futura contado como recebimento) — nunca exibir "em aberto" negativo.
   const openMonth = Math.max(0, expectedTotal - receiptsCorrectMonth);
   // Vencido = parte do em aberto cuja data de vencimento já passou (⊂ Em aberto).
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = hojeCivil();
   const overdueOpenAmount = openBillings.reduce(
     (s, b) =>
       (b as any).dueDate < today
@@ -396,6 +461,8 @@ export type RenewalClient = {
   modality: string | null;
   status: string;
   expected: number; // valor esperado de renovação
+  /** Desfecho no mês: pendente | renovou | nao_renovou. */
+  outcome?: "pendente" | "renovou" | "nao_renovou";
 };
 
 export type RenewalWindow = {
@@ -405,6 +472,8 @@ export type RenewalWindow = {
   label: string; // "Julho/2026"
   count: number;
   expectedTotal: number;
+  gainedValue?: number;
+  lostValue?: number;
   clients: RenewalClient[];
 };
 
@@ -472,31 +541,31 @@ export async function expectedRenewalValues(
 
 /**
  * Janela de renovações por offset de mês (0 = atual, 1..3 = à frente;
- * negativos = histórico). Lê a AGENDA ÚNICA de renewal-schedule (mês de
- * renovação do cadastro + data do contrato vigente + entrada/prazo), a mesma
- * do painel /renovacoes — antes olhava só Client.renewalMonth e divergia.
+ * negativos = histórico). Lê o LIVRO DE RENOVAÇÕES (renewal-schedule): data
+ * de expectativa do cliente + desfechos registrados — a mesma fonte do
+ * módulo /renovacoes e da Visão geral.
  */
 export async function getRenewalOutlook(
   offsets: number[] = [0, 1, 2, 3]
 ): Promise<RenewalWindow[]> {
-  const { scheduledRenewals, monthKey, zonedMonthOf } = await import("./renewal-schedule");
-  const today = zonedMonthOf(new Date());
-  const window = offsets.map((offset) => {
-    const ref = new Date(today.year, today.month - 1 + offset, 1);
-    return { offset, month: ref.getMonth() + 1, year: ref.getFullYear() };
-  });
-  const schedule = await scheduledRenewals(window);
-  const all = Array.from(schedule.values()).flat();
-  const expected = await expectedRenewalValues(all);
+  const { renewalLedger } = await import("./renewal-schedule");
+  const { currentYearMonth, fromMonthIndex, monthIndex, toCompetenceKey } = await import(
+    "@/lib/renewal-expectation"
+  );
+  const hoje = monthIndex(currentYearMonth());
+  const window = offsets.map((offset) => ({ offset, ...fromMonthIndex(hoje + offset) }));
+  const livro = await renewalLedger(window.map(({ month, year }) => ({ month, year })));
 
   return window.map(({ offset, month, year }) => {
-    const windowClients: RenewalClient[] = (schedule.get(monthKey({ month, year })) ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      salesOwner: c.salesOwner,
-      modality: c.modality,
-      status: c.status,
-      expected: expected.get(c.id) ?? 0,
+    const l = livro.get(toCompetenceKey({ month, year }))!;
+    const windowClients: RenewalClient[] = l.rows.map((r) => ({
+      id: r.clientId,
+      name: r.name,
+      salesOwner: r.salesOwner,
+      modality: r.modality,
+      status: r.status,
+      expected: r.expected,
+      outcome: r.outcome,
     }));
     return {
       offset,
@@ -504,7 +573,9 @@ export async function getRenewalOutlook(
       year,
       label: `${MONTHS_PT[month - 1]}/${year}`,
       count: windowClients.length,
-      expectedTotal: windowClients.reduce((s, c) => s + c.expected, 0),
+      expectedTotal: l.expectedTotal,
+      gainedValue: l.gainedValue,
+      lostValue: l.lostValue,
       clients: windowClients,
     };
   });
@@ -552,8 +623,10 @@ async function getMonthlyChurnImpl(start: Date, end: Date): Promise<MonthlyChurn
 
 /**
  * Novos clientes do período: entrada = startedAt (fallback createdAt).
- * Receita: MRR → valor mensal; TCV → valor total do último contrato
- * (fallback: valor mensal de referência).
+ * Receita: MRR → valor mensal; TCV → valor total do contrato no cadastro
+ * (totalContractValue), senão o total do contrato mais recente, senão 0 —
+ * a MESMA ordem do popup do card (getNewClientsDetail) e do valor esperado
+ * de renovação (auditoria 25/09/2026: eram três fórmulas).
  */
 export type NewClientsSummary = { count: number; revenue: number };
 async function getNewClientsSummaryImpl(
@@ -567,7 +640,7 @@ async function getNewClientsSummaryImpl(
         { startedAt: null, createdAt: { gte: start, lt: end } },
       ],
     },
-    select: { id: true, modality: true, monthlyValue: true },
+    select: { id: true, modality: true, monthlyValue: true, totalContractValue: true },
   });
   const tcvIds = clients.filter((c) => c.modality === "TCV").map((c) => c.id);
   const contracts = tcvIds.length
@@ -585,7 +658,9 @@ async function getNewClientsSummaryImpl(
     (s, c) =>
       s +
       (c.modality === "TCV"
-        ? lastTcv.get(c.id) ?? n(c.monthlyValue)
+        ? n(c.totalContractValue) > 0
+          ? n(c.totalContractValue)
+          : lastTcv.get(c.id) ?? 0
         : n(c.monthlyValue)),
     0
   );
@@ -656,10 +731,16 @@ export async function computeLossSnapshots(
   if (clientIds.length === 0) return [];
   const clients = await prisma.client.findMany({
     where: { id: { in: clientIds } },
-    select: { id: true, modality: true, monthlyValue: true, salesOwner: true },
+    select: { id: true, modality: true, monthlyValue: true, totalContractValue: true, salesOwner: true },
   });
+  // Com totalContractValue: sem ele o valor caía em Contract.totalValue, que
+  // ACUMULA a cada renovação — TCV de 12 mil renovado uma vez saía como 24 mil
+  // na perda, e o livro de renovações dizia 12 mil (auditoria 25/09/2026).
   const expected = await expectedRenewalValues(
-    clients.map((c) => ({ id: c.id, modality: c.modality, monthlyValue: c.monthlyValue }))
+    clients.map((c) => ({
+      id: c.id, modality: c.modality, monthlyValue: c.monthlyValue,
+      totalContractValue: c.totalContractValue,
+    }))
   );
   return clients.map((c) => ({
     clientId: c.id,

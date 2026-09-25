@@ -4,6 +4,7 @@ import { MONTHS_PT_SHORT, toNumber as n } from "@/lib/format";
 import { toCompetence, type Competence } from "@/lib/competence";
 import { isScoped, type DataScope } from "@/lib/scope";
 import { nomeDoEscopo, whereDaRelacao } from "@/lib/services/data-scope";
+import { currentYearMonth, monthBounds } from "@/lib/renewal-expectation";
 
 /**
  * PAINEL DO GESTOR (F1.19 · ref. 02 §5.4).
@@ -70,7 +71,7 @@ export async function carregarPainelGestor(
       startedAt: true,
       churnedAt: true,
       onboardingStatus: true,
-      client: { select: { name: true, renewalMonth: true } },
+      client: { select: { name: true, expectedRenewalAt: true } },
       avaliacoes: {
         where: { competence },
         select: { estabilidade: true, risco: true, confirmedAt: true },
@@ -107,7 +108,11 @@ export async function carregarPainelGestor(
   const avaliacoesPendentes: AcaoPendente[] = [];
   const onboardingVencido: AcaoPendente[] = [];
   const renovacoesSemNegociacao: AcaoPendente[] = [];
-  const mesAtual = hoje.getMonth() + 1;
+  // Renova no mês corrente = data de expectativa dentro do mês (calendário
+  // do workspace), a mesma régua do módulo Renovações.
+  const mesCorrente = monthBounds(currentYearMonth(hoje));
+  const renovaNoMes = (d: Date | null) =>
+    d != null && d >= mesCorrente.start && d < mesCorrente.end;
 
   for (const r of relacoes) {
     const av = r.avaliacoes[0];
@@ -131,7 +136,7 @@ export async function carregarPainelGestor(
       });
     }
     // Renovação do mês sem sinal de negociação na avaliação.
-    if (r.client.renewalMonth === mesAtual && !av?.confirmedAt) {
+    if (renovaNoMes(r.client.expectedRenewalAt) && !av?.confirmedAt) {
       renovacoesSemNegociacao.push({
         clientId: r.clientId,
         clientName: r.client.name,
@@ -160,7 +165,7 @@ export async function carregarPainelGestor(
     emObservacao,
     vencidoValor,
     vencidoClientes: vencidas.length,
-    renovacoesDoMes: relacoes.filter((r) => r.client.renewalMonth === mesAtual).length,
+    renovacoesDoMes: relacoes.filter((r) => renovaNoMes(r.client.expectedRenewalAt)).length,
     avaliacoesPendentes: avaliacoesPendentes.slice(0, 12),
     onboardingVencido: onboardingVencido.slice(0, 12),
     renovacoesSemNegociacao: renovacoesSemNegociacao.slice(0, 12),

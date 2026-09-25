@@ -9,7 +9,8 @@ export type ClientRow = {
   status: string;
   modality: string | null;
   salesOwner: string | null;
-  renewalMonth: number | null;
+  /** Expectativa de renovação, "YYYY-MM" (null = sem expectativa). */
+  renewalCompetence: string | null;
   // ===== Financeiro na linha (Fase A) =====
   monthlyValue: number | null; // mensal (MRR)
   totalContractValue: number | null; // total do contrato (TCV)

@@ -53,14 +53,13 @@ export async function getClientSummaries(
   );
   if (clientIds.length === 0) return map;
 
-  const [contracts, openBillings, overdueBillings, paidBillings, looseIncomes] =
+  const [contracts, openBillings, overdueBillings, paidBillings, looseIncomes, expectativas] =
     await Promise.all([
       prisma.contract.findMany({
         where: { clientId: { in: clientIds }, status: "ACTIVE" },
         select: {
           clientId: true,
           monthlyValue: true,
-          renewalDate: true,
           services: { select: { service: { select: { name: true } } } },
         },
       }),
@@ -92,16 +91,24 @@ export async function getClientSummaries(
         },
         _sum: { amount: true },
       }),
+      // Próxima renovação = DATA DE EXPECTATIVA do cliente (entrada + prazo
+      // ou agendada), a mesma do módulo Renovações — não a do contrato.
+      prisma.client.findMany({
+        where: { id: { in: clientIds } },
+        select: { id: true, expectedRenewalAt: true },
+      }),
     ]);
+
+  for (const e of expectativas) {
+    const s = map.get(e.id);
+    if (s) s.nextRenewal = e.expectedRenewalAt;
+  }
 
   for (const c of contracts) {
     const s = map.get(c.clientId);
     if (!s) continue;
     s.activeContracts += 1;
     s.monthlyValue += n(c.monthlyValue);
-    if (c.renewalDate && (!s.nextRenewal || c.renewalDate < s.nextRenewal)) {
-      s.nextRenewal = c.renewalDate;
-    }
     for (const cs of c.services) {
       if (!s.activeServices.includes(cs.service.name)) {
         s.activeServices.push(cs.service.name);

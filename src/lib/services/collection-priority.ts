@@ -75,7 +75,7 @@ async function getCollectionQueueImpl(): Promise<CollectionQueueItem[]> {
         clientId: { in: ids },
         status: { in: ["ACTIVE", "RENEWAL"] },
       },
-      select: { clientId: true, recurrence: true, renewalDate: true },
+      select: { clientId: true, recurrence: true },
     }),
     prisma.payment.findMany({
       where: { status: "CONFIRMED", paidAt: { gte: d90 } },
@@ -116,8 +116,13 @@ async function getCollectionQueueImpl(): Promise<CollectionQueueItem[]> {
   const renewalBy = new Set<string>();
   for (const c of contracts) {
     if (c.recurrence !== "NONE") recurringBy.add(c.clientId);
-    if (c.renewalDate && c.renewalDate <= in30) renewalBy.add(c.clientId);
   }
+  // Renovação próxima (ou vencida) pela DATA DE EXPECTATIVA do cliente.
+  const renovando = await prisma.client.findMany({
+    where: { id: { in: ids }, expectedRenewalAt: { not: null, lte: in30 } },
+    select: { id: true },
+  });
+  for (const c of renovando) renewalBy.add(c.id);
 
   let receita90Total = 0;
   const receita90By = new Map<string, number>();

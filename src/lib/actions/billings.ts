@@ -11,6 +11,8 @@ import {
 import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
 import { formatBRL, parseBRL, parseDateBR, toNumber as n, clean, formatDateBR } from "@/lib/format";
 import type { ActionResult } from "./clients";
+import { hojeCivil, hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
+import { MONEY_EPSILON } from "@/lib/billing-status";
 
 
 function revalidateBilling(clientId?: string) {
@@ -45,8 +47,8 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
       contractId: clean(formData.get("contractId")),
       serviceId: clean(formData.get("serviceId")),
       description: String(formData.get("description") ?? "").trim(),
-      competenceMonth: cm || new Date().getMonth() + 1,
-      competenceYear: cy || new Date().getFullYear(),
+      competenceMonth: cm || mesCivilAtual().month,
+      competenceYear: cy || mesCivilAtual().year,
       amount: parseBRL(String(formData.get("amount") ?? "0")),
       dueDate: parseDateBR(String(formData.get("dueDate") ?? "")) ?? (undefined as any),
       revenueType: (clean(formData.get("revenueType")) ?? "MRR") as RevenueType,
@@ -60,8 +62,7 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
     });
     if (!owned) return { ok: false, error: "Cliente não encontrado." };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = hojeCivil();
     const { id, ...data } = parsed;
 
     // Uma mensalidade (MRR) viva por competência — mesma invariante do
@@ -93,14 +94,40 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
       if (existing.status === "PAID") {
         return { ok: false, error: "Cobrança quitada não pode ser editada." };
       }
+      // Valor abaixo do já recebido deixaria a cobrança presa (saldo
+      // negativo, nunca quita nem reabre). Igual ao recebido = quitada.
+      const pago = n(existing.paidTotal);
+      if (data.amount < pago - MONEY_EPSILON)
+        return {
+          ok: false,
+          error: `Já foram recebidos ${formatBRL(pago)} nesta cobrança — o valor não pode ficar abaixo disso. Estorne o pagamento antes, se for o caso.`,
+        };
+      const quitada = pago > MONEY_EPSILON && data.amount <= pago + MONEY_EPSILON;
       // Reavalia vencida/pendente ao trocar o vencimento (mantém PARTIAL).
-      const status =
-        existing.status === "PARTIAL"
+      const status = quitada
+        ? "PAID"
+        : existing.status === "PARTIAL" || pago > MONEY_EPSILON
           ? "PARTIAL"
           : data.dueDate < today
             ? "OVERDUE"
             : "PENDING";
-      await prisma.billing.update({ where: { id: billingId }, data: { ...data, status } });
+      let paidAt = existing.paidAt;
+      if (quitada && !paidAt) {
+        const ultimo = await prisma.payment.findFirst({
+          where: { billingId },
+          orderBy: { paidAt: "desc" },
+          select: { paidAt: true },
+        });
+        paidAt = ultimo?.paidAt ?? hojeCivilParaGravar();
+      }
+      await prisma.billing.update({
+        where: { id: billingId },
+        data: {
+          ...data,
+          status,
+          ...(quitada ? { paidAt, collectionStatus: "PAID" as const } : {}),
+        },
+      });
     } else {
       const created = await prisma.billing.create({
         data: { ...data, status: data.dueDate < today ? "OVERDUE" : "PENDING" },
@@ -146,7 +173,7 @@ export async function registerBillingPayment(
     const parsed = PaymentSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),
       amount: parseBRL(String(formData.get("amount") ?? "0")),
-      paidAt: parseDateBR(String(formData.get("paidAt") ?? "")) ?? new Date(),
+      paidAt: parseDateBR(String(formData.get("paidAt") ?? "")) ?? hojeCivilParaGravar(),
       method: (clean(formData.get("method")) ?? "PIX") as PaymentMethod,
       accountId: clean(formData.get("accountId")),
       notes: clean(formData.get("notes")),
@@ -164,11 +191,10 @@ export async function registerBillingPayment(
     // F1.8 — o texto é o da Camada de Simplicidade (02 §1), palavra por
     // palavra: nada de "excedente", "CustomerCredit" ou qualquer termo de
     // arquitetura na tela.
+    // O texto diz o que ACONTECEU: quanto do excedente já quitou outras
+    // cobranças em aberto e quanto ficou guardado como crédito.
     return result.creditGenerated > 0
-      ? {
-          ok: true,
-          warning: `${formatBRL(result.creditGenerated)} ficaram como crédito para a próxima cobrança.`,
-        }
+      ? { ok: true, warning: creditMessage(result) }
       : { ok: true };
   } catch (e: any) {
     return {
@@ -176,6 +202,25 @@ export async function registerBillingPayment(
       error: e?.issues?.[0]?.message ?? e?.message ?? "Falha ao registrar o pagamento.",
     };
   }
+}
+
+/** Mensagem do excedente de um pagamento (o que foi aplicado e o que sobrou). */
+function creditMessage(r: {
+  creditGenerated: number;
+  creditApplied: number;
+  creditAppliedBillings: number;
+  creditRemaining: number;
+}): string {
+  const partes: string[] = [];
+  if (r.creditApplied > 0)
+    partes.push(
+      `${formatBRL(r.creditApplied)} pagos a mais foram abatidos ${r.creditAppliedBillings === 1 ? "da próxima cobrança em aberto" : `de ${r.creditAppliedBillings} cobranças em aberto`} do cliente`
+    );
+  if (r.creditRemaining > 0)
+    partes.push(
+      `${formatBRL(r.creditRemaining)} ${r.creditApplied > 0 ? "restantes " : ""}ficaram como crédito do cliente (não há outra cobrança em aberto para abater)`
+    );
+  return `${partes.join("; ")}.`;
 }
 
 // ---------- Pagamento em 1 clique + Desfazer (gesto da planilha) ----------
@@ -317,7 +362,7 @@ export async function includeClientInMonth(formData: FormData): Promise<ActionRe
 
     const { getValidDueDateForMonth } = await import("@/lib/financial/due-date");
     const fallbackDue =
-      cy && cm ? getValidDueDateForMonth(cy, cm, client.paymentDay) : new Date();
+      cy && cm ? getValidDueDateForMonth(cy, cm, client.paymentDay) : hojeCivilParaGravar();
     const compLabel = `${String(cm).padStart(2, "0")}/${cy}`;
 
     const parsed = IncludeClientSchema.parse({
@@ -355,8 +400,7 @@ export async function includeClientInMonth(formData: FormData): Promise<ActionRe
       };
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = hojeCivil();
     const openStatus: BillingStatus = parsed.dueDate < today ? "OVERDUE" : "PENDING";
 
     // Removido do mês? Restaura o marcador CANCELED em vez de duplicar.
@@ -368,11 +412,20 @@ export async function includeClientInMonth(formData: FormData): Promise<ActionRe
         revenueType,
         status: "CANCELED",
       },
-      select: { id: true },
+      select: { id: true, paidTotal: true },
     });
 
     let billingId: string;
     if (canceledMarker) {
+      // Marcador com dinheiro aplicado (legado) volta como PARTIAL/PAID —
+      // reabrir como PENDING esconderia o que já foi recebido.
+      const pagoMarker = n(canceledMarker.paidTotal);
+      const restoredStatus: BillingStatus =
+        pagoMarker > MONEY_EPSILON && pagoMarker >= parsed.amount - MONEY_EPSILON
+          ? "PAID"
+          : pagoMarker > MONEY_EPSILON
+            ? "PARTIAL"
+            : openStatus;
       await prisma.billing.update({
         where: { id: canceledMarker.id },
         data: {
@@ -380,7 +433,7 @@ export async function includeClientInMonth(formData: FormData): Promise<ActionRe
           dueDate: parsed.dueDate,
           description: parsed.description,
           contractId: parsed.contractId,
-          status: openStatus,
+          status: restoredStatus,
           canceledAt: null,
           canceledBy: null,
           cancelReason: null,
@@ -555,6 +608,13 @@ export async function cancelBilling(
     if (!b) return { ok: false, error: "Cobrança não encontrada." };
     if (b.status === "PAID")
       return { ok: false, error: "Cobrança quitada não pode ser removida do mês." };
+    // Parcial com dinheiro aplicado: cancelar esconderia o recebido (a
+    // cobrança sai do mês, o pagamento fica órfão de competência).
+    if (n(b.paidTotal) > MONEY_EPSILON)
+      return {
+        ok: false,
+        error: `Esta cobrança já tem ${formatBRL(n(b.paidTotal))} recebidos — estorne o pagamento antes de removê-la do mês.`,
+      };
     const cleanReason = (reason ?? "").trim() || null;
     await prisma.billing.update({
       where: { id },
@@ -607,16 +667,23 @@ export async function cancelBillingsBulk(
         collectionStatus: true,
         competenceMonth: true,
         competenceYear: true,
+        paidTotal: true,
       },
     });
+    // Parcial com dinheiro aplicado não sai do mês: estorne antes.
+    const temRecebido = (b: { status: string; paidTotal: unknown }) =>
+      b.status !== "PAID" && b.status !== "CANCELED" && n(b.paidTotal as any) > MONEY_EPSILON;
     const removable = billings.filter(
-      (b) => b.status !== "PAID" && b.status !== "CANCELED"
+      (b) => b.status !== "PAID" && b.status !== "CANCELED" && !temRecebido(b)
     );
+    const skippedPartial = billings.filter(temRecebido).length;
     if (removable.length === 0) {
       return {
         ok: false,
         error:
-          "Nenhuma das cobranças selecionadas pode ser excluída (já estão quitadas ou canceladas).",
+          skippedPartial > 0
+            ? "Nenhuma das cobranças selecionadas pode ser excluída: as parciais já têm valor recebido — estorne o pagamento antes."
+            : "Nenhuma das cobranças selecionadas pode ser excluída (já estão quitadas ou canceladas).",
       };
     }
     const skippedPaid = billings.filter((b) => b.status === "PAID").length;
@@ -654,10 +721,15 @@ export async function cancelBillingsBulk(
       skips.push(`${skippedPaid} quitada${skippedPaid === 1 ? "" : "s"} (o dinheiro já entrou)`);
     if (skippedCanceled > 0)
       skips.push(`${skippedCanceled} já cancelada${skippedCanceled === 1 ? "" : "s"}`);
+    if (skippedPartial > 0)
+      skips.push(
+        `${skippedPartial} parcia${skippedPartial === 1 ? "l" : "is"} com valor recebido (estorne o pagamento antes)`
+      );
     if (skips.length > 0) {
+      const totalSkipped = skippedPaid + skippedCanceled + skippedPartial;
       return {
         ok: true,
-        warning: `${removable.length} cobrança${removable.length === 1 ? "" : "s"} excluída${removable.length === 1 ? "" : "s"}; ignorada${skippedPaid + skippedCanceled === 1 ? "" : "s"}: ${skips.join(" e ")}.`,
+        warning: `${removable.length} cobrança${removable.length === 1 ? "" : "s"} excluída${removable.length === 1 ? "" : "s"}; ignorada${totalSkipped === 1 ? "" : "s"}: ${skips.join(" e ")}.`,
       };
     }
     return { ok: true };
@@ -676,10 +748,16 @@ export async function restoreBilling(id: string): Promise<ActionResult> {
     if (b.status !== "CANCELED")
       return { ok: false, error: "A cobrança não está removida do mês." };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = hojeCivil();
+    const pago = n(b.paidTotal);
     const status =
-      n(b.paidTotal) > 0 ? "PARTIAL" : b.dueDate < today ? "OVERDUE" : "PENDING";
+      pago > MONEY_EPSILON && pago >= n(b.amount) - MONEY_EPSILON
+        ? "PAID"
+        : pago > 0
+          ? "PARTIAL"
+          : b.dueDate < today
+            ? "OVERDUE"
+            : "PENDING";
     await prisma.billing.update({
       where: { id },
       data: { status, canceledAt: null, canceledBy: null, cancelReason: null },
@@ -751,8 +829,7 @@ export async function rescheduleBilling(
     if (b.status === "PAID" || b.status === "CANCELED")
       return { ok: false, error: "Cobrança encerrada não pode ser reagendada." };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = hojeCivil();
     await prisma.billing.update({
       where: { id },
       data: {

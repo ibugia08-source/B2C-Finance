@@ -9,6 +9,7 @@ import {
   type SettleResult,
 } from "@/lib/services/payment-accounting";
 import { applyCredit } from "@/lib/services/customer-credit";
+import { hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
 
 /**
  * PaymentEngine (F1.5 · ref. 03 §4.1).
@@ -44,7 +45,9 @@ export type SettleOptions = {
  * aritmética repetida dentro de um teste.
  */
 export function competenciaDoCaixa(paidAt: Date) {
-  return toCompetence(paidAt.getFullYear(), paidAt.getMonth() + 1);
+  // paidAt é DATA CIVIL (dia UTC) — o mesmo critério da classificação do
+  // núcleo contábil (payment-accounting), para guarda e fato concordarem.
+  return toCompetence(paidAt.getUTCFullYear(), paidAt.getUTCMonth() + 1);
 }
 
 export async function settleBilling(
@@ -156,7 +159,11 @@ export const QUICK_SETTLE_NOTE = "Pago com 1 clique (Gestão do Mês).";
 /**
  * Data do pagamento do 1 clique: competência passada → data do VENCIMENTO
  * (backfill "pagou em dia", a célula verde da planilha); mês corrente ou
- * futuro → hoje. Quem pagou atrasado de verdade usa o dialog com data real.
+ * futuro → HOJE como data civil (dia da Bahia, 00:00 UTC). Antes devolvia o
+ * instante `now`: no servidor UTC, depois das 21h da Bahia, isso já é o dia
+ * seguinte — pagar no vencimento saía "com atraso" e, no último dia do mês,
+ * virava pagamento do mês seguinte (RECOVERY). Quem pagou atrasado de
+ * verdade usa o dialog com data real.
  */
 export function quickSettlePaidAt(
   competenceYear: number,
@@ -165,6 +172,7 @@ export function quickSettlePaidAt(
   now: Date = new Date()
 ): Date {
   const compKey = competenceYear * 12 + (competenceMonth - 1);
-  const nowKey = now.getFullYear() * 12 + now.getMonth();
-  return compKey < nowKey ? dueDate : now;
+  const atual = mesCivilAtual(now);
+  const nowKey = atual.year * 12 + (atual.month - 1);
+  return compKey < nowKey ? dueDate : hojeCivilParaGravar(now);
 }

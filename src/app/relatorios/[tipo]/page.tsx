@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { formatInstantBR } from "@/lib/format";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getReport } from "@/lib/reports/registry";
+import { getReport, canViewReport } from "@/lib/reports/registry";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
 import { periodLabel } from "@/lib/period";
 import { presentReport } from "@/lib/reports/present";
@@ -29,6 +29,8 @@ export default async function RelatorioPage({
   const viewer = await requirePagePermission("relatorios.visualizar");
   const def = getReport(params.tipo);
   if (!def) notFound();
+  // Permissão por relatório (ex.: folha exige folha.visualizar).
+  if (!canViewReport(viewer, def)) redirect("/acesso-restrito");
 
   await markOverdueBillings();
 

@@ -1,4 +1,4 @@
-import { competenceOf, type Competence } from "@/lib/competence";
+import { competenciasDoPeriodo, type Competence } from "@/lib/competence";
 import { margemTotalmenteAlocada } from "@/lib/services/full-margin";
 import { type ReportQuery } from "../query";
 import { type ReportDef, type ReportRow } from "../shared";
@@ -14,14 +14,10 @@ import { type ReportDef, type ReportRow } from "../shared";
  */
 
 function competenciasNoPeriodo(q: ReportQuery): Competence[] {
-  const fim = new Date(q.period.end.getTime() - 1);
-  const out: Competence[] = [];
-  const cursor = new Date(q.period.start.getFullYear(), q.period.start.getMonth(), 1);
-  while (cursor <= fim) {
-    out.push(competenceOf(cursor) as Competence);
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  return out.length > 0 ? out : [competenceOf(q.period.start) as Competence];
+  // Meses pelas partes locais do período (como lib/period o monta) — o
+  // cursor passado por competenceOf (fuso da Bahia) no servidor UTC voltava
+  // um mês: o relatório de setembro calculava agosto.
+  return competenciasDoPeriodo(q.period.start, q.period.end);
 }
 
 async function linhas(q: ReportQuery): Promise<ReportRow[]> {

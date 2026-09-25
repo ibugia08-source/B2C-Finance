@@ -230,13 +230,17 @@ describe("F3.11 — projeção diária de caixa", () => {
       await prisma.payrollItem.create({
         data: { payrollId: folha.id, employeeId: emp.id, kind: "SALARY", amount: 4000 },
       });
+      // Desconto SUBTRAI do líquido (auditoria 25/09/2026: somava junto).
+      await prisma.payrollItem.create({
+        data: { payrollId: folha.id, employeeId: emp.id, kind: "DEDUCTION", amount: 500 },
+      });
     });
 
     // Janela de 60 dias: o dia 5 do mês seguinte cabe sempre.
     const f = await asOwner(dono, async () => fluxoProjetado({ de: em(0), ate: em(60) }));
     const d = f.dias.find((x) => x.dia === dia(pagamento))!;
     const folhaNoDia = d.lancamentos.find((l) => l.tipo === "FOLHA")!;
-    expect(folhaNoDia.valor).toBe(-4000);
+    expect(folhaNoDia.valor).toBe(-3500);
     expect(folhaNoDia.estimada).toBe(true);
 
     // Rascunho NÃO entra: rascunho não é compromisso.

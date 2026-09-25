@@ -149,9 +149,20 @@ export async function concluirOnboarding(
   }
 
   const status = quadro.obrigatoriasPendentes > 0 ? "EXCEPTION" : "COMPLETE";
+  // Concluir a implantação também promove a RELAÇÃO de ONBOARDING para
+  // ACTIVE (auditoria 25/09/2026): sem isto, todo cliente cadastrado ficava
+  // "em implantação" para sempre e o checklist de fechamento — que conta a
+  // carteira ativa, o MRR sem cobrança e quem está sem gestor — não o via.
+  const atual = await prisma.clientAgencyRelationship.findFirst({
+    where: { id: relationshipId },
+    select: { lifecycleStatus: true },
+  });
   await prisma.clientAgencyRelationship.update({
     where: { id: relationshipId },
-    data: { onboardingStatus: status },
+    data: {
+      onboardingStatus: status,
+      ...(atual?.lifecycleStatus === "ONBOARDING" ? { lifecycleStatus: "ACTIVE" as const } : {}),
+    },
   });
   return { ok: true, status };
 }

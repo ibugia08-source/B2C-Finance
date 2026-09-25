@@ -2,6 +2,7 @@ import { BILLING_AWAITING_STATUSES, BILLING_OPEN_STATUSES } from "@/lib/billing-
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { resolveOwnerId } from "@/lib/auth/owner-scope";
+import { hojeCivil } from "@/lib/civil-date";
 
 /**
  * Métricas de cobrança. Convenções:
@@ -30,8 +31,9 @@ export async function markOverdueBillings(): Promise<number> {
   if (Date.now() - last < MARK_OVERDUE_TTL_MS) return 0;
   lastMarkedAt.set(owner, Date.now());
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // Hoje CIVIL (dia da Bahia): no servidor UTC, depois das 21h o dia UTC já
+  // é amanhã e o que vence hoje virava OVERDUE antes da hora.
+  const today = hojeCivil();
   const r = await prisma.billing.updateMany({
     where: { status: { in: [...BILLING_AWAITING_STATUSES] }, dueDate: { lt: today } },
     data: { status: "OVERDUE" },
@@ -74,10 +76,12 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
   if (billings.length === 0) return [];
 
   const byClient = new Map<string, DelinquentClient>();
-  const today = new Date();
+  const today = hojeCivil();
 
   for (const b of billings) {
-    const openAmount = n(b.amount) - n(b.paidTotal);
+    // Clamp: cobrança com paidTotal acima do valor (legado) não pode abater
+    // o vencido de outra.
+    const openAmount = Math.max(0, n(b.amount) - n(b.paidTotal));
     const cur = byClient.get(b.clientId);
     if (!cur) {
       byClient.set(b.clientId, {

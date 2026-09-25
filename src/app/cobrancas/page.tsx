@@ -481,8 +481,13 @@ async function RecebimentosPageInner({
   const payrollSummary = gates.folha
     ? await getPayrollSummary(mes.month, mes.year)
     : null;
+  // Mesma base do "Falta receber" (openMonth = previsto − recebido NA
+  // competência): recuperação de meses anteriores e receita extra não são
+  // realização do faturamento esperado deste mês.
   const pctRealizacao =
-    receipts.expectedTotal > 0 ? receipts.totalRevenue / receipts.expectedTotal : null;
+    receipts.expectedTotal > 0
+      ? receipts.receiptsCorrectMonth / receipts.expectedTotal
+      : null;
   // PROJEÇÃO do mês (02 §5.2) = FATURAMENTO ESPERADO − despesas (regra da planilha do
   // dono: o resultado projeta o mês cheio, não só o que já caiu na conta).
   const resultadoMes =
@@ -922,7 +927,7 @@ async function RecebimentosPageInner({
           value={pctRealizacao != null ? `${Math.round(pctRealizacao * 100)}%` : null}
           nullReason="Nada esperado neste mês"
           hint="recebido ÷ esperado"
-          help="Quanto do faturamento esperado já virou dinheiro em caixa. Sem cobrança no mês não existe divisão possível, e aí o campo mostra um traço em vez de zero."
+          help="Quanto do faturamento esperado do mês já foi recebido dentro da competência (mesma base do Falta receber — recuperações e receitas extras ficam de fora). Sem cobrança no mês não existe divisão possível, e aí o campo mostra um traço em vez de zero."
           tone={
             pctRealizacao == null
               ? "default"
@@ -1097,7 +1102,6 @@ async function RecebimentosPageInner({
           scheduleClients={scheduleClients}
           monthLabel={referenceMonth}
           competence={`${mes.year}-${String(mes.month).padStart(2, "0")}`}
-          defaultMonth={mes.month}
         />
       )}
 

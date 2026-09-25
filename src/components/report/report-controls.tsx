@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Columns3, Download, Printer, X } from "lucide-react";
-import { MONTHS_PT } from "@/lib/format";
+import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 import { SEM_NICHO, SEM_NICHO_LABEL } from "@/lib/niches";
 
 type Opt = { id: string; name: string };
@@ -167,9 +167,11 @@ export function ReportControls(cfg: ReportControlsConfig) {
           </FilterSelect>
         )}
         {has("mesRenovacao") && (
-          <FilterSelect label="Mês de renovação" value={sp.get("mesRenovacao") ?? ""} onChange={(v) => set("mesRenovacao", v)} className={selectCls}>
+          <FilterSelect label="Renovação prevista" value={sp.get("mesRenovacao") ?? ""} onChange={(v) => set("mesRenovacao", v)} className={selectCls}>
             <option value="">Todos</option>
-            {MONTHS_PT.map((nome, i) => <option key={nome} value={String(i + 1)}>{nome}</option>)}
+            {renewalCompetenceOptions(sp.get("mesRenovacao"), { back: 6, ahead: 18 }).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </FilterSelect>
         )}
         {has("valor") && (

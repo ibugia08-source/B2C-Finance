@@ -3,17 +3,39 @@ import { toNumber as n } from "@/lib/format";
 import { type ReportQuery } from "../query";
 import { type ReportDef, type ReportRow } from "../shared";
 
+/**
+ * Competências (ano/mês) que o período cobre. Mesma leitura do card "TCV
+ * faturado" do Dashboard: o TCV pertence ao mês da COMPETÊNCIA (adesão/
+ * renovação), não ao do vencimento. Antes o relatório filtrava por dueDate e
+ * uma cobrança de agosto que vence em setembro saía de agosto aqui e ficava
+ * em agosto no Dashboard.
+ */
+function competenciasDoPeriodo(q: ReportQuery): { competenceYear: number; competenceMonth: number }[] {
+  const { start, end } = q.period;
+  const out: { competenceYear: number; competenceMonth: number }[] = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const fim = new Date(end);
+  fim.setDate(fim.getDate() - 1);
+  const ultimo = new Date(fim.getFullYear(), fim.getMonth(), 1);
+  while (cur <= ultimo && out.length < 240) {
+    out.push({ competenceYear: cur.getFullYear(), competenceMonth: cur.getMonth() + 1 });
+    cur.setMonth(cur.getMonth() + 1);
+  }
+  return out;
+}
+
 /** Cobranças TCV do período (valor cheio no mês da adesão/renovação). */
 async function buildTcv(q: ReportQuery): Promise<ReportRow[]> {
-  const { start, end } = q.period;
+  const competencias = competenciasDoPeriodo(q);
+  if (competencias.length === 0) return [];
   const billings = await prisma.billing.findMany({
     where: {
       revenueType: "TCV",
       status: { not: "CANCELED" },
-      dueDate: { gte: start, lt: end },
+      OR: competencias,
       ...(q.clientId ? { clientId: q.clientId } : {}),
     },
-    orderBy: { dueDate: "asc" },
+    orderBy: [{ competenceYear: "asc" }, { competenceMonth: "asc" }, { dueDate: "asc" }],
     select: {
       description: true, amount: true, paidTotal: true, status: true,
       competenceMonth: true, competenceYear: true, dueDate: true,
@@ -35,7 +57,7 @@ async function buildTcv(q: ReportQuery): Promise<ReportRow[]> {
 export const tcvReport: ReportDef = {
   key: "tcv",
   title: "TCV (contratos fechados)",
-  description: "Cobranças TCV do período — valor cheio no mês da adesão/renovação.",
+  description: "Cobranças TCV cuja competência cai no período — valor cheio no mês da adesão/renovação.",
   columns: [
     { key: "cliente", label: "Cliente", kind: "text" },
     { key: "descricao", label: "Descrição", kind: "text" },

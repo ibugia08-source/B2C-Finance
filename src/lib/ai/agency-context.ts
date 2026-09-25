@@ -47,21 +47,22 @@ export async function buildAgencySnapshotText(): Promise<string> {
       take: 12,
       select: { description: true, amount: true, dueDate: true, date: true },
     }),
-    prisma.contract.findMany({
+    // Expectativas de renovação vencidas ou nos próximos 30 dias.
+    prisma.client.findMany({
       where: {
-        status: { in: ["ACTIVE", "RENEWAL"] },
-        renewalDate: { not: null, lte: in30 },
+        status: { in: ["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"] },
+        expectedRenewalAt: { not: null, lte: in30 },
       },
-      orderBy: { renewalDate: "asc" },
+      orderBy: { expectedRenewalAt: "asc" },
       take: 10,
       select: {
-        title: true, renewalDate: true, monthlyValue: true,
-        client: { select: { name: true } },
+        name: true, expectedRenewalAt: true, modality: true,
+        monthlyValue: true, totalContractValue: true,
       },
     }),
   ]);
 
-  const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses, receipts } = dash;
+  const { kpis, finance, cash, series, breakdowns, health, alerts, revenue, renewalOutlook, losses, receipts, cardBase } = dash;
   const L: string[] = [];
 
   L.push(`PERÍODO DE REFERÊNCIA: ${periodLabel(period)} (hoje: ${formatDateBR(new Date())})`);
@@ -86,8 +87,9 @@ export async function buildAgencySnapshotText(): Promise<string> {
   L.push(
     `RESULTADO (mês): receitas ${formatBRL(finance.receitas)}; despesas ${formatBRL(finance.despesas)} ` +
       `(fixas ${formatBRL(finance.despesasFixas)}, variáveis ${formatBRL(finance.despesasVariaveis)}, pagas ${formatBRL(finance.despesasPagas)}); ` +
-      `folha ${formatBRL(finance.folhaPeriodo)} (${pct(finance.folhaSobreReceita)} da receita; saudável até 40%); ` +
-      `LUCRO/PREJUÍZO ${formatBRL(finance.lucro)} (receitas − despesas pagas); margem operacional ${pct(finance.margem)}.`
+      `folha ${formatBRL(finance.folhaPeriodo)} (${cardBase.folhaSobreFaturamento == null ? "sem faturamento" : pct(cardBase.folhaSobreFaturamento)} do faturamento total; saudável até 40% — mesmo "% Folha" do Dashboard); ` +
+      `RESULTADO ${formatBRL(cardBase.resultado)} (recebido − total de despesas — o mesmo card "Resultado" do Dashboard); ` +
+      `lucro de caixa ${formatBRL(finance.lucro)} (receitas − despesas pagas); margem operacional ${pct(finance.margem)}.`
   );
 
   L.push(
@@ -188,9 +190,9 @@ export async function buildAgencySnapshotText(): Promise<string> {
   }
   if (renewals.length) {
     L.push(
-      "PRÓXIMAS RENOVAÇÕES DE CONTRATO (30 dias): " +
+      "RENOVAÇÕES A DECIDIR (expectativa vencida ou nos próximos 30 dias): " +
         renewals.map((r) =>
-          `"${r.title}" de ${r.client.name} (${formatBRL(Number(r.monthlyValue))}/mês) renova ${r.renewalDate ? formatDateBR(r.renewalDate) : "em breve"}`
+          `${r.name} (${r.modality === "TCV" ? `${formatBRL(Number(r.totalContractValue ?? 0))} TCV` : `${formatBRL(Number(r.monthlyValue ?? 0))}/mês`}) com expectativa em ${r.expectedRenewalAt ? formatDateBR(r.expectedRenewalAt) : "breve"}`
         ).join("; ") + "."
     );
   }

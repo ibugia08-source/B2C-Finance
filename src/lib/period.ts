@@ -1,4 +1,5 @@
 import { parseDateBR } from "@/lib/format";
+import { calendarParts } from "@/lib/renewal-expectation";
 
 /**
  * PERÍODO — FONTE ÚNICA DE ESTADO (RP-01 · auditoria de 11/09/2026).
@@ -88,6 +89,18 @@ export const PERIODO_LEGADO: Record<string, DateRangePreset> = {
 };
 
 const dia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+/**
+ * "Hoje" do NEGÓCIO (calendário da Bahia) como data local à meia-noite.
+ * O servidor roda em UTC: `new Date()` entre 21:00 e 23:59 da Bahia já é o
+ * dia seguinte em UTC — no último dia do mês, "este mês" virava o mês
+ * seguinte. Os componentes (ano, mês, dia) saem do fuso do workspace e a
+ * data é montada no fuso local, que é como o resto deste módulo lê datas.
+ */
+export function hojeDoNegocio(ref: Date = new Date()): Date {
+  const p = calendarParts(ref);
+  return new Date(p.year, p.month - 1, p.day);
+}
 const somaDias = (d: Date, n: number) => {
   const out = new Date(d);
   out.setDate(out.getDate() + n);
@@ -102,7 +115,7 @@ const somaDias = (d: Date, n: number) => {
 export function presetRange(
   preset: DateRangePreset,
   minDate?: Date,
-  hoje: Date = new Date()
+  hoje: Date = hojeDoNegocio()
 ): { start: Date; end: Date } {
   const hj = dia(hoje);
   const a = hj.getFullYear();
@@ -161,7 +174,7 @@ export function presetRange(
 /** Um preset vira Period completo, já com a marca de parcial (DA-04). */
 export function periodOfPreset(
   preset: DateRangePreset,
-  hoje: Date = new Date(),
+  hoje: Date = hojeDoNegocio(),
   rotulo?: string
 ): Period {
   const { start, end } = presetRange(preset, undefined, hoje);
@@ -205,7 +218,7 @@ export function resolvePeriod(
     date?: string; // "YYYY-MM-DD_YYYY-MM-DD"
     preset?: string;
   },
-  hoje: Date = new Date()
+  hoje: Date = hojeDoNegocio()
 ): Period {
   const hj = dia(hoje);
 
@@ -242,7 +255,7 @@ export function resolvePeriod(
  * Period de um mês específico (competência) — usado por scripts e por telas
  * que navegam mês a mês, onde o "período" não vem de preset nem de URL.
  */
-export function periodOfMonth(ano: number, mes: number, hoje: Date = new Date()): Period {
+export function periodOfMonth(ano: number, mes: number, hoje: Date = hojeDoNegocio()): Period {
   const start = new Date(ano, mes - 1, 1);
   const fimInclusivo = new Date(ano, mes, 0);
   const label = `${String(mes).padStart(2, "0")}/${ano}`;

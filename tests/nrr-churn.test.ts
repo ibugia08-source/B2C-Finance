@@ -156,6 +156,43 @@ describe("F5.4 — previsão de churn por sinais", () => {
     });
   });
 
+  it("vocabulário OFICIAL da grade (Crítico / Sem campanha / Alto) pontua igual ao legado", async () => {
+    await asOwner(dono, async () => {
+      const c = await createMrrClient(dono, { name: "Cliente oficial" });
+      const r = await createRelationship(dono, c.id, { startedAt: new Date(2025, 0, 1) });
+      await prisma.avaliacaoMensal.create({
+        data: {
+          relationshipId: r.id, competence: "2027-07",
+          estabilidade: "Crítico", ads: "Sem campanha", risco: "Alto",
+        },
+      });
+      const lista = await previsaoDeChurn(HOJE);
+      const alvo = lista.find((x) => x.cliente === "Cliente oficial")!;
+      expect(alvo.pontos).toBe(
+        PESO_DO_SINAL.ESTABILIDADE_CAINDO + PESO_DO_SINAL.ADS_SEM_VERBA + PESO_DO_SINAL.RISCO_DECLARADO_ALTO
+      );
+      expect(alvo.nivel).toBe("ALTO");
+    });
+  });
+
+  it("vocabulário OFICIAL intermediário (Observação / Pausado / Médio) pontua o nível médio", async () => {
+    await asOwner(dono, async () => {
+      const c = await createMrrClient(dono, { name: "Cliente observação" });
+      const r = await createRelationship(dono, c.id, { startedAt: new Date(2025, 0, 1) });
+      await prisma.avaliacaoMensal.create({
+        data: {
+          relationshipId: r.id, competence: "2027-07",
+          estabilidade: "Observação", ads: "Pausado", risco: "Médio",
+        },
+      });
+      const lista = await previsaoDeChurn(HOJE);
+      const alvo = lista.find((x) => x.cliente === "Cliente observação")!;
+      expect(alvo.pontos).toBe(
+        PESO_DO_SINAL.ESTABILIDADE_OSCILANDO + PESO_DO_SINAL.ADS_PAUSADO + PESO_DO_SINAL.RISCO_DECLARADO_MEDIO
+      );
+    });
+  });
+
   it("cliente sem avaliação recente NÃO ganha ponto pelo que ninguém leu — ganha a marca", async () => {
     await asOwner(dono, async () => {
       const c = await createMrrClient(dono, { name: "Cliente sem leitura" });

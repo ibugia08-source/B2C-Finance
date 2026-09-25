@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
+import { runWithoutScope } from "@/lib/auth/owner-scope";
+import { hojeCivilParaGravar } from "@/lib/civil-date";
 
 /**
  * COMPLEMENTO DA FOLHA — lançamentos DEPOIS da folha paga.
@@ -18,6 +20,9 @@ import { toNumber as n } from "@/lib/format";
  *  - remover item só enquanto ele não foi coberto por pagamento — depois
  *    disso, a correção é um Desconto lançado como complemento.
  */
+
+/** Outro pagamento do complemento carimbou os itens antes — aborta a transação. */
+class ComplementoConcorrente extends Error {}
 
 const rotuloDaFolha = (month: number, year: number) =>
   `${String(month).padStart(2, "0")}/${year}`;
@@ -57,32 +62,57 @@ export async function pagarComplementoDaFolha(
     };
 
   const paidAt = new Date();
-  const [tx] = await prisma.$transaction([
-    prisma.transaction.create({
-      data: {
-        date: paidAt,
-        description: `Complemento da folha ${rotuloDaFolha(run.month, run.year)} — lançamentos pós-pagamento`,
-        amount: total,
-        type: "despesa",
-        origin: "pix",
-        status: "pago",
-        belongsTo: "empresa",
-        expenseType: "PAYROLL",
-        hash: null,
-      },
-      select: { id: true },
-    }),
-    prisma.payrollItem.updateMany({
-      where: { id: { in: pendentes.map((i) => i.id) } },
-      data: { settledAt: paidAt },
-    }),
-    // Comissões da competência que entraram na folha (APPROVED) ficam
-    // quitadas junto — mesmo comportamento do pagamento original.
-    prisma.commission.updateMany({
-      where: { month: run.month, year: run.year, status: "APPROVED" },
-      data: { status: "PAID", paidAt },
-    }),
-  ]);
+  const ids = pendentes.map((i) => i.id);
+  // IDEMPOTENTE (auditoria 25/09/2026): duplo clique rodava duas vezes e
+  // criava DUAS despesas PAYROLL. Agora o carimbo vem PRIMEIRO, condicional
+  // (settledAt nulo), dentro da transação: a segunda chamada carimba menos
+  // itens do que leu e aborta sem criar despesa.
+  const tx = await prisma
+    .$transaction(async (t) => {
+      // runWithoutScope só no updateMany: a extensão injeta ownerId no where e
+      // item legado sem dono nunca casaria. A posse já foi validada no
+      // findUnique (escopado) da folha acima.
+      const carimbo = await runWithoutScope(async () =>
+        t.payrollItem.updateMany({
+          where: { id: { in: ids }, payrollId: run.id, settledAt: null },
+          data: { settledAt: paidAt },
+        })
+      );
+      if (carimbo.count !== ids.length) throw new ComplementoConcorrente();
+      const criada = await t.transaction.create({
+        data: {
+          // Data CIVIL do pagamento (dia da Bahia) — a competência da despesa
+          // é lida pelo dia UTC; o instante "agora" depois das 21h caía no dia
+          // (e às vezes no mês) seguinte.
+          date: hojeCivilParaGravar(paidAt),
+          description: `Complemento da folha ${rotuloDaFolha(run.month, run.year)} — lançamentos pós-pagamento`,
+          amount: total,
+          type: "despesa",
+          origin: "pix",
+          status: "pago",
+          belongsTo: "empresa",
+          expenseType: "PAYROLL",
+          hash: null,
+        },
+        select: { id: true },
+      });
+      // Comissões da competência que entraram na folha (APPROVED) ficam
+      // quitadas junto — mesmo comportamento do pagamento original.
+      await t.commission.updateMany({
+        where: { month: run.month, year: run.year, status: "APPROVED" },
+        data: { status: "PAID", paidAt },
+      });
+      return criada;
+    })
+    .catch((e) => {
+      if (e instanceof ComplementoConcorrente) return null;
+      throw e;
+    });
+  if (!tx)
+    return {
+      ok: false,
+      error: "Este complemento já foi pago (pagamento registrado ao mesmo tempo). Atualize a tela.",
+    };
 
   return { ok: true, total, itens: pendentes.length, transactionId: tx.id };
 }

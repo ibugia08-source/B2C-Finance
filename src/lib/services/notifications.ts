@@ -1,5 +1,6 @@
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
+import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import { toNumber as n, formatBRL } from "@/lib/format";
 import { hasPermission } from "@/lib/permissions";
 
@@ -63,8 +64,12 @@ async function achadosDoDia(hoje: Date): Promise<Achado[]> {
         _count: { _all: true },
         _sum: { amount: true },
       }),
-      prisma.contract.count({
-        where: { status: "ACTIVE", renewalDate: { gte: d0, lte: em30 } },
+      // Expectativas de renovação dos próximos 30 dias (data do cliente).
+      prisma.client.count({
+        where: {
+          status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
+          expectedRenewalAt: { gte: d0, lte: em30 },
+        },
       }),
       hoje.getDate() >= 25
         ? (async () => {
@@ -110,8 +115,8 @@ async function achadosDoDia(hoje: Date): Promise<Achado[]> {
   if (renovacoes > 0) {
     out.push({
       event: "contrato_renovacao",
-      title: "Contratos a renovar em 30 dias",
-      detail: `${renovacoes} contrato(s) chegando ao fim da vigência.`,
+      title: "Renovações nos próximos 30 dias",
+      detail: `${renovacoes} cliente(s) com expectativa de renovação nos próximos 30 dias.`,
       link: "/renovacoes",
       severity: "media",
       permissao: "clientes.visualizar",

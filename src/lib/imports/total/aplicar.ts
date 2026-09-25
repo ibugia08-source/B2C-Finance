@@ -14,6 +14,7 @@ import {
 
 
 import { resolverNicho } from "@/lib/services/niches";
+import { expectationFromBase } from "@/lib/renewal-expectation";
 
 /**
  * Nicho da planilha entra pelo CATÁLOGO: casa com o existente (sem
@@ -325,6 +326,8 @@ export async function aplicarPlanilhaTotal(
           contractMonths: linha.prazoMeses,
           paymentDay: linha.diaVencimento,
           startedAt: linha.dataEntrada,
+          // Entrada + prazo = expectativa de renovação (regra do cadastro).
+          expectedRenewalAt: expectationFromBase(linha.dataEntrada, linha.prazoMeses),
           status: STATUS_CLIENTE[linha.statusAtual] ?? "ACTIVE",
           churnedAt: linha.statusAtual === "Churn" ? linha.dataChurn : null,
           notes: linha.obs,
@@ -506,6 +509,19 @@ export async function aplicarPlanilhaTotal(
       operation: "CRIOU",
       raw: { anterior: vigente?.id ?? null, motivo: "renovacao", linha },
     });
+    // A renovação importada move a EXPECTATIVA: data da renovação + prazo
+    // (e ciclos até o mês corrente), como o "Sim, renovou" faz na tela.
+    const prazo = linha.prazoMeses ?? vigente?.contractMonths ?? null;
+    if (prazo) {
+      const proxima = expectationFromBase(linha.data, prazo);
+      const atual = await prisma.client.findFirst({
+        where: { id: clientId },
+        select: { expectedRenewalAt: true },
+      });
+      if (proxima && (!atual?.expectedRenewalAt || proxima > atual.expectedRenewalAt)) {
+        await prisma.client.update({ where: { id: clientId }, data: { expectedRenewalAt: proxima } });
+      }
+    }
   }
 
   // ---------------- 4) Churn sem data: inferir e AVISAR ----------------

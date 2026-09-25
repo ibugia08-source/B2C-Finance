@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { toNumber as n } from "@/lib/format";
 import { resolveOwnerId } from "@/lib/auth/owner-scope";
+import { chaveDiaCivil, hojeCivil } from "@/lib/civil-date";
+import { MONEY_EPSILON } from "@/lib/billing-status";
 
 /**
  * CICLO MENSAL DE RECEBIMENTOS — a "planilha mensal inteligente".
@@ -52,8 +54,7 @@ export async function ensureMonthlyBillings(
   lastEnsuredAt.set(throttleKey, Date.now());
 
   const monthEnd = new Date(year, month, 1);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = hojeCivil();
 
   const [clients, existing] = await Promise.all([
     prisma.client.findMany({
@@ -169,8 +170,7 @@ export async function ensureClientBillingForMonth(
   if (existing) return { ok: true, billingId: existing.id, created: false };
 
   const dueDate = getValidDueDateForMonth(year, month, client.paymentDay);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = hojeCivil();
   const openStatus = dueDate < today ? "OVERDUE" : "PENDING";
   const compLabel = `${String(month).padStart(2, "0")}/${year}`;
   const description =
@@ -192,13 +192,26 @@ export async function ensureClientBillingForMonth(
 
   let billingId: string;
   if (canceledMarker) {
+    // Marcador com dinheiro aplicado (legado: cancelada com parcial) volta
+    // como PARTIAL/PAID — reabrir como PENDING esconderia o que já entrou.
+    const marker = await prisma.billing.findUnique({
+      where: { id: canceledMarker.id },
+      select: { paidTotal: true },
+    });
+    const pago = n(marker?.paidTotal);
+    const restoredStatus =
+      pago >= amount - MONEY_EPSILON && pago > MONEY_EPSILON
+        ? "PAID"
+        : pago > MONEY_EPSILON
+          ? "PARTIAL"
+          : openStatus;
     await prisma.billing.update({
       where: { id: canceledMarker.id },
       data: {
         amount,
         dueDate,
         description,
-        status: openStatus,
+        status: restoredStatus,
         canceledAt: null,
         canceledBy: null,
         cancelReason: null,
@@ -275,22 +288,21 @@ export function cycleStatusOf(
   b: CycleRow["billing"],
   today: Date = new Date()
 ): { status: CycleStatus; daysLate: number } {
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // Dias CIVIS: hoje = dia da Bahia; vencimento/pagamento pelo dia UTC. Sem
+  // isto, depois das 21h (servidor em UTC) o que vence hoje virava vencido.
+  const t = hojeCivil(today).getTime();
+  const due = chaveDiaCivil(b.dueDate);
   const msDay = 86_400_000;
   if (b.status === "CANCELED") return { status: "REMOVED", daysLate: 0 };
   if (b.status === "PAID") {
+    const paid = b.paidAt ? chaveDiaCivil(b.paidAt) : null;
     const daysLate =
-      b.paidAt && b.paidAt > b.dueDate
-        ? Math.max(1, Math.round((b.paidAt.getTime() - b.dueDate.getTime()) / msDay))
-        : 0;
+      paid !== null && paid > due ? Math.max(1, Math.round((paid - due) / msDay)) : 0;
     if (b.paidInDifferentMonth) return { status: "PAID_OTHER_MONTH", daysLate };
     if (b.isLate) return { status: "PAID_LATE", daysLate };
     return { status: "PAID", daysLate: 0 };
   }
-  const daysLate =
-    b.dueDate < t
-      ? Math.max(1, Math.floor((t.getTime() - b.dueDate.getTime()) / msDay))
-      : 0;
+  const daysLate = due < t ? Math.max(1, Math.floor((t - due) / msDay)) : 0;
   // Inadimplente = decisão manual (vale mesmo antes do vencimento).
   if (b.collectionStatus === "ESCALATED") return { status: "DELINQUENT", daysLate };
   if (daysLate > 0) return { status: "OVERDUE", daysLate };

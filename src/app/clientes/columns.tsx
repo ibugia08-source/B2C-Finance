@@ -17,10 +17,11 @@ import {
 import {
   setClientStatus,
   setClientModality,
-  setClientRenewalMonth,
+  setClientRenewalExpectation,
   setClientMonthlyValue,
 } from "@/lib/actions/clients";
 import type { ClientRow } from "./clients-table";
+import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 
 const STATUS_OPTIONS = CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => ({
   value: s,
@@ -30,7 +31,6 @@ const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
   value: m,
   label: CLIENT_MODALITY_LABEL[m],
 }));
-const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
 
 export type ClientColKey =
   | "status"
@@ -42,7 +42,7 @@ export type ClientColKey =
   | "services"
   | "risk"
   | "notes"
-  | "renewalMonth"
+  | "renewalCompetence"
   | "monthsActive"
   | "salesOwner"
   | "segment";
@@ -190,17 +190,17 @@ export const ALL_COLUMNS: ClientColumn[] = [
     render: (c) => <NotesCell client={c} />,
   },
   {
-    key: "renewalMonth",
+    key: "renewalCompetence",
     header: "Renovação",
     interactive: true,
     render: (c) => (
       <InlineSelect
-        ariaLabel={`Mês de renovação de ${c.name}`}
-        value={c.renewalMonth != null ? String(c.renewalMonth) : ""}
-        options={MONTH_OPTIONS}
+        ariaLabel={`Expectativa de renovação de ${c.name}`}
+        value={c.renewalCompetence ?? ""}
+        options={renewalCompetenceOptions(c.renewalCompetence)}
         allowEmpty
         emptyLabel="— definir —"
-        action={(v) => setClientRenewalMonth(c.id, v ? parseInt(v, 10) : null)}
+        action={(v) => setClientRenewalExpectation(c.id, v || null)}
       />
     ),
   },
@@ -238,7 +238,7 @@ export const DEFAULT_VISIBLE: ClientColKey[] = [
   "dueDay",
   "paymentStatus",
   "services",
-  "renewalMonth",
+  "renewalCompetence",
   "notes",
   "salesOwner",
 ];

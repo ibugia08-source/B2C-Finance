@@ -1,181 +1,270 @@
 import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
-import { WORKSPACE_TIMEZONE } from "@/lib/format";
+import { toNumber as n } from "@/lib/format";
+import {
+  monthBounds, monthIndex, toCompetenceKey, civilParts, type YearMonth,
+} from "@/lib/renewal-expectation";
+import { expectedRenewalValues } from "./revenue-metrics";
 
 /**
- * AGENDA DE RENOVAÇÕES — fonte única de "quem tem renovação prevista em
- * cada mês". Antes, cada tela contava de um jeito: o painel de Renovações
- * unia agenda + contratos; o card "Renovações do mês" do painel principal,
- * a faixa "Próximos meses" e o relatório olhavam SÓ Client.renewalMonth. Um
- * cliente cadastrado com contrato (renewalDate preenchida) e sem mês de
- * renovação aparecia numa tela e sumia da outra — e o dono lia isso como
- * "o sistema não contabiliza as renovações" (24/09/2026).
+ * LIVRO DE RENOVAÇÕES — fonte única (25/09/2026).
  *
- * Três fontes, nesta ordem de autoridade, deduplicadas por cliente:
- *  (a) Client.renewalMonth — a agenda editável da carteira;
- *  (b) Contract.renewalDate de contrato vigente (ACTIVE/RENEWAL);
- *  (c) derivada: cliente SEM agenda e SEM contrato vigente, mas com data de
- *      entrada + prazo em meses → renova a cada `contractMonths` a partir da
- *      entrada. É a regra que o cadastro já usa para o fim do contrato.
+ * Para cada competência (mês/ano), três tipos de linha:
  *
- * Só clientes em atividade (PORTFOLIO_ACTIVE_STATUSES) entram: quem já saiu
- * aparece no painel do mês pela PERDA registrada, não pela agenda.
+ *   PENDENTE  cliente em atividade cuja DATA DE EXPECTATIVA
+ *             (Client.expectedRenewalAt) cai no mês e ainda sem desfecho;
+ *   GANHA     renovação registrada para a expectativa daquele mês
+ *             (ClientRenewal.expectedCompetence);
+ *   PERDIDA   perda registrada contra a expectativa daquele mês
+ *             (ClientLoss.renewalCompetence).
+ *
+ * O desfecho conta no mês da EXPECTATIVA, não no dia em que foi registrado:
+ * quem renova em agosto a expectativa de setembro é uma renovação ganha de
+ * setembro. É o que mantém "ganho ≤ esperado" e o histórico comparável.
+ *
+ * Valor esperado da linha: pendente → regra central `expectedRenewalValues`
+ * (TCV = valor cheio do contrato; MRR = mensalidade); ganha/perdida → o
+ * valor esperado gravado no desfecho (snapshot), para o passado não mudar
+ * quando o cadastro muda.
+ *
+ * Todos os leitores de renovação (módulo, Gestão do Mês, Visão geral,
+ * gráfico, rotina, painel do gestor, notificações, relatórios, assistente)
+ * passam por aqui.
  */
 
-export type ScheduledClient = {
-  id: string;
+export type RenewalOutcome = "pendente" | "renovou" | "nao_renovou";
+
+export type RenewalLedgerRow = {
+  clientId: string;
   name: string;
   status: string;
   modality: string | null;
   salesOwner: string | null;
-  monthlyValue: unknown;
-  totalContractValue: unknown;
+  monthlyValue: number | null;
   paymentDay: number | null;
   contractMonths: number | null;
-  startedAt: Date | null;
-  renewalMonth: number | null;
-  /** De onde veio a previsão — útil para depurar divergências. */
-  source: "agenda" | "contrato" | "prazo";
+  startedAtISO: string | null;
+  /** Data de expectativa (pendente: a atual do cliente; desfecho: nula). */
+  expectedRenewalAtISO: string | null;
+  /** Meses de relação até o mês da expectativa. */
+  monthsActive: number | null;
+  expected: number;
+  outcome: RenewalOutcome;
+  renewal: { id: string; renewedAtISO: string; months: number; totalValue: number } | null;
+  lostAtISO: string | null;
+  lostValue: number;
 };
 
-export const SCHEDULE_CLIENT_SELECT = {
+export type RenewalLedgerMonth = {
+  month: number;
+  year: number;
+  competence: string;
+  rows: RenewalLedgerRow[];
+  /** Soma dos valores esperados de TODAS as linhas do mês (pendentes + desfechos). */
+  expectedTotal: number;
+  /** Soma do valor das renovações ganhas. */
+  gainedValue: number;
+  /** Soma do valor esperado das renovações perdidas. */
+  lostValue: number;
+  /** Soma esperada do que ainda não teve desfecho. */
+  pendingValue: number;
+  renewedCount: number;
+  lostCount: number;
+  pendingCount: number;
+};
+
+export const LEDGER_CLIENT_SELECT = {
   id: true, name: true, status: true, modality: true, salesOwner: true,
   monthlyValue: true, totalContractValue: true, paymentDay: true,
-  contractMonths: true, startedAt: true, renewalMonth: true,
+  contractMonths: true, startedAt: true, expectedRenewalAt: true,
 } as const;
 
-export type MonthKey = { month: number; year: number };
+type LedgerClient = {
+  id: string; name: string; status: string; modality: string | null;
+  salesOwner: string | null; monthlyValue: unknown; totalContractValue: unknown;
+  paymentDay: number | null; contractMonths: number | null;
+  startedAt: Date | null; expectedRenewalAt: Date | null;
+};
 
-export function monthKey(m: MonthKey): string {
-  return `${m.year}-${String(m.month).padStart(2, "0")}`;
+function mesesDeRelacao(startedAt: Date | null, ym: YearMonth): number | null {
+  if (!startedAt) return null;
+  return Math.max(0, monthIndex(ym) - monthIndex(civilParts(startedAt)));
 }
 
-/**
- * Instante (UTC) em que começa o dia `d` do mês `m`/`y` no fuso do
- * workspace. `new Date(y, m-1, 1)` usa o fuso do SERVIDOR — na Vercel é UTC,
- * três horas à frente da Bahia: uma renovação registrada às 22h do dia 30
- * caía no mês seguinte.
- */
-export function zonedMonthStart(year: number, month: number, timeZone = WORKSPACE_TIMEZONE): Date {
-  const guess = Date.UTC(year, month - 1, 1, 0, 0, 0);
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone, hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(new Date(guess));
-  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
-  const wall = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"), get("second"));
-  return new Date(guess - (wall - guess));
-}
+/** Livro de várias competências de uma vez (consultas em lote). */
+export async function renewalLedger(months: YearMonth[]): Promise<Map<string, RenewalLedgerMonth>> {
+  const out = new Map<string, RenewalLedgerMonth>();
+  if (months.length === 0) return out;
+  const keys = months.map(toCompetenceKey);
+  const ordered = [...months].sort((a, b) => monthIndex(a) - monthIndex(b));
+  const rangeStart = monthBounds(ordered[0]).start;
+  const rangeEnd = monthBounds(ordered[ordered.length - 1]).end;
 
-/** [início, fim) do mês no fuso do workspace. */
-export function zonedMonthBounds(year: number, month: number): { start: Date; end: Date } {
-  const next = month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
-  return { start: zonedMonthStart(year, month), end: zonedMonthStart(next.year, next.month) };
-}
-
-/** Mês/ano de uma data no fuso do workspace. */
-export function zonedMonthOf(date: Date, timeZone = WORKSPACE_TIMEZONE): MonthKey {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit" })
-    .formatToParts(date);
-  return {
-    year: Number(parts.find((p) => p.type === "year")!.value),
-    month: Number(parts.find((p) => p.type === "month")!.value),
-  };
-}
-
-/**
- * Meses (1-12) em que um cliente sem agenda e sem contrato renova, dado
- * entrada + prazo. Retorna vazio quando não há como derivar. Prazo de 12
- * meses → sempre o mesmo mês; prazo de 6 → dois meses; e assim por diante.
- * Só os ciclos que caem dentro da janela pedida são devolvidos.
- */
-export function derivedRenewalMonths(
-  startedAt: Date | null,
-  contractMonths: number | null,
-  window: MonthKey[]
-): MonthKey[] {
-  if (!startedAt || !contractMonths || contractMonths < 1) return [];
-  const start = zonedMonthOf(startedAt);
-  const startIdx = start.year * 12 + (start.month - 1);
-  const out: MonthKey[] = [];
-  for (const w of window) {
-    const idx = w.year * 12 + (w.month - 1);
-    const diff = idx - startIdx;
-    if (diff >= contractMonths && diff % contractMonths === 0) out.push(w);
-  }
-  return out;
-}
-
-/**
- * Clientes com renovação prevista em cada um dos meses pedidos.
- * Chave do mapa = `YYYY-MM`; cada cliente aparece no máximo uma vez por mês.
- */
-export async function scheduledRenewals(
-  window: MonthKey[]
-): Promise<Map<string, ScheduledClient[]>> {
-  const out = new Map<string, ScheduledClient[]>();
-  for (const w of window) out.set(monthKey(w), []);
-  if (window.length === 0) return out;
-
-  const active = { in: [...PORTFOLIO_ACTIVE_STATUSES] as any };
-  const months = Array.from(new Set(window.map((w) => w.month)));
-  const sorted = [...window].sort((a, b) => a.year * 12 + a.month - (b.year * 12 + b.month));
-  const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  const rangeStart = zonedMonthBounds(first.year, first.month).start;
-  const rangeEnd = zonedMonthBounds(last.year, last.month).end;
-
-  const [byAgenda, contracts, byTerm] = await Promise.all([
-    prisma.client.findMany({
-      where: { renewalMonth: { in: months }, status: active },
-      orderBy: { name: "asc" },
-      select: SCHEDULE_CLIENT_SELECT,
-    }),
-    prisma.contract.findMany({
-      where: {
-        renewalDate: { gte: rangeStart, lt: rangeEnd },
-        status: { in: ["ACTIVE", "RENEWAL"] },
-        client: { status: active },
-      },
-      select: { clientId: true, renewalDate: true, client: { select: SCHEDULE_CLIENT_SELECT } },
-    }),
+  const [pendentes, renovacoes, perdas] = await Promise.all([
     prisma.client.findMany({
       where: {
-        renewalMonth: null,
-        startedAt: { not: null },
-        contractMonths: { not: null },
-        status: active,
-        // Sem contrato vigente com data: o contrato, quando existe, manda.
-        contracts: { none: { status: { in: ["ACTIVE", "RENEWAL"] }, renewalDate: { not: null } } },
+        expectedRenewalAt: { gte: rangeStart, lt: rangeEnd },
+        status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
       },
-      orderBy: { name: "asc" },
-      select: SCHEDULE_CLIENT_SELECT,
+      select: LEDGER_CLIENT_SELECT,
+    }),
+    prisma.clientRenewal.findMany({
+      where: { expectedCompetence: { in: keys } },
+      orderBy: { renewedAt: "desc" },
+      select: {
+        id: true, clientId: true, renewedAt: true, months: true, totalValue: true,
+        expectedValue: true, expectedCompetence: true,
+        client: { select: LEDGER_CLIENT_SELECT },
+      },
+    }),
+    prisma.clientLoss.findMany({
+      where: { renewalCompetence: { in: keys } },
+      orderBy: { lostAt: "desc" },
+      select: {
+        clientId: true, lostAt: true, expectedValue: true, renewalCompetence: true,
+        client: { select: LEDGER_CLIENT_SELECT },
+      },
     }),
   ]);
 
-  const seen = new Map<string, Set<string>>(); // monthKey → clientIds
-  const push = (w: MonthKey, c: Omit<ScheduledClient, "source">, source: ScheduledClient["source"]) => {
-    const k = monthKey(w);
-    if (!out.has(k)) return;
-    const ids = seen.get(k) ?? new Set<string>();
-    if (ids.has(c.id)) return;
-    ids.add(c.id);
-    seen.set(k, ids);
-    out.get(k)!.push({ ...c, source });
-  };
+  // Valor esperado ATUAL (regra central) — para pendentes e para desfechos
+  // antigos que não guardaram o snapshot.
+  const todos = new Map<string, LedgerClient>();
+  for (const c of pendentes) todos.set(c.id, c);
+  for (const r of renovacoes) todos.set(r.client.id, r.client);
+  for (const l of perdas) todos.set(l.client.id, l.client);
+  const esperadoAtual = await expectedRenewalValues(Array.from(todos.values()));
 
-  for (const w of window) {
-    for (const c of byAgenda) if (c.renewalMonth === w.month) push(w, c, "agenda");
-  }
-  for (const ct of contracts) {
-    if (!ct.renewalDate) continue;
-    push(zonedMonthOf(ct.renewalDate), ct.client, "contrato");
-  }
-  for (const c of byTerm) {
-    for (const w of derivedRenewalMonths(c.startedAt, c.contractMonths, window)) push(w, c, "prazo");
-  }
+  for (const ym of months) {
+    const key = toCompetenceKey(ym);
+    const { start, end } = monthBounds(ym);
+    const linhas = new Map<string, RenewalLedgerRow>();
 
-  for (const list of out.values()) list.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const base = (c: LedgerClient): Omit<RenewalLedgerRow, "expected" | "outcome" | "renewal" | "lostAtISO" | "lostValue" | "expectedRenewalAtISO"> => ({
+      clientId: c.id,
+      name: c.name,
+      status: c.status,
+      modality: c.modality,
+      salesOwner: c.salesOwner,
+      monthlyValue: c.monthlyValue != null ? n(c.monthlyValue) : null,
+      paymentDay: c.paymentDay,
+      contractMonths: c.contractMonths,
+      startedAtISO: c.startedAt ? c.startedAt.toISOString() : null,
+      monthsActive: mesesDeRelacao(c.startedAt, ym),
+    });
+
+    // 1) Ganhas (a mais recente por cliente).
+    for (const r of renovacoes) {
+      if (r.expectedCompetence !== key || linhas.has(r.clientId)) continue;
+      const esperado = r.expectedValue != null ? n(r.expectedValue) : n(r.totalValue);
+      linhas.set(r.clientId, {
+        ...base(r.client),
+        expectedRenewalAtISO: null,
+        expected: esperado,
+        outcome: "renovou",
+        renewal: {
+          id: r.id,
+          renewedAtISO: r.renewedAt.toISOString(),
+          months: r.months,
+          totalValue: n(r.totalValue),
+        },
+        lostAtISO: null,
+        lostValue: 0,
+      });
+    }
+    // 2) Perdidas (sem renovação no mesmo mês).
+    for (const l of perdas) {
+      if (l.renewalCompetence !== key || linhas.has(l.clientId)) continue;
+      const esperado =
+        l.expectedValue != null ? n(l.expectedValue) : esperadoAtual.get(l.clientId) ?? 0;
+      linhas.set(l.clientId, {
+        ...base(l.client),
+        expectedRenewalAtISO: null,
+        expected: esperado,
+        outcome: "nao_renovou",
+        renewal: null,
+        lostAtISO: l.lostAt.toISOString(),
+        lostValue: esperado,
+      });
+    }
+    // 3) Pendentes: expectativa no mês e sem desfecho.
+    for (const c of pendentes) {
+      if (!c.expectedRenewalAt || linhas.has(c.id)) continue;
+      if (c.expectedRenewalAt < start || c.expectedRenewalAt >= end) continue;
+      linhas.set(c.id, {
+        ...base(c),
+        expectedRenewalAtISO: c.expectedRenewalAt.toISOString(),
+        expected: esperadoAtual.get(c.id) ?? 0,
+        outcome: "pendente",
+        renewal: null,
+        lostAtISO: null,
+        lostValue: 0,
+      });
+    }
+
+    const rows = Array.from(linhas.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    const ganhas = rows.filter((r) => r.outcome === "renovou");
+    const perdidas = rows.filter((r) => r.outcome === "nao_renovou");
+    const pend = rows.filter((r) => r.outcome === "pendente");
+    const soma = (xs: RenewalLedgerRow[], f: (r: RenewalLedgerRow) => number) =>
+      Math.round(xs.reduce((s, r) => s + f(r), 0) * 100) / 100;
+
+    out.set(key, {
+      month: ym.month,
+      year: ym.year,
+      competence: key,
+      rows,
+      expectedTotal: soma(rows, (r) => r.expected),
+      gainedValue: soma(ganhas, (r) => r.renewal?.totalValue ?? 0),
+      lostValue: soma(perdidas, (r) => r.lostValue),
+      pendingValue: soma(pend, (r) => r.expected),
+      renewedCount: ganhas.length,
+      lostCount: perdidas.length,
+      pendingCount: pend.length,
+    });
+  }
   return out;
+}
+
+/** Livro de uma competência. */
+export async function renewalLedgerMonth(ym: YearMonth): Promise<RenewalLedgerMonth> {
+  const m = await renewalLedger([ym]);
+  return m.get(toCompetenceKey(ym))!;
+}
+
+/**
+ * Expectativas de meses ANTERIORES a `ym` que continuam sem desfecho — o que
+ * ficou para trás e ainda precisa de "renovou / não renovou".
+ */
+export async function overdueRenewals(ym: YearMonth): Promise<{ count: number; value: number }> {
+  const { start } = monthBounds(ym);
+  const clients = await prisma.client.findMany({
+    where: {
+      expectedRenewalAt: { lt: start },
+      status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
+    },
+    select: LEDGER_CLIENT_SELECT,
+  });
+  if (clients.length === 0) return { count: 0, value: 0 };
+  const v = await expectedRenewalValues(clients);
+  return {
+    count: clients.length,
+    value: Math.round(clients.reduce((s, c) => s + (v.get(c.id) ?? 0), 0) * 100) / 100,
+  };
+}
+
+/**
+ * Clientes em atividade com expectativa entre `from` e `to` e sem desfecho —
+ * a janela "próximos N dias" da rotina, notificações, painel e prioridades.
+ */
+export async function upcomingRenewals(from: Date, to: Date, clientIds?: string[] | null) {
+  return prisma.client.findMany({
+    where: {
+      expectedRenewalAt: { gte: from, lte: to },
+      status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
+      ...(clientIds ? { id: { in: clientIds } } : {}),
+    },
+    orderBy: { expectedRenewalAt: "asc" },
+    select: LEDGER_CLIENT_SELECT,
+  });
 }

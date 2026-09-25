@@ -54,6 +54,13 @@ export type ReportDef = {
   /** default de período diferente de "mes" (ex.: ano p/ relatório mensal) */
   defaultPeriodo?: string;
   build: (q: ReportQuery) => Promise<ReportRow[]>;
+  /**
+   * Permissão (ou lista — TODAS exigidas) além de relatorios.visualizar.
+   * O relatório expõe os dados de um módulo; quem não vê o módulo na tela
+   * também não pode vê-lo aqui, nem no PDF, nem na exportação.
+   * Atribuída em registry.ts.
+   */
+  permission?: string | string[];
 };
 
 export { CLIENT_STATUS_LABEL } from "@/lib/status-meta";

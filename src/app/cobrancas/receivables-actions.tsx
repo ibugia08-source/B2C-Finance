@@ -16,6 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { InlineSelect } from "@/app/clientes/inline-select";
+import { BulkOwnerDialog } from "@/app/clientes/bulk-owner-dialog";
 import { PaymentDialog } from "./payment-dialog";
 import { MessageDialog } from "./message-dialog";
 import { RescheduleDialog } from "./note-dialog";
@@ -512,14 +513,7 @@ export function BulkBar({
         />
       )}
       {dialog === "owner" && (
-        <BulkTextDialog
-          title="Responsável em massa"
-          count={clientIds.length}
-          placeholder="Nome do responsável (vazio = limpar)"
-          onClose={() => setDialog(null)}
-          onConfirm={(v) => bulkUpdateClients({ ids: clientIds, salesOwner: v })}
-          onDone={onClear}
-        />
+        <BulkOwnerDialog ids={clientIds} onClose={() => setDialog(null)} onDone={onClear} />
       )}
     </>
   );

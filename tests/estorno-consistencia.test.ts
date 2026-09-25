@@ -116,12 +116,12 @@ describe("estorno de pagamento — consistência completa", () => {
     const cobB = await createBilling(dono, c.id, { month: 6, year: 2031, amount: 400 });
 
     await asOwner(dono, async () => {
-      // 1500 na cobrança de 1000 → 500 de crédito…
-      expect((await pay(cobA.id, 1500, new Date(2031, 4, 5))).ok).toBe(true);
-      // …e 400 do crédito quitam a cobrança B.
-      const ap = await applyCredit({ billingId: cobB.id });
-      expect(ap.ok).toBe(true);
-      expect((ap as any).applied).toBe(400);
+      // 1500 na cobrança de 1000 → 500 de excedente, e 400 dele quitam a
+      // cobrança B NA HORA (aplicação automática, 25/09/2026).
+      const r: any = await pay(cobA.id, 1500, new Date(2031, 4, 5));
+      expect(r.ok).toBe(true);
+      expect(r.creditApplied).toBe(400);
+      expect(r.creditRemaining).toBe(100);
     });
 
     const bPaga = await asOwner(dono, async () =>

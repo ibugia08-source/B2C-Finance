@@ -1,5 +1,7 @@
 "use server";
-import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
+import { expectationFromBase } from "@/lib/renewal-expectation";
+import { BILLING_OPEN_STATUSES, MONEY_EPSILON } from "@/lib/billing-status";
+import { hojeCivil, hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
 import { prisma } from "@/lib/prisma";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
 import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
@@ -54,8 +56,7 @@ export async function setClientPaymentDay(
     const open = await openBillingOf(clientId, month, year);
     if (open) {
       const dueDate = getValidDueDateForMonth(year, month, day);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = hojeCivil();
       await prisma.billing.update({
         where: { id: open.id },
         data: {
@@ -91,7 +92,7 @@ export async function setClientChargeAmount(
     if (!client) return { ok: false, error: "Cliente não encontrado." };
 
     const open = await openBillingOf(clientId, month, year);
-    if (open && amount < n(open.paidTotal))
+    if (open && amount < n(open.paidTotal) - MONEY_EPSILON)
       return {
         ok: false,
         error: "Valor menor que o já pago nesta cobrança — exclua o pagamento antes.",
@@ -102,7 +103,26 @@ export async function setClientChargeAmount(
       data: { monthlyValue: amount },
     });
     if (open) {
-      await prisma.billing.update({ where: { id: open.id }, data: { amount } });
+      // Valor igual ao já recebido = quitada. Sem isto a cobrança ficava
+      // PARTIAL com saldo zero — presa: o "Pago" recusava (sem saldo) e ela
+      // nunca saía da lista de abertas.
+      const pago = n(open.paidTotal);
+      const quitada = pago > MONEY_EPSILON && amount <= pago + MONEY_EPSILON;
+      let paidAt: Date | null = open.paidAt;
+      if (quitada && !paidAt) {
+        const ultimo = await prisma.payment.findFirst({
+          where: { billingId: open.id },
+          orderBy: { paidAt: "desc" },
+          select: { paidAt: true },
+        });
+        paidAt = ultimo?.paidAt ?? hojeCivilParaGravar();
+      }
+      await prisma.billing.update({
+        where: { id: open.id },
+        data: quitada
+          ? { amount, status: "PAID", paidAt, collectionStatus: "PAID" }
+          : { amount },
+      });
     }
     revalidateAll(clientId);
     return { ok: true };
@@ -122,9 +142,15 @@ export async function setClientContractMonths(
       return { ok: false, error: "Prazo inválido (1 a 120 meses)." };
     const client = await prisma.client.findFirst({ where: { id: clientId } });
     if (!client) return { ok: false, error: "Cliente não encontrado." };
+    // Prazo é metade da BASE da expectativa de renovação (entrada + prazo):
+    // mudou o prazo, refaz a expectativa. Sem prazo, não há expectativa.
+    const mudou = client.contractMonths !== months;
     await prisma.client.update({
       where: { id: clientId },
-      data: { contractMonths: months },
+      data: {
+        contractMonths: months,
+        ...(mudou ? { expectedRenewalAt: expectationFromBase(client.startedAt, months) } : {}),
+      },
     });
     revalidateAll(clientId);
     return { ok: true };
@@ -168,7 +194,10 @@ export async function setMonthChargeStatus(
       const res = await settleViaEngine({
         billingId: b.id,
         amount: open,
-        paidAt: new Date(),
+        // Data CIVIL de hoje (dia da Bahia): um instante "agora" depois das
+        // 21h vira o dia seguinte no servidor UTC — pagar no vencimento
+        // saía "com atraso" e, no último dia do mês, como RECOVERY.
+        paidAt: hojeCivilParaGravar(),
         method: "OTHER",
         accountId: null,
         notes: "Marcado como pago na lista de Recebimentos.",
@@ -186,8 +215,7 @@ export async function setMonthChargeStatus(
           "Cobrança já quitada. Para reabrir, use a ação 'Excluir pagamento' na própria linha.",
       };
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = hojeCivil();
     const clearManual =
       b.collectionStatus === "ESCALATED"
         ? { collectionStatus: "NOT_CONTACTED" as any }
@@ -376,9 +404,9 @@ export async function addPastDelinquency(formData: FormData): Promise<ActionResu
     if (!Number.isFinite(amount) || amount <= 0)
       return { ok: false, error: "Informe o valor inadimplente." };
 
-    const now = new Date();
+    const atual = mesCivilAtual();
     const compKey = refYear * 12 + (refMonth - 1);
-    const nowKey = now.getFullYear() * 12 + now.getMonth();
+    const nowKey = atual.year * 12 + (atual.month - 1);
     if (compKey >= nowKey)
       return {
         ok: false,
@@ -594,13 +622,18 @@ export async function bulkRemoveClientsFromList(
     );
 
     let removed = 0;
+    let skippedPartial = 0;
 
-    // 1) Cancela as cobranças existentes (quitadas ficam de fora).
+    // 1) Cancela as cobranças existentes (quitadas ficam de fora; parciais
+    //    com valor recebido também — cancelar esconderia o dinheiro que já
+    //    entrou: estorne o pagamento antes).
     if (billingIds.length) {
-      const bills = await prisma.billing.findMany({
+      const candidates = await prisma.billing.findMany({
         where: { id: { in: billingIds }, status: { notIn: ["PAID", "CANCELED"] } },
-        select: { id: true, clientId: true },
+        select: { id: true, clientId: true, paidTotal: true },
       });
+      const bills = candidates.filter((b) => n(b.paidTotal) <= MONEY_EPSILON);
+      skippedPartial = candidates.length - bills.length;
       if (bills.length) {
         await prisma.billing.updateMany({
           where: { id: { in: bills.map((b) => b.id) } },
@@ -669,13 +702,17 @@ export async function bulkRemoveClientsFromList(
       }
     }
 
+    const avisoParcial =
+      skippedPartial > 0
+        ? `${skippedPartial} cobrança${skippedPartial === 1 ? "" : "s"} com valor já recebido ${skippedPartial === 1 ? "ficou" : "ficaram"} na lista — estorne o pagamento antes de remover.`
+        : null;
     if (removed === 0)
       return {
         ok: false,
-        error: "Nada para remover (cobranças quitadas ficam de fora).",
+        error: avisoParcial ?? "Nada para remover (cobranças quitadas ficam de fora).",
       };
     revalidateAll();
-    return { ok: true };
+    return avisoParcial ? { ok: true, warning: avisoParcial } : { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao remover da lista." };
   }

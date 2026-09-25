@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { registerBillingPayment } from "@/lib/actions/billings";
-import { formatDateInput } from "@/lib/format";
+import { formatDateInputLocal } from "@/lib/format";
+import { showUndoToast } from "@/components/undo-toast";
 import { PAYMENT_METHOD_LABEL } from "./_meta";
 
 /** Registra pagamento total (valor pré-preenchido) ou parcial (edite o valor). */
@@ -43,8 +44,12 @@ export function PaymentDialog({
             start(async () => {
               setError(null);
               const res = await registerBillingPayment(fd);
-              if (res.ok) setOpen(false);
-              else setError(res.error);
+              if (res.ok) {
+                setOpen(false);
+                // Pagamento acima do saldo: o servidor diz quanto foi abatido
+                // de outras cobranças e quanto ficou de crédito.
+                if (res.warning) showUndoToast({ message: String(res.warning) });
+              } else setError(res.error);
             })
           }
           className="grid grid-cols-2 gap-3"
@@ -59,12 +64,13 @@ export function PaymentDialog({
               required
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Menor que o saldo → pagamento parcial.
+              Menor que o saldo → pagamento parcial. Maior → o excedente abate as
+              próximas cobranças em aberto do cliente; o que sobrar fica de crédito.
             </p>
           </div>
           <div>
             <Label>Data</Label>
-            <Input type="date" name="paidAt" defaultValue={formatDateInput(new Date())} required />
+            <Input type="date" name="paidAt" defaultValue={formatDateInputLocal(new Date())} required />
           </div>
           <div>
             <Label>Forma</Label>

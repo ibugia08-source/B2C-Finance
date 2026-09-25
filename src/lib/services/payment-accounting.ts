@@ -1,4 +1,4 @@
-import { MONEY_EPSILON } from "@/lib/billing-status";
+import { BILLING_OPEN_STATUSES, MONEY_EPSILON } from "@/lib/billing-status";
 import { auditEvent, auditUpdate } from "@/lib/audit";
 import { publish } from "@/lib/outbox";
 import { post, reverter } from "@/lib/accounting/engine";
@@ -8,6 +8,7 @@ import { systemContext, type EngineContext } from "@/lib/engines/context";
 import { prisma } from "@/lib/prisma";
 import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { toNumber as n } from "@/lib/format";
+import { chaveDiaCivil, chaveMesCivil, hojeCivil } from "@/lib/civil-date";
 
 /**
  * Núcleo CONTÁBIL do pagamento de cobrança (fechamento mensal B2C).
@@ -43,6 +44,11 @@ export type SettleInput = {
    */
   externalSource?: string | null;
   externalId?: string | null;
+  /**
+   * Excedente acima do saldo: aplicar já nas cobranças em aberto mais
+   * antigas do cliente (padrão) ou só guardar como crédito (false).
+   */
+  applyExcess?: boolean;
 };
 
 export type SettleResult =
@@ -54,8 +60,16 @@ export type SettleResult =
       extraRevenueId: string | null;
       paymentId: string;
       clientId: string;
-      /** F1.8 — quanto do pagamento sobrou e virou crédito (0 = nada sobrou). */
+      /** F1.8 — quanto do pagamento passou do saldo desta cobrança (0 = nada). */
       creditGenerated: number;
+      /**
+       * Do excedente, quanto já foi APLICADO nas cobranças em aberto mais
+       * antigas do mesmo cliente (na mesma transação), e em quantas.
+       */
+      creditApplied: number;
+      creditAppliedBillings: number;
+      /** O que sobrou como crédito guardado (creditGenerated − creditApplied). */
+      creditRemaining: number;
     }
   | { ok: false; error: string };
 
@@ -127,10 +141,14 @@ export async function settleBillingPayment(
       const fullyPaidPrevisto = n(billing.paidTotal) + aplicado >= n(billing.amount) - MONEY_EPSILON;
 
       // ===== Classificação do fechamento mensal =====
+      // paidAt e dueDate são DATAS CIVIS (lidas pelo dia UTC). Comparar os
+      // instantes brutos marcava "com atraso" o pagamento feito NO dia do
+      // vencimento quando um dos dois vinha com hora (03:00Z × 00:00Z).
       const compKey = billing.competenceYear * 12 + (billing.competenceMonth - 1);
-      const paidKey = input.paidAt.getFullYear() * 12 + input.paidAt.getMonth();
+      const paidKey = chaveMesCivil(input.paidAt);
       const inLaterMonth = paidKey > compKey;
-      const lateSameMonth = !inLaterMonth && input.paidAt > billing.dueDate;
+      const lateSameMonth =
+        !inLaterMonth && chaveDiaCivil(input.paidAt) > chaveDiaCivil(billing.dueDate);
 
       const payment = await tx.payment.create({
         data: {
@@ -160,6 +178,7 @@ export async function settleBillingPayment(
       });
 
       let creditGenerated = 0;
+      let creditId: string | null = null;
       if (excedente > MONEY_EPSILON) {
         // upsert não serve: a unique é (clientId, relationshipId) e
         // relationshipId é nulável — Prisma exige valor não nulo na chave
@@ -192,6 +211,7 @@ export async function settleBillingPayment(
           },
         });
         creditGenerated = excedente;
+        creditId = credito.id;
       }
 
       const newPaidTotal = await recomputePaidTotal(tx, billing.id);
@@ -224,7 +244,7 @@ export async function settleBillingPayment(
       // updateMany, e cobrança legada com ownerId NULL nunca casaria (o
       // pagamento falharia para sempre com a mensagem de concorrência). A
       // posse já foi validada no findUnique acima — o bypass aqui é seguro.
-      const updated = await runWithoutScope(() =>
+      const updated = await runWithoutScope(async () =>
         tx.billing.updateMany({
           where: { id: billing.id, paidTotal: billing.paidTotal },
           data: {
@@ -241,6 +261,89 @@ export async function settleBillingPayment(
         throw new SettleError(
           "Outro pagamento desta cobrança foi registrado ao mesmo tempo — confira o saldo antes de repetir."
         );
+
+      // EXCEDENTE APLICADO NA HORA (auditoria 25/09/2026). O toast prometia
+      // "fica como crédito para a próxima cobrança", mas nada aplicava o
+      // crédito — ele ficava parado e a próxima cobrança seguia em aberto.
+      // Agora o excedente quita as cobranças em aberto MAIS ANTIGAS do mesmo
+      // cliente, dentro desta transação, pelo mesmo mecanismo do applyCredit
+      // (PaymentApplication do pagamento original — sem Payment novo, o
+      // dinheiro entra no caixa uma vez só). O estorno já desfaz essas
+      // aplicações (aplicacoesEmOutras). O que não couber fica como crédito.
+      let creditApplied = 0;
+      let creditAppliedBillings = 0;
+      if (creditGenerated > MONEY_EPSILON && input.applyExcess !== false) {
+        const abertas = await tx.billing.findMany({
+          where: {
+            clientId: billing.clientId,
+            id: { not: billing.id },
+            status: { in: [...BILLING_OPEN_STATUSES] },
+          },
+          orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+        });
+        let restante = creditGenerated;
+        for (const alvo of abertas) {
+          if (restante <= MONEY_EPSILON) break;
+          const aberto = Math.max(0, n(alvo.amount) - n(alvo.paidTotal));
+          if (aberto <= MONEY_EPSILON) continue;
+          const usar = Math.round(Math.min(aberto, restante) * 100) / 100;
+          await tx.paymentApplication.create({
+            data: { paymentId: payment.id, billingId: alvo.id, amount: usar, appliedAt: input.paidAt },
+          });
+          const pagoAlvo = await recomputePaidTotal(tx, alvo.id);
+          const quitadaAlvo = pagoAlvo >= n(alvo.amount) - MONEY_EPSILON;
+          const compAlvo = alvo.competenceYear * 12 + (alvo.competenceMonth - 1);
+          const tardeAlvo = paidKey > compAlvo;
+          await tx.billing.update({
+            where: { id: alvo.id },
+            data: {
+              paidTotal: pagoAlvo,
+              status: quitadaAlvo ? "PAID" : "PARTIAL",
+              ...(quitadaAlvo
+                ? {
+                    paidAt: input.paidAt,
+                    collectionStatus: "PAID" as const,
+                    isLate:
+                      !tardeAlvo && chaveDiaCivil(input.paidAt) > chaveDiaCivil(alvo.dueDate),
+                    paidInDifferentMonth: tardeAlvo,
+                  }
+                : {}),
+            },
+          });
+          await tx.collectionHistory.create({
+            data: {
+              billingId: alvo.id,
+              clientId: alvo.clientId,
+              status: quitadaAlvo ? "PAID" : "PROMISED",
+              message: `R$ ${usar.toFixed(2)} abatidos com o valor pago a mais em ${billing.description}.`,
+            },
+          });
+          await auditUpdate(
+            tx as any, "Billing", alvo.id,
+            { paidTotal: n(alvo.paidTotal), status: alvo.status },
+            { paidTotal: pagoAlvo, status: quitadaAlvo ? "PAID" : "PARTIAL" },
+            ctx
+          );
+          restante -= usar;
+          creditApplied += usar;
+          creditAppliedBillings += 1;
+        }
+        if (creditApplied > MONEY_EPSILON && creditId) {
+          await tx.customerCredit.update({
+            where: { id: creditId },
+            data: { balance: { decrement: creditApplied } },
+          });
+          await tx.customerCreditMovement.create({
+            data: {
+              creditId,
+              kind: "OUT",
+              amount: creditApplied,
+              sourcePaymentId: payment.id,
+              reason: `Excedente aplicado em ${creditAppliedBillings} cobrança(s) em aberto`,
+            },
+          });
+        }
+      }
 
       await tx.collectionHistory.create({
         data: {
@@ -312,6 +415,9 @@ export async function settleBillingPayment(
         paymentId: payment.id,
         clientId: billing.clientId,
         creditGenerated,
+        creditApplied,
+        creditAppliedBillings,
+        creditRemaining: Math.max(0, Math.round((creditGenerated - creditApplied) * 100) / 100),
       };
     });
   } catch (e) {
@@ -338,8 +444,7 @@ export async function revertBillingPayment(
   if (!payment) return { ok: false, error: "Pagamento não encontrado." };
 
   const b = payment.billing;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = hojeCivil();
   // Resolvido FORA da transação, como no registro: leitura de configuração.
   const workspaceId = await currentWorkspaceId();
 
@@ -532,7 +637,7 @@ export async function revertBillingPayment(
     // Reverte a Receita Extra automática correspondente (pagamento feito em
     // mês posterior à competência).
     const compKey = b.competenceYear * 12 + (b.competenceMonth - 1);
-    const paidKey = payment.paidAt.getFullYear() * 12 + payment.paidAt.getMonth();
+    const paidKey = chaveMesCivil(payment.paidAt);
     if (paidKey > compKey) {
       const er = await tx.extraRevenue.findFirst({
         where: { originBillingId: b.id, origin: "AUTOMATIC" },

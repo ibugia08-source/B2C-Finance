@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { type ReportQuery, amountRange } from "../query";
-import { MONTHS_PT } from "@/lib/format";
+import {
+  civilCompetenceKey, competenceShortLabel, monthBounds, parseCompetenceKey,
+} from "@/lib/renewal-expectation";
 import { SEM_NICHO } from "@/lib/niches";
 import { CLIENT_STATUS_LABEL, MODALITY_LABEL, type ReportDef, type ReportRow } from "../shared";
 
@@ -25,13 +27,19 @@ async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
   else if (q.segmento) where.segment = { equals: q.segmento, mode: "insensitive" };
   if (q.origem) where.origin = { equals: q.origem, mode: "insensitive" };
   if (q.uf) where.state = { equals: q.uf, mode: "insensitive" };
-  if (q.mesRenovacao) where.renewalMonth = q.mesRenovacao;
+  if (q.mesRenovacao) {
+    const ym = parseCompetenceKey(q.mesRenovacao);
+    if (ym) {
+      const { start, end } = monthBounds(ym);
+      where.expectedRenewalAt = { gte: start, lt: end };
+    }
+  }
   const clients = await prisma.client.findMany({
     where,
     orderBy: { name: "asc" },
     select: {
       id: true, name: true, status: true, city: true, state: true, salesOwner: true,
-      opsOwner: true, modality: true, segment: true, origin: true, renewalMonth: true,
+      opsOwner: true, modality: true, segment: true, origin: true, expectedRenewalAt: true,
       createdAt: true,
     },
   });
@@ -48,7 +56,9 @@ async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
       modalidade: c.modality ? MODALITY_LABEL[c.modality] ?? c.modality : null,
       segmento: c.segment,
       origem: c.origin,
-      mesRenovacao: c.renewalMonth ? MONTHS_PT[c.renewalMonth - 1] : null,
+      mesRenovacao: c.expectedRenewalAt ?? null,
+      // Rótulo do mês (Set/2026) — é por ele que se agrupa.
+      renovacaoMes: c.expectedRenewalAt ? competenceShortLabel(civilCompetenceKey(c.expectedRenewalAt)) : null,
       contratosAtivos: s.activeContracts,
       valorMensal: s.monthlyValue,
       receitaTotal: s.totalRevenue,
@@ -79,7 +89,8 @@ export const clientesReport: ReportDef = {
     { key: "modalidade", label: "Modalidade", kind: "text" },
     { key: "segmento", label: "Nicho", kind: "text" },
     { key: "origem", label: "Origem", kind: "text" },
-    { key: "mesRenovacao", label: "Mês de renovação", kind: "text" },
+    { key: "mesRenovacao", label: "Expectativa de renovação", kind: "date" },
+    { key: "renovacaoMes", label: "Mês da renovação", kind: "text" },
     { key: "contratosAtivos", label: "Contratos ativos", kind: "int", total: true },
     { key: "valorMensal", label: "Valor mensal", kind: "money", total: true },
     { key: "receitaTotal", label: "Receita total", kind: "money", total: true },
@@ -91,7 +102,7 @@ export const clientesReport: ReportDef = {
     "cliente", "status", "responsavel", "modalidade", "segmento", "origem", "uf",
     "mesRenovacao", "situacao", "valor",
   ],
-  groupOptions: ["status", "responsavel", "modalidade", "segmento", "origem", "uf", "cidade", "mesRenovacao"],
+  groupOptions: ["status", "responsavel", "modalidade", "segmento", "origem", "uf", "cidade", "renovacaoMes"],
   statusOptions: Object.entries(CLIENT_STATUS_LABEL).map(([value, label]) => ({ value, label })),
   defaultSort: { key: "receitaTotal", dir: "desc" },
   build: buildClientes,

@@ -13,6 +13,12 @@ export async function agendarRelatorioAction(
   recipientsTexto: string
 ) {
   const viewer = await requirePermission("configuracoes.editar");
+  // Quem agenda precisa poder ABRIR o relatório: senão o agendamento vira
+  // um jeito de mandar por e-mail o que a tela esconde (ex.: folha nominal).
+  const { getReport, canViewReport } = await import("@/lib/reports/registry");
+  const def = getReport(reportKey);
+  if (def && !canViewReport(viewer, def))
+    return { ok: false as const, error: "Você não tem acesso a este relatório." };
   const r = await agendarRelatorio({
     reportKey,
     frequency,

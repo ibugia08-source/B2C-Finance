@@ -211,11 +211,23 @@ export const IMPORT_DEFS: ImportDef[] = [
       { key: "monthlyValue", header: "Valor mensal (R$)", kind: "money", example: "2500,00" },
       { key: "notes", header: "Observações", kind: "text", example: "" },
     ],
-    toData: (row, _refs, err) => {
+    toData: (row, refs, err) => {
       const d = row.data;
       if (d.paymentDay != null && (Number(d.paymentDay) < 1 || Number(d.paymentDay) > 31))
         err("Dia de pagamento", "use um dia entre 1 e 31");
-      return { ...d, status: d.status ?? "ACTIVE" };
+      const status = d.status ?? "ACTIVE";
+      // Auditoria 25/09/2026: sem modalidade o cliente importado ficava fora
+      // do MRR e do ciclo de mensalidades, embora o termo aberto fosse MRR.
+      // Com valor mensal, é MRR. Perdido na planilha nasce com data de saída.
+      // O responsável liga ao colaborador de mesmo nome, quando existe.
+      const salesOwnerId = d.salesOwner ? refs.employees.get(norm(String(d.salesOwner))) ?? null : null;
+      return {
+        ...d,
+        status,
+        modality: Number(d.monthlyValue) > 0 ? "MRR" : null,
+        churnedAt: status === "CHURNED" ? new Date() : null,
+        salesOwnerId,
+      };
     },
     dupKey: (d) => norm(d.name),
     existingKeys: async () => {
@@ -238,7 +250,7 @@ export const IMPORT_DEFS: ImportDef[] = [
           const vida = await abrirVidaDoCliente(c.id, {
             status: (data.status as string) ?? "ACTIVE",
             monthlyValue: (data.monthlyValue as number) ?? null,
-            modality: "MRR",
+            modality: data.modality === "MRR" ? "MRR" : null,
           });
           out.push({
             id: c.id,

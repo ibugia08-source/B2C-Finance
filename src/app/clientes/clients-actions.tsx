@@ -1,4 +1,5 @@
 "use client";
+import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { useTransition, useState } from "react";
 import { Trash2 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { InlineSelect } from "./inline-select";
+import { BulkOwnerDialog } from "./bulk-owner-dialog";
 import {
   CLIENT_STATUSES,
   CLIENT_STATUS_LABEL,
@@ -42,7 +44,6 @@ const DELINQUENCY_OPTIONS = DELINQUENCY_VALUES.map((d) => ({
   value: d,
   label: DELINQUENCY_LABEL[d],
 }));
-const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
 
 /**
  * Motivo da perda (opcional) — aparece logo após marcar um cliente como
@@ -301,31 +302,17 @@ export function BulkActionBar({
         />
       )}
       {dialog === "owner" && (
-        <BulkFieldDialog
-          title="Alterar responsável em massa"
-          count={count}
-          onClose={() => setDialog(null)}
-          render={(value, setValue) => (
-            <Input
-              placeholder="Nome do responsável (vazio = limpar)"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          )}
-          allowEmpty
-          onConfirm={(value) => bulkUpdateClients({ ids, salesOwner: value })}
-          onDone={onClear}
-        />
+        <BulkOwnerDialog ids={ids} onClose={() => setDialog(null)} onDone={onClear} />
       )}
       {dialog === "renewal" && (
         <BulkFieldDialog
-          title="Alterar mês de renovação em massa"
+          title="Agendar expectativa de renovação em massa"
           count={count}
           onClose={() => setDialog(null)}
           render={(value, setValue) => (
             <Select value={value} onChange={(e) => setValue(e.target.value)}>
               <option value="">Selecione o mês…</option>
-              {MONTH_OPTIONS.map((o) => (
+              {renewalCompetenceOptions().map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -333,7 +320,7 @@ export function BulkActionBar({
             </Select>
           )}
           onConfirm={(value) =>
-            bulkUpdateClients({ ids, renewalMonth: value ? parseInt(value, 10) : null })
+            bulkUpdateClients({ ids, renewalCompetence: value || null })
           }
           onDone={onClear}
         />

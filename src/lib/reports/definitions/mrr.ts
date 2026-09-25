@@ -18,7 +18,7 @@ async function buildMrr(q: ReportQuery): Promise<ReportRow[]> {
     orderBy: { name: "asc" },
     select: {
       name: true, status: true, segment: true, salesOwner: true,
-      monthlyValue: true, renewalMonth: true,
+      monthlyValue: true, expectedRenewalAt: true,
     },
   });
   return clients.map((c) => ({
@@ -28,7 +28,7 @@ async function buildMrr(q: ReportQuery): Promise<ReportRow[]> {
     responsavel: c.salesOwner,
     mensal: n(c.monthlyValue),
     anualizado: n(c.monthlyValue) * 12,
-    renovacao: c.renewalMonth ? String(c.renewalMonth).padStart(2, "0") : null,
+    renovacao: c.expectedRenewalAt ?? null,
   }));
 }
 
@@ -43,7 +43,7 @@ export const mrrReport: ReportDef = {
     { key: "responsavel", label: "Responsável", kind: "text" },
     { key: "mensal", label: "MRR mensal", kind: "money", total: true },
     { key: "anualizado", label: "Anualizado", kind: "money", total: true },
-    { key: "renovacao", label: "Mês renovação", kind: "text" },
+    { key: "renovacao", label: "Expectativa de renovação", kind: "date" },
   ],
   filterFields: ["cliente", "responsavel"],
   groupOptions: ["responsavel", "segmento", "status"],

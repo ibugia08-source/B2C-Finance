@@ -31,10 +31,16 @@ export function ClientLossDialog({
   clientId,
   clientName,
   trigger,
+  renewalCompetence,
 }: {
   clientId: string;
   clientName: string;
   trigger?: React.ReactNode;
+  /**
+   * "Não renovou" do módulo Renovações: a competência (YYYY-MM) em exibição.
+   * A perda passa a contar como renovação perdida DAQUELE mês.
+   */
+  renewalCompetence?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +73,8 @@ export function ClientLossDialog({
             const res = await markClientLost(
               clientId,
               String(fd.get("lostAt") ?? ""),
-              reason
+              reason,
+              renewalCompetence ?? null
             );
             if (res.ok) setOpen(false);
             else setError(res.error);

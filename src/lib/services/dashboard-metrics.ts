@@ -1,3 +1,4 @@
+import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
@@ -113,7 +114,6 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
   const renewLimit = new Date();
   renewLimit.setDate(renewLimit.getDate() + 30);
 
-  const contractClientWhere = f.clientId ? { clientId: f.clientId } : {};
 
   const [esperado, recebido, pendente, vencido, novos, ativos, delinq, renov, mrr, tcv] =
     await Promise.all([
@@ -144,11 +144,13 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
       prisma.client.count({ where: { createdAt: { gte: start, lt: end } } }),
       prisma.client.count({ where: { status: "ACTIVE" } }),
       prisma.billing.groupBy({ by: ["clientId"], where: { ...bw, status: "OVERDUE" } }),
-      prisma.contract.count({
+      // Renovações vencidas ou nos próximos 30 dias, pela DATA DE EXPECTATIVA
+      // do cliente (mesma fonte do módulo Renovações).
+      prisma.client.count({
         where: {
-          ...contractClientWhere,
-          status: { in: ["ACTIVE", "RENEWAL"] },
-          renewalDate: { not: null, lte: renewLimit },
+          ...(f.clientId ? { id: f.clientId } : {}),
+          status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
+          expectedRenewalAt: { not: null, lte: renewLimit },
         },
       }),
       // Delegado a contract-metrics (fonte única da métrica contratual) —
@@ -425,12 +427,27 @@ const FOLHA_SOBRE_RECEITA_CRITICA = 0.5;
 const FOLHA_SOBRE_RECEITA_ALTA = 0.4;
 const FIXAS_SOBRE_RECEITA_LIMITE = 0.6;
 
+/**
+ * Base dos CARDS do Dashboard (dashboard-main / motor de métricas): Resultado
+ * = Recebido − Total de despesas; % Folha = folha ÷ Faturamento total. O
+ * score e os alertas leem ESTA base quando ela vem — antes liam
+ * finance.lucro (receitas − despesas pagas) e folha ÷ receitas, e o fator
+ * "Lucro de X" discordava do card Resultado logo acima.
+ */
+export type CardBase = {
+  faturamentoTotal: number;
+  resultado: number;
+  /** folha ÷ faturamento total (0-1); null sem faturamento. */
+  folhaSobreFaturamento: number | null;
+};
+
 export function computeHealth(
   finance: FinanceSummary,
   cash: CashSummary,
   inadimplenciaTaxa: number,
   /** Churn do mês corrente: perdas ÷ ativos (0-1). Opcional por compatibilidade. */
-  churnRate?: number
+  churnRate?: number,
+  base?: CardBase
 ): Health {
   let score = 100;
   const fatores: { ok: boolean; text: string }[] = [];
@@ -446,7 +463,10 @@ export function computeHealth(
   if (cash.projecao30 < 0) hit(25, `Projeção de caixa negativa em 30 dias (${formatBRL(cash.projecao30)})`);
   else ok(`Projeção de 30 dias positiva (${formatBRL(cash.projecao30)})`);
 
-  if (finance.lucro < 0) hit(20, `Prejuízo no período (${formatBRL(finance.lucro)})`);
+  if (base) {
+    if (base.resultado < 0) hit(20, `Resultado negativo no período (${formatBRL(base.resultado)})`);
+    else ok(`Resultado de ${formatBRL(base.resultado)} no período`);
+  } else if (finance.lucro < 0) hit(20, `Prejuízo no período (${formatBRL(finance.lucro)})`);
   else ok(`Lucro de ${formatBRL(finance.lucro)} no período`);
 
   const inadPct = Math.round(inadimplenciaTaxa * 100);
@@ -463,10 +483,13 @@ export function computeHealth(
     else ok(`Churn controlado (${churnPct}% no mês)`);
   }
 
-  const folhaPct = Math.round(finance.folhaSobreReceita * 100);
-  if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_CRITICA) hit(15, `Folha consome ${folhaPct}% da receita (limite saudável: 40%)`);
-  else if (finance.folhaSobreReceita > FOLHA_SOBRE_RECEITA_ALTA) hit(10, `Folha em ${folhaPct}% da receita — acima do ideal de 40%`);
-  else ok(`Folha em ${folhaPct}% da receita`);
+  const folhaRazao = base ? base.folhaSobreFaturamento : finance.folhaSobreReceita;
+  const folhaBase = base ? "do faturamento" : "da receita";
+  const folhaPct = Math.round((folhaRazao ?? 0) * 100);
+  if (folhaRazao == null) ok("Folha sem base de comparação (sem faturamento no período)");
+  else if (folhaRazao > FOLHA_SOBRE_RECEITA_CRITICA) hit(15, `Folha consome ${folhaPct}% ${folhaBase} (limite saudável: 40%)`);
+  else if (folhaRazao > FOLHA_SOBRE_RECEITA_ALTA) hit(10, `Folha em ${folhaPct}% ${folhaBase} — acima do ideal de 40%`);
+  else ok(`Folha em ${folhaPct}% ${folhaBase}`);
 
   if (finance.receitas > 0 && finance.despesasFixas > finance.receitas * FIXAS_SOBRE_RECEITA_LIMITE)
     hit(8, `Despesas fixas consomem ${Math.round((finance.despesasFixas / finance.receitas) * 100)}% da receita`);
@@ -525,6 +548,8 @@ export type ExecutiveDashboard = {
   expenses: ExpenseSummary;
   // ===== Fechamento mensal: Recebimentos + Receita Extra =====
   receipts: ReceiptsSummary;
+  /** Base dos cards (Resultado, % Folha) — a mesma de dashboard-main. */
+  cardBase: CardBase;
 };
 
 /** Contadores de clientes do mês (com override manual de inadimplência). */
@@ -617,14 +642,14 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
         _sum: { amount: true },
         _count: true,
       }),
-      prisma.contract.findMany({
+      prisma.client.findMany({
         where: {
-          status: { in: ["ACTIVE", "RENEWAL"] },
-          renewalDate: { not: null, lte: renewLimit },
+          status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
+          expectedRenewalAt: { not: null, lte: renewLimit },
         },
-        orderBy: { renewalDate: "asc" },
+        orderBy: { expectedRenewalAt: "asc" },
         take: 3,
-        select: { title: true, renewalDate: true, client: { select: { name: true } } },
+        select: { name: true, expectedRenewalAt: true },
       }),
     ]);
 
@@ -632,7 +657,16 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
     clients.ativos + losses.currentMonth.count > 0
       ? losses.currentMonth.count / (clients.ativos + losses.currentMonth.count)
       : 0;
-  const health = computeHealth(finance, cash, kpis.inadimplenciaTaxa, churnRate);
+  // Mesma conta dos cards (dashboard-main.buildMetrics / motor de métricas):
+  // Faturamento total = MRR + TCV + Receita Extra manual; Resultado =
+  // Recebido − Total de despesas; % Folha = folha ÷ Faturamento total.
+  const faturamentoTotal = revenue.total + receipts.extraRevenueManual;
+  const cardBase: CardBase = {
+    faturamentoTotal,
+    resultado: receipts.totalRevenue - finance.despesas,
+    folhaSobreFaturamento: faturamentoTotal > 0 ? finance.folhaPeriodo / faturamentoTotal : null,
+  };
+  const health = computeHealth(finance, cash, kpis.inadimplenciaTaxa, churnRate, cardBase);
 
   // --- Alertas ---
   const alerts: DashAlert[] = [];
@@ -660,15 +694,15 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
   if (kpis.contratosEmRenovacao > 0)
     alerts.push({
       severity: "medium",
-      title: "Contratos próximos da renovação",
-      detail: `${kpis.contratosEmRenovacao} contrato(s) renovam nos próximos 30 dias`,
+      title: "Renovações a decidir",
+      detail: `${kpis.contratosEmRenovacao} cliente(s) com renovação vencida ou nos próximos 30 dias`,
       href: "/renovacoes",
     });
-  if (finance.folhaSobreReceita > 0.4)
+  if (cardBase.folhaSobreFaturamento != null && cardBase.folhaSobreFaturamento > 0.4)
     alerts.push({
       severity: "medium",
       title: "Folha acima do limite saudável",
-      detail: `Folha consome ${Math.round(finance.folhaSobreReceita * 100)}% da receita (ideal: até 40%)`,
+      detail: `Folha consome ${Math.round(cardBase.folhaSobreFaturamento * 100)}% do faturamento (ideal: até 40%)`,
       href: "/folha",
     });
 
@@ -682,7 +716,7 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
   }
   for (const r of renewals.slice(0, 2)) {
     actions.push({
-      text: `Renovar contrato "${r.title}" de ${r.client.name} (vence ${r.renewalDate ? formatDateBR(r.renewalDate) : "em breve"})`,
+      text: `Renovação de ${r.name} (expectativa ${r.expectedRenewalAt ? formatDateBR(r.expectedRenewalAt) : "em breve"})`,
       href: "/renovacoes",
     });
   }
@@ -712,7 +746,7 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
     kpis, finance, cash, series, breakdowns, health,
     alerts, actions: actions.slice(0, 6),
     revenue, renewalOutlook, losses,
-    clients, upsell, expenses, receipts,
+    clients, upsell, expenses, receipts, cardBase,
   };
 }
 

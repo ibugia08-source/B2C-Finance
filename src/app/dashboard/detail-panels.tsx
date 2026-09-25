@@ -6,13 +6,15 @@ import type {
 
 /** Lista resumida de clientes (MRR/TCV/novos/renovações) — detalhe de card. */
 export function NamedValueList({
-  items, total, totalLabel, valueSuffix, emptyText,
+  items, total, totalLabel, valueSuffix, emptyText, limit = 50,
 }: {
   items: NamedValue[];
   total?: number;
   totalLabel?: string;
   valueSuffix?: string;
   emptyText?: string;
+  /** Quantas linhas mostrar (a lista rola). Renovações mostram todas. */
+  limit?: number;
 }) {
   if (items.length === 0) {
     return <p className="text-sm text-muted-foreground py-2">{emptyText ?? "Sem itens no período."}</p>;
@@ -20,7 +22,7 @@ export function NamedValueList({
   return (
     <div>
       <ul className="space-y-1 max-h-72 overflow-y-auto">
-        {items.slice(0, 50).map((it, i) => {
+        {items.slice(0, limit).map((it, i) => {
           const row = (
             <>
               <span className="truncate">
@@ -33,7 +35,7 @@ export function NamedValueList({
             </>
           );
           return (
-            <li key={it.id ?? i} className="flex items-center justify-between gap-3 text-sm">
+            <li key={`${it.id ?? "item"}-${i}`} className="flex items-center justify-between gap-3 text-sm">
               {it.id ? (
                 <Link href={`/clientes/${it.id}`} className="flex items-center justify-between gap-3 w-full hover:underline">
                   {row}
@@ -74,13 +76,14 @@ function Line({ label, value, strong, tone }: { label: string; value: string; st
 }
 
 export function FaturamentoDetail({
-  mrr, tcv, extra, total, mrrClients, tcvClients,
-}: { mrr: number; tcv: number; extra: number; total: number; mrrClients: number; tcvClients: number }) {
+  mrr, tcv, extra, total, mrrClients, tcvClients, avulso = 0,
+}: { mrr: number; tcv: number; extra: number; total: number; mrrClients: number; tcvClients: number; avulso?: number }) {
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-2">Composição do faturamento previsto do mês</p>
       <Line label={`MRR — ${mrrClients} cliente(s) ativo(s)`} value={formatBRL(mrr)} />
       <Line label={`TCV — ${tcvClients} fechamento(s)/renovação(ões)`} value={formatBRL(tcv)} />
+      {avulso > 0 && <Line label="Avulsas (upsell, setup, pontual)" value={formatBRL(avulso)} />}
       <Line label="Receita Extra manual" value={formatBRL(extra)} />
       <Line label="Faturamento total" value={formatBRL(total)} strong />
       <p className="text-[11px] text-muted-foreground mt-3">

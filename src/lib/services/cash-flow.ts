@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { hojeCivil } from "@/lib/civil-date";
 import { toNumber as n } from "@/lib/format";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { escopoAtual, whereDaCobranca } from "@/lib/services/data-scope";
@@ -154,7 +155,9 @@ export async function fluxoProjetado(opcoes: OpcoesDoFluxo): Promise<FluxoProjet
   const ate = new Date(
     Date.UTC(opcoes.ate.getUTCFullYear(), opcoes.ate.getUTCMonth(), opcoes.ate.getUTCDate(), 23, 59, 59, 999)
   );
-  const hoje = diaDe(new Date());
+  // Dia da Bahia (o dia UTC depois das 21h já é amanhã e marcava "atrasada"
+  // a cobrança que vence hoje).
+  const hoje = diaDe(hojeCivil());
 
   const escopo = await escopoAtual();
   // O recorte da URL só APERTA o recorte do usuário: quem enxerga uma agência
@@ -220,7 +223,7 @@ export async function fluxoProjetado(opcoes: OpcoesDoFluxo): Promise<FluxoProjet
       take: 24,
       select: {
         id: true, month: true, year: true,
-        items: { select: { amount: true } },
+        items: { select: { amount: true, kind: true } },
       },
     }),
   ]);
@@ -280,7 +283,11 @@ export async function fluxoProjetado(opcoes: OpcoesDoFluxo): Promise<FluxoProjet
   }
 
   for (const p of folhas) {
-    const total = centavo(p.items.reduce((s, i) => s + n(i.amount), 0));
+    // Desconto (DEDUCTION) SUBTRAI do líquido — mesma conta do pagamento da
+    // folha (actions/payroll). Somar tudo projetava saída maior que a real.
+    const total = centavo(
+      p.items.reduce((s, i) => s + n(i.amount) * (i.kind === "DEDUCTION" ? -1 : 1), 0)
+    );
     if (total <= 0) continue;
     // Dia 5 do mês seguinte à competência (convenção declarada).
     const pagamento = new Date(Date.UTC(p.year, p.month, DIA_DO_PAGAMENTO_DA_FOLHA));

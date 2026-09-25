@@ -29,7 +29,7 @@ export type ReportQuery = {
   segmento?: string; // nicho / segmento de atuação (valor exato do cadastro)
   origem?: string; // origem comercial
   uf?: string; // estado (UF)
-  mesRenovacao?: number; // 1-12
+  mesRenovacao?: string; // "YYYY-MM" — mês da expectativa de renovação
 };
 
 export type ReportPresentation = {
@@ -83,8 +83,14 @@ export function parseReportQuery(sp: SearchParams): ReportQuery {
     origem: sp.origem || undefined,
     uf: sp.uf ? sp.uf.toUpperCase() : undefined,
     mesRenovacao: (() => {
-      const m = Number(sp.mesRenovacao);
-      return Number.isInteger(m) && m >= 1 && m <= 12 ? m : undefined;
+      const v = (sp.mesRenovacao ?? "").trim();
+      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) return v;
+      // Link antigo com só o mês (1-12): a próxima ocorrência desse mês.
+      const m = Number(v);
+      if (!Number.isInteger(m) || m < 1 || m > 12) return undefined;
+      const hoje = new Date();
+      const ano = m < hoje.getMonth() + 1 ? hoje.getFullYear() + 1 : hoje.getFullYear();
+      return `${ano}-${String(m).padStart(2, "0")}`;
     })(),
   };
 }

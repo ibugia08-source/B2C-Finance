@@ -83,6 +83,43 @@ export function competenceOf(date: Date, timeZone: string = WORKSPACE_TIMEZONE):
   return `${year}-${month}`;
 }
 
+/**
+ * Competência de uma DATA CIVIL (vencimento, data da despesa, data do
+ * pagamento) — lida pelas partes UTC, como `formatDateBR` exibe.
+ *
+ * `competenceOf` é para INSTANTES. Aplicada a uma data civil gravada à
+ * meia-noite UTC (o que o servidor grava), ela volta 3 horas no fuso da
+ * Bahia e cai no dia ANTERIOR: a despesa do dia 1º era conferida contra a
+ * guarda de período do mês anterior.
+ */
+export function competenceOfCivil(date: Date): Competence {
+  return toCompetence(date.getUTCFullYear(), date.getUTCMonth() + 1);
+}
+
+/**
+ * Competências (YYYY-MM) cobertas por um período [start, end) montado com
+ * construtores LOCAIS (`new Date(a, m, 1)`, como lib/period faz): os meses
+ * saem das partes locais do início e do último instante. Passar o cursor
+ * por `competenceOf` (fuso da Bahia) no servidor UTC devolvia o mês
+ * ANTERIOR — o relatório de setembro calculava agosto.
+ */
+export function competenciasDoPeriodo(start: Date, end: Date): Competence[] {
+  const fim = new Date(end.getTime() - 1);
+  const out: Competence[] = [];
+  let y = start.getFullYear();
+  let m = start.getMonth() + 1;
+  const fimKey = fim.getFullYear() * 12 + fim.getMonth();
+  while (y * 12 + (m - 1) <= fimKey && out.length < 600) {
+    out.push(toCompetence(y, m));
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out.length > 0 ? out : [toCompetence(start.getFullYear(), start.getMonth() + 1)];
+}
+
 /** Soma (ou subtrai) meses: `addMonths("2026-11", 3)` → `"2027-02"`. */
 export function addMonths(competence: Competence, months: number): Competence {
   const p = parseCompetence(competence);

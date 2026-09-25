@@ -23,8 +23,29 @@ export const ROTAS_APOSENTADAS = [
   { origem: "/fila/:resto*", destino: "/inadimplencia" },
 ];
 
+/**
+ * CABEÇALHOS DE SEGURANÇA em todas as rotas (25/09/2026).
+ *  - X-Frame-Options + frame-ancestors: o app não pode ser embutido em iframe
+ *    de outro site (clickjacking — botões de pagar/excluir sob um disfarce).
+ *  - nosniff: o navegador não "adivinha" o tipo de um download (anexos de
+ *    cliente) e o executa como script/HTML.
+ *  - Referrer-Policy: URLs internas (com ids e filtros) não vazam inteiras
+ *    para sites externos linkados.
+ * CSP completa fica de fora de propósito: estilos/scripts inline do Next e
+ * dos componentes quebrariam. Só a diretiva frame-ancestors é enviada.
+ */
+export const SECURITY_HEADERS = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 const nextConfig = {
   reactStrictMode: true,
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb",

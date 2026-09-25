@@ -31,7 +31,8 @@ import {
   MONTHS,
   modalityPill,
 } from "./_meta";
-import { setClientModality, setClientRenewalMonth } from "@/lib/actions/clients";
+import { setClientModality, setClientRenewalExpectation } from "@/lib/actions/clients";
+import { competenceShortLabel, renewalCompetenceOptions } from "@/lib/renewal-expectation";
 import { formatBRL } from "@/lib/format";
 import {
   ALL_COLUMNS,
@@ -51,14 +52,14 @@ import type { ClientRow } from "./clients-table";
  */
 const GROUP_KEY_STORAGE = "b2c:clientes:agrupar";
 
-type GroupKey = "none" | "salesOwner" | "modality" | "status" | "renewalMonth";
+type GroupKey = "none" | "salesOwner" | "modality" | "status" | "renewalCompetence";
 
 const GROUP_OPTIONS: { value: GroupKey; label: string }[] = [
   { value: "none", label: "Sem agrupamento" },
   { value: "salesOwner", label: "Gestor" },
   { value: "modality", label: "Modalidade" },
   { value: "status", label: "Status" },
-  { value: "renewalMonth", label: "Mês de renovação" },
+  { value: "renewalCompetence", label: "Expectativa de renovação" },
 ];
 
 function rotuloGrupo(c: ClientRow, by: GroupKey): string {
@@ -69,10 +70,10 @@ function rotuloGrupo(c: ClientRow, by: GroupKey): string {
       return c.modality ? CLIENT_MODALITY_LABEL[c.modality as keyof typeof CLIENT_MODALITY_LABEL] ?? c.modality : "Sem modalidade";
     case "status":
       return c.status;
-    case "renewalMonth":
-      return c.renewalMonth
-        ? MONTHS.find((m) => m.value === c.renewalMonth)?.label ?? String(c.renewalMonth)
-        : "Sem mês de renovação";
+    case "renewalCompetence":
+      return c.renewalCompetence
+        ? competenceShortLabel(c.renewalCompetence)
+        : "Sem expectativa de renovação";
     default:
       return "";
   }
@@ -102,7 +103,6 @@ const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
   value: m,
   label: CLIENT_MODALITY_LABEL[m],
 }));
-const MONTH_OPTIONS = MONTHS.map((m) => ({ value: String(m.value), label: m.label }));
 
 export function ClientsPanel({
   clients,
@@ -390,12 +390,12 @@ export function ClientsPanel({
                 </Field>
                 <Field label="Renovação">
                   <InlineSelect
-                    ariaLabel={`Mês de renovação de ${c.name}`}
-                    value={c.renewalMonth != null ? String(c.renewalMonth) : ""}
-                    options={MONTH_OPTIONS}
+                    ariaLabel={`Expectativa de renovação de ${c.name}`}
+                    value={c.renewalCompetence ?? ""}
+                    options={renewalCompetenceOptions(c.renewalCompetence)}
                     allowEmpty
                     emptyLabel="— definir —"
-                    action={(v) => setClientRenewalMonth(c.id, v ? parseInt(v, 10) : null)}
+                    action={(v) => setClientRenewalExpectation(c.id, v || null)}
                   />
                 </Field>
                 <Field label="Responsável">{c.salesOwner ?? "—"}</Field>

@@ -8,21 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { scheduleClientRenewal } from "@/lib/actions/renewals";
-import { MONTHS } from "@/app/clientes/_meta";
+import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 import { CalendarPlus } from "lucide-react";
 
 /**
- * Agendar renovação manualmente: escolhe o cliente e o mês em que ele deve
- * aparecer na lista de renovações (Gestão do Mês e módulo Renovações).
- * Grava Client.renewalMonth — a mesma agenda editável da carteira.
+ * Agendar renovação manualmente: escolhe o cliente e o MÊS/ANO em que ele
+ * deve aparecer na lista de renovações (Gestão do Mês e módulo Renovações).
+ * Grava a data de expectativa do cliente — a mesma da coluna Renovação da
+ * carteira — sobrepondo o cálculo por entrada + prazo.
  */
 export function ScheduleRenewalDialog({
   clients,
-  defaultMonth,
+  defaultCompetence,
   trigger,
 }: {
   clients: { id: string; name: string }[];
-  defaultMonth: number; // 1-12 (mês em exibição)
+  defaultCompetence: string; // "YYYY-MM" do mês em exibição
   trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,7 +31,7 @@ export function ScheduleRenewalDialog({
   const [pending, start] = useTransition();
   const [q, setQ] = useState("");
   const [clientId, setClientId] = useState("");
-  const [month, setMonth] = useState(defaultMonth);
+  const [month, setMonth] = useState(defaultCompetence);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -62,7 +63,7 @@ export function ScheduleRenewalDialog({
         if (o) {
           // Ressincroniza com o mês em exibição a cada abertura (o componente
           // fica montado enquanto o usuário navega entre meses).
-          setMonth(defaultMonth);
+          setMonth(defaultCompetence);
           setError(null);
         } else setError(null);
       }}
@@ -98,14 +99,14 @@ export function ScheduleRenewalDialog({
           </div>
           <div>
             <Label>Mês da renovação *</Label>
-            <Select value={String(month)} onChange={(e) => setMonth(parseInt(e.target.value, 10))}>
-              {MONTHS.map((m) => (
+            <Select value={month} onChange={(e) => setMonth(e.target.value)}>
+              {renewalCompetenceOptions(defaultCompetence).map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              O cliente passa a aparecer na lista de renovações deste mês
-              (agenda anual — a mesma coluna Renovação da carteira).
+              O cliente passa a ter expectativa de renovação neste mês e entra
+              na lista dele. Substitui a data calculada por entrada + prazo.
             </p>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

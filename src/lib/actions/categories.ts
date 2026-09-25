@@ -1,6 +1,6 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { getViewer } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidatePath } from "next/cache";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
@@ -12,8 +12,11 @@ const CategorySchema = z.object({
   kind: z.enum(["despesa", "receita", "mista"]).default("despesa"),
 });
 
+// Category é GLOBAL (fora da extensão de dono): criar, renomear ou excluir
+// mexe nas categorias de todos os lançamentos. Por isso exige a permissão de
+// alterar configurações — antes bastava estar logado.
 export async function saveCategory(formData: FormData) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("configuracoes.editar");
   const parsed = CategorySchema.parse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
@@ -35,7 +38,7 @@ export async function saveCategory(formData: FormData) {
 }
 
 export async function deleteCategory(id: string) {
-  await getViewer(); // sessão obrigatória (dados escopados por dono)
+  await requirePermission("configuracoes.editar");
   await prisma.category.delete({ where: { id } });
   revalidateFinance();
   revalidatePath("/configuracoes");

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { getAISettingsView } from "@/lib/actions/ai";
+import { aiPrivateWhere } from "@/lib/ai/context";
 import { AISettingsDialog } from "./settings-dialog";
 import { Chat } from "./chat";
 import { Insights } from "./insights";
@@ -13,17 +14,23 @@ import { Sparkles, Bot, FileBarChart2 } from "lucide-react";
 
 export default async function AssistentePage() {
   // Aberto a qualquer usuário logado. Cada um vê o próprio histórico e memórias
-  // (AIConversation/AIMemory são escopados por dono). Só o admin configura a chave.
+  // (filtro por userId; legado sem autor só o ADMIN vê). Só o admin configura a chave.
   const viewer = await requirePagePermission("assistente.visualizar", "/assistente");
   const isAdmin = viewer.role === "ADMIN";
 
   const [settings, conversation, memories] = await Promise.all([
     getAISettingsView(),
+    // A extensão escopa pelo DONO do workspace (a equipe inteira); o filtro de
+    // autoria garante que cada usuário abre só a PRÓPRIA conversa/memória.
     prisma.aIConversation.findFirst({
+      where: aiPrivateWhere(viewer),
       orderBy: { updatedAt: "desc" },
       include: { messages: { orderBy: { createdAt: "asc" } } },
     }),
-    prisma.aIMemory.findMany({ orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }] }),
+    prisma.aIMemory.findMany({
+      where: aiPrivateWhere(viewer),
+      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
+    }),
   ]);
 
   const configured = settings.enabled && settings.hasKey && !!settings.model;

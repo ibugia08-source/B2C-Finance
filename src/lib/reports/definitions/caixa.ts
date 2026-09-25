@@ -11,6 +11,8 @@ async function buildCaixa(q: ReportQuery): Promise<ReportRow[]> {
         status: "RECEIVED",
         receivedAt: { gte: start, lt: end },
         ...(q.clientId ? { clientId: q.clientId } : {}),
+        // Categoria vale para TODAS as fontes (antes só para as movimentações).
+        ...(q.categoryId ? { categoryId: q.categoryId } : {}),
       },
       select: { receivedAt: true, description: true, amount: true, client: { select: { name: true } } },
     }),

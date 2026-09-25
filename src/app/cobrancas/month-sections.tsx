@@ -553,7 +553,6 @@ export function RenovacoesSection({
   scheduleClients,
   monthLabel,
   competence,
-  defaultMonth,
 }: {
   rows: RenewalPanelRow[];
   expectedTotal: number;
@@ -565,7 +564,6 @@ export function RenovacoesSection({
   scheduleClients: { id: string; name: string }[];
   monthLabel: string;
   competence: string; // "YYYY-MM"
-  defaultMonth: number;
 }) {
   return (
     <SectionShell
@@ -581,7 +579,7 @@ export function RenovacoesSection({
             abrir Renovações
           </Link>
           {canSchedule && (
-            <ScheduleRenewalDialog clients={scheduleClients} defaultMonth={defaultMonth} />
+            <ScheduleRenewalDialog clients={scheduleClients} defaultCompetence={competence} />
           )}
         </div>
       }

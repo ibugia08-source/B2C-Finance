@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { competenceOf } from "@/lib/competence";
+import { competenceOfCivil } from "@/lib/competence";
 import { auditEvent, auditUpdate } from "@/lib/audit";
 import { post } from "@/lib/accounting/engine";
 import { publish } from "@/lib/outbox";
@@ -43,7 +43,9 @@ export async function setExpenseStatus(
   if (!despesa) return { ok: false, error: "Despesa não encontrada." };
   if (despesa.status === status) return { ok: true };
 
-  const competencia = competenceOf(despesa.date);
+  // despesa.date é DATA CIVIL: competência pelas partes UTC (competenceOf,
+  // de instante, jogava a despesa do dia 1º no mês anterior).
+  const competencia = competenceOfCivil(despesa.date);
   const periodo = await guardPeriod("EXPENSE_PAID_CASH", competencia);
   if (!periodo.ok) return periodo;
 
@@ -92,7 +94,9 @@ export async function recognizeExpense(
   });
   if (!despesa) return { ok: false, error: "Despesa não encontrada." };
 
-  const competencia = competenceOf(despesa.date);
+  // despesa.date é DATA CIVIL: competência pelas partes UTC (competenceOf,
+  // de instante, jogava a despesa do dia 1º no mês anterior).
+  const competencia = competenceOfCivil(despesa.date);
   const periodo = await guardPeriod("EXPENSE_RECOGNIZED_ON_CREDIT", competencia);
   if (!periodo.ok) return periodo;
 

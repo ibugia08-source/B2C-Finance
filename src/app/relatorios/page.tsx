@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { requirePagePermission } from "@/lib/auth/viewer";
-import { REPORTS } from "@/lib/reports/registry";
+import { REPORTS, canViewReport } from "@/lib/reports/registry";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileBarChart2, ArrowRight } from "lucide-react";
 
 export default async function RelatoriosPage() {
-  await requirePagePermission("relatorios.visualizar");
+  const viewer = await requirePagePermission("relatorios.visualizar");
+  // Só lista o que o usuário pode abrir (permissão por relatório).
+  const visiveis = REPORTS.filter((r) => canViewReport(viewer, r));
   return (
     <div>
       <PageHeader
@@ -14,7 +16,12 @@ export default async function RelatoriosPage() {
         description="Análises personalizáveis com filtros, agrupamento e exportação — sem alterar os dados originais"
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {REPORTS.map((r) => (
+        {visiveis.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            Nenhum relatório disponível para o seu perfil — fale com o administrador.
+          </p>
+        )}
+        {visiveis.map((r) => (
           <Link key={r.key} href={`/relatorios/${r.key}${r.defaultPeriodo ? `?periodo=${r.defaultPeriodo}` : ""}`}>
             <Card className="h-full transition-all hover:-translate-y-0.5 hover:shadow-soft group">
               <CardContent className="p-5">

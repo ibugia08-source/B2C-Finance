@@ -49,26 +49,23 @@ describe("F1.8 — crédito do cliente", () => {
     expect(movs[0].sourcePaymentId).toBe(r.paymentId);
   });
 
-  it("o crédito abate a cobrança seguinte SEM criar pagamento novo", async () => {
+  it("o excedente abate a cobrança seguinte NA HORA, SEM criar pagamento novo", async () => {
     const cliente = await createMrrClient(dono, { name: "Usa o crédito" });
     const jan = await createBilling(dono, cliente.id, { month: 1, year: 2026, amount: 500 });
     const fev = await createBilling(dono, cliente.id, { month: 2, year: 2026, amount: 500 });
 
-    await asOwner(dono, async () => pay(jan.id, 800, new Date(2026, 0, 5)));
+    const r: any = await asOwner(dono, async () => pay(jan.id, 800, new Date(2026, 0, 5)));
+    expect(r.ok).toBe(true);
+    expect(r.creditGenerated).toBe(300);
+    expect(r.creditApplied).toBe(300);
+    expect(r.creditAppliedBillings).toBe(1);
+    expect(r.creditRemaining).toBe(0);
 
-    const antes = await asOwner(dono, async () =>
+    // NENHUM pagamento novo: o dinheiro entrou uma vez, em janeiro.
+    const pagamentos = await asOwner(dono, async () =>
       prisma.payment.count({ where: { billing: { clientId: cliente.id } } })
     );
-
-    const res: any = await asOwner(dono, async () => applyCredit({ billingId: fev.id }));
-    expect(res.ok).toBe(true);
-    expect(res.applied).toBe(300);
-
-    // NENHUM pagamento novo: o dinheiro já tinha entrado em janeiro.
-    const depois = await asOwner(dono, async () =>
-      prisma.payment.count({ where: { billing: { clientId: cliente.id } } })
-    );
-    expect(depois).toBe(antes);
+    expect(pagamentos).toBe(1);
 
     const b = await asOwner(dono, async () =>
       prisma.billing.findUniqueOrThrow({ where: { id: fev.id } })
@@ -78,6 +75,28 @@ describe("F1.8 — crédito do cliente", () => {
 
     const saldo = await asOwner(dono, async () => creditBalance(cliente.id));
     expect(saldo).toBe(0);
+    const c = await asOwner(dono, async () => reconcileCredit(cliente.id));
+    expect(c.bate).toBe(true);
+
+    // Nada sobrou para o gesto manual.
+    const res: any = await asOwner(dono, async () => applyCredit({ billingId: fev.id }));
+    expect(res.ok).toBe(false);
+  });
+
+  it("sem outra cobrança aberta, o excedente fica guardado e o gesto manual o usa depois", async () => {
+    const cliente = await createMrrClient(dono, { name: "Crédito guardado" });
+    const jan = await createBilling(dono, cliente.id, { month: 7, year: 2026, amount: 500 });
+    const r: any = await asOwner(dono, async () => pay(jan.id, 800, new Date(2026, 6, 5)));
+    expect(r.creditApplied).toBe(0);
+    expect(r.creditRemaining).toBe(300);
+
+    const ago = await createBilling(dono, cliente.id, { month: 8, year: 2026, amount: 500 });
+    const res: any = await asOwner(dono, async () => applyCredit({ billingId: ago.id }));
+    expect(res.ok).toBe(true);
+    expect(res.applied).toBe(300);
+    const c = await asOwner(dono, async () => reconcileCredit(cliente.id));
+    expect(c.real).toBe(0);
+    expect(c.bate).toBe(true);
   });
 
   it("o cache do saldo bate com a conta real", async () => {
@@ -103,8 +122,8 @@ describe("F1.8 — crédito do cliente", () => {
     const cliente = await createMrrClient(dono, { name: "Já quitada" });
     const a = await createBilling(dono, cliente.id, { month: 5, year: 2026, amount: 100 });
     const b = await createBilling(dono, cliente.id, { month: 6, year: 2026, amount: 100 });
+    // 250 em A (100): 100 do excedente quitam B na hora; sobram 50.
     await asOwner(dono, async () => pay(a.id, 250, new Date(2026, 4, 3)));
-    await asOwner(dono, async () => pay(b.id, 100, new Date(2026, 5, 3)));
 
     const res: any = await asOwner(dono, async () => applyCredit({ billingId: b.id }));
     expect(res.ok).toBe(false);

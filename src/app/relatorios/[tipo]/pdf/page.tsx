@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { periodLabel } from "@/lib/period";
 import { requirePagePermission } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getReport } from "@/lib/reports/registry";
+import { getReport, canViewReport } from "@/lib/reports/registry";
 import {
   parseReportQuery, parsePresentation, type SearchParams,
 } from "@/lib/reports/query";
@@ -63,9 +63,11 @@ export default async function RelatorioPdfPage({
   params: { tipo: string };
   searchParams?: SearchParams;
 }) {
-  await requirePagePermission("relatorios.visualizar");
+  const viewer = await requirePagePermission("relatorios.visualizar");
   const def = getReport(params.tipo);
   if (!def) notFound();
+  // Permissão por relatório — o PDF não pode ser a porta dos fundos da tela.
+  if (!canViewReport(viewer, def)) redirect("/acesso-restrito");
 
   await markOverdueBillings();
 

@@ -193,6 +193,12 @@ export async function cancelContract(id: string): Promise<ActionResult> {
       where: { id },
       data: { status: "CANCELED", canceledAt: new Date() },
     });
+    // As mensalidades que o contrato gerou para os meses SEGUINTES, ainda sem
+    // pagamento, saem dos recebimentos (auditoria 25/09/2026). O mês corrente
+    // e o que já tem pagamento ficam.
+    const { cancelarCobrancasFuturas } = await import("@/lib/services/lifecycle");
+    const { currentYearMonth } = await import("@/lib/renewal-expectation");
+    await cancelarCobrancasFuturas(prisma, { contractId: id }, currentYearMonth(), "Contrato cancelado");
     revalidateContracts(c.clientId);
     return { ok: true };
   } catch (e: any) {

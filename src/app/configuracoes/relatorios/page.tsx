@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { prisma } from "@/lib/prisma";
-import { REPORTS } from "@/lib/reports/registry";
+import { REPORTS, canViewReport } from "@/lib/reports/registry";
 import { PainelDeAgendamentos } from "./painel";
 
 /**
@@ -34,7 +34,7 @@ export default async function RelatoriosAgendadosPage() {
           ...a,
           lastRunAt: a.lastRunAt?.toISOString() ?? null,
         }))}
-        relatorios={REPORTS.map((r) => ({ key: r.key, title: r.title }))}
+        relatorios={REPORTS.filter((r) => canViewReport(viewer, r)).map((r) => ({ key: r.key, title: r.title }))}
         podeEditar={can(viewer, "configuracoes.editar")}
       />
     </div>

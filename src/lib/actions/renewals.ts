@@ -7,6 +7,10 @@ import { getValidDueDateForMonth, addMonthsClamped } from "@/lib/financial/due-d
 import { settleBilling as settleViaEngine } from "@/lib/engines/payment-engine";
 import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
+import {
+  addCalendarMonths, civilCompetenceKey, civilToday, competenceKeyOf, currentYearMonth, expectationInMonth,
+  monthIndex, parseCompetenceKey, rollForward,
+} from "@/lib/renewal-expectation";
 
 /**
  * FLUXO COMPLETO DE RENOVAÇÃO — "Sim, renovou" da Gestão do Mês e do módulo
@@ -61,10 +65,23 @@ export async function renewClientFlow(
       where: { id: clientId },
       select: {
         id: true, name: true, modality: true, paymentDay: true,
-        monthlyValue: true, totalContractValue: true,
+        monthlyValue: true, totalContractValue: true, expectedRenewalAt: true,
       },
     });
     if (!client) return { ok: false, error: "Cliente não encontrado." };
+
+    // EXPECTATIVA ATENDIDA: a competência que esta renovação resolve. Vem do
+    // mês em exibição no módulo (forCompetence); sem ele, da expectativa
+    // atual do cliente; sem as duas, do mês de hoje. E o valor que se
+    // esperava, congelado ANTES de o cadastro mudar.
+    const expectedCompetence =
+      parseCompetenceKey(String(formData.get("forCompetence") ?? ""))
+        ? String(formData.get("forCompetence")).trim()
+        : client.expectedRenewalAt
+          ? civilCompetenceKey(client.expectedRenewalAt)
+          : competenceKeyOf(today);
+    const { expectedRenewalValues } = await import("@/lib/services/revenue-metrics");
+    const expectedValue = (await expectedRenewalValues([client])).get(client.id) ?? null;
 
     const contract = contractId
       ? await prisma.contract.findFirst({ where: { id: contractId, clientId } })
@@ -155,8 +172,14 @@ export async function renewClientFlow(
           status: "ACTIVE",
           churnedAt: null,
           contractMonths: months,
-          // Próxima janela de renovação = mês do novo fim de vigência.
-          renewalMonth: newEnd.getMonth() + 1,
+          // Próxima expectativa = a expectativa atendida + o novo prazo (o
+          // ciclo segue a data do cliente, não o dia em que se registrou).
+          // Renovação registrada com atraso anda até o mês corrente.
+          expectedRenewalAt: rollForward(
+            addCalendarMonths(client.expectedRenewalAt ?? civilToday(today), months),
+            months,
+            today
+          ),
           // Normalização por modalidade — a MESMA regra do saveClient:
           // MRR zera o valor total; TCV zera mensalidade e dia recorrente.
           ...(staysMonthly
@@ -190,6 +213,8 @@ export async function renewClientFlow(
           billingMonth: launch ? comp.month : null,
           billingYear: launch ? comp.year : null,
           keptMonthly: staysMonthly,
+          expectedCompetence,
+          expectedValue,
           paymentStatus: launch ? payStatus : null,
           notes: details,
           createdBy: viewer.email,
@@ -321,26 +346,31 @@ export async function renewClientFlow(
 }
 
 /**
- * Agenda (ou reagenda) manualmente a renovação de um cliente para um mês —
- * usada pelo "Agendar renovação" da Gestão do Mês e do módulo Renovações.
- * Grava Client.renewalMonth (mesma fonte dos KPIs/janelas de renovação).
+ * Agenda (ou reagenda) manualmente a EXPECTATIVA de renovação de um cliente
+ * para um mês — o "Agendar renovação" da Gestão do Mês e do módulo
+ * Renovações. Grava Client.expectedRenewalAt no mês escolhido, no dia do
+ * ciclo do cliente (dia da entrada).
  */
 export async function scheduleClientRenewal(
   clientId: string,
-  month: number
+  competence: string
 ): Promise<ActionResult> {
   await requirePermission("clientes.editar");
   try {
-    if (!Number.isInteger(month) || month < 1 || month > 12)
-      return { ok: false, error: "Mês inválido." };
+    const ym = parseCompetenceKey(competence);
+    if (!ym) return { ok: false, error: "Mês inválido." };
+    // Sem agendar no passado distante: o módulo mostra o mês corrente e os
+    // próximos; mês anterior ainda é permitido (renovação atrasada).
+    if (monthIndex(ym) < monthIndex(currentYearMonth()) - 1)
+      return { ok: false, error: "Escolha o mês atual ou um mês futuro." };
     const client = await prisma.client.findFirst({
       where: { id: clientId },
-      select: { id: true },
+      select: { id: true, startedAt: true },
     });
     if (!client) return { ok: false, error: "Cliente não encontrado." };
     await prisma.client.update({
       where: { id: clientId },
-      data: { renewalMonth: month },
+      data: { expectedRenewalAt: expectationInMonth(ym, client.startedAt) },
     });
     revalidateAgency({ clientId });
     return { ok: true };

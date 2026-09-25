@@ -79,6 +79,31 @@ describe("F3.10 — os blocos da semana", () => {
     });
   });
 
+  it("vocabulário OFICIAL da avaliação (\"Alto\"/\"Médio\", \"Crítico\"/\"Observação\") entra em 'críticos'", async () => {
+    await asOwner(dono, async () => {
+      const oficiais = [
+        { name: "Cliente risco Alto", risco: "Alto", estabilidade: "Estável" },
+        { name: "Cliente risco Médio", risco: "Médio", estabilidade: null },
+        { name: "Cliente Crítico", risco: "Baixo", estabilidade: "Crítico" },
+        { name: "Cliente em Observação", risco: null, estabilidade: "Observação" },
+        { name: "Cliente tranquilo", risco: "Baixo", estabilidade: "Estável" },
+      ];
+      for (const o of oficiais) {
+        const c = await createMrrClient(dono, { name: o.name });
+        const rel = await createRelationship(dono, c.id);
+        await prisma.avaliacaoMensal.create({
+          data: { relationshipId: rel.id, competence: "2027-04", risco: o.risco, estabilidade: o.estabilidade },
+        });
+      }
+      const r = await rotinaSemanal(new Date(2027, 3, 14));
+      const nomes = r.blocos.find((b) => b.id === "criticos")!.itens.map((i) => i.titulo);
+      expect(nomes).toEqual(expect.arrayContaining([
+        "Cliente risco Alto", "Cliente risco Médio", "Cliente Crítico", "Cliente em Observação",
+      ]));
+      expect(nomes).not.toContain("Cliente tranquilo");
+    });
+  });
+
   it("promessa com data NA semana aparece; fora dela, não", async () => {
     await asOwner(dono, async () => {
       const b = await createBilling(dono, cliente.id, { month: 4, year: 2027, amount: 800 });

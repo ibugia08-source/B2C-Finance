@@ -1,6 +1,7 @@
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
+import { ADS_STATUS, ESTABILIDADE, RISCO } from "@/lib/avaliacao-meta";
 
 /**
  * PREVISÃO DE CHURN POR SINAIS (F5.4 · ref. 03 roadmap Fase 5).
@@ -52,6 +53,53 @@ export type PrevisaoDeChurn = {
   /** Sem avaliação nas 2 últimas competências: problema de processo, à vista. */
   semLeitura: boolean;
 };
+
+// ===================================================================
+// Vocabulário da avaliação mensal — leitura tolerante.
+// A grade e a importação gravam o vocabulário OFICIAL de avaliacao-meta
+// ("Baixo" | "Médio" | "Alto", "Estável" | "Observação" | "Crítico",
+// "Ativo" | "Pausado" | "Sem campanha"). Antes os leitores comparavam com
+// "alto"/"caindo"/"sem verba" (vocabulário antigo do schema) e NUNCA
+// casavam. A leitura agora aceita os dois, sem acento e sem caixa.
+// ===================================================================
+
+const normaliza = (v: string | null | undefined) =>
+  (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+
+const [, RISCO_MEDIO, RISCO_ALTO] = RISCO;
+const [, ESTAB_OBSERVACAO, ESTAB_CRITICO] = ESTABILIDADE;
+const [, ADS_PAUSADO, ADS_SEM_CAMPANHA] = ADS_STATUS;
+
+/** Risco declarado: "alto" | "medio" | null (baixo ou sem leitura). */
+export function nivelDeRiscoDeclarado(v: string | null | undefined): "alto" | "medio" | null {
+  const x = normaliza(v);
+  if (x === normaliza(RISCO_ALTO)) return "alto";
+  if (x === normaliza(RISCO_MEDIO)) return "medio";
+  return null;
+}
+
+/** Estabilidade ruim: "critico" (Crítico / legado caindo) | "observacao" (Observação / legado oscilando). */
+export function estabilidadeRuim(v: string | null | undefined): "critico" | "observacao" | null {
+  const x = normaliza(v);
+  if (x === normaliza(ESTAB_CRITICO) || x === "caindo") return "critico";
+  if (x === normaliza(ESTAB_OBSERVACAO) || x === "oscilando") return "observacao";
+  return null;
+}
+
+/** Ads parado: "sem_campanha" (Sem campanha / legado sem verba) | "pausado". */
+export function adsParado(v: string | null | undefined): "sem_campanha" | "pausado" | null {
+  const x = normaliza(v);
+  if (x === normaliza(ADS_SEM_CAMPANHA) || x === "sem verba") return "sem_campanha";
+  if (x === normaliza(ADS_PAUSADO)) return "pausado";
+  return null;
+}
+
+/**
+ * Valores GRAVADOS que o filtro no banco precisa casar (a consulta não
+ * normaliza): o oficial e o legado.
+ */
+export const RISCO_EM_ALERTA_DB = [RISCO_ALTO, RISCO_MEDIO, "alto", "medio", "médio"];
+export const ESTABILIDADE_EM_ALERTA_DB = [ESTAB_CRITICO, ESTAB_OBSERVACAO, "caindo", "oscilando"];
 
 function competenciaDe(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -110,19 +158,22 @@ export async function previsaoDeChurn(hoje: Date = new Date()): Promise<Previsao
       sinais.push({ sinal: "Atraso", detalhe: `Vencido há ${atraso} ${atraso === 1 ? "dia" : "dias"}.`, pontos: PESO_DO_SINAL.ATRASO });
 
     if (leituraRecente && a) {
-      if (a.estabilidade === "caindo")
-        sinais.push({ sinal: "Resultados caindo", detalhe: "Avaliação do gestor: caindo.", pontos: PESO_DO_SINAL.ESTABILIDADE_CAINDO });
-      else if (a.estabilidade === "oscilando")
-        sinais.push({ sinal: "Resultados oscilando", detalhe: "Avaliação do gestor: oscilando.", pontos: PESO_DO_SINAL.ESTABILIDADE_OSCILANDO });
+      const estab = estabilidadeRuim(a.estabilidade);
+      if (estab === "critico")
+        sinais.push({ sinal: "Resultados caindo", detalhe: `Avaliação do gestor: ${a.estabilidade}.`, pontos: PESO_DO_SINAL.ESTABILIDADE_CAINDO });
+      else if (estab === "observacao")
+        sinais.push({ sinal: "Resultados oscilando", detalhe: `Avaliação do gestor: ${a.estabilidade}.`, pontos: PESO_DO_SINAL.ESTABILIDADE_OSCILANDO });
 
-      if (a.ads === "sem verba")
-        sinais.push({ sinal: "Sem verba de anúncios", detalhe: "Campanhas paradas por verba.", pontos: PESO_DO_SINAL.ADS_SEM_VERBA });
-      else if (a.ads === "pausado")
-        sinais.push({ sinal: "Anúncios pausados", detalhe: "Cliente sem campanha no ar.", pontos: PESO_DO_SINAL.ADS_PAUSADO });
+      const ads = adsParado(a.ads);
+      if (ads === "sem_campanha")
+        sinais.push({ sinal: "Sem campanha de anúncios", detalhe: "Cliente sem campanha no ar.", pontos: PESO_DO_SINAL.ADS_SEM_VERBA });
+      else if (ads === "pausado")
+        sinais.push({ sinal: "Anúncios pausados", detalhe: "Campanhas pausadas.", pontos: PESO_DO_SINAL.ADS_PAUSADO });
 
-      if (a.risco === "alto")
+      const risco = nivelDeRiscoDeclarado(a.risco);
+      if (risco === "alto")
         sinais.push({ sinal: "Risco declarado alto", detalhe: "O gestor marcou risco alto na avaliação.", pontos: PESO_DO_SINAL.RISCO_DECLARADO_ALTO });
-      else if (a.risco === "medio")
+      else if (risco === "medio")
         sinais.push({ sinal: "Risco declarado médio", detalhe: "O gestor marcou risco médio na avaliação.", pontos: PESO_DO_SINAL.RISCO_DECLARADO_MEDIO });
     }
 

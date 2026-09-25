@@ -23,8 +23,22 @@ export function IncomeActions({
   contracts?: any[];
 }) {
   const [pending, start] = useTransition();
+  // Espelho de pagamento de cobrança: não se edita por aqui (o servidor
+  // recusa) — a correção é estornar o pagamento na Gestão do Mês.
+  const espelho = Boolean(income?.billingId || income?.paymentId);
   return (
     <div className="flex gap-1 justify-end">
+      {espelho ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled
+          aria-label="Entrada de pagamento de cobrança — edite pelo pagamento"
+          title="Espelho de um pagamento de cobrança: para corrigir, exclua o pagamento na Gestão do Mês e registre de novo."
+        >
+          <Pencil className="h-4 w-4 opacity-40" />
+        </Button>
+      ) : (
       <IncomeDialog
         accounts={accounts}
         people={people}
@@ -38,6 +52,7 @@ export function IncomeActions({
           </Button>
         }
       />
+      )}
       <Button
         variant="ghost"
         size="icon"

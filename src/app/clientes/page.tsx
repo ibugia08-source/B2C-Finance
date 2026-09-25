@@ -13,6 +13,22 @@ import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
 import { SEM_NICHO } from "@/lib/niches";
+import { renewalLedgerMonth } from "@/lib/services/renewal-schedule";
+import {
+  civilCompetenceKey, currentYearMonth, monthBounds as expectationMonthBounds, monthIndex,
+  parseCompetenceKey, type YearMonth,
+} from "@/lib/renewal-expectation";
+
+/** "YYYY-MM" → esse mês; "1".."12" (link antigo) → próxima ocorrência. */
+function mesDaExpectativa(v: string): YearMonth | null {
+  const ym = parseCompetenceKey(v);
+  if (ym) return ym;
+  const m = Number(v);
+  if (!Number.isInteger(m) || m < 1 || m > 12) return null;
+  const hoje = currentYearMonth();
+  const candidato = { year: hoje.year, month: m };
+  return monthIndex(candidato) < monthIndex(hoje) ? { year: hoje.year + 1, month: m } : candidato;
+}
 import { listarNichos } from "@/lib/services/niches";
 import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
@@ -92,9 +108,14 @@ async function ClientesPageInner({
   }
   if (searchParams.modalidade) where.modality = searchParams.modalidade;
   if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
+  // Expectativa de renovação no mês "YYYY-MM". Link antigo com só o mês
+  // (1-12) vale a PRÓXIMA ocorrência daquele mês a partir de hoje.
   if (searchParams.mesRenovacao) {
-    const mr = parseInt(searchParams.mesRenovacao, 10);
-    if (mr >= 1 && mr <= 12) where.renewalMonth = mr;
+    const alvo = mesDaExpectativa(searchParams.mesRenovacao);
+    if (alvo) {
+      const { start: rs, end: re } = expectationMonthBounds(alvo);
+      where.expectedRenewalAt = { gte: rs, lt: re };
+    }
   }
   if (searchParams.q) {
     const q = searchParams.q.trim();
@@ -188,13 +209,9 @@ async function ClientesPageInner({
       prisma.client.count({
         where: { status: "CHURNED", churnedAt: { gte: start, lt: end } },
       }),
-      // Renovações próximas: mês de renovação = mês atual (clientes da base).
-      prisma.client.count({
-        where: {
-          renewalMonth: curMonth,
-          status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] },
-        },
-      }),
+      // Renovações do mês: o MESMO livro do módulo Renovações (expectativas
+      // do mês + desfechos registrados contra elas).
+      renewalLedgerMonth({ month: curMonth, year: curYear }).then((l) => l.rows.length),
     ]);
 
   const autoDelinq = await getMonthDelinquencies(
@@ -250,7 +267,7 @@ async function ClientesPageInner({
       status: true,
       modality: true,
       salesOwner: true,
-      renewalMonth: true,
+      expectedRenewalAt: true,
       monthlyValue: true,
       totalContractValue: true,
       paymentDay: true,
@@ -307,7 +324,7 @@ async function ClientesPageInner({
         status: r.status,
         modality: r.modality,
         salesOwner: r.salesOwner,
-        renewalMonth: r.renewalMonth,
+        renewalCompetence: r.expectedRenewalAt ? civilCompetenceKey(r.expectedRenewalAt) : null,
         monthlyValue: monthly,
         totalContractValue: total,
         refValue: refValue != null ? refValue : null,
@@ -400,9 +417,9 @@ async function ClientesPageInner({
           title="Renovações do mês"
           value={String(renovacoesProx)}
           tone={renovacoesProx > 0 ? "warn" : "default"}
-          help="Clientes com mês de renovação igual ao mês selecionado."
+          help="Clientes com data de expectativa de renovação no mês selecionado (entrada + prazo do contrato, ou agendada), incluindo quem já renovou e quem não renovou. É a mesma lista do módulo Renovações."
           hint={`renovações em ${selLabel}`}
-          href={`/clientes?mesRenovacao=${curMonth}${mesQS}`}
+          href={`/renovacoes?mes=${curYear}-${String(curMonth).padStart(2, "0")}`}
         />
       </div>
 

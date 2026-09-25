@@ -152,7 +152,7 @@ export function ClientHeader({ client, summary, monthly, risk, upsell }: ClientH
           }
         />
         <StatCard
-          title="Próxima renovação"
+          title="Expectativa de renovação"
           value={summary.nextRenewal ? formatDateBR(summary.nextRenewal) : "—"}
         />
         {/* Perfil de pagamento / risco de inadimplência individual */}

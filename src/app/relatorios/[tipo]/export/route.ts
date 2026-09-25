@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { hasPermission } from "@/lib/permissions";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getReport } from "@/lib/reports/registry";
+import { getReport, canViewReport } from "@/lib/reports/registry";
 import {
   parseReportQuery,
   parsePresentation,
@@ -27,6 +27,10 @@ export async function GET(
   }
   const def = getReport(params.tipo);
   if (!def) return NextResponse.json({ error: "Relatório inexistente" }, { status: 404 });
+  // Exportar exige também ver ESTE relatório (ex.: folha → folha.visualizar).
+  if (!canViewReport(user, def)) {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  }
 
   const sp: SearchParams = Object.fromEntries(req.nextUrl.searchParams.entries());
   const formato = sp.formato === "xlsx" ? "xlsx" : "csv";

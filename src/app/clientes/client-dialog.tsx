@@ -117,7 +117,9 @@ function toFormValues(src: any): FormValues {
     address: src?.address ?? "",
     legalRepresentative: src?.legalRepresentative ?? "",
     origin: src?.origin ?? "",
-    salesOwnerId: src?.salesOwnerId ?? "",
+    // Responsável só em TEXTO (importação antiga): o select abre nele, e não
+    // em "sem responsável" — senão salvar qualquer campo apagava o nome.
+    salesOwnerId: src?.salesOwnerId ?? (src?.salesOwner ? "__texto__" : ""),
     opsOwner: src?.opsOwner ?? "",
     status: src?.status ?? "ACTIVE",
     // Aceita `modality` (cadastro/edição) ou `paymentModel` (pré-fill da IA).
@@ -296,7 +298,12 @@ export function ClientDialog({
               <option value="">— sem responsável —</option>
               {/* Vínculo atual com colaborador fora da lista (inativo):
                   mantém a option para não perder o vínculo ao salvar. */}
-              {dv.salesOwnerId &&
+              {dv.salesOwnerId === "__texto__" && (
+                <option value="__texto__">
+                  {data?.salesOwner} (sem cadastro de colaborador)
+                </option>
+              )}
+              {dv.salesOwnerId && dv.salesOwnerId !== "__texto__" &&
                 !(employees ?? []).some((e) => e.id === dv.salesOwnerId) && (
                   <option value={dv.salesOwnerId}>
                     {data?.salesOwner ?? "(colaborador inativo)"}

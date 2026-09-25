@@ -26,6 +26,42 @@ const ServicesSchema = z.array(
   z.object({ serviceId: z.string().min(1), unitPrice: z.number().nonnegative() })
 );
 
+/**
+ * Desfaz a cobrança de um upsell que deixa de ser venda (sair de WON ou ser
+ * excluído). Sem pagamento → cancela (soft) e libera novo lançamento; com
+ * pagamento → mantém e avisa (reverter dinheiro é gesto manual).
+ * Único caminho para o quadro, o formulário e a exclusão (auditoria
+ * 25/09/2026: o formulário e a exclusão deixavam a cobrança viva).
+ */
+async function desfazerCobrancaDoUpsell(
+  billingIdAtual: string | null,
+  porEmail: string | null
+): Promise<{ billingId: string | null; warning?: string; temPagamento: boolean }> {
+  if (!billingIdAtual) return { billingId: null, temPagamento: false };
+  const billing = await prisma.billing.findFirst({
+    where: { id: billingIdAtual },
+    select: { id: true, status: true, paidTotal: true },
+  });
+  if (!billing || billing.status === "CANCELED") return { billingId: null, temPagamento: false };
+  if (n(billing.paidTotal) === 0) {
+    await prisma.billing.update({
+      where: { id: billing.id },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        canceledBy: porEmail,
+        cancelReason: "Venda de upsell desfeita.",
+      },
+    });
+    return { billingId: null, temPagamento: false };
+  }
+  return {
+    billingId: billing.id,
+    temPagamento: true,
+    warning: "A cobrança do upsell já tem pagamento registrado — ela foi mantida nos recebimentos.",
+  };
+}
+
 export async function saveUpsell(formData: FormData): Promise<ActionResult> {
   // Criar exige upsell.criar; editar registro existente exige upsell.editar
   // (os pontos de entrada de criação — ficha do cliente, header do Kanban —
@@ -65,6 +101,16 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
     // formulário de edição não pode contornar o gate do quadro, senão uma
     // venda entra sem a pergunta de lançamento e nunca vira cobrança
     // (auditoria 2026-08-13).
+    const saindoDeVenda = parsed.id
+      ? (await prisma.upsell.findUnique({ where: { id: parsed.id }, select: { status: true } }))?.status === "WON" &&
+        parsed.status !== "WON"
+      : false;
+    if (saindoDeVenda && !can(viewer, "upsell.marcar_vendido"))
+      return {
+        ok: false,
+        error:
+          "Desfazer uma venda é decisão do funil — exige a permissão \"Marcar como vendido\".",
+      };
     if (parsed.status === "WON" || parsed.status === "LOST") {
       const prev = parsed.id
         ? await prisma.upsell.findUnique({
@@ -119,13 +165,32 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
     };
 
     let id = parsed.id;
+    let aviso: string | undefined;
     if (id) {
       const existing = await prisma.upsell.findUnique({ where: { id } });
       if (!existing) return { ok: false, error: "Oportunidade não encontrada." };
+      let billingId = existing.billingId;
+      if (existing.status === "WON" && parsed.status !== "WON") {
+        const r = await desfazerCobrancaDoUpsell(existing.billingId, viewer.email);
+        billingId = r.billingId;
+        aviso = r.warning;
+      } else if (existing.status === "WON" && existing.billingId && n(existing.value) !== value) {
+        // Venda com valor corrigido: a cobrança ainda sem pagamento acompanha.
+        const b = await prisma.billing.findFirst({
+          where: { id: existing.billingId },
+          select: { id: true, status: true, paidTotal: true },
+        });
+        if (b && b.status !== "CANCELED" && n(b.paidTotal) === 0) {
+          await prisma.billing.update({ where: { id: b.id }, data: { amount: value } });
+        } else if (b && n(b.paidTotal) > 0) {
+          aviso = "A cobrança do upsell já tem pagamento — o valor dela não foi alterado.";
+        }
+      }
       await prisma.upsell.update({
         where: { id },
         data: {
           ...data,
+          billingId,
           // Preserva a data de fechamento original se já estava fechada.
           closedAt:
             parsed.status === "WON" || parsed.status === "LOST"
@@ -151,7 +216,8 @@ export async function saveUpsell(formData: FormData): Promise<ActionResult> {
     }
 
     revalidateCatalog();
-    return { ok: true, id };
+    revalidateFinance();
+    return { ok: true, id, ...(aviso ? { warning: aviso } : {}) };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao salvar a oportunidade.";
     return { ok: false, error: msg };
@@ -190,27 +256,9 @@ export async function setUpsellStatus(
     // nos recebimentos. Sem pagamento → cancela (soft) e libera novo
     // lançamento; com pagamento → mantém e avisa (reverter dinheiro é manual).
     if (existing.status === "WON" && s !== "WON" && existing.billingId) {
-      const billing = await prisma.billing.findUnique({
-        where: { id: existing.billingId },
-        select: { id: true, status: true, paidTotal: true },
-      });
-      if (!billing || billing.status === "CANCELED") {
-        billingId = null;
-      } else if (n(billing.paidTotal) === 0) {
-        await prisma.billing.update({
-          where: { id: billing.id },
-          data: {
-            status: "CANCELED",
-            canceledAt: new Date(),
-            canceledBy: viewer.email,
-            cancelReason: "Venda de upsell desfeita.",
-          },
-        });
-        billingId = null;
-      } else {
-        warning =
-          "A cobrança do upsell já tem pagamento registrado — ela foi mantida nos recebimentos.";
-      }
+      const r = await desfazerCobrancaDoUpsell(existing.billingId, viewer.email);
+      billingId = r.billingId;
+      warning = r.warning;
     }
 
     if (s === "WON" && opts?.launchBilling && !billingId) {
@@ -265,9 +313,26 @@ export async function setUpsellStatus(
 }
 
 export async function deleteUpsell(id: string): Promise<ActionResult> {
-  await requirePermission("upsell.excluir");
+  const viewer = await requirePermission("upsell.excluir");
   try {
+    const existing = await prisma.upsell.findFirst({
+      where: { id },
+      select: { id: true, billingId: true, clientId: true },
+    });
+    if (!existing) return { ok: false, error: "Oportunidade não encontrada." };
+    // Venda com cobrança: sem pagamento, a cobrança é cancelada junto; com
+    // pagamento, a exclusão é recusada (o dinheiro precisa de estorno antes).
+    if (existing.billingId) {
+      const r = await desfazerCobrancaDoUpsell(existing.billingId, viewer.email);
+      if (r.temPagamento)
+        return {
+          ok: false,
+          error: "Esta venda já tem pagamento registrado. Estorne o pagamento antes de excluir.",
+        };
+    }
     await prisma.upsell.deleteMany({ where: { id } });
+    revalidateFinance();
+    revalidateAgency({ clientId: existing.clientId });
     revalidateCatalog();
     return { ok: true };
   } catch (e: any) {

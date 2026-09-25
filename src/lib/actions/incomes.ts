@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateFinance } from "@/lib/revalidate";
 import { z } from "zod";
 import { parseBRL, parseDateBR } from "@/lib/format";
+import { hojeCivilParaGravar } from "@/lib/civil-date";
 
 const SOURCE_TYPES = ["BANK_ACCOUNT", "PIX", "TRANSFER", "CASH"] as const;
 const INCOME_TYPES = [
@@ -46,7 +47,7 @@ export async function saveIncome(formData: FormData) {
   await requirePermission("receitas.editar");
   try {
   const receivedAt =
-    parseDateBR(String(formData.get("receivedAt") || "")) ?? new Date();
+    parseDateBR(String(formData.get("receivedAt") || "")) ?? hojeCivilParaGravar();
 
   const parsed = Schema.parse({
     id: formData.get("id") || undefined,
@@ -96,7 +97,22 @@ export async function saveIncome(formData: FormData) {
   };
 
   if (parsed.id) {
-    await prisma.income.update({ where: { id: parsed.id }, data });
+    // `update` por id não passa pelo escopo de dono (where único): lê antes
+    // com findFirst — que o escopo filtra — e só então grava.
+    const atual = await prisma.income.findFirst({
+      where: { id: parsed.id },
+      select: { id: true, billingId: true, paymentId: true },
+    });
+    if (!atual) return { ok: false as const, error: "Entrada não encontrada." };
+    // Espelho de pagamento de cobrança: editar aqui descasaria o caixa do
+    // pagamento (valor/data/competência). O caminho é estornar o pagamento.
+    if (atual.billingId || atual.paymentId)
+      return {
+        ok: false as const,
+        error:
+          "Esta entrada é o espelho de um pagamento de cobrança e não pode ser editada aqui. Para corrigir, exclua o pagamento na Gestão do Mês e registre de novo.",
+      };
+    await prisma.income.update({ where: { id: atual.id }, data });
   } else {
     await prisma.income.create({ data });
   }
@@ -112,7 +128,7 @@ export async function saveIncome(formData: FormData) {
 
 export async function deleteIncome(id: string) {
   await requirePermission("receitas.excluir");
-  const income = await prisma.income.findUnique({
+  const income = await prisma.income.findFirst({
     where: { id },
     select: { billingId: true, paymentId: true },
   });

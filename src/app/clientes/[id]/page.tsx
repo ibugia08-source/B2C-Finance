@@ -221,6 +221,14 @@ export default async function ClientDetailPage({
                 <Info label="Origem">{client.origin ?? "—"}</Info>
                 <Info label="Resp. comercial">{client.salesOwner ?? "—"}</Info>
                 <Info label="Resp. operacional">{client.opsOwner ?? "—"}</Info>
+                <Info label="Expectativa de renovação">
+                  {client.expectedRenewalAt ? formatDateBR(client.expectedRenewalAt) : "—"}
+                  {client.startedAt && client.contractMonths ? (
+                    <span className="block text-caption text-muted-foreground">
+                      entrada {formatDateBR(client.startedAt)} + {client.contractMonths} meses
+                    </span>
+                  ) : null}
+                </Info>
                 <Info label="Dia de pagamento">
                   {client.paymentDay != null ? `dia ${client.paymentDay}` : "—"}
                 </Info>

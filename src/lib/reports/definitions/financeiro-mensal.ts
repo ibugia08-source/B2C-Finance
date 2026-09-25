@@ -7,11 +7,10 @@ async function buildFinanceiroMensal(q: ReportQuery): Promise<ReportRow[]> {
   const months = monthsInPeriod(q);
   if (months.length === 0) return [];
   const { start, end } = q.period;
-  const clientWhere = q.clientId ? { clientId: q.clientId } : {};
 
   const [incomes, txs, payrollItems] = await Promise.all([
     prisma.income.findMany({
-      where: { status: "RECEIVED", receivedAt: { gte: start, lt: end }, ...clientWhere },
+      where: { status: "RECEIVED", receivedAt: { gte: start, lt: end } },
       select: { receivedAt: true, amount: true },
     }),
     prisma.transaction.findMany({
@@ -74,7 +73,10 @@ export const financeiroMensalReport: ReportDef = {
     { key: "lucro", label: "Lucro/prejuízo", kind: "money", total: true },
     { key: "margem", label: "Margem", kind: "percent" },
   ],
-  filterFields: ["periodo", "cliente"],
+  // Sem filtro de cliente: é o resultado da AGÊNCIA mês a mês. O filtro só
+  // recortava as receitas avulsas — despesas e folha seguiam inteiras, e o
+  // "lucro por cliente" que saía disso era falso.
+  filterFields: ["periodo"],
   groupOptions: [],
   defaultSort: { key: "mes", dir: "asc" },
   defaultPeriodo: "ano",

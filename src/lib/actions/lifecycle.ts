@@ -1,14 +1,16 @@
 "use server";
-import { revalidatePath } from "next/cache";
+import { revalidateAgency } from "@/lib/revalidate";
 import { requirePermission } from "@/lib/auth/viewer";
 import { pausarCliente, reativarCliente, retomarCliente } from "@/lib/services/lifecycle";
 
 /** Ações de ciclo de vida (F1.16): pausar, retomar, reativar. */
 
+// Pausar/retomar/reativar muda quem é receita ativa e quem entra no livro
+// de renovações: além das telas do cliente, derruba os caches do Dashboard,
+// Renovações e métricas (antes só /clientes e /cobrancas eram revalidados e
+// o Dashboard seguia mostrando o cliente com o status antigo por até 5 min).
 function revalidar(clientId: string) {
-  revalidatePath(`/clientes/${clientId}`);
-  revalidatePath("/clientes");
-  revalidatePath("/cobrancas");
+  revalidateAgency({ clientId });
 }
 
 export async function pausarClienteAction(clientId: string, motivo?: string) {

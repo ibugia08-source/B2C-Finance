@@ -54,9 +54,15 @@ export async function salvarConta(formData: FormData): Promise<ActionResult> {
       active: formData.get("active") !== "false",
     });
     const { id, ...data } = parsed;
-    const saved = id
-      ? await prisma.account.update({ where: { id }, data })
-      : await prisma.account.create({ data });
+    if (id) {
+      // updateMany é escopado por dono pela extensão; o update por id único
+      // não é — um id de outro workspace seria alterado sem checagem.
+      const { count } = await prisma.account.updateMany({ where: { id }, data });
+      if (count === 0) return { ok: false, error: "Conta não encontrada." };
+      revalidarCaixa();
+      return { ok: true, id };
+    }
+    const saved = await prisma.account.create({ data });
     revalidarCaixa();
     return { ok: true, id: saved.id };
   } catch (e: any) {

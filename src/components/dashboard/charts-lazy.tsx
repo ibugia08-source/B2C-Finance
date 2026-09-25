@@ -22,3 +22,8 @@ export const CombinedChart = dynamic(
   { ssr: false }
 );
 
+
+export const RenewalsChart = dynamic(
+  () => import("./renewals-chart").then((m) => m.RenewalsChart),
+  { ssr: false }
+);

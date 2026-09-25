@@ -28,13 +28,15 @@ import {
   getTcvClientsDetail,
   getNewClientsDetail,
   getRenewalClientsDetail,
+  periodMonths,
   getPreviousMonthComparison,
   buildDashboardSummary,
 } from "@/lib/services/dashboard-main";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChartCard, HBarList } from "@/components/charts";
-import { MainChart, CompositionDonut, CombinedChart } from "@/components/dashboard/charts-lazy";
+import { MainChart, CompositionDonut, CombinedChart, RenewalsChart } from "@/components/dashboard/charts-lazy";
+import { getRenewalHistory } from "@/lib/services/renewal-metrics";
 import { MetricCard, SecondaryStat } from "@/components/metric-card";
 import { getLiquidez } from "@/lib/services/liquidity";
 import {
@@ -107,6 +109,16 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
       (period.start.getMonth() + period.start.getFullYear() * 12) === 1;
   const selectedMonth = period.start.getMonth() + 1; // 1-12
   const selectedMonthIndex = isFullMonth ? period.start.getMonth() : undefined;
+  // Competências do período (mesma leitura do Faturamento total): renovações
+  // somam o livro de TODOS os meses — um trimestre soma 3 meses de renovação
+  // a 3 meses de faturamento, nunca 1 contra 3.
+  const mesesDoPeriodo = periodMonths(period);
+  // Último mês do período: âncora do gráfico de evolução (6 anteriores + ele).
+  const fimInclusivo = new Date(period.end);
+  fimInclusivo.setDate(fimInclusivo.getDate() - 1);
+  const ultimoMes = { year: fimInclusivo.getFullYear(), month: fimInclusivo.getMonth() + 1 };
+  const noRecorte = isFullMonth ? "no mês" : "no período";
+  const doRecorte = isFullMonth ? "do mês" : "do período";
 
   // IMPORTANTE (produção): o Prisma na Vercel tem pool pequeno (connection
   // limit ~5). Cada agregador abre VÁRIAS queries em paralelo internamente;
@@ -129,11 +141,18 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
     getReceivedDetail(period),
     getExpensesDetail(period),
     getExpensesByCategory(period),
-    getMrrClientsDetail(),
+    getMrrClientsDetail(period),
     getTcvClientsDetail(period),
     getNewClientsDetail(period),
-    getRenewalClientsDetail(selectedMonth, selectedYear),
+    getRenewalClientsDetail(mesesDoPeriodo),
   ]);
+  // Renovações esperadas = Σ do livro em TODOS os meses do período (a lista
+  // do detalhe é a mesma soma). A evolução mostra os 6 meses anteriores ao
+  // ÚLTIMO mês do período + ele — mesmas regras do módulo Renovações.
+  const renewalHistory = await getRenewalHistory(ultimoMes, 6);
+  const renovacaoEsperada =
+    Math.round(renewalClientsDetail.reduce((s, r) => s + r.value, 0) * 100) / 100;
+  const faturamentoTotalEsperado = Math.round((main.current.faturamentoTotal + renovacaoEsperada) * 100) / 100;
   // Sexto card do painel executivo (02 §5.1). Com as reservas removidas
   // (10/09/2026), a conta é: contas ativas − compromissos imediatos.
   const liquidez = await getLiquidez(new Date().toISOString());
@@ -236,9 +255,10 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
       </Card>
 
       {/* ===== PAINEL EXECUTIVO — DECIDIR (02 §5.1) =====
-          Seis cards, cada um com sparkline de 12 meses e clique abrindo o
-          detalhe no contexto. Em fileiras de TRÊS: o §7.2 proíbe fileiras
-          de 4 ou 5, e antes daqui eram cinco cards em cinco colunas. */}
+          Oito cards, cada um com clique abrindo o detalhe no contexto. Em
+          fileiras de TRÊS: o §7.2 proíbe fileiras de 4 ou 5. Desde 25/09/2026
+          entram "Faturamento total esperado" e "Renovações esperadas" logo
+          depois do Faturamento total (decisão do dono). */}
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Decidir · {periodLabel(period)}
@@ -256,11 +276,55 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           value={formatBRL(previsto)}
           metrica="faturamento_total"
           sparkline={yearly.faturamento}
-          help="Soma do faturamento MRR previsto, TCV previsto e receitas extras manuais do mês selecionado."
+          help="Soma do faturamento MRR previsto, TCV previsto, cobranças avulsas da competência (upsell, setup, pontual) e receitas extras manuais do período selecionado."
           delta={main.deltas.faturamentoTotal}
           detailTitle="Faturamento total do mês"
-          detail={<FaturamentoDetail mrr={M.mrr} tcv={M.tcv} extra={M.extraManual}
+          detail={<FaturamentoDetail mrr={M.mrr} tcv={M.tcv} extra={M.extraManual} avulso={M.avulso}
             total={M.faturamentoTotal} mrrClients={M.mrrClients} tcvClients={M.tcvClients} />}
+        />
+        <MetricCard
+          title="Faturamento total esperado"
+          value={formatBRL(faturamentoTotalEsperado)}
+          metrica="faturamento_total_esperado"
+          hint={`${formatBRL(previsto)} faturamento + ${formatBRL(renovacaoEsperada)} renovações`}
+          help={`Tudo o que se espera faturar ${noRecorte}: o Faturamento total (MRR + TCV + receitas extras) somado ao valor esperado de renovação dos mesmos meses.`}
+          detailTitle={`Faturamento total esperado ${doRecorte}`}
+          detail={
+            <NamedValueList
+              items={[
+                { name: "Faturamento total (MRR + TCV + extras)", value: previsto },
+                { name: `Renovações esperadas ${doRecorte}`, value: renovacaoEsperada },
+              ]}
+              total={faturamentoTotalEsperado}
+              totalLabel="Faturamento total esperado"
+            />
+          }
+        />
+        <MetricCard
+          title="Renovações esperadas"
+          value={formatBRL(renovacaoEsperada)}
+          metrica="renovacao_esperada"
+          sparkline={renewalHistory.map((h) => h.expected)}
+          hint={`${renewalClientsDetail.length} expectativa(s) de renovação ${noRecorte}`}
+          help={`Soma dos valores esperados de todos os clientes com data de expectativa de renovação ${noRecorte} (entrada + prazo do contrato, ou agendada). TCV conta o valor cheio do contrato; MRR, a mensalidade. Clique para ver a lista.`}
+          detailTitle={`Renovações esperadas — ${periodLabel(period)}`}
+          detail={
+            <div className="space-y-2">
+              <NamedValueList
+                items={renewalClientsDetail}
+                total={renovacaoEsperada}
+                totalLabel="Valor esperado de renovação"
+                limit={Infinity}
+                emptyText={`Nenhum cliente com expectativa de renovação ${isFullMonth ? "neste mês" : "neste período"}.`}
+              />
+              <Link
+                href={`/renovacoes?mes=${ultimoMes.year}-${String(ultimoMes.month).padStart(2, "0")}`}
+                className="inline-block text-caption text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Abrir o módulo Renovações
+              </Link>
+            </div>
+          }
         />
         <MetricCard
           title="Total de despesas"
@@ -483,6 +547,21 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         </ChartCard>
       </div>
 
+      {/* Evolução das renovações: 6 meses anteriores + o último mês do período. */}
+      <div className="mb-3">
+        <RenewalsChart
+          data={renewalHistory.map((h) => ({
+            label: h.label,
+            expected: h.expected,
+            gained: h.gained,
+            lost: h.lost,
+            renewedCount: h.renewedCount,
+            lostCount: h.lostCount,
+          }))}
+          selectedIndex={renewalHistory.length - 1}
+        />
+      </div>
+
       {/* ===== PAINEL EXECUTIVO — SECUNDÁRIOS VISÍVEIS (02 §5.1) =====
           Exatamente os OITO que a spec nomeia, nesta ordem. Inadimplência
           e Margem NÃO entram: "nunca repetir (já estão nos cards)" — o
@@ -498,7 +577,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           help="Soma dos valores mensais dos clientes MRR ativos no mês."
           delta={mrrDelta}
           detailTitle="Clientes MRR do mês"
-          detail={<NamedValueList items={mrrClientsDetail} total={M.mrr} totalLabel="Total MRR" valueSuffix="/mês" emptyText="Nenhum cliente MRR ativo." />} />
+          detail={<NamedValueList items={mrrClientsDetail} total={M.mrr} totalLabel="Total MRR" valueSuffix={isFullMonth ? "/mês" : undefined} limit={Infinity} emptyText="Nenhum cliente MRR ativo." />} />
         <SecondaryStat label="TCV faturado" value={formatBRL(M.tcv)}
           help="Soma dos contratos TCV com fechamento, entrada ou renovação no mês. É o TCV FATURADO — não o vendido, e não é rateado."
           delta={tcvDelta}
@@ -554,11 +633,11 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
               tone={newClients.revenue > 0 ? "pos" : "default"}
               detailTitle="Novos clientes do mês"
               detail={<NamedValueList items={newClientsDetail} total={newClients.revenue} totalLabel="Receita nova" emptyText="Nenhum novo cliente no mês." />} />
-            <SecondaryStat label="Renovações do mês" value={String(renewalClientsDetail.length)}
-              help="Clientes com renovação prevista no mês selecionado (agenda da carteira, data do contrato ou entrada + prazo), incluindo quem já renovou e quem não renovou. É a mesma lista do módulo Renovações."
+            <SecondaryStat label={`Renovações ${doRecorte}`} value={String(renewalClientsDetail.length)}
+              help={`Quantidade de expectativas de renovação ${noRecorte} (entrada + prazo do contrato, ou agendada), incluindo quem já renovou e quem não renovou. É a mesma lista do módulo Renovações.`}
               tone={renewalClientsDetail.length > 0 ? "warn" : "default"}
-              detailTitle="Renovações do mês"
-              detail={<NamedValueList items={renewalClientsDetail} emptyText="Nenhuma renovação neste mês." />} />
+              detailTitle={`Renovações ${doRecorte}`}
+              detail={<NamedValueList items={renewalClientsDetail} limit={Infinity} emptyText={`Nenhuma renovação ${isFullMonth ? "neste mês" : "neste período"}.`} />} />
             <SecondaryStat label="Clientes em aberto" value={String(clientsBlock.devendoMes)}
               help="Clientes ativos ainda sem pagamento registrado no mês."
               tone={clientsBlock.devendoMes > 0 ? "neg" : "pos"} />
@@ -579,7 +658,7 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
             <ChartCard title="Despesas por categoria" hint="no período">
               <HBarList colorClass="bg-primary" items={expensesByCategory.slice(0, 6)} />
             </ChartCard>
-            <ChartCard title="Novos clientes × renovações" hint="quantidade no mês">
+            <ChartCard title="Novos clientes × renovações" hint={`quantidade ${noRecorte}`}>
               <HBarList
                 colorClass="bg-primary"
                 format={(v: number) => String(Math.round(v))}

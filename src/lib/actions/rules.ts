@@ -50,10 +50,13 @@ export async function saveRule(formData: FormData) {
   });
 
   if (parsed.id) {
-    await prisma.categorizationRule.update({
+    // updateMany é escopado por dono pela extensão (update por id único não
+    // é): id de regra de outro workspace não casa e a gravação é recusada.
+    const { count } = await prisma.categorizationRule.updateMany({
       where: { id: parsed.id },
       data: { ...parsed, id: undefined } as any,
     });
+    if (count === 0) throw new Error("Regra não encontrada.");
   } else {
     await prisma.categorizationRule.create({ data: { ...parsed, id: undefined } as any });
   }
@@ -62,6 +65,8 @@ export async function saveRule(formData: FormData) {
 
 export async function deleteRule(id: string) {
   await requirePermission("regras.gerenciar");
-  await prisma.categorizationRule.delete({ where: { id } });
+  // deleteMany: escopado por dono (delete por id único não é).
+  const { count } = await prisma.categorizationRule.deleteMany({ where: { id } });
+  if (count === 0) throw new Error("Regra não encontrada.");
   revalidateFinance();
 }

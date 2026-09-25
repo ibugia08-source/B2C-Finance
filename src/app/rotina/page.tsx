@@ -286,11 +286,16 @@ export default async function RotinaPage() {
       href: "/cobrancas",
     });
   }
+  // Só o que ainda está PENDENTE: quem já renovou ou já foi dado como perdido
+  // não tem mais o que encaminhar (antes a ação somava o livro inteiro).
   const renov = renewalWindows[0];
-  if (renov && renov.count > 0) {
+  const renovPendentes = renov ? renov.clients.filter((c) => c.outcome === "pendente") : [];
+  const renovPendenteValor =
+    Math.round(renovPendentes.reduce((s, c) => s + c.expected, 0) * 100) / 100;
+  if (renov && renovPendentes.length > 0) {
     acoes.push({
       key: `renovacoes:${renov.month}`, priority: "media",
-      text: `Encaminhar ${renov.count} renovação(ões) do mês — ${formatBRL(renov.expectedTotal)} esperado`,
+      text: `Encaminhar ${renovPendentes.length} renovação(ões) pendente(s) do mês — ${formatBRL(renovPendenteValor)} esperado`,
       href: "/renovacoes",
     });
   }

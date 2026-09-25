@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 import { getFile } from "@/lib/storage";
+import { hasPermission } from "@/lib/permissions";
 
 type FileType = "contrato" | "documento" | "modelo";
 
@@ -45,6 +46,18 @@ async function getFileMetadata(type: FileType, id: string): Promise<FileMetadata
   return null;
 }
 
+/**
+ * Permissão que libera o download de cada tipo de arquivo. Antes só o ADMIN
+ * baixava — e a tela mostrava o link para Gestor/Comercial/Closer, que
+ * levavam 403. O escopo por dono continua vindo da extensão do Prisma
+ * (findUnique é pós-filtrado por ownerId): arquivo de outro workspace = 404.
+ */
+export const FILE_DOWNLOAD_PERMISSION: Record<FileType, string> = {
+  contrato: "contratos.baixar_contrato",
+  documento: "clientes.anexar_documentos",
+  modelo: "contratos.gerar_contrato",
+};
+
 const typeNames: Record<FileType, string> = {
   contrato: "Contrato",
   documento: "Documento",
@@ -56,7 +69,8 @@ export async function handleFileDownload(
   params: { type: FileType; id: string }
 ) {
   const user = await getCurrentUser();
-  if (!user || user.role !== "ADMIN") {
+  const permission = FILE_DOWNLOAD_PERMISSION[params.type];
+  if (!user || !permission || !hasPermission(user, permission)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 

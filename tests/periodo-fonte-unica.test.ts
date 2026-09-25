@@ -180,3 +180,16 @@ describe("a unificação não moveu nenhum intervalo financeiro", () => {
     expect(p.end).toEqual(new Date(2026, 8, 14)); // exclusivo: segunda seguinte
   });
 });
+
+describe("hoje do negócio — fuso da Bahia, não o do servidor (25/09/2026)", () => {
+  it("23:30 de 30/09 na Bahia (02:30 UTC de 01/10) ainda é setembro", async () => {
+    const { hojeDoNegocio, periodOfPreset } = await import("@/lib/period");
+    const ref = new Date("2026-10-01T02:30:00.000Z");
+    const hj = hojeDoNegocio(ref);
+    expect([hj.getFullYear(), hj.getMonth() + 1, hj.getDate()]).toEqual([2026, 9, 30]);
+    const p = periodOfPreset("this_month", hj);
+    expect(p.start.getMonth() + 1).toBe(9);
+    expect(p.end.getMonth() + 1).toBe(10);
+    expect(p.end.getDate()).toBe(1);
+  });
+});

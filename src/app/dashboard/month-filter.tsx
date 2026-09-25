@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { CalendarDays } from "lucide-react";
+import { currentYearMonth } from "@/lib/renewal-expectation";
 
 /**
  * Filtro ÚNICO do Dashboard: [Mês ▾] [Ano ▾] — com "Personalizado…" no fim
@@ -26,9 +27,9 @@ export function MonthFilter() {
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  const now = new Date();
-  const curM = now.getMonth() + 1;
-  const curY = now.getFullYear();
+  // Mês corrente no calendário do NEGÓCIO (Bahia), o mesmo que o servidor
+  // usa em resolvePeriod — não o fuso do navegador.
+  const { month: curM, year: curY } = currentYearMonth();
 
   // Anos disponíveis: 3 para trás até 1 à frente (inclui o ano da URL, se fora).
   const years = useMemo(() => {

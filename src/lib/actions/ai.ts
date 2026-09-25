@@ -10,7 +10,13 @@ import {
   type AISettings,
   type ChatMsg,
 } from "@/lib/ai/provider";
-import { buildFinancialSnapshot, snapshotToText, loadMemoryText } from "@/lib/ai/context";
+import {
+  buildFinancialSnapshot,
+  snapshotToText,
+  loadMemoryText,
+  aiPrivateWhere,
+  snapshotVisibilityFor,
+} from "@/lib/ai/context";
 import { buildAgencySnapshotText } from "@/lib/ai/agency-context";
 import type { Viewer } from "@/lib/auth/viewer";
 
@@ -113,9 +119,12 @@ async function requireConfigured(): Promise<AISettings> {
 
 async function buildSystemPrompt(viewer: Viewer): Promise<string> {
   const isAdmin = viewer.role === "ADMIN";
+  // O retrato respeita as permissões EFETIVAS de quem pergunta: cada bloco
+  // (despesas, caixa, recebíveis, saúde…) só entra se o usuário pode vê-lo na
+  // tela. O retrato da agência (tudo, inclusive folha) segue exclusivo do ADMIN.
   const [personal, memory, agency] = await Promise.all([
-    buildFinancialSnapshot(),
-    loadMemoryText(),
+    buildFinancialSnapshot(new Date(), snapshotVisibilityFor(viewer)),
+    loadMemoryText(viewer),
     isAdmin ? buildAgencySnapshotText() : Promise.resolve(""),
   ]);
 
@@ -214,19 +223,20 @@ export async function sendChatMessage(
     return { ok: false, error: e.message };
   }
 
-  // Garante conversa DO PRÓPRIO usuário. Se veio um id, confirma que pertence a
-  // ele (findFirst é escopado por dono pela extensão); senão, cria uma nova.
+  // Garante conversa DO PRÓPRIO usuário. A extensão só escopa pelo DONO do
+  // workspace (compartilhado pela equipe) — o filtro por userId é o que impede
+  // continuar a conversa de um colega pelo id. Id alheio → abre uma nova.
   let convId: string | null = conversationId;
   if (convId) {
     const owned = await prisma.aIConversation.findFirst({
-      where: { id: convId },
+      where: { id: convId, ...aiPrivateWhere(viewer) },
       select: { id: true },
     });
     if (!owned) convId = null;
   }
   if (!convId) {
     const conv = await prisma.aIConversation.create({
-      data: { title: text.slice(0, 60) },
+      data: { title: text.slice(0, 60), userId: viewer.id },
     });
     convId = conv.id;
   }
@@ -318,7 +328,9 @@ Use os números reais do retrato financeiro. Seja específico e priorize o que t
     report = report.slice(0, memMatch.index).trim();
     const items = memMatch[1].split("|").map((s) => s.trim()).filter(Boolean).slice(0, 3);
     for (const content of items) {
-      await prisma.aIMemory.create({ data: { kind: "pattern", content, source: "auto" } });
+      await prisma.aIMemory.create({
+        data: { kind: "pattern", content, source: "auto", userId: viewer.id },
+      });
     }
   }
 
@@ -419,26 +431,30 @@ export async function generateAIReport(kind: string): Promise<AIReportResult> {
 // ---------- Memória / base de conhecimento ----------
 
 export async function addMemory(formData: FormData) {
-  await requirePermission("assistente.visualizar");
+  const viewer = await requirePermission("assistente.visualizar");
   const content = String(formData.get("content") || "").trim();
   const kind = String(formData.get("kind") || "note");
   if (!content) return;
-  await prisma.aIMemory.create({ data: { content, kind, source: "manual" } });
+  await prisma.aIMemory.create({
+    data: { content, kind, source: "manual", userId: viewer.id },
+  });
   revalidateAssistant();
 }
 
 export async function deleteMemory(id: string) {
-  await requirePermission("assistente.visualizar");
-  // deleteMany é escopado por dono → só apaga memória do próprio usuário.
-  await prisma.aIMemory.deleteMany({ where: { id } });
+  const viewer = await requirePermission("assistente.visualizar");
+  // A extensão escopa pelo dono do WORKSPACE; o userId restringe ao autor.
+  await prisma.aIMemory.deleteMany({ where: { id, ...aiPrivateWhere(viewer) } });
   revalidateAssistant();
 }
 
 export async function toggleMemoryPin(id: string) {
-  await requirePermission("assistente.visualizar");
-  // findUnique é pós-filtrado por dono → memória de outro usuário volta null.
-  const m = await prisma.aIMemory.findUnique({ where: { id } });
+  const viewer = await requirePermission("assistente.visualizar");
+  const m = await prisma.aIMemory.findFirst({ where: { id, ...aiPrivateWhere(viewer) } });
   if (!m) return;
-  await prisma.aIMemory.update({ where: { id }, data: { pinned: !m.pinned } });
+  await prisma.aIMemory.updateMany({
+    where: { id, ...aiPrivateWhere(viewer) },
+    data: { pinned: !m.pinned },
+  });
   revalidateAssistant();
 }

@@ -14,6 +14,7 @@ import {
   MONTHS,
 } from "./_meta";
 import { SEM_NICHO, SEM_NICHO_LABEL, type NicheOption } from "@/lib/niches";
+import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 
 /**
  * Filtros do módulo Clientes — simples e diretos: busca (nome/razão social/
@@ -125,11 +126,11 @@ export function ClientFilters({
         </div>
 
         <div>
-          <Label className="text-xs">Mês de renovação</Label>
+          <Label className="text-xs">Renovação prevista</Label>
           <Select value={mesRenovacao} onChange={(e) => setMesRenovacao(e.target.value)}>
             <option value="">Todos</option>
-            {MONTHS.map((m) => (
-              <option key={m.value} value={String(m.value)}>{m.label}</option>
+            {renewalCompetenceOptions(mesRenovacao || null, { back: 6, ahead: 18 }).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </Select>
         </div>

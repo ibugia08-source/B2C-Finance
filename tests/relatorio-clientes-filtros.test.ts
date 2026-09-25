@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { prisma, createOwner, destroyOwner, createMrrClient, asOwner, type TestOwner } from "./support/db";
 import { parseReportQuery } from "@/lib/reports/query";
+import { expectationInMonth } from "@/lib/renewal-expectation";
+
+// Expectativas com ANO (25/09/2026): março e setembro de 2027.
+const MAR = expectationInMonth({ year: 2027, month: 3 });
+const SET = expectationInMonth({ year: 2027, month: 9 });
 import { clientesReport } from "@/lib/reports/definitions/clientes";
 import { responsaveisCadastrados, opcoesDaCarteira, mergeNames } from "@/lib/reports/options";
 
@@ -25,9 +30,9 @@ beforeAll(async () => {
   const varejo = await asOwner(owner, async () =>
     prisma.niche.create({ data: { name: "Varejo", slug: "varejo" }, select: { id: true } })
   );
-  await mk("Clínica A", { nicheId: clinica.id, segment: "Clínica", modality: "MRR", origin: "Indicação", state: "BA", salesOwner: "Ana Paula", renewalMonth: 3 });
-  await mk("Clínica B", { nicheId: clinica.id, segment: "Clínica", modality: "TCV", origin: "Tráfego", state: "SP", salesOwner: "Bruno", opsOwner: "Ana Paula", renewalMonth: 9, monthlyValue: null, totalContractValue: 9000 });
-  await mk("Loja C", { nicheId: varejo.id, segment: "Varejo", modality: "MRR", origin: "Indicação", state: "ba", salesOwner: "ana paula", renewalMonth: 3 });
+  await mk("Clínica A", { nicheId: clinica.id, segment: "Clínica", modality: "MRR", origin: "Indicação", state: "BA", salesOwner: "Ana Paula", expectedRenewalAt: MAR });
+  await mk("Clínica B", { nicheId: clinica.id, segment: "Clínica", modality: "TCV", origin: "Tráfego", state: "SP", salesOwner: "Bruno", opsOwner: "Ana Paula", expectedRenewalAt: SET, monthlyValue: null, totalContractValue: 9000 });
+  await mk("Loja C", { nicheId: varejo.id, segment: "Varejo", modality: "MRR", origin: "Indicação", state: "ba", salesOwner: "ana paula", expectedRenewalAt: MAR });
   await asOwner(owner, async () =>
     prisma.employee.create({ data: { name: "Carla", active: true } })
   );
@@ -42,13 +47,15 @@ afterAll(async () => {
 describe("parseReportQuery", () => {
   it("lê os filtros novos da URL e ignora valores inválidos", () => {
     const q = parseReportQuery({
-      modalidade: "TCV", segmento: "Clínica", origem: "Tráfego", uf: "sp", mesRenovacao: "9",
+      modalidade: "TCV", segmento: "Clínica", origem: "Tráfego", uf: "sp", mesRenovacao: "2027-09",
     });
     expect(q.modalidade).toBe("TCV");
     expect(q.segmento).toBe("Clínica");
     expect(q.origem).toBe("Tráfego");
     expect(q.uf).toBe("SP");
-    expect(q.mesRenovacao).toBe(9);
+    expect(q.mesRenovacao).toBe("2027-09");
+    // Link antigo com só o mês vira a próxima ocorrência dele.
+    expect(parseReportQuery({ mesRenovacao: "9" }).mesRenovacao).toMatch(/^\d{4}-09$/);
     const ruim = parseReportQuery({ modalidade: "XYZ", mesRenovacao: "13" });
     expect(ruim.modalidade).toBeUndefined();
     expect(ruim.mesRenovacao).toBeUndefined();
@@ -71,7 +78,9 @@ describe("relatório de clientes", () => {
   });
   it("filtra por UF sem diferenciar caixa e por mês de renovação", async () => {
     expect(await nomes({ uf: "BA" })).toEqual(["Clínica A", "Loja C"]);
-    expect(await nomes({ mesRenovacao: "9" })).toEqual(["Clínica B"]);
+    expect(await nomes({ mesRenovacao: "2027-09" })).toEqual(["Clínica B"]);
+    expect(await nomes({ mesRenovacao: "2027-03" })).toEqual(["Clínica A", "Loja C"]);
+    expect(await nomes({ mesRenovacao: "2028-03" })).toEqual([]);
   });
   it("responsável escolhido da lista casa comercial OU operacional, nome exato", async () => {
     expect(await nomes({ responsavel: "Ana Paula" })).toEqual(["Clínica A", "Clínica B", "Loja C"]);
@@ -86,10 +95,13 @@ describe("relatório de clientes", () => {
     expect(b.segmento).toBe("Clínica");
     expect(b.origem).toBe("Tráfego");
     expect(b.uf).toBe("SP");
-    expect(b.mesRenovacao).toBe("Setembro");
+    expect((b.mesRenovacao as Date).toISOString()).toBe(SET.toISOString());
+    expect(b.renovacaoMes).toBe("Set/2027");
     expect(b.responsavelOperacional).toBe("Ana Paula");
     for (const k of ["modalidade", "segmento", "origem", "uf", "mesRenovacao"]) {
       expect(clientesReport.filterFields).toContain(k);
+    }
+    for (const k of ["modalidade", "segmento", "origem", "uf", "renovacaoMes"]) {
       expect(clientesReport.groupOptions).toContain(k);
     }
   });

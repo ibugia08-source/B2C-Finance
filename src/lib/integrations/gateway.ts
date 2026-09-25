@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { hojeCivilParaGravar } from "@/lib/civil-date";
 import { assinar } from "@/lib/integrations/avancecrm";
 
 /**
@@ -145,7 +146,11 @@ async function chargeCancelada(d: Record<string, any>) {
 async function chargePaga(eventId: string, d: Record<string, any>) {
   const chargeId = String(d.chargeId ?? "").trim();
   const valor = Number(d.amount ?? d.valor ?? NaN);
-  const pagoEm = d.paidAt ? new Date(String(d.paidAt)) : new Date();
+  // O provedor manda um INSTANTE; a baixa grava o DIA CIVIL da Bahia desse
+  // instante. Pago às 22h do último dia do mês é do mês que termina, não do
+  // seguinte (auditoria 25/09/2026).
+  const instante = d.paidAt ? new Date(String(d.paidAt)) : new Date();
+  const pagoEm = Number.isNaN(instante.getTime()) ? instante : hojeCivilParaGravar(instante);
   if (!Number.isFinite(valor) || valor <= 0)
     return { situacao: "IGNORADO" as const, nota: "Evento de pagamento sem valor." };
   if (Number.isNaN(pagoEm.getTime()))

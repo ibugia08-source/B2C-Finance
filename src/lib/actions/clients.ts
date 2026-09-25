@@ -7,6 +7,42 @@ import { requirePermission, tryPermission, NO_PERMISSION } from "@/lib/auth/view
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { abrirVidaDoCliente } from "@/lib/services/client-lifecycle";
+import {
+  calendarParts, civilCompetenceKey, civilParts, currentYearMonth, expectationFromBase, expectationInMonth,
+  monthBounds, monthIndex, parseCompetenceKey, rollForward,
+} from "@/lib/renewal-expectation";
+
+/** Mesmo dia de calendário (fuso do workspace)? Nulos só casam com nulos. */
+function mesmoDia(a: Date | null | undefined, b: Date | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  const x = civilParts(a);
+  const y = civilParts(b);
+  return x.year === y.year && x.month === y.month && x.day === y.day;
+}
+
+/**
+ * Expectativa de renovação ao SALVAR o cadastro (25/09/2026). A regra é
+ * entrada + prazo; ela só é refeita quando a BASE muda (entrada ou prazo) ou
+ * quando o cliente ainda não tem expectativa — assim um agendamento manual
+ * sobrevive a editar o telefone. Cliente que volta a ficar ativo com uma
+ * expectativa já vencida anda em ciclos até o mês corrente.
+ */
+function expectativaAoSalvar(
+  antes: { startedAt: Date | null; contractMonths: number | null; expectedRenewalAt: Date | null; status: string } | null,
+  depois: { startedAt: Date | null; contractMonths: number | null; status: string }
+): Date | null | undefined {
+  const calculada = expectationFromBase(depois.startedAt, depois.contractMonths);
+  if (!antes) return calculada;
+  const baseMudou =
+    !mesmoDia(antes.startedAt, depois.startedAt) || antes.contractMonths !== depois.contractMonths;
+  if (baseMudou) return calculada;
+  if (!antes.expectedRenewalAt) return calculada ?? undefined;
+  const reativou =
+    (antes.status === "CHURNED" || antes.status === "INACTIVE") &&
+    depois.status !== "CHURNED" && depois.status !== "INACTIVE";
+  if (reativou) return rollForward(antes.expectedRenewalAt, depois.contractMonths ?? 12);
+  return undefined; // não mexe
+}
 
 /**
  * Resultado padrão das mutations (Etapa 1). Toda ação retorna um objeto
@@ -41,12 +77,14 @@ const chaveNome = (v: string) =>
 async function acharDuplicado(
   nome: string,
   documento: string | null,
-  permitirNomeRepetido: boolean
+  permitirNomeRepetido: boolean,
+  /** Na EDIÇÃO: o próprio cliente não conta como duplicado. */
+  exceto?: string
 ): Promise<ActionResult | null> {
   const doc = documento ? soDigitos(documento) : "";
   if (doc.length >= 11) {
     const comDoc = await prisma.client.findMany({
-      where: { document: { not: null } },
+      where: { document: { not: null }, ...(exceto ? { id: { not: exceto } } : {}) },
       select: { id: true, name: true, document: true },
     });
     const igual = comDoc.find((c) => soDigitos(c.document ?? "") === doc);
@@ -161,23 +199,48 @@ const ClientSchema = z
 async function recordLosses(
   clientIds: string[],
   reason?: string | null,
-  lostAt?: Date
+  lostAt?: Date,
+  /** "Não renovou" do módulo Renovações: a competência em exibição. */
+  renewalCompetence?: string | null
 ) {
   if (clientIds.length === 0) return;
-  const { computeLossSnapshots } = await import("@/lib/services/revenue-metrics");
-  const snapshots = await computeLossSnapshots(clientIds);
+  const { computeLossSnapshots, expectedRenewalValues } = await import("@/lib/services/revenue-metrics");
+  const [snapshots, clientes] = await Promise.all([
+    computeLossSnapshots(clientIds),
+    prisma.client.findMany({
+      where: { id: { in: clientIds } },
+      select: { id: true, modality: true, monthlyValue: true, totalContractValue: true, expectedRenewalAt: true },
+    }),
+  ]);
   if (snapshots.length === 0) return;
+  const esperado = await expectedRenewalValues(clientes);
+  const quando = lostAt ?? new Date();
+  const porId = new Map(clientes.map((c) => [c.id, c]));
   await prisma.clientLoss.createMany({
-    data: snapshots.map((s) => ({
-      clientId: s.clientId,
-      modality: s.modality as any,
-      monthlyValue: s.monthlyValue,
-      referenceValue: s.referenceValue,
-      salesOwner: s.salesOwner,
-      reason: reason ?? null,
-      // Data informada pelo gestor (botão Perda); default do banco = agora.
-      ...(lostAt ? { lostAt } : {}),
-    })),
+    data: snapshots.map((s) => {
+      // É RENOVAÇÃO PERDIDA quando veio do módulo (competência explícita)
+      // ou quando a expectativa do cliente já tinha chegado (mês dela ≤ mês
+      // da perda). Saída no meio do contrato não conta como renovação.
+      const exp = porId.get(s.clientId)?.expectedRenewalAt ?? null;
+      const competencia =
+        renewalCompetence && parseCompetenceKey(renewalCompetence)
+          ? renewalCompetence
+          : exp && monthIndex(civilParts(exp)) <= monthIndex(calendarParts(quando))
+            ? civilCompetenceKey(exp)
+            : null;
+      return {
+        clientId: s.clientId,
+        modality: s.modality as any,
+        monthlyValue: s.monthlyValue,
+        referenceValue: s.referenceValue,
+        salesOwner: s.salesOwner,
+        reason: reason ?? null,
+        renewalCompetence: competencia,
+        expectedValue: competencia ? esperado.get(s.clientId) ?? null : null,
+        // Data informada pelo gestor (botão Perda); default do banco = agora.
+        ...(lostAt ? { lostAt } : {}),
+      };
+    }),
   });
 }
 
@@ -203,10 +266,16 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         const raw = clean(formData.get("paymentDay"));
         return raw == null ? null : parseInt(raw, 10);
       })(),
-      tags: (clean(formData.get("tags")) ?? "")
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
+      // Tags em minúsculas e sem repetição: a busca da carteira procura a tag
+      // em minúsculas, e "VIP" gravado assim nunca era encontrado.
+      tags: Array.from(
+        new Set(
+          (clean(formData.get("tags")) ?? "")
+            .split(",")
+            .map((t) => t.trim().toLocaleLowerCase("pt-BR"))
+            .filter(Boolean)
+        )
+      ),
       status: (clean(formData.get("status")) ?? "ACTIVE") as ClientStatus,
       modality: (() => {
         const raw = clean(formData.get("paymentModel"));
@@ -265,7 +334,25 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
     // id de outro owner volta null. O texto salesOwner é sincronizado com o
     // nome do colaborador para manter filtros/relatórios/importação intactos.
     let salesOwnerEmployee: { id: string; name: string } | null = null;
-    if (parsed.salesOwnerId) {
+    // "__texto__" = manter o responsável que só existe como texto no cadastro
+    // (importação). Se houver colaborador com o mesmo nome, liga os dois.
+    let manterTexto: string | null = null;
+    if (parsed.salesOwnerId === "__texto__") {
+      const atual = parsed.id
+        ? await prisma.client.findFirst({ where: { id: parsed.id }, select: { salesOwner: true } })
+        : null;
+      manterTexto = atual?.salesOwner ?? null;
+      if (manterTexto) {
+        const emp = await prisma.employee.findFirst({
+          where: { name: { equals: manterTexto, mode: "insensitive" } },
+          select: { id: true, name: true },
+        });
+        if (emp) {
+          salesOwnerEmployee = emp;
+          manterTexto = null;
+        }
+      }
+    } else if (parsed.salesOwnerId) {
       const emp = await prisma.employee.findUnique({
         where: { id: parsed.salesOwnerId },
       });
@@ -297,7 +384,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       legalRepresentative: parsed.legalRepresentative,
       origin: parsed.origin,
       salesOwnerId: salesOwnerEmployee?.id ?? null,
-      salesOwner: salesOwnerEmployee?.name ?? null,
+      salesOwner: salesOwnerEmployee?.name ?? manterTexto,
       opsOwner: parsed.opsOwner,
       tags: parsed.tags,
       status: parsed.status,
@@ -311,19 +398,35 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
       // findUnique é pós-filtrado por dono → cliente de outro owner volta null.
       const existing = await prisma.client.findUnique({ where: { id } });
       if (!existing) return { ok: false, error: "Cliente não encontrado." };
-      // Transição → Perdido pela edição também registra a perda.
-      if (parsed.status === "CHURNED" && existing.status !== "CHURNED") {
-        await recordLosses([id]);
+      // CNPJ/CPF de OUTRO cliente colado na edição também é duplicata
+      // (antes a checagem só rodava na criação). Nome repetido na edição
+      // não bloqueia: renomear para um nome parecido é legítimo.
+      if (parsed.document && soDigitos(parsed.document) !== soDigitos(existing.document ?? "")) {
+        const dup = await acharDuplicado(parsed.name, parsed.document, true, id);
+        if (dup) return dup;
       }
-      await prisma.client.update({
+      const expectativa = expectativaAoSalvar(
+        { ...existing, status: existing.status },
+        {
+          startedAt: parsed.startedAt,
+          contractMonths: modalityFields.contractMonths ?? null,
+          status: existing.status, // a troca de status vem depois, pelo caminho único
+        }
+      );
+      // Grava o cadastro SEM trocar o status; a troca (se houver) passa por
+      // transicionarStatus — perda, relação, termo e cobranças acompanham.
+      const atualizado = await prisma.client.update({
         where: { id },
         data: {
           ...base,
-          // Preserva o churn original; limpa se saiu do status CHURNED.
-          churnedAt:
-            parsed.status === "CHURNED" ? existing.churnedAt ?? new Date() : null,
+          status: existing.status,
+          churnedAt: existing.churnedAt,
+          ...(expectativa !== undefined ? { expectedRenewalAt: expectativa } : {}),
         },
       });
+      if (parsed.status !== existing.status) {
+        await transicionarStatus(atualizado, parsed.status);
+      }
     } else {
       // Deduplicação antes de criar (02 §4.1).
       const duplicado = await acharDuplicado(
@@ -337,6 +440,8 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         data: {
           ...base,
           churnedAt: parsed.status === "CHURNED" ? new Date() : null,
+          // Entrada + prazo = expectativa de renovação (regra do dono).
+          expectedRenewalAt: expectationFromBase(parsed.startedAt, modalityFields.contractMonths ?? null),
         },
       });
       id = created.id;
@@ -408,13 +513,13 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
           "@/lib/services/contract-metrics"
         );
         await generateBillingsForContract(contract.id);
-        // Garante a data de entrada no cadastro quando não informada e
-        // preenche o MÊS DE RENOVAÇÃO a partir do fim do contrato: sem isso
-        // o cliente nascia com contrato e renewalDate, mas fora da agenda
-        // da carteira (filtro "Mês de renovação", card do painel).
-        const complemento: { startedAt?: Date; renewalMonth?: number } = {};
-        if (!parsed.startedAt) complemento.startedAt = entry;
-        if (endDate) complemento.renewalMonth = endDate.getMonth() + 1;
+        // Sem data de entrada informada, a entrada é hoje — e a expectativa
+        // de renovação nasce dela + prazo (a mesma regra do cadastro).
+        const complemento: { startedAt?: Date; expectedRenewalAt?: Date | null } = {};
+        if (!parsed.startedAt) {
+          complemento.startedAt = entry;
+          complemento.expectedRenewalAt = expectationFromBase(entry, months ?? null);
+        }
         if (Object.keys(complemento).length > 0) {
           await prisma.client.update({
             where: { id: created.id },
@@ -540,23 +645,83 @@ export async function setClientStatus(
     const s = z.nativeEnum(ClientStatus).parse(status);
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
-    // Transição → Perdido registra a perda (data, receita, modalidade, motivo).
-    if (s === "CHURNED" && existing.status !== "CHURNED") {
-      await recordLosses([id], reason);
-    }
-    await prisma.client.update({
-      where: { id },
-      data: {
-        status: s,
-        churnedAt: s === "CHURNED" ? existing.churnedAt ?? new Date() : null,
-      },
-    });
+    await transicionarStatus(existing, s, { reason });
     revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };
   }
+}
+
+const ATIVOS = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;
+const ehAtivo = (s: string) => (ATIVOS as readonly string[]).includes(s);
+
+/**
+ * TRANSIÇÃO DE STATUS — caminho ÚNICO (auditoria 25/09/2026).
+ *
+ * O select da carteira, o botão Perda, a ação em massa e a edição do
+ * cadastro mudavam só Client.status. A relação com a agência e o termo
+ * comercial (fonte do NRR, das avaliações, do painel do gestor) não
+ * acompanhavam, e as mensalidades futuras de quem saiu seguiam em aberto.
+ * Agora toda troca de status passa por aqui e usa os MESMOS serviços do
+ * dossiê: encerrarRelacoes (saída), pausarCliente, retomarCliente e
+ * reativarCliente — além do registro de perda e da expectativa de renovação.
+ */
+async function transicionarStatus(
+  existing: {
+    id: string; status: string; churnedAt: Date | null; startedAt: Date | null;
+    contractMonths: number | null; expectedRenewalAt: Date | null;
+  },
+  novo: ClientStatus,
+  opts: { reason?: string | null; lostAt?: Date; renewalCompetence?: string | null } = {}
+): Promise<void> {
+  const id = existing.id;
+  const antes = existing.status;
+  if (antes === novo) return;
+  const ciclo = await import("@/lib/services/lifecycle");
+
+  if (novo === "CHURNED") {
+    const saida = opts.lostAt ?? new Date();
+    await recordLosses([id], opts.reason ?? null, opts.lostAt, opts.renewalCompetence ?? null);
+    await prisma.client.update({ where: { id }, data: { status: "CHURNED", churnedAt: saida } });
+    await ciclo.encerrarRelacoes(id, saida, opts.reason ?? null);
+    return;
+  }
+
+  // Saindo de Perdido: reativa (relação, termo novo, expectativa em dia).
+  if (antes === "CHURNED") {
+    const r = await ciclo.reativarCliente(id, opts.reason ?? null);
+    if (!r.ok) throw new Error(r.error);
+  } else if (antes === "PAUSED" && novo !== "PAUSED") {
+    const r = await ciclo.retomarCliente(id, opts.reason ?? null);
+    if (!r.ok) throw new Error(r.error);
+  }
+
+  if (novo === "PAUSED") {
+    const r = await ciclo.pausarCliente(id, { motivo: opts.reason ?? null });
+    if (!r.ok) throw new Error(r.error);
+    return;
+  }
+
+  // Reativar/retomar deixam ACTIVE; o status pedido pode ser outro (ex.:
+  // Inadimplente, Renovação, Lead). Grava o final + expectativa coerente.
+  const expectativa = expectativaAoSalvar(existing, {
+    startedAt: existing.startedAt,
+    contractMonths: existing.contractMonths,
+    status: novo,
+  });
+  await prisma.client.update({
+    where: { id },
+    data: {
+      status: novo,
+      churnedAt: null,
+      ...(expectativa !== undefined && !(antes === "CHURNED" || antes === "PAUSED")
+        ? { expectedRenewalAt: expectativa }
+        : {}),
+    },
+  });
+  void ehAtivo;
 }
 
 /**
@@ -568,7 +733,9 @@ export async function setClientStatus(
 export async function markClientLost(
   id: string,
   lostAtRaw: string,
-  reason?: string | null
+  reason?: string | null,
+  /** "Não renovou" do módulo Renovações: competência (YYYY-MM) em exibição. */
+  renewalCompetence?: string | null
 ): Promise<ActionResult> {
   if (!(await tryPermission("clientes.alterar_status"))) return NO_PERMISSION;
   try {
@@ -582,8 +749,9 @@ export async function markClientLost(
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
 
     const text = (reason ?? "").trim() || null;
+    const competencia = parseCompetenceKey(renewalCompetence ?? "") ? renewalCompetence! : null;
     if (existing.status !== "CHURNED") {
-      await recordLosses([id], text, lostAt);
+      await recordLosses([id], text, lostAt, competencia);
     } else {
       // Já estava perdido: atualiza a perda mais recente (data/motivo)
       // em vez de duplicar o registro.
@@ -595,10 +763,14 @@ export async function markClientLost(
       if (last) {
         await prisma.clientLoss.updateMany({
           where: { id: last.id },
-          data: { lostAt, ...(text ? { reason: text } : {}) },
+          data: {
+            lostAt,
+            ...(text ? { reason: text } : {}),
+            ...(competencia ? { renewalCompetence: competencia } : {}),
+          },
         });
       } else {
-        await recordLosses([id], text, lostAt);
+        await recordLosses([id], text, lostAt, competencia);
       }
     }
 
@@ -606,6 +778,10 @@ export async function markClientLost(
       where: { id },
       data: { status: "CHURNED", churnedAt: lostAt },
     });
+    // Relação encerrada, termo fechado e mensalidades futuras canceladas —
+    // o mesmo que a saída pelo dossiê. Idempotente para quem já saiu.
+    const { encerrarRelacoes } = await import("@/lib/services/lifecycle");
+    await encerrarRelacoes(id, lostAt, text);
 
     revalidateAgency({ clientId: id });
     return { ok: true };
@@ -656,7 +832,32 @@ export async function setClientModality(
         : z.nativeEnum(ClientModality).parse(modality);
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
-    await prisma.client.update({ where: { id }, data: { modality: value } });
+    // Mesmas regras do cadastro (auditoria 25/09/2026): TCV exige valor total
+    // e prazo — sem eles o cliente nunca aparece em Renovações — e TCV não tem
+    // mensalidade nem dia recorrente. Faltando dado, o caminho é o formulário.
+    if (value === "TCV") {
+      if (!(Number(existing.totalContractValue) > 0) || !existing.contractMonths)
+        return {
+          ok: false,
+          error: "Para TCV, informe o valor total e o prazo do contrato no cadastro do cliente (Editar).",
+        };
+      await prisma.client.update({
+        where: { id },
+        data: { modality: "TCV", monthlyValue: null, paymentDay: null },
+      });
+    } else if (value === "MRR") {
+      if (!(Number(existing.monthlyValue) > 0))
+        return {
+          ok: false,
+          error: "Para MRR, informe a mensalidade no cadastro do cliente (Editar).",
+        };
+      await prisma.client.update({
+        where: { id },
+        data: { modality: "MRR", totalContractValue: null },
+      });
+    } else {
+      await prisma.client.update({ where: { id }, data: { modality: null } });
+    }
     revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
@@ -677,32 +878,43 @@ export async function setClientMonthlyValue(
       return { ok: false, error: "Valor não pode ser negativo." };
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
+    if (existing.modality === "TCV")
+      return {
+        ok: false,
+        error: "Cliente TCV não tem mensalidade — o valor dele é o total do contrato (Editar).",
+      };
     await prisma.client.update({ where: { id }, data: { monthlyValue: value } });
-    revalidateAgency();
+    revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao atualizar o valor mensal." };
   }
 }
 
-/** Mês de renovação (1-12) — edição inline na carteira. */
-export async function setClientRenewalMonth(
+/**
+ * Expectativa de renovação — edição inline na carteira. Recebe a
+ * competência "YYYY-MM" (ou vazio para limpar) e grava a data no dia do
+ * ciclo do cliente. É o mesmo gesto do "Agendar renovação".
+ */
+export async function setClientRenewalExpectation(
   id: string,
-  month: number | null
+  competence: string | null
 ): Promise<ActionResult> {
   if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
   try {
-    const value =
-      month == null
-        ? null
-        : z.number().int().min(1, "Mês inválido.").max(12, "Mês inválido.").parse(month);
     const existing = await prisma.client.findUnique({ where: { id } });
     if (!existing) return { ok: false, error: "Cliente não encontrado." };
-    await prisma.client.update({ where: { id }, data: { renewalMonth: value } });
-    revalidateAgency();
+    let value: Date | null = null;
+    if (competence) {
+      const ym = parseCompetenceKey(competence);
+      if (!ym) return { ok: false, error: "Mês inválido." };
+      value = expectationInMonth(ym, existing.startedAt);
+    }
+    await prisma.client.update({ where: { id }, data: { expectedRenewalAt: value } });
+    revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
-    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o mês de renovação.";
+    const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar a expectativa de renovação.";
     return { ok: false, error: msg };
   }
 }
@@ -713,7 +925,10 @@ const BulkSchema = z.object({
   ids: z.array(z.string().min(1)).min(1, "Selecione ao menos um cliente."),
   status: z.nativeEnum(ClientStatus).nullish(),
   salesOwner: z.string().trim().nullish(),
-  renewalMonth: z.number().int().min(1).max(12).nullish(),
+  /** Colaborador responsável (id). "" = sem responsável; ausente = não mexe. */
+  salesOwnerId: z.string().trim().nullish(),
+  /** "YYYY-MM" = agenda a expectativa; "" = limpa; ausente = não mexe. */
+  renewalCompetence: z.string().regex(/^(\d{4}-(0[1-9]|1[0-2]))?$/, "Mês inválido.").nullish(),
   modality: z.nativeEnum(ClientModality).nullish(),
   paymentDay: z.number().int().min(1).max(31).nullish(),
 });
@@ -727,7 +942,8 @@ export async function bulkUpdateClients(input: {
   ids: string[];
   status?: string | null;
   salesOwner?: string | null;
-  renewalMonth?: number | null;
+  salesOwnerId?: string | null;
+  renewalCompetence?: string | null;
   modality?: string | null;
   paymentDay?: number | null;
 }): Promise<ActionResult> {
@@ -738,38 +954,80 @@ export async function bulkUpdateClients(input: {
       status: input.status ? (input.status as ClientStatus) : undefined,
       salesOwner:
         input.salesOwner === undefined ? undefined : (input.salesOwner || null),
-      renewalMonth: input.renewalMonth ?? undefined,
+      salesOwnerId: input.salesOwnerId === undefined ? undefined : (input.salesOwnerId ?? ""),
+      renewalCompetence: input.renewalCompetence === undefined ? undefined : input.renewalCompetence ?? "",
       modality: input.modality ? (input.modality as ClientModality) : undefined,
       paymentDay: input.paymentDay ?? undefined,
     });
 
     const data: Record<string, any> = {};
-    if (parsed.status) {
-      data.status = parsed.status;
-      // Mantém churnedAt coerente ao mudar status em massa.
-      if (parsed.status === "CHURNED") data.churnedAt = new Date();
-      else data.churnedAt = null;
+    // Responsável: SEMPRE o par colaborador + nome. Texto livre em massa
+    // deixava salesOwnerId apontando para outra pessoa, e o próximo "salvar"
+    // do cadastro desfazia a troca (auditoria 25/09/2026).
+    if (parsed.salesOwnerId !== undefined && parsed.salesOwnerId !== null) {
+      if (parsed.salesOwnerId === "") {
+        data.salesOwnerId = null;
+        data.salesOwner = null;
+      } else {
+        const emp = await prisma.employee.findFirst({
+          where: { id: parsed.salesOwnerId },
+          select: { id: true, name: true },
+        });
+        if (!emp) return { ok: false, error: "Colaborador responsável não encontrado." };
+        data.salesOwnerId = emp.id;
+        data.salesOwner = emp.name;
+      }
+    } else if (parsed.salesOwner !== undefined) {
+      // Compatibilidade: nome digitado casa com um colaborador pelo nome.
+      const nome = parsed.salesOwner;
+      const emp = nome
+        ? await prisma.employee.findFirst({
+            where: { name: { equals: nome, mode: "insensitive" } },
+            select: { id: true, name: true },
+          })
+        : null;
+      data.salesOwner = emp?.name ?? nome;
+      data.salesOwnerId = emp?.id ?? null;
     }
-    if (parsed.salesOwner !== undefined) data.salesOwner = parsed.salesOwner;
-    if (parsed.renewalMonth !== undefined) data.renewalMonth = parsed.renewalMonth;
+    // Expectativa em massa: cada cliente no dia do PRÓPRIO ciclo, então não
+    // dá para um updateMany só — vai cliente a cliente depois do lote.
+    const agendar =
+      parsed.renewalCompetence === undefined || parsed.renewalCompetence === null
+        ? undefined
+        : parsed.renewalCompetence === ""
+          ? null
+          : parseCompetenceKey(parsed.renewalCompetence);
     if (parsed.modality !== undefined && parsed.modality !== null)
       data.modality = parsed.modality;
     if (parsed.paymentDay !== undefined && parsed.paymentDay !== null)
       data.paymentDay = parsed.paymentDay;
 
-    if (Object.keys(data).length === 0)
+    if (Object.keys(data).length === 0 && agendar === undefined && !parsed.status)
       return { ok: false, error: "Nada para atualizar." };
 
-    // Transição em massa → Perdido: registra a perda de quem ainda não era.
-    if (parsed.status === "CHURNED") {
-      const transitioning = await prisma.client.findMany({
-        where: { id: { in: parsed.ids }, status: { not: "CHURNED" } },
-        select: { id: true },
-      });
-      await recordLosses(transitioning.map((c) => c.id));
+    // Status em massa: cliente a cliente, pelo caminho único de transição —
+    // perda registrada só para quem muda, churnedAt de quem JÁ tinha saído
+    // preservado, relação/termo/cobranças futuras acompanhando.
+    if (parsed.status) {
+      const alvos = await prisma.client.findMany({ where: { id: { in: parsed.ids } } });
+      for (const c of alvos) await transicionarStatus(c, parsed.status);
     }
 
-    await prisma.client.updateMany({ where: { id: { in: parsed.ids } }, data });
+    if (Object.keys(data).length > 0) {
+      await prisma.client.updateMany({ where: { id: { in: parsed.ids } }, data });
+    }
+    if (agendar !== undefined) {
+      const alvos = await prisma.client.findMany({
+        where: { id: { in: parsed.ids } },
+        select: { id: true, startedAt: true },
+      });
+      for (const c of alvos) {
+        await prisma.client.update({
+          where: { id: c.id },
+          data: { expectedRenewalAt: agendar ? expectationInMonth(agendar, c.startedAt) : null },
+        });
+      }
+    }
     revalidateAgency();
     return { ok: true };
   } catch (e: any) {

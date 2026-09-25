@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { toNumber as n, toNumber, formatBRL, formatDateBR } from "@/lib/format";
 import { competenceOf } from "@/lib/competence";
 import { getLiquidez } from "@/lib/services/liquidity";
+import { upcomingRenewals } from "@/lib/services/renewal-schedule";
+import { expectedRenewalValues } from "@/lib/services/revenue-metrics";
 import { escopoAtual, clientesNoEscopo } from "@/lib/services/data-scope";
+import { RISCO_EM_ALERTA_DB, ESTABILIDADE_EM_ALERTA_DB } from "@/lib/services/churn-signals";
 
 /**
  * ROTINA SEMANAL (F3.10 · ref. 02 §4.6).
@@ -116,10 +119,16 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
     novasAnterior,
   ] = await Promise.all([
     // 1. Críticos e em observação — a avaliação da competência corrente.
+    // Vocabulário OFICIAL de avaliacao-meta ("Alto"/"Médio", "Crítico"/
+    // "Observação") + o legado minúsculo. Antes o filtro só conhecia
+    // "alto"/"medio"/"caindo", que a grade nunca grava: o bloco vinha vazio.
     prisma.avaliacaoMensal.findMany({
       where: {
         competence,
-        OR: [{ risco: { in: ["alto", "medio"] } }, { estabilidade: "caindo" }],
+        OR: [
+          { risco: { in: RISCO_EM_ALERTA_DB } },
+          { estabilidade: { in: ESTABILIDADE_EM_ALERTA_DB } },
+        ],
         ...(idsDoEscopo === null ? {} : { relationship: { clientId: { in: idsDoEscopo } } }),
       },
       select: {
@@ -127,21 +136,18 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
         relationship: { select: { clientId: true, client: { select: { name: true } } } },
       },
     }),
-    // 2. Renovações nos próximos 30 dias.
-    //
-    // A fonte é o CONTRATO, não o `renewalMonth` do cliente: renewalMonth é
-    // só um mês (1-12) e não distingue "renova dia 3" de "renova dia 28" —
-    // e a diferença entre as duas é a semana inteira de conversa.
-    prisma.contract.findMany({
-      where: {
-        renewalDate: { gte: hoje, lte: em30 },
-        status: { in: ["ACTIVE", "RENEWAL"] },
-        ...(idsDoEscopo === null ? {} : { clientId: { in: idsDoEscopo } }),
-      },
-      select: {
-        id: true, clientId: true, renewalDate: true, totalValue: true,
-        client: { select: { name: true } },
-      },
+    // 2. Renovações nos próximos 30 dias — pela DATA DE EXPECTATIVA do
+    // cliente (entrada + prazo, ou agendada), a mesma do módulo Renovações.
+    // É uma data com dia, então distingue "renova dia 3" de "renova dia 28".
+    upcomingRenewals(hoje, em30, idsDoEscopo).then(async (clientes) => {
+      const valores = await expectedRenewalValues(clientes);
+      return clientes.map((c) => ({
+        id: c.id,
+        clientId: c.id,
+        renewalDate: c.expectedRenewalAt,
+        totalValue: valores.get(c.id) ?? null,
+        client: { name: c.name },
+      }));
     }),
     prisma.clientRenewal.findMany({
       where: { renewedAt: { gte: new Date(hoje.getTime() - 60 * 86_400_000) } },
@@ -200,7 +206,10 @@ export async function rotinaSemanal(hoje: Date = new Date()): Promise<RotinaSema
         chave: `critico:${a.id}`,
         titulo: a.relationship.client.name,
         detalhe:
-          [a.risco ? `risco ${a.risco}` : null, a.estabilidade ? `estabilidade ${a.estabilidade}` : null]
+          [
+            a.risco ? `risco ${a.risco.toLowerCase()}` : null,
+            a.estabilidade ? `estabilidade ${a.estabilidade.toLowerCase()}` : null,
+          ]
             .filter(Boolean)
             .join(" · ") || null,
         valor: null,

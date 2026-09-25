@@ -16,10 +16,10 @@ import type { RenewalPanelRow } from "@/lib/services/renewal-metrics";
 
 /**
  * Tabela de renovações do mês — compartilhada entre a seção da Gestão do Mês
- * e o módulo /renovacoes. Colunas da planilha do dono: Cliente, Modalidade,
- * Status, Data de renovação, Contrato ativo (meses), Responsável, Valor do
- * contrato e "Renovou?". Linhas já resolvidas (renovou = verde; perdeu =
- * vermelho) ganham a tintura da planilha.
+ * e o módulo /renovacoes. Colunas: Cliente, Modalidade, Status, Expectativa
+ * de renovação (data), Entrada + prazo (a base do cálculo), Responsável,
+ * Valor esperado e "Renovou?". Linhas já resolvidas (renovou = verde;
+ * perdeu = vermelho) ganham a tintura da planilha.
  */
 export function RenewalsTable({
   rows,
@@ -57,7 +57,7 @@ export function RenewalsTable({
         <div className="text-right">
           <Badge variant="destructive">Não renovou</Badge>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
-            {formatDateBR(new Date(r.lostAtISO))}
+            {formatDateBR(new Date(r.lostAtISO))} · {formatBRL(r.lostValue)}
           </p>
         </div>
       );
@@ -83,6 +83,7 @@ export function RenewalsTable({
           <ClientLossDialog
             clientId={r.clientId}
             clientName={r.name}
+            renewalCompetence={defaultCompetence}
             trigger={
               <Button size="sm" variant="outline" className="text-destructive border-destructive/40">
                 Não renovou
@@ -109,10 +110,10 @@ export function RenewalsTable({
               <TableHead>Cliente</TableHead>
               <TableHead>Modalidade</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Data de renovação</TableHead>
-              <TableHead className="text-right">Contrato ativo</TableHead>
+              <TableHead>Expectativa</TableHead>
+              <TableHead>Entrada + prazo</TableHead>
               <TableHead>Responsável</TableHead>
-              <TableHead className="text-right">Valor do contrato</TableHead>
+              <TableHead className="text-right">Valor esperado</TableHead>
               <TableHead className="text-right">Renovou?</TableHead>
             </TableRow>
           </TableHeader>
@@ -136,15 +137,14 @@ export function RenewalsTable({
                   </Badge>
                 </TableCell>
                 <TableCell className="tabular-nums">
-                  {r.renewalDateISO ? formatDateBR(new Date(r.renewalDateISO)) : "—"}
+                  {r.expectedRenewalAtISO ? formatDateBR(new Date(r.expectedRenewalAtISO)) : "—"}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {r.monthsActive != null ? `${r.monthsActive} mes${r.monthsActive === 1 ? "" : "es"}` : "—"}
-                  {r.contractMonths != null && (
-                    <span className="block text-[10px] text-muted-foreground">
-                      prazo {r.contractMonths}m
-                    </span>
-                  )}
+                <TableCell className="tabular-nums">
+                  {r.startedAtISO ? formatDateBR(new Date(r.startedAtISO)) : "—"}
+                  <span className="block text-[10px] text-muted-foreground">
+                    {r.contractMonths != null ? `prazo ${r.contractMonths} meses` : "sem prazo"}
+                    {r.monthsActive != null ? ` · ${r.monthsActive} meses de casa` : ""}
+                  </span>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {r.salesOwner ?? "—"}
@@ -176,14 +176,15 @@ export function RenewalsTable({
                 <Field label="Status">
                   {(CLIENT_STATUS_LABEL as Record<string, string>)[r.status] ?? r.status}
                 </Field>
-                <Field label="Renovação">
-                  {r.renewalDateISO ? formatDateBR(new Date(r.renewalDateISO)) : "—"}
+                <Field label="Expectativa">
+                  {r.expectedRenewalAtISO ? formatDateBR(new Date(r.expectedRenewalAtISO)) : "—"}
                 </Field>
-                <Field label="Contrato ativo">
-                  {r.monthsActive != null ? `${r.monthsActive} meses` : "—"}
+                <Field label="Entrada + prazo">
+                  {r.startedAtISO ? formatDateBR(new Date(r.startedAtISO)) : "—"}
+                  {r.contractMonths != null ? ` · ${r.contractMonths} meses` : ""}
                 </Field>
                 <Field label="Responsável">{r.salesOwner ?? "—"}</Field>
-                <Field label="Valor">{r.expected > 0 ? formatBRL(r.expected) : "—"}</Field>
+                <Field label="Valor esperado">{r.expected > 0 ? formatBRL(r.expected) : "—"}</Field>
               </div>
               <MobileCardActions>{decision(r)}</MobileCardActions>
             </MobileCard>

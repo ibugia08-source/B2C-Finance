@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   revalidatePayroll as revalidatePayrollDomain,
   revalidateFinance,
+  revalidateAgency,
 } from "@/lib/revalidate";
 import { z } from "zod";
 import { EmployeeType, PayrollItemKind, PayrollStatus } from "@prisma/client";
@@ -14,6 +15,11 @@ import {
   podeRemoverItem,
 } from "@/lib/services/payroll-complement";
 import type { ActionResult } from "./clients";
+import { runWithoutScope } from "@/lib/auth/owner-scope";
+import { hojeCivilParaGravar } from "@/lib/civil-date";
+
+/** A folha virou PAID por outra chamada — aborta a transação do pagamento. */
+class FolhaJaPaga extends Error {}
 
 
 function revalidatePayroll() {
@@ -59,6 +65,16 @@ export async function saveEmployee(formData: FormData): Promise<ActionResult> {
         where: { id },
         data: { ...data, endedAt: parsed.active ? null : existing.endedAt ?? new Date() },
       });
+      // Client.salesOwner é o TEXTO denormalizado do responsável (filtros e
+      // relatórios leem por ele). Renomear o colaborador sem propagar deixava
+      // a carteira com o nome antigo — e o filtro por responsável partido.
+      if (existing.name !== data.name) {
+        await prisma.client.updateMany({
+          where: { salesOwnerId: id },
+          data: { salesOwner: data.name },
+        });
+        revalidateAgency();
+      }
     } else {
       await prisma.employee.create({ data });
     }
@@ -79,8 +95,17 @@ export async function deleteEmployee(id: string): Promise<ActionResult> {
         error: "Colaborador tem itens de folha. Desative-o em vez de excluir.",
       };
     }
-    await prisma.employee.deleteMany({ where: { id } });
+    // O FK (SetNull) limpa salesOwnerId, mas o TEXTO salesOwner ficaria com
+    // o nome de alguém que não existe mais — limpa junto, na mesma transação.
+    await prisma.$transaction([
+      prisma.client.updateMany({
+        where: { salesOwnerId: id },
+        data: { salesOwner: null },
+      }),
+      prisma.employee.deleteMany({ where: { id } }),
+    ]);
     revalidatePayroll();
+    revalidateAgency();
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao excluir o colaborador." };
@@ -292,33 +317,56 @@ export async function setPayrollStatus(
       );
       if (total <= 0) return { ok: false, error: "Folha sem itens (total zero)." };
       const paidAt = new Date();
-      await prisma.$transaction([
-        prisma.payroll.update({ where: { id: runId }, data: { status: s, paidAt } }),
-        prisma.transaction.create({
-          data: {
-            date: paidAt,
-            description: `Folha de pagamento ${String(run.month).padStart(2, "0")}/${run.year}`,
-            amount: total,
-            type: "despesa",
-            origin: "pix",
-            status: "pago",
-            belongsTo: "empresa",
-            expenseType: "PAYROLL",
-            hash: null,
-          },
-        }),
-        // Todos os itens presentes foram cobertos por ESTA despesa — o
-        // carimbo é o que separa o pago do complemento a pagar futuro.
-        prisma.payrollItem.updateMany({
-          where: { payrollId: runId, settledAt: null },
-          data: { settledAt: paidAt },
-        }),
-        // comissões da competência quitadas junto com a folha
-        prisma.commission.updateMany({
-          where: { month: run.month, year: run.year, status: "APPROVED" },
-          data: { status: "PAID", paidAt },
-        }),
-      ]);
+      // IDEMPOTENTE (auditoria 25/09/2026): duplo clique em "Pagar" criava
+      // DUAS despesas PAYROLL. A virada para PAID é condicional (status ainda
+      // não PAID) e vem PRIMEIRO na transação; quem chega depois vê count 0
+      // e aborta sem criar despesa.
+      const pagou = await prisma
+        .$transaction(async (tx) => {
+          // runWithoutScope só no updateMany: a extensão injeta ownerId no
+          // where e folha legada sem dono nunca casaria. A posse já foi
+          // validada no findUnique (escopado) acima.
+          const virada = await runWithoutScope(async () =>
+            tx.payroll.updateMany({
+              where: { id: runId, status: { not: "PAID" } },
+              data: { status: s, paidAt },
+            })
+          );
+          if (virada.count === 0) throw new FolhaJaPaga();
+          await tx.transaction.create({
+            data: {
+              // Data CIVIL (dia da Bahia): a competência da despesa é lida
+              // pelo dia UTC — o instante depois das 21h caía no dia seguinte.
+              date: hojeCivilParaGravar(paidAt),
+              description: `Folha de pagamento ${String(run.month).padStart(2, "0")}/${run.year}`,
+              amount: total,
+              type: "despesa",
+              origin: "pix",
+              status: "pago",
+              belongsTo: "empresa",
+              expenseType: "PAYROLL",
+              hash: null,
+            },
+          });
+          // Todos os itens presentes foram cobertos por ESTA despesa — o
+          // carimbo é o que separa o pago do complemento a pagar futuro.
+          await tx.payrollItem.updateMany({
+            where: { payrollId: runId, settledAt: null },
+            data: { settledAt: paidAt },
+          });
+          // comissões da competência quitadas junto com a folha
+          await tx.commission.updateMany({
+            where: { month: run.month, year: run.year, status: "APPROVED" },
+            data: { status: "PAID", paidAt },
+          });
+          return true;
+        })
+        .catch((e) => {
+          if (e instanceof FolhaJaPaga) return false;
+          throw e;
+        });
+      if (!pagou)
+        return { ok: false, error: "Esta folha já foi paga (pagamento registrado ao mesmo tempo)." };
     } else {
       await prisma.payroll.update({ where: { id: runId }, data: { status: s } });
     }

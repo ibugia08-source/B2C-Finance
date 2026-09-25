@@ -100,6 +100,31 @@ export const METRIC_REGISTRY: MetricSpec[] = [
     rounding: MOEDA, spec: "01 §7.1",
   },
   {
+    key: "renovacao_esperada",
+    name: "Renovações esperadas do mês",
+    description:
+      "Quanto se espera renovar no mês: soma do valor esperado de todos os clientes com data de expectativa de renovação no mês.",
+    formulaDescription:
+      "Σ valor esperado dos clientes com expectativa no mês (entrada + prazo, ou agendada) — pendentes e já decididos. TCV = valor cheio do contrato; MRR = mensalidade. Desfechos usam o valor congelado no registro.",
+    grain: "COMPETENCE", dateBasis: "COMPETENCE",
+    sourceEntities: ["Client", "ClientRenewal", "ClientLoss"],
+    filters: "clientes em atividade; desfecho conta no mês da expectativa",
+    rounding: MOEDA, spec: "01 §7.1 — decisão do dono 25/09/2026",
+  },
+  {
+    key: "faturamento_total_esperado",
+    name: "Faturamento total esperado",
+    description:
+      "Tudo o que se espera faturar no mês: o faturamento total previsto somado ao valor esperado de renovação do mês.",
+    formulaDescription:
+      "Faturamento total (MRR + TCV + receita extra do mês) + Renovações esperadas do mês.",
+    grain: "COMPETENCE", dateBasis: "COMPETENCE",
+    sourceEntities: ["Billing", "ExtraRevenue", "Client", "ClientRenewal", "ClientLoss"],
+    filters:
+      "fórmula definida pelo dono; renovação MRR já tem a mensalidade dentro do MRR do mês, e renovação TCV lançada já aparece no TCV — o card mostra as duas parcelas separadas",
+    rounding: MOEDA, spec: "01 §7.1 — decisão do dono 25/09/2026",
+  },
+  {
     key: "faturamento_esperado",
     name: "Faturamento esperado",
     description: "Quanto a Gestão do Mês espera receber. É operação/projeção — NÃO é DRE.",

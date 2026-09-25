@@ -86,13 +86,30 @@ export function formatPercent(value: Money, digits = 1): string {
   return `${(n * 100).toFixed(digits).replace(".", ",")}%`;
 }
 
+/**
+ * Valor digitado → número. Aceita o formato brasileiro ("1.500,50") e também
+ * o ponto como DECIMAL quando não há vírgula e o ponto separa 1 ou 2 casas
+ * ("1500.50", "99.9") — é o que o teclado numérico de muitos celulares
+ * produz. Antes, todo ponto era apagado e "1500.50" virava 150.050 (auditoria
+ * de 25/09/2026: pagamento 100× maior aceito, o excedente virando crédito).
+ * Ponto seguido de 3 dígitos continua sendo milhar ("1.500" = 1500).
+ */
 export function parseBRL(value: string): number {
   if (!value) return 0;
-  const cleaned = value
-    .replace(/[R$\s]/g, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const n = Number(cleaned);
+  let s = String(value).replace(/[R$\s\u00a0]/g, "");
+  const temVirgula = s.includes(",");
+  const temPonto = s.includes(".");
+  if (temVirgula && temPonto) {
+    // O separador que vem por último é o decimal.
+    s = s.lastIndexOf(",") > s.lastIndexOf(".")
+      ? s.replace(/\./g, "").replace(",", ".")
+      : s.replace(/,/g, "");
+  } else if (temVirgula) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (temPonto && !/^-?\d+\.\d{1,2}$/.test(s)) {
+    s = s.replace(/\./g, ""); // só milhar
+  }
+  const n = Number(s);
   return isNaN(n) ? 0 : n;
 }
 

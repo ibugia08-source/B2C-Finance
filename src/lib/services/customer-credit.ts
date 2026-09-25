@@ -1,12 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { MONEY_EPSILON } from "@/lib/billing-status";
 import { toNumber as n } from "@/lib/format";
+import { hojeCivil, hojeCivilParaGravar } from "@/lib/civil-date";
 
 /**
  * CRÉDITO DO CLIENTE (F1.8 · ref. 01 §3.12; 02 §1).
  *
  * "Marca Pago com valor maior que o devido → aplica até o saldo e cria
- * crédito; toast: 'R$ X ficaram como crédito para a próxima cobrança'."
+ * crédito". Desde 25/09/2026 o núcleo do pagamento (payment-accounting)
+ * já APLICA o excedente nas cobranças em aberto mais antigas do cliente, na
+ * mesma transação; só o que não couber fica aqui como saldo, e `applyCredit`
+ * é o gesto manual para usá-lo depois.
  *
  * COMO O CRÉDITO É GASTO — e por que não se cria pagamento novo:
  * o dinheiro já entrou uma vez, no pagamento que gerou o excedente. Criar
@@ -115,8 +119,7 @@ export async function applyCredit(input: {
     });
     const novoPago = n(soma._sum.amount);
     const quitada = novoPago >= n(billing.amount) - MONEY_EPSILON;
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+    const hoje = hojeCivil();
 
     await tx.billing.update({
       where: { id: billing.id },
@@ -124,17 +127,26 @@ export async function applyCredit(input: {
         paidTotal: novoPago,
         status: quitada ? "PAID" : novoPago > MONEY_EPSILON ? "PARTIAL"
           : billing.dueDate < hoje ? "OVERDUE" : "PENDING",
-        paidAt: quitada ? new Date() : null,
+        paidAt: quitada ? hojeCivilParaGravar() : null,
         collectionStatus: quitada ? "PAID" : undefined,
       },
     });
 
     // Movimento de SAÍDA do crédito, com destino — saldo sem história é
     // reclamação garantida.
-    const credito = await tx.customerCredit.findFirst({
-      where: { clientId: billing.clientId, relationshipId: billing.relationshipId },
-      select: { id: true },
-    });
+    // A linha do crédito é por (cliente, relação); crédito gerado noutra
+    // relação do mesmo cliente também paga — sem este fallback o cache não
+    // baixava e divergia da conta real.
+    const credito =
+      (await tx.customerCredit.findFirst({
+        where: { clientId: billing.clientId, relationshipId: billing.relationshipId },
+        select: { id: true },
+      })) ??
+      (await tx.customerCredit.findFirst({
+        where: { clientId: billing.clientId, balance: { gt: 0 } },
+        orderBy: { balance: "desc" },
+        select: { id: true },
+      }));
     if (credito) {
       await tx.customerCredit.update({
         where: { id: credito.id },
