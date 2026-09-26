@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getClientStatusesForCompetences, periodReferenceCompetence } from "@/lib/clients/period-status";
 import { getClientSummaries } from "@/lib/services/client-metrics";
 import { type ReportQuery, amountRange } from "../query";
 import {
@@ -15,8 +16,14 @@ import { CLIENT_STATUS_LABEL, MODALITY_LABEL, type ReportDef, type ReportRow } f
  */
 async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
   const where: Record<string, unknown> = {};
-  if (q.status) where.status = q.status;
-  if (q.clientId) where.id = q.clientId;
+  // STATUS DA COMPETÊNCIA (26/09/2026): coluna e filtro de status usam o status
+  // vigente no encerramento do período do relatório (hoje, no mês em curso),
+  // pela linha do tempo — relatório de setembro mostra a carteira de setembro.
+  const competencia = periodReferenceCompetence(q.period);
+  const statusDaComp = (await getClientStatusesForCompetences([competencia])).get(competencia) ?? new Map<string, string>();
+  if (q.status) where.id = { in: [...statusDaComp].filter(([, s]) => s === q.status).map(([id]) => id) };
+  if (q.clientId)
+    where.id = q.status ? { in: ((where.id as { in: string[] }).in).filter((id) => id === q.clientId) } : q.clientId;
   if (q.responsavel)
     where.OR = [
       { salesOwner: { equals: q.responsavel, mode: "insensitive" } },
@@ -48,7 +55,10 @@ async function buildClientes(q: ReportQuery): Promise<ReportRow[]> {
     const s = summaries.get(c.id)!;
     return {
       cliente: c.name,
-      status: CLIENT_STATUS_LABEL[c.status] ?? c.status,
+      status: (() => {
+        const s = statusDaComp.get(c.id);
+        return s ? CLIENT_STATUS_LABEL[s] ?? s : "Sem registro";
+      })(),
       cidade: c.city ? `${c.city}${c.state ? "/" + c.state : ""}` : null,
       uf: c.state,
       responsavel: c.salesOwner,

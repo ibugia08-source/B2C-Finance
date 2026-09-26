@@ -51,6 +51,10 @@ export const CATEGORIA_DO_EVENTO: Record<string, CategoriaDeEvento> = {
   RECONCILIATION: "FECHAMENTO",
   CLOSING_ADJUSTMENT: "FECHAMENTO",
 
+  // Status do cliente com vigência (26/09/2026): muda a CARTEIRA da
+  // competência (ativos, MRR, churn) — mês fechado bloqueia; reaberto libera.
+  CLIENT_STATUS_CHANGED: "ECONOMICO",
+
   MONTHLY_EVALUATION: "OPERACIONAL",
   ONBOARDING: "OPERACIONAL",
   COLLECTION_CONTACT: "OPERACIONAL",

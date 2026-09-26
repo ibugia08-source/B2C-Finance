@@ -92,6 +92,11 @@ export default async function ClientDetailLayout({
     onboarding: onboardingPendentes,
   };
 
+  const { todayKey } = await import("@/lib/competence");
+  const { getNextScheduledStatusChange } = await import("@/lib/clients/status-history");
+  const hoje = todayKey();
+  const programada = await getNextScheduledStatusChange(client.id, hoje);
+
   return (
     <div>
       <ClientHeader
@@ -99,6 +104,10 @@ export default async function ClientDetailLayout({
         summary={summary}
         monthly={monthly}
         risk={risk}
+        statusInfo={{
+          today: hoje,
+          scheduled: programada ? { status: programada.status, from: programada.from } : null,
+        }}
         upsell={
           canUpsell
             ? { services: upsellServices, offers: upsellOffers }

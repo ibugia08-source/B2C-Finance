@@ -124,6 +124,14 @@ export const PERMISSION_MODULES: PermissionModule[] = [
       { id: "clientes.criar", label: "Cadastrar clientes" },
       { id: "clientes.editar", label: "Editar clientes" },
       { id: "clientes.alterar_status", label: "Alterar status" },
+      // Status com vigência (26/09/2026): programar = vigência depois de hoje;
+      // retroativo = vigência num mês que já passou (reescreve a carteira dele).
+      { id: "clientes.programar_status", label: "Programar alteração de status (vigência futura)" },
+      {
+        id: "clientes.alterar_status_retroativo",
+        label: "Alterar status com vigência retroativa (meses anteriores)",
+        sensitive: true,
+      },
       { id: "clientes.anexar_documentos", label: "Anexar documentos" },
       {
         id: "clientes.ver_dados_financeiros",
@@ -436,6 +444,8 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "clientes.criar",
     "clientes.editar",
     "clientes.alterar_status",
+    "clientes.programar_status",
+    "clientes.alterar_status_retroativo",
     "clientes.anexar_documentos",
     "clientes.ver_dados_financeiros",
     "recebimentos.visualizar",
@@ -526,6 +536,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "clientes.criar",
     "clientes.editar",
     "clientes.alterar_status",
+    "clientes.programar_status",
     "clientes.anexar_documentos",
     "recebimentos.visualizar",
     "rotina.visualizar",
@@ -543,6 +554,7 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "clientes.criar",
     "clientes.editar",
     "clientes.alterar_status",
+    "clientes.programar_status",
     "contratos.visualizar",
     "contratos.criar",
     "contratos.editar",

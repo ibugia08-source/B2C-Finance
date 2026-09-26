@@ -33,7 +33,8 @@ import {
 import { setClientMonthPayment } from "@/lib/actions/receivables-inline";
 import { undoQuickSettle } from "@/lib/actions/billings";
 import { showUndoToast } from "@/components/undo-toast";
-import type { ClientRow } from "./clients-table";
+import type { ClientRow, StatusContext } from "./clients-table";
+import { StatusChangeDialog } from "./status-change-dialog";
 import { FloatingActionBar } from "@/components/ui/floating-action-bar";
 
 const STATUS_OPTIONS = CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => ({
@@ -220,10 +221,13 @@ export function BulkActionBar({
   count,
   onClear,
   canDelete = true,
+  statusContext,
 }: {
   ids: string[];
   count: number;
   onClear: () => void;
+  /** Competência em exibição + hoje (servidor): a vigência do status em massa. */
+  statusContext: StatusContext;
   /** Sem clientes.excluir → botão Excluir não aparece (backend também bloqueia). */
   canDelete?: boolean;
 }) {
@@ -282,25 +286,16 @@ export function BulkActionBar({
         </div>
       </FloatingActionBar>
 
-      {dialog === "status" && (
-        <BulkFieldDialog
-          title="Alterar status em massa"
-          count={count}
-          onClose={() => setDialog(null)}
-          render={(value, setValue) => (
-            <Select value={value} onChange={(e) => setValue(e.target.value)}>
-              <option value="">Selecione…</option>
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          )}
-          onConfirm={(value) => bulkUpdateClients({ ids, status: value })}
-          onDone={onClear}
-        />
-      )}
+      {/* Status em massa COM VIGÊNCIA: todos a partir da mesma data; os
+          meses anteriores de cada cliente ficam como estavam. */}
+      <StatusChangeDialog
+        open={dialog === "status"}
+        onOpenChange={(o) => setDialog(o ? "status" : null)}
+        clientIds={ids}
+        competence={statusContext.competence}
+        today={statusContext.today}
+        onDone={onClear}
+      />
       {dialog === "owner" && (
         <BulkOwnerDialog ids={ids} onClose={() => setDialog(null)} onDone={onClear} />
       )}

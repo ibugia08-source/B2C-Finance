@@ -78,6 +78,19 @@ export async function montarChecklist(competence: Competence | string): Promise<
   const fim = new Date(ano, mes, 1);
   const q = `?mes=${competence}`;
   const workspaceId = await currentWorkspaceId();
+  // Carteira ATIVA DA COMPETÊNCIA (linha do tempo de status, 26/09/2026) —
+  // não a de hoje: o checklist de agosto não muda porque alguém saiu em
+  // outubro.
+  const { getActiveClientsForCompetence } = await import("@/lib/clients/status-history");
+  const ativosDaComp = [...(await getActiveClientsForCompetence(competence))];
+  // Relação viva na competência (em curso, ou encerrada depois do fim dela).
+  const relacaoViva = {
+    OR: [
+      { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] as any } },
+      { churnedAt: { gte: fim } },
+      { endedAt: { gte: fim } },
+    ],
+  };
 
   const [
     mrrSemCobranca,
@@ -95,7 +108,8 @@ export async function montarChecklist(competence: Competence | string): Promise<
     // 1. MRR ativo sem cobrança na competência.
     prisma.clientAgencyRelationship.count({
       where: {
-        lifecycleStatus: "ACTIVE",
+        clientId: { in: ativosDaComp },
+        ...relacaoViva,
         currentCommercialTerm: { modality: "MRR", monthlyValue: { gt: 0 } },
         billings: { none: { competence } },
       },
@@ -122,11 +136,12 @@ export async function montarChecklist(competence: Competence | string): Promise<
     // 5. Folha fora de APPROVED/PAID.
     prisma.payroll.count({ where: { year: ano, month: mes, status: "DRAFT" } }),
     // 6 e 7. Carteira ativa.
-    prisma.clientAgencyRelationship.count({ where: { lifecycleStatus: "ACTIVE" } }),
+    prisma.clientAgencyRelationship.count({ where: { clientId: { in: ativosDaComp }, ...relacaoViva } }),
     prisma.avaliacaoMensal.count({ where: { competence, confirmedAt: { not: null } } }),
     prisma.clientAgencyRelationship.count({
       where: {
-        lifecycleStatus: "ACTIVE",
+        clientId: { in: ativosDaComp },
+        ...relacaoViva,
         managers: { none: { validTo: null, role: "MANAGER_1" } },
       },
     }),

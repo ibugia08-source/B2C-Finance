@@ -7,51 +7,31 @@ import { requirePermission, tryPermission, NO_PERMISSION } from "@/lib/auth/view
 import { parseBRL, parseDateBR, clean } from "@/lib/format";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { abrirVidaDoCliente } from "@/lib/services/client-lifecycle";
+import { expectativaAoSalvar, recordLosses } from "@/lib/services/client-status-transition";
 import {
-  PRAZO_INDETERMINADO, calendarParts, civilCompetenceKey, civilParts, currentYearMonth, expectationFromBase, expectationInMonth,
-  monthBounds, monthIndex, parseCompetenceKey, rollForward,
+  PRAZO_INDETERMINADO, expectationFromBase, expectationInMonth, parseCompetenceKey,
 } from "@/lib/renewal-expectation";
 
-/** Mesmo dia de calendário (fuso do workspace)? Nulos só casam com nulos. */
-function mesmoDia(a: Date | null | undefined, b: Date | null | undefined): boolean {
-  if (!a || !b) return !a && !b;
-  const x = civilParts(a);
-  const y = civilParts(b);
-  return x.year === y.year && x.month === y.month && x.day === y.day;
-}
+const CLIENT_STATUS_TEXT: Record<string, string> = {
+  LEAD: "Lead", PROSPECT: "Prospect", ACTIVE: "Ativo", INACTIVE: "Inativo", PAUSED: "Pausado",
+  RENEWAL: "Em renovação", DELINQUENT: "Inadimplente", CHURNED: "Perdido",
+};
 
 /**
- * Expectativa de renovação ao SALVAR o cadastro (25/09/2026). A regra é
- * entrada + prazo; ela só é refeita quando a BASE muda (entrada ou prazo) ou
- * quando o cliente ainda não tem expectativa — assim um agendamento manual
- * sobrevive a editar o telefone. Cliente que volta a ficar ativo com uma
- * expectativa já vencida anda em ciclos até o mês corrente.
+ * Capacidades de status do usuário logado (RBAC existente). Toda troca de
+ * status passa pela linha do tempo (src/lib/clients/status-history.ts).
  */
-function expectativaAoSalvar(
-  antes: {
-    startedAt: Date | null; contractMonths: number | null; contractIndefinite?: boolean;
-    expectedRenewalAt: Date | null; status: string;
-  } | null,
-  depois: { startedAt: Date | null; contractMonths: number | null; contractIndefinite?: boolean; status: string }
-): Date | null | undefined {
-  // Prazo INDETERMINADO não gera expectativa: o cliente só aparece em
-  // Renovações se alguém agendar à mão.
-  const calculada = depois.contractIndefinite
-    ? null
-    : expectationFromBase(depois.startedAt, depois.contractMonths);
-  if (!antes) return calculada;
-  const baseMudou =
-    !mesmoDia(antes.startedAt, depois.startedAt) ||
-    antes.contractMonths !== depois.contractMonths ||
-    !!antes.contractIndefinite !== !!depois.contractIndefinite;
-  if (baseMudou) return calculada;
-  if (!antes.expectedRenewalAt) return calculada ?? undefined;
-  const reativou =
-    (antes.status === "CHURNED" || antes.status === "INACTIVE") &&
-    depois.status !== "CHURNED" && depois.status !== "INACTIVE";
-  if (reativou)
-    return depois.contractIndefinite ? null : rollForward(antes.expectedRenewalAt, depois.contractMonths ?? 12);
-  return undefined; // não mexe
+async function capacidadesDeStatus() {
+  const { getViewer, can } = await import("@/lib/auth/viewer");
+  const v = await getViewer();
+  return {
+    actor: { id: v.id, email: v.email },
+    caps: {
+      alterar: can(v, "clientes.alterar_status"),
+      programar: can(v, "clientes.programar_status"),
+      retroativo: can(v, "clientes.alterar_status_retroativo"),
+    },
+  };
 }
 
 /**
@@ -208,59 +188,6 @@ const ClientSchema = z
   });
 
 /** Normaliza um campo do FormData: string vazia vira null. */
-
-/**
- * Registra a PERDA (ClientLoss) dos clientes que estão virando CHURNED:
- * snapshot da receita perdida (MRR mensal / TCV de referência), modalidade,
- * responsável e motivo. Chamado em toda transição de status → Perdido.
- */
-async function recordLosses(
-  clientIds: string[],
-  reason?: string | null,
-  lostAt?: Date,
-  /** "Não renovou" do módulo Renovações: a competência em exibição. */
-  renewalCompetence?: string | null
-) {
-  if (clientIds.length === 0) return;
-  const { computeLossSnapshots, expectedRenewalValues } = await import("@/lib/services/revenue-metrics");
-  const [snapshots, clientes] = await Promise.all([
-    computeLossSnapshots(clientIds),
-    prisma.client.findMany({
-      where: { id: { in: clientIds } },
-      select: { id: true, modality: true, monthlyValue: true, totalContractValue: true, expectedRenewalAt: true },
-    }),
-  ]);
-  if (snapshots.length === 0) return;
-  const esperado = await expectedRenewalValues(clientes);
-  const quando = lostAt ?? new Date();
-  const porId = new Map(clientes.map((c) => [c.id, c]));
-  await prisma.clientLoss.createMany({
-    data: snapshots.map((s) => {
-      // É RENOVAÇÃO PERDIDA quando veio do módulo (competência explícita)
-      // ou quando a expectativa do cliente já tinha chegado (mês dela ≤ mês
-      // da perda). Saída no meio do contrato não conta como renovação.
-      const exp = porId.get(s.clientId)?.expectedRenewalAt ?? null;
-      const competencia =
-        renewalCompetence && parseCompetenceKey(renewalCompetence)
-          ? renewalCompetence
-          : exp && monthIndex(civilParts(exp)) <= monthIndex(calendarParts(quando))
-            ? civilCompetenceKey(exp)
-            : null;
-      return {
-        clientId: s.clientId,
-        modality: s.modality as any,
-        monthlyValue: s.monthlyValue,
-        referenceValue: s.referenceValue,
-        salesOwner: s.salesOwner,
-        reason: reason ?? null,
-        renewalCompetence: competencia,
-        expectedValue: competencia ? esperado.get(s.clientId) ?? null : null,
-        // Data informada pelo gestor (botão Perda); default do banco = agora.
-        ...(lostAt ? { lostAt } : {}),
-      };
-    }),
-  });
-}
 
 export async function saveClient(formData: FormData): Promise<ActionResult> {
   if (!(await tryPermission("clientes.editar"))) return NO_PERMISSION;
@@ -438,7 +365,7 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         }
       );
       // Grava o cadastro SEM trocar o status; a troca (se houver) passa por
-      // transicionarStatus — perda, relação, termo e cobranças acompanham.
+      // linha do tempo de status — perda, relação, termo e cobranças acompanham.
       const atualizado = await prisma.client.update({
         where: { id },
         data: {
@@ -452,8 +379,17 @@ export async function saveClient(formData: FormData): Promise<ActionResult> {
         const { liberarTerminoDosContratos } = await import("@/lib/services/lifecycle");
         await liberarTerminoDosContratos(id);
       }
+      // Status no cadastro = "a partir de hoje" pela linha do tempo; os meses
+      // anteriores ficam como estavam. Vigência em outra data: diálogo
+      // "Alterar status".
       if (parsed.status !== existing.status) {
-        await transicionarStatus(atualizado, parsed.status);
+        const { changeClientStatus } = await import("@/lib/clients/status-history");
+        const { todayKey } = await import("@/lib/competence");
+        const { actor, caps } = await capacidadesDeStatus();
+        await changeClientStatus(
+          { clientId: atualizado.id, status: parsed.status, effectiveFrom: todayKey(), actor },
+          caps
+        );
       }
     } else {
       // Deduplicação antes de criar (02 §4.1).
@@ -674,87 +610,19 @@ export async function setClientStatus(
 ): Promise<ActionResult> {
   if (!(await tryPermission("clientes.alterar_status"))) return NO_PERMISSION;
   try {
+    // Compatibilidade: sem data informada, vale A PARTIR DE HOJE — nunca
+    // reescreve os meses anteriores. A interface usa changeClientStatusAction.
     const s = z.nativeEnum(ClientStatus).parse(status);
-    const existing = await prisma.client.findUnique({ where: { id } });
-    if (!existing) return { ok: false, error: "Cliente não encontrado." };
-    await transicionarStatus(existing, s, { reason });
+    const { changeClientStatus } = await import("@/lib/clients/status-history");
+    const { todayKey } = await import("@/lib/competence");
+    const { actor, caps } = await capacidadesDeStatus();
+    await changeClientStatus({ clientId: id, status: s, effectiveFrom: todayKey(), reason, actor }, caps);
     revalidateAgency({ clientId: id });
     return { ok: true };
   } catch (e: any) {
     const msg = e?.issues?.[0]?.message ?? e?.message ?? "Falha ao atualizar o status.";
     return { ok: false, error: msg };
   }
-}
-
-const ATIVOS = ["ACTIVE", "RENEWAL", "DELINQUENT"] as const;
-const ehAtivo = (s: string) => (ATIVOS as readonly string[]).includes(s);
-
-/**
- * TRANSIÇÃO DE STATUS — caminho ÚNICO (auditoria 25/09/2026).
- *
- * O select da carteira, o botão Perda, a ação em massa e a edição do
- * cadastro mudavam só Client.status. A relação com a agência e o termo
- * comercial (fonte do NRR, das avaliações, do painel do gestor) não
- * acompanhavam, e as mensalidades futuras de quem saiu seguiam em aberto.
- * Agora toda troca de status passa por aqui e usa os MESMOS serviços do
- * dossiê: encerrarRelacoes (saída), pausarCliente, retomarCliente e
- * reativarCliente — além do registro de perda e da expectativa de renovação.
- */
-async function transicionarStatus(
-  existing: {
-    id: string; status: string; churnedAt: Date | null; startedAt: Date | null;
-    contractMonths: number | null; contractIndefinite?: boolean; expectedRenewalAt: Date | null;
-  },
-  novo: ClientStatus,
-  opts: { reason?: string | null; lostAt?: Date; renewalCompetence?: string | null } = {}
-): Promise<void> {
-  const id = existing.id;
-  const antes = existing.status;
-  if (antes === novo) return;
-  const ciclo = await import("@/lib/services/lifecycle");
-
-  if (novo === "CHURNED") {
-    const saida = opts.lostAt ?? new Date();
-    await recordLosses([id], opts.reason ?? null, opts.lostAt, opts.renewalCompetence ?? null);
-    await prisma.client.update({ where: { id }, data: { status: "CHURNED", churnedAt: saida } });
-    await ciclo.encerrarRelacoes(id, saida, opts.reason ?? null);
-    return;
-  }
-
-  // Saindo de Perdido: reativa (relação, termo novo, expectativa em dia).
-  if (antes === "CHURNED") {
-    const r = await ciclo.reativarCliente(id, opts.reason ?? null);
-    if (!r.ok) throw new Error(r.error);
-  } else if (antes === "PAUSED" && novo !== "PAUSED") {
-    const r = await ciclo.retomarCliente(id, opts.reason ?? null);
-    if (!r.ok) throw new Error(r.error);
-  }
-
-  if (novo === "PAUSED") {
-    const r = await ciclo.pausarCliente(id, { motivo: opts.reason ?? null });
-    if (!r.ok) throw new Error(r.error);
-    return;
-  }
-
-  // Reativar/retomar deixam ACTIVE; o status pedido pode ser outro (ex.:
-  // Inadimplente, Renovação, Lead). Grava o final + expectativa coerente.
-  const expectativa = expectativaAoSalvar(existing, {
-    startedAt: existing.startedAt,
-    contractMonths: existing.contractMonths,
-    contractIndefinite: existing.contractIndefinite,
-    status: novo,
-  });
-  await prisma.client.update({
-    where: { id },
-    data: {
-      status: novo,
-      churnedAt: null,
-      ...(expectativa !== undefined && !(antes === "CHURNED" || antes === "PAUSED")
-        ? { expectedRenewalAt: expectativa }
-        : {}),
-    },
-  });
-  void ehAtivo;
 }
 
 /**
@@ -783,11 +651,10 @@ export async function markClientLost(
 
     const text = (reason ?? "").trim() || null;
     const competencia = parseCompetenceKey(renewalCompetence ?? "") ? renewalCompetence! : null;
-    if (existing.status !== "CHURNED") {
-      await recordLosses([id], text, lostAt, competencia);
-    } else {
-      // Já estava perdido: atualiza a perda mais recente (data/motivo)
-      // em vez de duplicar o registro.
+    const dia = `${m[1]}-${m[2]}-${m[3]}`;
+    if (existing.status === "CHURNED") {
+      // Já estava perdido: atualiza a perda mais recente (data/motivo) em vez
+      // de duplicar o registro, e a saída passa a valer desde a data informada.
       const last = await prisma.clientLoss.findFirst({
         where: { clientId: id },
         orderBy: { lostAt: "desc" },
@@ -806,15 +673,29 @@ export async function markClientLost(
         await recordLosses([id], text, lostAt, competencia);
       }
     }
-
-    await prisma.client.update({
-      where: { id },
-      data: { status: "CHURNED", churnedAt: lostAt },
-    });
-    // Relação encerrada, termo fechado e mensalidades futuras canceladas —
-    // o mesmo que a saída pelo dossiê. Idempotente para quem já saiu.
-    const { encerrarRelacoes } = await import("@/lib/services/lifecycle");
-    await encerrarRelacoes(id, lostAt, text);
+    // A saída entra na LINHA DO TEMPO a partir da data informada: os meses
+    // anteriores continuam com o status que tinham. Perda, relação, termo e
+    // cobranças futuras acompanham pela transição (sincronizarStatusAtual).
+    // Data futura = saída PROGRAMADA (não mexe no status de hoje).
+    const { changeClientStatus, getClientStatusTimeline, describeInterval } = await import("@/lib/clients/status-history");
+    const { todayKey } = await import("@/lib/competence");
+    // Um status já registrado DEPOIS da data informada (ex.: a entrada do
+    // cliente) continua valendo — a saída não o apaga em silêncio. O gesto
+    // "Perda" precisa deixar o cliente perdido; se não deixaria, explica.
+    const posterior = (await getClientStatusTimeline(id)).find(
+      (i) => i.from > dia && i.from <= todayKey() && i.status !== "CHURNED"
+    );
+    if (posterior)
+      return {
+        ok: false,
+        error: `Há um status registrado depois dessa data (${CLIENT_STATUS_TEXT[posterior.status] ?? posterior.status} ${describeInterval(posterior)}). Informe uma data de saída posterior ou ajuste o histórico em "Alterar status".`,
+      };
+    const { actor, caps } = await capacidadesDeStatus();
+    const r = await changeClientStatus(
+      { clientId: id, status: "CHURNED", effectiveFrom: dia, reason: text, actor, renewalCompetence: competencia },
+      caps
+    );
+    if (r.aviso) return { ok: false, error: r.aviso };
 
     revalidateAgency({ clientId: id });
     return { ok: true };
@@ -1042,8 +923,14 @@ export async function bulkUpdateClients(input: {
     // perda registrada só para quem muda, churnedAt de quem JÁ tinha saído
     // preservado, relação/termo/cobranças futuras acompanhando.
     if (parsed.status) {
-      const alvos = await prisma.client.findMany({ where: { id: { in: parsed.ids } } });
-      for (const c of alvos) await transicionarStatus(c, parsed.status);
+      // A PARTIR DE HOJE, pela linha do tempo. Vigência em outra data:
+      // bulkChangeClientStatusAction (diálogo da ação em massa).
+      const { changeClientStatus } = await import("@/lib/clients/status-history");
+      const { todayKey } = await import("@/lib/competence");
+      const { actor, caps } = await capacidadesDeStatus();
+      const alvos = await prisma.client.findMany({ where: { id: { in: parsed.ids } }, select: { id: true } });
+      for (const c of alvos)
+        await changeClientStatus({ clientId: c.id, status: parsed.status, effectiveFrom: todayKey(), actor }, caps);
     }
 
     if (Object.keys(data).length > 0) {

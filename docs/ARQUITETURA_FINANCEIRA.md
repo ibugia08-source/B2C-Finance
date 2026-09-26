@@ -40,6 +40,11 @@ CashBox/CashBoxMovement       → caixa/reservas
 
 - MRR previsto NÃO depende de billing existir (Σ Client.monthlyValue dos MRR
   ativos) — imune a mensalidade não gerada.
+- **Status do cliente tem vigência (26/09/2026):** "ativo no mês X" vem da linha
+  do tempo `ClientStatusHistory` (status no encerramento da competência; hoje
+  na competência em curso; projeção com alterações programadas no futuro) —
+  `src/lib/clients/status-history.ts`. `Client.status` = status vigente HOJE,
+  materializado. Detalhes: `docs/STATUS_TEMPORAL_CLIENTES.md`.
 - TCV previsto = billings TCV da competência (o cadastro TCV gera exatamente 1
   cobrança cheia no mês do fechamento).
 - Recebido casa Payment.paidAt com a competência (pagou no mês ou adiantado);
@@ -52,7 +57,8 @@ CashBox/CashBoxMovement       → caixa/reservas
 | Dashboard (5 cards, gráficos, resumo) | `getDashboardMainMetrics` + `getYearlySeries` (dashboard-main) |
 | Dashboard (saúde, alertas, indicadores) | `getExecutiveDashboard` (dashboard-metrics) |
 | Rotina diária | queue (billing-metrics/collection-priority) + billings diretos + getCashSummary |
-| Clientes (KPIs) | counts diretos + client-metrics (inadimplência mês) |
+| Clientes (KPIs, lista, filtro de status) | status DA COMPETÊNCIA (`getClientStatusesForCompetence`) + `ClientLoss` do mês + client-metrics (inadimplência mês) |
+| Status do cliente (qualquer tela) | `src/lib/clients/status-history.ts` — nunca `client.status` para um mês que não seja hoje |
 | Gestão do Mês (resumo do topo) | `getReceiptsSummary` + `getExpenseSummary` + `getPayrollSummary` — MESMAS fontes do Dashboard, de propósito (não criar cálculo novo aqui). Resultado do mês = `expectedTotal − despesas` (regra da planilha, 2026-08-13) |
 | Gestão do Mês (grid de clientes) | receivables-cycle + KPIs do ciclo calculados na página (paidTotal) |
 | Gestão do Mês (Recebimentos do Mês) | reuso das billings do grid + incomes avulsas/RECOVERY + extraRevenue MANUAL (zero query nova de billing) |

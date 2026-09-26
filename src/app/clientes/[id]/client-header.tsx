@@ -7,7 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/metric-card";
 import { formatBRL, formatDateBR } from "@/lib/format";
 import type { ClientRiskProfile } from "@/lib/services/client-metrics";
-import { ClientStatusSelect } from "../status-select";
+import { ClientStatusCell } from "../status-change-dialog";
+import { clientStatusPill } from "../_meta";
 import { LifecycleActions } from "./lifecycle-actions";
 import { ClientDialog } from "../client-dialog";
 import { UpsellDialog } from "@/app/upsell/upsell-dialog";
@@ -35,6 +36,9 @@ export interface ClientHeaderProps {
   };
   monthly: number;
   risk: ClientRiskProfile;
+  /** Hoje (Bahia) e a próxima alteração programada — o seletor antigo de
+   * status trocava o status "para sempre"; agora a troca tem vigência. */
+  statusInfo: { today: string; scheduled: { status: string; from: string } | null };
   /** Opções do quick-add de upsell (null = viewer sem upsell.criar). */
   upsell?: {
     services: { id: string; name: string }[];
@@ -49,7 +53,7 @@ const RISK_BADGE: Record<ClientRiskProfile["riskLevel"], any> = {
   sem_historico: "secondary",
 };
 
-export function ClientHeader({ client, summary, monthly, risk, upsell }: ClientHeaderProps) {
+export function ClientHeader({ client, summary, monthly, risk, upsell, statusInfo }: ClientHeaderProps) {
   const onTimePct =
     risk.onTimeRate != null ? Math.round(risk.onTimeRate * 100) : null;
   return (
@@ -75,7 +79,15 @@ export function ClientHeader({ client, summary, monthly, risk, upsell }: ClientH
         actions={
           <div className="flex items-center gap-2">
             <LifecycleActions clientId={client.id} status={client.status} />
-            <ClientStatusSelect clientId={client.id} status={client.status} />
+            <ClientStatusCell
+              clientId={client.id}
+              clientName={client.name}
+              status={client.status}
+              scheduled={statusInfo.scheduled}
+              competence={statusInfo.today.slice(0, 7)}
+              today={statusInfo.today}
+              pillClass={clientStatusPill}
+            />
             <ClientDialog
               initial={{
                 ...client,

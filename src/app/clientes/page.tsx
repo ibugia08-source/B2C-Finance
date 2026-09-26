@@ -32,6 +32,11 @@ function mesDaExpectativa(v: string): YearMonth | null {
 import { listarNichos } from "@/lib/services/niches";
 import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
+import {
+  getClientStatusesForCompetence, getClientsNeedingStatusReview, getScheduledStatusChanges,
+} from "@/lib/clients/status-history";
+import { isRevenueActiveStatus } from "@/lib/client-status";
+import { toCompetence, todayKey } from "@/lib/competence";
 import { PageSizeSelect } from "./page-size-select";
 import { PAGE_SIZES, MONTH_LABEL } from "./_meta";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
@@ -75,18 +80,41 @@ async function ClientesPageInner({
   const { start: mesStart, end: mesEnd } = monthRange(selRef);
   const selLabel = `${MONTH_LABEL[selMonth]}/${selYear}`;
 
+  // ===== STATUS DA COMPETÊNCIA (26/09/2026) =====
+  // A lista, o filtro de status e os KPIs usam o status VIGENTE NO
+  // ENCERRAMENTO da competência selecionada (hoje, se ela está em curso), pela
+  // linha do tempo — nunca o status de hoje para um mês passado. Mudar o
+  // cliente para Inativo em outubro não muda o que setembro mostra.
+  const competencia = toCompetence(selYear, selMonth);
+  const hoje = todayKey();
+  const [statusDaComp, perdasDoMes] = await Promise.all([
+    getClientStatusesForCompetence(competencia, { today: hoje }),
+    // Perdidos no mês = TRANSIÇÃO registrada no mês (ClientLoss, gravada na
+    // data de vigência da saída) — a mesma fonte do Dashboard. Não é "quem
+    // hoje está Perdido".
+    prisma.clientLoss.findMany({
+      where: { lostAt: { gte: mesStart, lt: mesEnd } },
+      select: { clientId: true },
+      distinct: ["clientId"],
+    }),
+  ]);
+  const idsComStatus = (pred: (s: string) => boolean) =>
+    [...statusDaComp].filter(([, s]) => pred(s)).map(([id]) => id);
+
   // ---------- where (filtros que rodam no banco) ----------
   const where: any = {};
   // Perdidos saem da lista padrão (botão "Perda de cliente"); para revê-los,
-  // use o filtro de status "Perdido / Cancelado" ou o card "Perdidos este mês".
+  // use o filtro de status "Perdido / Cancelado" ou o card "Perdidos no mês".
   if (searchParams.perda === "mes") {
-    // Card "Clientes perdidos este mês": perdidos com saída no mês atual.
-    where.status = "CHURNED";
-    where.churnedAt = { gte: mesStart, lt: mesEnd };
+    where.id = { in: perdasDoMes.map((p) => p.clientId) };
+  } else if (searchParams.status === "ativos") {
+    // Card "Clientes ativos": os que geram receita na competência.
+    where.id = { in: idsComStatus(isRevenueActiveStatus) };
   } else if (searchParams.status) {
-    where.status = searchParams.status;
+    where.id = { in: idsComStatus((s) => s === searchParams.status) };
   } else {
-    where.status = { not: "CHURNED" };
+    // Carteira da competência: quem tinha status nela, menos os perdidos.
+    where.id = { in: idsComStatus((s) => s !== "CHURNED") };
   }
   // Card "Novos clientes este mês": entrada no mês (startedAt; fallback createdAt).
   if (searchParams.entrada === "mes") {
@@ -182,20 +210,9 @@ async function ClientesPageInner({
         select: { salesOwner: true },
         orderBy: { salesOwner: "asc" },
       }),
-      // Ativos: mês corrente = status ACTIVE; mês passado = quem estava na
-      // base naquele mês (entrou antes do fim; não havia saído antes do início).
-      isCurrentMonth
-        ? prisma.client.count({ where: { status: "ACTIVE" } })
-        : prisma.client.count({
-            where: {
-              status: { notIn: ["PROSPECT", "LEAD"] },
-              OR: [
-                { startedAt: { lt: mesEnd } },
-                { startedAt: null, createdAt: { lt: mesEnd } },
-              ],
-              AND: [{ OR: [{ churnedAt: null }, { churnedAt: { gte: mesStart } }] }],
-            },
-          }),
+      // Ativos: status que gera receita no ENCERRAMENTO da competência
+      // (hoje, na competência em curso), pela linha do tempo.
+      Promise.resolve(idsComStatus(isRevenueActiveStatus).length),
       // Novos do mês: entrada (startedAt; fallback createdAt) no mês atual.
       prisma.client.count({
         where: {
@@ -205,10 +222,8 @@ async function ClientesPageInner({
           ],
         },
       }),
-      // Perdidos este mês: saída (churnedAt) dentro do mês atual.
-      prisma.client.count({
-        where: { status: "CHURNED", churnedAt: { gte: start, lt: end } },
-      }),
+      // Perdidos no mês: perdas registradas com saída no mês.
+      Promise.resolve(perdasDoMes.length),
       // Renovações do mês: o MESMO livro do módulo Renovações (expectativas
       // do mês + desfechos registrados contra elas).
       renewalLedgerMonth({ month: curMonth, year: curYear }).then((l) => l.rows.length),
@@ -296,6 +311,12 @@ async function ClientesPageInner({
     servicesById.set(ct.clientId, cur);
   }
   const risksById = await getClientRiskLevels(pageIds);
+  // Próxima alteração programada (aviso discreto na linha) e histórico que
+  // precisa de conferência — em lote, só da página.
+  const [programadas, revisar] = await Promise.all([
+    getScheduledStatusChanges(pageIds, hoje),
+    getClientsNeedingStatusReview(),
+  ]);
   const rowById = new Map(rowsRaw.map((r) => [r.id, r]));
   const clients: ClientRow[] = pageIds
     .map((id) => rowById.get(id))
@@ -322,7 +343,11 @@ async function ClientesPageInner({
         id: r.id,
         name: r.name,
         segment: r.segment,
-        status: r.status,
+        status: statusDaComp.get(r.id) ?? null,
+        scheduled: (() => {
+          const p = programadas.get(r.id);
+          return p ? { status: p.status, from: p.from } : null;
+        })(),
         modality: r.modality,
         salesOwner: r.salesOwner,
         renewalCompetence: r.expectedRenewalAt ? civilCompetenceKey(r.expectedRenewalAt) : null,
@@ -380,8 +405,18 @@ async function ClientesPageInner({
 
       {!isCurrentMonth && (
         <div className="mb-3 rounded-xl border border-primary/25 bg-primary/[0.04] px-4 py-2.5 text-sm">
-          Você está gerenciando <strong>{selLabel}</strong> — a inadimplência, os
-          vencimentos e os ajustes feitos aqui ficam gravados nessa competência.
+          Você está gerenciando <strong>{selLabel}</strong> — os status exibidos são os
+          vigentes nessa competência, e a inadimplência, os vencimentos e os ajustes
+          feitos aqui ficam gravados nela.
+        </div>
+      )}
+      {revisar.size > 0 && can(viewer, "clientes.alterar_status") && (
+        <div className="mb-3 rounded-xl border border-dashed px-4 py-2.5 text-sm text-muted-foreground">
+          {revisar.size} cliente{revisar.size === 1 ? "" : "s"} com histórico de status reconstruído sem data
+          suficiente — até a revisão, os meses anteriores ficam sem status nesses cadastros.{" "}
+          <Link href="/clientes/historico-status" className="text-primary underline-offset-2 hover:underline">
+            Revisar
+          </Link>
         </div>
       )}
 
@@ -393,11 +428,11 @@ async function ClientesPageInner({
           tone="pos"
           help={
             isCurrentMonth
-              ? "Total de clientes com status ativo na carteira."
-              : "Clientes que estavam na base durante o mês selecionado (entraram antes do fim do mês e não haviam saído)."
+              ? "Clientes ativos hoje (Ativo, Em renovação ou Inadimplente), pelo status vigente. Alterações programadas para depois de hoje não contam."
+              : "Clientes ativos (Ativo, Em renovação ou Inadimplente) no encerramento do mês selecionado, pelo histórico de status — mudanças posteriores não alteram este número."
           }
           hint={isCurrentMonth ? "clique para filtrar os ativos" : selLabel}
-          href={`/clientes?status=ACTIVE${mesQS}`}
+          href={`/clientes?status=ativos${mesQS}`}
         />
         <KpiCard
           title="Novos no mês"
@@ -411,7 +446,7 @@ async function ClientesPageInner({
           title="Perdidos no mês"
           value={String(perdidosMes)}
           tone={perdidosMes > 0 ? "neg" : "default"}
-          help="Clientes perdidos no mês selecionado (data da saída registrada na perda)."
+          help="Clientes que saíram no mês selecionado: perdas registradas com data de saída no mês. Quem saiu antes ou depois não entra, mesmo que hoje esteja Perdido."
           hint={`saídas em ${selLabel}`}
           href={`/clientes?perda=mes${mesQS}`}
         />
@@ -433,7 +468,12 @@ async function ClientesPageInner({
 
       <Card>
         <CardContent className="p-0">
-          <ClientsTable clients={clients} allFilteredIds={allFilteredIds} canDelete={canDeleteClients} />
+          <ClientsTable
+            clients={clients}
+            allFilteredIds={allFilteredIds}
+            canDelete={canDeleteClients}
+            statusContext={{ competence: competencia, today: hoje }}
+          />
         </CardContent>
       </Card>
 

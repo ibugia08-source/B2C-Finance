@@ -60,6 +60,7 @@ const OWNED_MODELS = new Set<string>([
   "ClientNote",
   // Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra
   "ClientLoss",
+  "ClientStatusHistory",
   "Offer",
   "OfferService",
   "Upsell",

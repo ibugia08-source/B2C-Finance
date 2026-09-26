@@ -159,6 +159,17 @@ export async function middleware(req: NextRequest) {
     return seguir();
   }
 
+  // Job agendado (Vercel Cron): sem sessão; a própria rota autentica pelo
+  // CRON_SECRET (ou pelo agente do cron) — ver api/cron/status-programado.
+  if (pathname.startsWith("/api/cron/")) {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+    if (isLoginRateLimited(ip)) {
+      return new NextResponse("Muitas requisições.", { status: 429, headers: { "Retry-After": "60" } });
+    }
+    return seguir();
+  }
+
   // Tentativas de login (POST) limitadas por IP.
   if (pathname === "/login" && req.method === "POST") {
     const ip =

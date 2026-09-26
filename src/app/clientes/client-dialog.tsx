@@ -293,13 +293,31 @@ export function ClientDialog({
 
           <div>
             <Label>Status</Label>
-            <Select name="status" defaultValue={dv.status}>
-              {CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => (
-                <option key={s} value={s}>
-                  {CLIENT_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </Select>
+            {isNew ? (
+              <Select name="status" defaultValue={dv.status}>
+                {CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => (
+                  <option key={s} value={s}>
+                    {CLIENT_STATUS_LABEL[s]}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <>
+                {/* Status tem VIGÊNCIA (26/09/2026): editar o cadastro não troca
+                    o status — isso é o botão "Alterar status", com data. */}
+                <input type="hidden" name="status" value={dv.status} />
+                <Select value={dv.status} disabled aria-readonly>
+                  {CLIENT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {CLIENT_STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Para mudar, use &quot;Alterar status&quot; — a mudança vale a partir de uma data e preserva os meses anteriores.
+                </p>
+              </>
+            )}
           </div>
           <div>
             <Label>Responsável</Label>

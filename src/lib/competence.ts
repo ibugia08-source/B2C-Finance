@@ -154,3 +154,114 @@ export function competenceShort(competence: Competence): string {
   if (!p) return competence;
   return `${String(p.month).padStart(2, "0")}/${p.year}`;
 }
+
+// ============================================================================
+// DATAS CIVIS DA COMPETÊNCIA (status temporal de clientes, 26/09/2026)
+//
+// Datas de vigência são DIAS DO CALENDÁRIO, sem hora nem fuso, como a string
+// `YYYY-MM-DD`. Trabalhar com a string — e não com Date — é o que garante que
+// 01/10/2026 nunca vire 30/09/2026 numa conversão UTC ↔ Bahia.
+// ============================================================================
+
+/** Dia civil `YYYY-MM-DD`. */
+export type DateKey = string;
+
+const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Competência de uma data civil (`"2026-10-15"` → `"2026-10"`) ou de (ano, mês). */
+export function getCompetenceKey(value: DateKey | Date | number, month?: number): Competence {
+  if (typeof value === "number") return toCompetence(value, month ?? 1);
+  if (value instanceof Date) return toCompetence(value.getUTCFullYear(), value.getUTCMonth() + 1);
+  return value.slice(0, 7);
+}
+
+/** Primeiro dia da competência: `"2026-09"` → `"2026-09-01"`. */
+export function getStartOfCompetence(competence: Competence): DateKey {
+  if (!parseCompetence(competence)) throw new RangeError(`Competência inválida: ${competence}`);
+  return `${competence}-01`;
+}
+
+/** Último dia da competência (28, 29, 30 ou 31): `"2024-02"` → `"2024-02-29"`. */
+export function getEndOfCompetence(competence: Competence): DateKey {
+  const p = parseCompetence(competence);
+  if (!p) throw new RangeError(`Competência inválida: ${competence}`);
+  const last = new Date(Date.UTC(p.year, p.month, 0)).getUTCDate();
+  return `${competence}-${String(last).padStart(2, "0")}`;
+}
+
+export function getPreviousCompetence(competence: Competence): Competence {
+  return addMonths(competence, -1);
+}
+
+export function getNextCompetence(competence: Competence): Competence {
+  return addMonths(competence, 1);
+}
+
+/** É um dia civil válido? (`"2026-02-30"` não é.) */
+export function isDateKey(value: unknown): value is DateKey {
+  if (typeof value !== "string") return false;
+  const m = value.match(DAY_RE);
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3];
+}
+
+/** Soma dias a um dia civil (negativo subtrai). */
+export function addDays(day: DateKey, days: number): DateKey {
+  const m = day.match(DAY_RE);
+  if (!m) throw new RangeError(`Data inválida: ${day}`);
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + days));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Dia civil → Date à meia-noite UTC (o formato das colunas @db.Date). */
+export function dateKeyToDate(day: DateKey): Date {
+  if (!isDateKey(day)) throw new RangeError(`Data inválida: ${day}`);
+  return new Date(`${day}T00:00:00.000Z`);
+}
+
+/** Coluna @db.Date (meia-noite UTC) → dia civil. */
+export function dateToDateKey(d: Date): DateKey {
+  return d.toISOString().slice(0, 10);
+}
+
+/** "Hoje" do negócio (calendário da Bahia) como dia civil. */
+export function todayKey(now: Date = new Date()): DateKey {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: WORKSPACE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const v = (t: string) => partes.find((p) => p.type === t)!.value;
+  return `${v("year")}-${v("month")}-${v("day")}`;
+}
+
+/**
+ * Dia civil de um timestamptz na convenção do sistema — a MESMA regra de
+ * `b2c_civil_date` no banco: meia-noite UTC em ponto é data civil gravada
+ * (lê-se o dia UTC); qualquer outra hora é um instante (lê-se na Bahia).
+ */
+export function civilDateKeyOf(ts: Date): DateKey {
+  if (ts.getUTCHours() === 0 && ts.getUTCMinutes() === 0 && ts.getUTCSeconds() === 0 && ts.getUTCMilliseconds() === 0)
+    return ts.toISOString().slice(0, 10);
+  return todayKey(ts);
+}
+
+/** `"2026-10-01"` → `"01/10/2026"`. */
+export function formatDateKey(day: DateKey): string {
+  const m = day.match(DAY_RE);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : day;
+}
+
+/**
+ * Data de referência da competência para a CARTEIRA: o encerramento do mês
+ * (último dia). Na competência em curso, HOJE — o fim do mês ainda não
+ * aconteceu, e uma mudança programada para o dia 20 não pode aparecer no
+ * número de hoje. Competência futura: o último dia (é projeção).
+ */
+export function competenceReferenceDate(competence: Competence, today: DateKey = todayKey()): DateKey {
+  const atual = today.slice(0, 7);
+  if (competence === atual) return today;
+  return getEndOfCompetence(competence);
+}

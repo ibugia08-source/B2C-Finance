@@ -1,4 +1,5 @@
-import { PORTFOLIO_ACTIVE_STATUSES } from "@/lib/client-status";
+import { PORTFOLIO_ACTIVE_STATUSES, isRevenueActiveStatus } from "@/lib/client-status";
+import { getClientStatusesForCompetences, periodReferenceCompetence } from "@/lib/clients/period-status";
 import { CACHE_TAGS } from "@/lib/cache-tags";
 import { ownerCached } from "@/lib/owner-cache";
 import { BILLING_AWAITING_STATUSES } from "@/lib/billing-status";
@@ -142,7 +143,11 @@ export async function getCommercialKpis(f: DashboardFilters): Promise<Commercial
         _sum: { amount: true, paidTotal: true },
       }),
       prisma.client.count({ where: { createdAt: { gte: start, lt: end } } }),
-      prisma.client.count({ where: { status: "ACTIVE" } }),
+      // Ativos no ENCERRAMENTO do período, pela linha do tempo — não o
+      // status de hoje (26/09/2026).
+      getClientStatusesForCompetences([periodReferenceCompetence(f.period)]).then(
+        (m) => [...(m.values().next().value ?? new Map()).values()].filter(isRevenueActiveStatus).length
+      ),
       prisma.billing.groupBy({ by: ["clientId"], where: { ...bw, status: "OVERDUE" } }),
       // Renovações vencidas ou nos próximos 30 dias, pela DATA DE EXPECTATIVA
       // do cliente (mesma fonte do módulo Renovações).
@@ -552,43 +557,50 @@ export type ExecutiveDashboard = {
   cardBase: CardBase;
 };
 
-/** Contadores de clientes do mês (com override manual de inadimplência). */
-async function getClientsBlock(): Promise<ClientsBlock> {
-  const now = new Date();
-  const curMonth = now.getMonth() + 1;
-  const curYear = now.getFullYear();
+/**
+ * Contadores da CARTEIRA na competência de referência do período (o último
+ * mês dele), pela linha do tempo de status (26/09/2026): passado = como
+ * estava no encerramento; mês em curso = hoje. Antes eram contagens do
+ * status de HOJE exibidas como se fossem do mês selecionado.
+ * "Ativos" = status que gera receita (Ativo, Em renovação, Inadimplente).
+ */
+async function getClientsBlock(period: Period): Promise<ClientsBlock> {
+  const competence = periodReferenceCompetence(period);
+  const [cy, cm] = competence.split("-").map(Number);
 
-  const [ativos, pausados, perdidos, mrrAtivos, tcvAtivos, allClients] =
-    await Promise.all([
-      prisma.client.count({ where: { status: "ACTIVE" } }),
-      prisma.client.count({ where: { status: "PAUSED" } }),
-      prisma.client.count({ where: { status: "CHURNED" } }),
-      prisma.client.count({ where: { status: "ACTIVE", modality: "MRR" } }),
-      prisma.client.count({ where: { status: "ACTIVE", modality: "TCV" } }),
-      prisma.client.findMany({
-        where: { status: { notIn: ["CHURNED", "INACTIVE", "PROSPECT", "LEAD"] } },
-        select: { id: true },
-      }),
-    ]);
+  const [statusPorComp, modalidades] = await Promise.all([
+    getClientStatusesForCompetences([competence]),
+    prisma.client.findMany({ select: { id: true, modality: true } }),
+  ]);
+  const status = statusPorComp.get(competence) ?? new Map<string, string>();
+  const modalidade = new Map(modalidades.map((c) => [c.id, c.modality]));
+  let ativos = 0, pausados = 0, perdidos = 0, mrrAtivos = 0, tcvAtivos = 0;
+  const base: string[] = [];
+  for (const [id, s] of status) {
+    if (isRevenueActiveStatus(s)) {
+      ativos++;
+      if (modalidade.get(id) === "MRR") mrrAtivos++;
+      if (modalidade.get(id) === "TCV") tcvAtivos++;
+    }
+    if (s === "PAUSED") pausados++;
+    if (s === "CHURNED") perdidos++;
+    if (!["CHURNED", "INACTIVE", "PROSPECT", "LEAD"].includes(s)) base.push(id);
+  }
 
-  // Overrides manuais da competência corrente (histórico por mês —
+  // Pago/Devendo da MESMA competência (overrides manuais por mês —
   // ClientMonthDelinquency; mesma fonte do módulo Clientes).
   const [auto, overrides] = await Promise.all([
-    getMonthDelinquencies(
-      allClients.map((c) => c.id),
-      curMonth,
-      curYear
-    ),
+    getMonthDelinquencies(base, cm, cy),
     prisma.clientMonthDelinquency.findMany({
-      where: { year: curYear, month: curMonth },
+      where: { year: cy, month: cm },
       select: { clientId: true, status: true },
     }),
   ]);
   const overrideBy = new Map(overrides.map((o) => [o.clientId, o.status]));
   let devendoMes = 0;
   let pagosMes = 0;
-  for (const c of allClients) {
-    const value = overrideBy.get(c.id) ?? auto.get(c.id);
+  for (const id of base) {
+    const value = overrideBy.get(id) ?? auto.get(id);
     if (value === "DEVENDO") devendoMes += 1;
     else if (value === "PAGO") pagosMes += 1;
   }
@@ -629,7 +641,7 @@ async function getExecutiveDashboardImpl(f: DashboardFilters): Promise<Executive
       getPeriodRevenue(f.period.start, f.period.end, revenueFilters),
       getRenewalOutlook([0, 1, 2, 3]),
       getLossSummary(),
-      getClientsBlock(),
+      getClientsBlock(f.period),
       getUpsellKpis(f.period.start, f.period.end),
       getExpenseSummary(f.period.start),
       getReceiptsSummary(f.period.start, f.period.end, revenueFilters),

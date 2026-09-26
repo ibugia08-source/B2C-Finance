@@ -50,7 +50,10 @@ mesmo tamanho. Sem base → "Sem dados do mês anterior".
 
 ## Faturamento MRR / TCV (mês)
 - **MRR (oficial)** = `getPeriodRevenue().mrr` — Σ `Client.monthlyValue` dos
-  clientes MRR ativos no mês (mês corrente exige ACTIVE/RENEWAL/DELINQUENT).
+  clientes MRR ATIVOS (Ativo/Em renovação/Inadimplente) no ENCERRAMENTO de cada
+  competência, pela linha do tempo de status (26/09/2026). Competência em
+  curso = status de hoje; futura = projeção com alterações programadas.
+  Limitação: o valor ainda é a mensalidade atual (ver STATUS_TEMPORAL_CLIENTES.md).
 - **TCV (oficial)** = `getPeriodRevenue().tcv` — Σ `Billing revenueType=TCV` da
   competência (valor cheio, sem rateio).
 - ⚠️ Definições PARALELAS que ainda existem (usos legados/IA — não usar em telas):
@@ -78,9 +81,15 @@ despesas, recebido (por competência) e resultado — Jan..Dez do ano filtrado.
 | Caixa disponível | Σ `Account.balance` + Σ `CashBox.currentAmount`; projeções 30/60/90 | `getCashSummary` |
 
 ## Módulo Clientes (KPIs da carteira)
-Clientes ativos (status=ACTIVE) · Novos este mês (startedAt/createdAt no mês) ·
-Perdidos este mês (CHURNED + churnedAt no mês) · Renovações próximas
-(renewalMonth = mês atual, base ativa).
+Todos pela COMPETÊNCIA selecionada (26/09/2026):
+Clientes ativos = status que gera receita no encerramento da competência (hoje,
+na competência em curso), pela linha do tempo de status · Novos no mês =
+startedAt (fallback createdAt) no mês — reativação não é novo · Perdidos no mês
+= perdas registradas (`ClientLoss.lostAt`) no mês, a mesma fonte do Dashboard —
+não "quem hoje está Perdido" · Renovações do mês = livro de renovações (pendente
+só se o cliente estava na carteira viva naquela competência).
+Dashboard: clientes ativos, ticket médio, custo por cliente e churn rate usam a
+carteira do encerramento do período (`getClientsBlock(period)`).
 
 ## Lançar ao caixa
 Resultado positivo do mês pode ser lançado (total/parcial) ao "Caixa operacional"

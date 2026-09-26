@@ -104,10 +104,7 @@ export async function renewalLedger(months: YearMonth[]): Promise<Map<string, Re
 
   const [pendentes, renovacoes, perdas] = await Promise.all([
     prisma.client.findMany({
-      where: {
-        expectedRenewalAt: { gte: rangeStart, lt: rangeEnd },
-        status: { in: [...PORTFOLIO_ACTIVE_STATUSES] as any },
-      },
+      where: { expectedRenewalAt: { gte: rangeStart, lt: rangeEnd } },
       select: LEDGER_CLIENT_SELECT,
     }),
     prisma.clientRenewal.findMany({
@@ -136,6 +133,14 @@ export async function renewalLedger(months: YearMonth[]): Promise<Map<string, Re
   for (const r of renovacoes) todos.set(r.client.id, r.client);
   for (const l of perdas) todos.set(l.client.id, l.client);
   const esperadoAtual = await expectedRenewalValues(Array.from(todos.values()));
+  // Pendente só conta se o cliente estava na carteira viva (Ativo,
+  // Renovação, Inadimplente ou Pausado) NAQUELA competência — pela linha do
+  // tempo de status, não pelo status de hoje (26/09/2026).
+  const { getStatusesForCompetences } = await import("@/lib/clients/status-history");
+  const statusPorMes = pendentes.length
+    ? await getStatusesForCompetences(keys, { clientIds: pendentes.map((c) => c.id) })
+    : new Map<string, Map<string, string>>();
+  const VIVOS = new Set<string>(PORTFOLIO_ACTIVE_STATUSES);
 
   for (const ym of months) {
     const key = toCompetenceKey(ym);
@@ -193,6 +198,7 @@ export async function renewalLedger(months: YearMonth[]): Promise<Map<string, Re
     // 3) Pendentes: expectativa no mês e sem desfecho.
     for (const c of pendentes) {
       if (!c.expectedRenewalAt || linhas.has(c.id)) continue;
+      if (!VIVOS.has(statusPorMes.get(key)?.get(c.id) ?? "")) continue;
       if (c.expectedRenewalAt < start || c.expectedRenewalAt >= end) continue;
       linhas.set(c.id, {
         ...base(c),

@@ -37,8 +37,24 @@ export async function carregarGrade(
   // avalia a carteira daquela agência e só ela.
   const recorte = whereDaRelacao(scope ?? (await escopoAtual()));
 
+  // Quem se avalia é a carteira ATIVA NA COMPETÊNCIA (linha do tempo de
+  // status) — a grade de agosto não perde quem saiu em outubro.
+  const { getActiveClientsForCompetence } = await import("@/lib/clients/status-history");
+  const ativos = [...(await getActiveClientsForCompetence(competence))];
+  // …e com a RELAÇÃO viva naquele mês: em curso hoje, ou encerrada depois do
+  // fim da competência (relação encerrada sem data não entra).
+  const [cy, cm] = competence.split("-").map(Number);
+  const fimDaComp = new Date(cy, cm, 1);
   const relacoes = await prisma.clientAgencyRelationship.findMany({
-    where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] }, ...recorte },
+    where: {
+      clientId: { in: ativos },
+      OR: [
+        { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING"] } },
+        { churnedAt: { gte: fimDaComp } },
+        { endedAt: { gte: fimDaComp } },
+      ],
+      ...recorte,
+    },
     select: {
       id: true,
       clientId: true,

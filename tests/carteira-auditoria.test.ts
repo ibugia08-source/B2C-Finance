@@ -122,8 +122,11 @@ describe("transição de status pelo caminho único", () => {
   it("status em massa: perda só para quem muda, e o churnedAt de quem já saiu é preservado", async () => {
     const jaSaiu = await cadastrarMrr("Já Saiu Antes");
     const vaiSair = await cadastrarMrr("Vai Sair Agora");
-    const antiga = new Date(Date.UTC(2026, 2, 15, 12));
-    expect((await asOwner(owner, async () => acoes.markClientLost(jaSaiu, "2026-03-15", "x"))).ok).toBe(true);
+    // Saída no dia da entrada (1º do mês corrente): perda anterior à entrada
+    // agora é recusada — a entrada registrada depois dela continuaria valendo.
+    const dia1 = `${HOJE.year}-${String(HOJE.month).padStart(2, "0")}-01`;
+    const antiga = new Date(`${dia1}T12:00:00.000Z`);
+    expect((await asOwner(owner, async () => acoes.markClientLost(jaSaiu, dia1, "x"))).ok).toBe(true);
     await asOwner(owner, async () => prisma.client.update({ where: { id: jaSaiu }, data: { churnedAt: antiga } }));
 
     expect((await asOwner(owner, async () => acoes.bulkUpdateClients({ ids: [jaSaiu, vaiSair], status: "CHURNED" }))).ok).toBe(true);

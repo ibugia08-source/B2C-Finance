@@ -28,7 +28,12 @@ import type { Competence } from "@/lib/competence";
  * zerou — e essa confusão só aparece meses depois, quando é tarde.
  */
 
-export const SNAPSHOT_SCHEMA_VERSION = 2;
+/**
+ * 3 (26/09/2026): a CARTEIRA passou a ser a da competência pela linha do
+ * tempo de status (antes: ciclo de vida de HOJE, que fazia o recálculo de um
+ * mês fechado mudar a cada troca de status) e cada linha leva o status dela.
+ */
+export const SNAPSHOT_SCHEMA_VERSION = 3;
 
 export type AreaNaoDisponivel = { indisponivel: true; motivo: string };
 
@@ -60,11 +65,25 @@ export async function montarAreas(
   const inicio = new Date(ano, mes - 1, 1);
   const fim = new Date(ano, mes, 1);
   const corteDaLeitura = opts.ate ? { createdAt: { lte: opts.ate } } : {};
+  const { getStatusesForCompetences } = await import("@/lib/clients/status-history");
+  const statusDaComp =
+    (await getStatusesForCompetences([competence])).get(competence) ?? new Map<string, string>();
+  const CARTEIRA = new Set(["ACTIVE", "RENEWAL", "DELINQUENT", "PAUSED"]);
+  const naCarteira = [...statusDaComp].filter(([, s]) => CARTEIRA.has(s)).map(([id]) => id);
 
   const [relacoes, termos, cobrancas, despesas, contas, folha, avaliacoes, metricas] =
     await Promise.all([
       prisma.clientAgencyRelationship.findMany({
-        where: { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] }, ...corteDaLeitura },
+        where: {
+          clientId: { in: naCarteira },
+          // Relação viva na competência (em curso, ou encerrada depois dela).
+          OR: [
+            { lifecycleStatus: { in: ["ACTIVE", "ONBOARDING", "PAUSED"] } },
+            { churnedAt: { gte: fim } },
+            { endedAt: { gte: fim } },
+          ],
+          ...corteDaLeitura,
+        },
         orderBy: { id: "asc" },
         select: {
           id: true, clientId: true, lifecycleStatus: true, financialStatus: true,
@@ -147,7 +166,7 @@ export async function montarAreas(
     carteira: relacoes.map((r) => ({
       relationshipId: r.id, clientId: r.clientId, nome: r.client.name,
       agencyId: r.agencyId, ciclo: r.lifecycleStatus, financeiro: r.financialStatus,
-      entrada: r.startedAt,
+      entrada: r.startedAt, status: statusDaComp.get(r.clientId) ?? null,
     })),
     termos_vigentes: termos.map((t) => ({
       id: t.id, relationshipId: t.relationshipId, modalidade: t.modality,

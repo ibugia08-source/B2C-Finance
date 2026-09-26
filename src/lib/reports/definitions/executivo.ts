@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { isRevenueActiveStatus } from "@/lib/client-status";
+import { getClientStatusesForCompetences, periodReferenceCompetence } from "@/lib/clients/period-status";
 import {
   getPeriodRevenue,
   getRenewalOutlook,
@@ -37,8 +39,15 @@ async function buildExecutivo(q: ReportQuery): Promise<ReportRow[]> {
         },
         _sum: { amount: true },
       }),
-      prisma.client.count({ where: { status: "ACTIVE" } }),
-      prisma.client.count({ where: { status: "DELINQUENT" } }),
+      // Carteira no ENCERRAMENTO do período, pela linha do tempo de status
+      // (26/09/2026) — o relatório de setembro não muda porque o cliente
+      // ficou inativo em outubro.
+      getClientStatusesForCompetences([periodReferenceCompetence(q.period)]).then(
+        (m) => [...(m.values().next().value ?? new Map()).values()].filter(isRevenueActiveStatus).length
+      ),
+      getClientStatusesForCompetences([periodReferenceCompetence(q.period)]).then(
+        (m) => [...(m.values().next().value ?? new Map()).values()].filter((s) => s === "DELINQUENT").length
+      ),
     ]);
   const despesasPeriodo = finance.despesas;
   const despesasVencidas = Number(vencidasAgg._sum.amount ?? 0);

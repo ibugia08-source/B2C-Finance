@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { runWithoutScope } from "@/lib/auth/owner-scope";
 import { currentWorkspaceId } from "@/lib/services/workspace";
 import { ledgerHealth } from "@/lib/accounting/health";
-import { montarAreas } from "./engine";
+import { SNAPSHOT_SCHEMA_VERSION, montarAreas } from "./engine";
 import { checksumByArea } from "./serialize";
 
 /**
@@ -108,7 +108,15 @@ export async function conferirIntegridade(
       (a) => gravadoPorArea[a] && gravadoPorArea[a] !== doConteudo.porArea[a]
     );
 
-    // (3) O mês mudou depois de fechado?
+    // (3) O mês mudou depois de fechado? Só dá para comparar com a MESMA
+    // régua: fotografia de formato anterior (ex.: carteira pelo status de
+    // hoje, antes do formato 3) é conferida só contra adulteração (2).
+    if (f.schemaVersion !== SNAPSHOT_SCHEMA_VERSION) {
+      if (adulteradas.length) {
+        divergencias.push({ competence: f.competence, versao: f.version, adulteradas, mudaramDesdeOFechamento: [] });
+      }
+      continue;
+    }
     const recalculadas = await montarAreas(f.competence, { ate: f.sourceCutoffAt });
     const doRecalculo = checksumByArea(recalculadas);
     const mudaram = Object.keys(doRecalculo.porArea).filter(

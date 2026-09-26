@@ -11,6 +11,7 @@ import { getExpenseSummary } from "@/lib/services/expense-metrics";
 import { getUpsellKpis } from "@/lib/services/upsell-metrics";
 import { getCashSummary, getFinanceSummary } from "@/lib/services/finance-metrics";
 import { getAnnualPanel } from "@/lib/services/annual-panel";
+import { getPortfolioProjection } from "@/lib/services/portfolio-projection";
 import { resolvePeriod } from "@/lib/period";
 import type { Baseline } from "@/lib/financial/projections";
 import { ProjectionSimulator } from "./simulator";
@@ -42,6 +43,7 @@ export default async function PainelAnualPage({
 
   // ===== FASE 1 — painel anual (cacheado) + meta do ano =====
   const panel = await getAnnualPanel(year);
+  const projecao = await getPortfolioProjection(6);
   const targetRow = await prisma.annualTarget.findFirst({ where: { year } });
 
   const upto = panel.lastMonthWithData;
@@ -142,6 +144,52 @@ export default async function PainelAnualPage({
 
       {/* Painel indicador × meses */}
       <AnnualTable panel={panel} />
+
+      {/* Carteira projetada: status programados entram só aqui (e nos meses
+          futuros dos gráficos) — nunca nos números de hoje. */}
+      <div className="mt-6 rounded-xl border bg-card p-4">
+        <h2 className="text-sm font-semibold">Carteira projetada</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Clientes ativos e MRR no encerramento de cada mês pela linha do tempo de status. O mês em curso é
+          <strong className="font-medium text-foreground"> realizado</strong> (status vigente hoje); os seguintes são
+          <strong className="font-medium text-foreground"> projetados</strong> e já consideram as alterações de status
+          programadas. Valores pela mensalidade atual de cada cliente.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-muted-foreground">
+                <th className="py-1 pr-3 font-medium">Mês</th>
+                <th className="py-1 pr-3 font-medium">Base</th>
+                <th className="py-1 pr-3 text-right font-medium">Clientes ativos</th>
+                <th className="py-1 pr-3 text-right font-medium">MRR</th>
+                <th className="py-1 text-right font-medium">Alterações programadas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projecao.map((r) => (
+                <tr key={r.competence} className="border-t">
+                  <td className="py-1.5 pr-3">{r.label}</td>
+                  <td className="py-1.5 pr-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        r.kind === "REALIZADO"
+                          ? "bg-success-soft text-success-ink"
+                          : "bg-info-soft text-info-ink"
+                      }`}
+                    >
+                      {r.kind === "REALIZADO" ? "Realizado" : "Projetado"}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{r.ativos}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{formatBRL(r.mrr)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{r.programadas || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <p className="mt-2 mb-8 text-xs text-muted-foreground">
         Mesmos números do Dashboard (fonte única de cálculo). Recebido conta a
         competência do mês; pagamentos de meses anteriores entram como

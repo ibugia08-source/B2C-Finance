@@ -6,6 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { StatusHistoryPanel } from "./status-history-panel";
+import { getClientStatusTimeline } from "@/lib/clients/status-history";
+import { todayKey } from "@/lib/competence";
 import {
   Table,
   TableBody,
@@ -63,6 +66,8 @@ export default async function ClientDetailPage({
     },
   });
   if (!client) notFound();
+  const hojeStatus = todayKey();
+  const statusTimeline = await getClientStatusTimeline(client.id);
 
   const [
     contracts,
@@ -203,6 +208,20 @@ export default async function ClientDetailPage({
 
         {/* ---------- Visão geral ---------- */}
         <TabsContent value="visao-geral">
+          {/* Linha do tempo de status com vigência (26/09/2026). */}
+          <div className="mb-4">
+            <StatusHistoryPanel
+              clientId={client.id}
+              clientName={client.name}
+              timeline={statusTimeline.map((i) => ({
+                status: i.status, from: i.from, to: i.to, reason: i.reason,
+                origin: i.origin, needsReview: i.needsReview,
+              }))}
+              today={hojeStatus}
+              canChange={can(viewer, "clientes.alterar_status")}
+              canSchedule={can(viewer, "clientes.programar_status")}
+            />
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-5 space-y-2">

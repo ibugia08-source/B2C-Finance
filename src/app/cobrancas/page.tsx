@@ -1,3 +1,5 @@
+import { getActiveClientsForCompetence } from "@/lib/clients/status-history";
+import { toCompetence } from "@/lib/competence";
 import { PORTFOLIO_ACTIVE_STATUSES, REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { PageHeader } from "@/components/page-header";
 import { PeriodBadge } from "@/components/period-badge";
@@ -174,16 +176,19 @@ async function RecebimentosPageInner({
           _count: { select: { history: true } },
         },
       }),
-      // Clientes ativos da carteira — aparecem mesmo sem cobrança no mês.
-      prisma.client.findMany({
-        where: { status: { in: [...REVENUE_ACTIVE_STATUSES] } },
+      // Clientes ativos NA COMPETÊNCIA — aparecem mesmo sem cobrança no mês.
+      // Ativo pela linha do tempo de status (encerramento do mês; hoje, no mês
+      // em curso), nunca pelo status de hoje aplicado a outro mês.
+      getActiveClientsForCompetence(toCompetence(mes.year, mes.month)).then((ativos) =>
+        prisma.client.findMany({
+        where: { id: { in: [...ativos] } },
         select: {
           id: true, name: true, phone: true, modality: true, paymentDay: true,
           salesOwner: true, contractMonths: true, contractIndefinite: true, monthlyValue: true,
         },
         orderBy: { name: "asc" },
         take: 1000,
-      }),
+      })),
       prisma.client.findMany({
         orderBy: { name: "asc" },
         select: {

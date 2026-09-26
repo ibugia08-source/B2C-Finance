@@ -269,6 +269,7 @@ model User {
 
   // ===== Perdas de clientes, Ofertas (Planos), Upsell e Receita Extra =====
   ownedClientLosses             ClientLoss[]               @relation("OwnerClientLoss")
+  ownedClientStatusHistory      ClientStatusHistory[]      @relation("OwnerClientStatusHistory")
   ownedOffers                   Offer[]                    @relation("OwnerOffer")
   ownedOfferServices            OfferService[]             @relation("OwnerOfferService")
   ownedUpsells                  Upsell[]                   @relation("OwnerUpsell")
@@ -1290,6 +1291,7 @@ model Client {
 
   // ===== Perdas (histórico de churn), Upsell e Receita Extra =====
   losses        ClientLoss[]
+  statusHistory ClientStatusHistory[]
   upsells       Upsell[]
   extraRevenues ExtraRevenue[]
 
@@ -1386,6 +1388,47 @@ model ClientRenewal {
 // da perda (MRR: valor mensal; TCV: valor de referência da última adesão),
 // modalidade, responsável e motivo. Histórico: um cliente pode ter várias
 // perdas (saiu, voltou, saiu de novo).
+/// HISTÓRICO DE STATUS COM VIGÊNCIA (26/09/2026) — FONTE TEMPORAL OFICIAL do
+/// status do cliente. Client.status é só o status VIGENTE HOJE, materializado.
+///
+/// Cada linha é um intervalo de datas CIVIS [effectiveFrom, effectiveTo]
+/// (inclusivo; effectiveTo nulo = em diante). Intervalos do mesmo cliente
+/// nunca se sobrepõem — o banco garante (EXCLUDE com daterange). Mudar o
+/// status em outubro fecha o intervalo anterior em 30/09 e abre outro em
+/// 01/10: setembro continua como era. Linha com effectiveFrom no futuro é
+/// uma alteração PROGRAMADA: não mexe no status atual até a data chegar.
+///
+/// Quem escreve: src/lib/clients/status-history.ts (via as funções SQL
+/// b2c_status_apply / b2c_status_cancel) e os gatilhos de Client, que
+/// registram qualquer outra troca de status como "a partir de hoje".
+/// Documentação: docs/STATUS_TEMPORAL_CLIENTES.md.
+model ClientStatusHistory {
+  id            String       @id @default(cuid())
+  clientId      String
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status        ClientStatus
+  /// Primeiro dia em que o status vale (data civil, sem fuso).
+  effectiveFrom DateTime     @db.Date
+  /// Último dia em que vale (inclusivo). Nulo = em diante.
+  effectiveTo   DateTime?    @db.Date
+  reason        String?
+  /// Usuário que registrou. Sem FK de propósito (como AuditLog): apagar o
+  /// usuário não pode reescrever a trilha.
+  changedById   String?
+  /// USUARIO | SISTEMA | IMPORTACAO | BACKFILL_COMPROVADO | BACKFILL_INFERIDO | BACKFILL_INDETERMINADO
+  origin        String       @default("USUARIO")
+  /// Reconstrução sem evidência suficiente: conferir à mão.
+  needsReview   Boolean      @default(false)
+  ownerId       String?
+  owner         User?        @relation("OwnerClientStatusHistory", fields: [ownerId], references: [id])
+  createdAt     DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([clientId, effectiveFrom])
+  @@index([ownerId])
+  @@index([status])
+}
+
 model ClientLoss {
   id             String                    @id @default(cuid())
   clientId       String

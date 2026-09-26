@@ -76,6 +76,24 @@ export function revalidateAgency(
   metricsTags();
 }
 
+/**
+ * STATUS DE CLIENTE COM VIGÊNCIA (26/09/2026): além da agência, a troca
+ * muda a carteira de competências — relatórios, painel anual/projeções,
+ * retenção, avaliações, fechamento e a revisão do histórico. As tags de
+ * métricas são as de sempre (o cache já é segmentado por dono).
+ */
+export function revalidateClientStatus(clientId?: string | null) {
+  revalidateAgency({ clientId });
+  paths([
+    "/projecoes",
+    "/relatorios",
+    "/retencao",
+    "/avaliacoes",
+    "/fechamento",
+    "/clientes/historico-status",
+  ]);
+}
+
 /** Catálogo comercial (serviços, ofertas, upsells). */
 export function revalidateCatalog() {
   paths(["/dashboard", "/servicos", "/ofertas", "/upsell", "/clientes"]);

@@ -6,7 +6,10 @@ export type ClientRow = {
   id: string;
   name: string;
   segment: string | null;
-  status: string;
+  /** Status NA COMPETÊNCIA em exibição (linha do tempo). Nulo = sem registro. */
+  status: string | null;
+  /** Próxima alteração programada (depois de hoje). */
+  scheduled: { status: string; from: string } | null;
   modality: string | null;
   salesOwner: string | null;
   /** Expectativa de renovação, "YYYY-MM" (null = sem expectativa). */
@@ -36,20 +39,26 @@ export type ClientRow = {
   notes: string | null; // observação livre (Client.notes)
 };
 
+/** Competência em exibição + "hoje" do servidor, para o diálogo de status. */
+export type StatusContext = { competence: string; today: string };
+
 export function ClientsTable({
   clients,
   allFilteredIds,
   canDelete,
+  statusContext,
 }: {
   clients: ClientRow[];
   allFilteredIds: string[];
   canDelete: boolean;
+  statusContext: StatusContext;
 }) {
   return (
     <ClientsPanel
       clients={clients}
       allFilteredIds={allFilteredIds}
       canDelete={canDelete}
+      statusContext={statusContext}
     />
   );
 }

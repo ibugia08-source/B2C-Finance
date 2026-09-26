@@ -54,6 +54,8 @@ export async function computePeriodMetrics(
 
   const M = main.current;
   const finance = executivo.finance;
+  // Ativos no ENCERRAMENTO do período, pela linha do tempo de status
+  // (getClientsBlock(period)) — nunca o status de hoje para um mês passado.
   const ativos = executivo.clients.ativos;
   const ativosInicio = ativos + churn.count; // quem estava no início do período
 

@@ -145,6 +145,16 @@ Já existiram **16 cópias** de `toNumber` e **9** de `clean` neste código.
 Se sentir vontade de escrever `const n = (v) => ...` local: importe.
 Números mágicos de negócio (limiares, taxas) ganham **constante nomeada**.
 
+## 9.1 Status do cliente tem VIGÊNCIA — nunca leia `client.status` para o passado
+
+`Client.status` é só o status vigente HOJE. Para qualquer competência que não
+seja hoje (relatório de setembro, MRR histórico, carteira de um mês fechado,
+projeção), use `src/lib/clients/status-history.ts` (em lote:
+`getStatusesForCompetences`, `getActiveClientsByCompetences`). Para MUDAR status,
+use `changeClientStatus`/`changeClientStatusAction` com início de vigência —
+nunca `prisma.client.update({ status })` numa tela nova. Regra, fontes e
+migração: `docs/STATUS_TEMPORAL_CLIENTES.md`.
+
 ## 10. Padrões de código do projeto
 
 - **Formulários**: inputs não-controlados + `FormData` + validação Zod com

@@ -107,16 +107,27 @@ describe("ensureMonthlyBillings", () => {
     expect(await countBillings(c.id, 6, 2026)).toBe(1);
   });
 
-  it("ignora cliente perdido, pausado e sem valor mensal", async () => {
+  it("ignora cliente perdido NA COMPETÊNCIA e sem valor mensal", async () => {
     const perdido = await createMrrClient(owner, { monthlyValue: 400 });
     const semValor = await createMrrClient(owner, { monthlyValue: 0 });
+    // Saiu em 01/06/2026 (linha do tempo de status): julho já não fatura.
     await runWithoutScope(async () =>
-      prisma.client.update({ where: { id: perdido.id }, data: { status: "CHURNED" } })
+      prisma.$executeRaw`SELECT b2c_status_apply(${perdido.id}, 'CHURNED'::"ClientStatus", '2026-06-01'::date, NULL, NULL, 'USUARIO', false)`
     );
 
     await asOwner(owner, async () => ensureMonthlyBillings(7, 2026));
     expect(await countBillings(perdido.id, 7, 2026)).toBe(0);
     expect(await countBillings(semValor.id, 7, 2026)).toBe(0);
+  });
+
+  it("perdido HOJE continua faturando os meses em que estava ativo (o passado não é reescrito)", async () => {
+    const saiuHoje = await createMrrClient(owner, { monthlyValue: 450 });
+    await runWithoutScope(async () =>
+      prisma.client.update({ where: { id: saiuHoje.id }, data: { status: "CHURNED" } })
+    );
+    // Competência anterior, sem throttle da de julho do teste acima.
+    await asOwner(owner, async () => ensureMonthlyBillings(5, 2026));
+    expect(await countBillings(saiuHoje.id, 5, 2026)).toBe(1);
   });
 });
 

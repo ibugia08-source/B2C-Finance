@@ -11,12 +11,14 @@ vi.mock("next/cache", async (orig) => ({
 /**
  * DETALHES DOS CARDS DO DASHBOARD = TOTAL DO CARD (25/09/2026).
  *
- * - O popup do MRR segue o PERÍODO e a regra clientActiveInMonth, mês a mês,
- *   sem corte de 60 linhas: a soma da lista é o MRR do card.
+ * - O popup do MRR segue o PERÍODO e a linha do tempo de status, mês a mês
+ *   (status no ENCERRAMENTO de cada competência — regra de 26/09/2026), sem
+ *   corte de 60 linhas: a soma da lista é o MRR do card.
  * - Novo cliente TCV vale o totalContractValue do cliente primeiro e, só sem
  *   ele, o total do contrato mais recente (ordem de expectedRenewalValues).
  *
- * Ano de 2024 (passado): só entrada/saída decidem quem é ativo no mês.
+ * Ano de 2024 (passado): a linha do tempo nasce da entrada e da saída
+ * (gatilho de Client), e o mês conta quem estava ativo no último dia dele.
  */
 
 const periodo = (start: Date, end: Date): Period =>
@@ -34,7 +36,7 @@ beforeAll(async () => {
   await createMrrClient(dono, { name: "MRR A", monthlyValue: 1000, startedAt: new Date(2023, 5, 1) });
   // B: entra em 15/02 → fevereiro e março.
   await createMrrClient(dono, { name: "MRR B", monthlyValue: 500, startedAt: new Date(2024, 1, 15) });
-  // C: sai em 10/02 → janeiro e fevereiro.
+  // C: sai em 10/02 → só janeiro (em 29/02 já tinha saído).
   const c = await createMrrClient(dono, { name: "MRR C", monthlyValue: 700, startedAt: new Date(2023, 0, 1) });
   await asOwner(dono, async () =>
     prisma.client.update({ where: { id: c.id }, data: { status: "CHURNED", churnedAt: new Date(2024, 1, 10) } })
@@ -75,12 +77,12 @@ describe("popup do MRR = card do MRR", () => {
     const porNome = new Map(lista.map((x) => [x.name, x.value]));
     expect(porNome.get("MRR A")).toBe(3000);
     expect(porNome.get("MRR B")).toBe(1000);
-    expect(porNome.get("MRR C")).toBe(1400);
+    expect(porNome.get("MRR C")).toBe(700);
     // Sem corte: os 70 miúdos estão todos lá.
     expect(lista.filter((x) => x.name.startsWith("MRR miúdo"))).toHaveLength(70);
 
     const soma = lista.reduce((s, x) => s + x.value, 0);
-    expect(soma).toBe(3000 + 1000 + 1400 + 70 * 10 * 3);
+    expect(soma).toBe(3000 + 1000 + 700 + 70 * 10 * 3);
     const card = await asOwner(dono, async () => dm.getDashboardMainMetrics(TRI));
     expect(soma).toBe(card.current.mrr);
   });

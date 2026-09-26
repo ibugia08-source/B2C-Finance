@@ -1,5 +1,6 @@
 import { computeOperationalMargin } from "@/lib/financial/calculations";
-import { clientActiveInMonth } from "@/lib/client-status";
+import { getActiveClientsByCompetences } from "@/lib/clients/status-history";
+import { toCompetence } from "@/lib/competence";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { ownerCached } from "@/lib/owner-cache";
@@ -269,7 +270,7 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
     await Promise.all([
       prisma.client.findMany({
         where: { modality: "MRR" },
-        select: { monthlyValue: true, startedAt: true, churnedAt: true, status: true, createdAt: true },
+        select: { id: true, monthlyValue: true },
       }),
       // TCV e AVULSAS (tudo que não é MRR) por competência — a mesma base do
       // card Faturamento total, para a série anual não divergir dele.
@@ -341,12 +342,15 @@ async function getYearlySeriesImpl(year: number): Promise<YearlySeries> {
   const adiantadoEntrada = zero();
   const despesas = zero();
 
-  // MRR previsto por mês: cliente MRR ativo naquele mês (regra única).
-  const activeInMonth = (c: (typeof mrrClients)[number], m: number) =>
-    clientActiveInMonth(c, year, m + 1, now);
+  // MRR previsto por mês: cliente MRR ATIVO no encerramento da competência,
+  // pela linha do tempo (regra única com o card). Meses futuros = projeção
+  // com as alterações de status programadas.
+  const comps = Array.from({ length: 12 }, (_, m) => toCompetence(year, m + 1));
+  const ativosPorMes = await getActiveClientsByCompetences(comps, { clientIds: mrrClients.map((c) => c.id) });
   for (let m = 0; m < 12; m++) {
+    const ativos = ativosPorMes.get(comps[m])!;
     for (const c of mrrClients) {
-      if (activeInMonth(c, m)) mrr[m] += n(c.monthlyValue);
+      if (ativos.has(c.id)) mrr[m] += n(c.monthlyValue);
     }
   }
 
@@ -659,7 +663,7 @@ export function periodMonths(period: Pick<Period, "start" | "end">): YearMonth[]
 
 /**
  * Clientes MRR que compõem o faturamento recorrente do período — a MESMA
- * regra do card (clientActiveInMonth, mês a mês). `value` = Σ mensalidade
+ * regra do card (linha do tempo de status, mês a mês). `value` = Σ mensalidade
  * nos meses do período em que o cliente estava ativo; a soma da lista é o
  * MRR do card. Antes a lista lia o status de HOJE, sem período e cortada em
  * 60 — e não fechava com o card.
@@ -669,19 +673,19 @@ async function getMrrClientsDetailImpl(period: Period): Promise<NamedValue[]> {
   if (months.length === 0) return [];
   const rows = await prisma.client.findMany({
     where: { modality: "MRR" },
-    select: {
-      id: true, name: true, monthlyValue: true, salesOwner: true,
-      startedAt: true, churnedAt: true, status: true, createdAt: true,
-    },
+    select: { id: true, name: true, monthlyValue: true, salesOwner: true },
   });
-  const now = new Date();
+  const ativosPorMes = await getActiveClientsByCompetences(
+    months.map(({ year, month }) => toCompetence(year, month)),
+    { clientIds: rows.map((r) => r.id) }
+  );
   const out: NamedValue[] = [];
   for (const r of rows) {
     const mensal = n(r.monthlyValue);
     if (mensal <= 0) continue;
     let value = 0;
     for (const { year, month } of months) {
-      if (clientActiveInMonth(r, year, month, now)) value += mensal;
+      if (ativosPorMes.get(toCompetence(year, month))?.has(r.id)) value += mensal;
     }
     if (value > 0) out.push({ id: r.id, name: r.name, sub: r.salesOwner ?? undefined, value });
   }

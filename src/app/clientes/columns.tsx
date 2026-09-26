@@ -6,8 +6,6 @@ import { DelinquencyCell, NotesCell } from "./clients-actions";
 import { Badge } from "@/components/ui/badge";
 import { formatBRL } from "@/lib/format";
 import {
-  CLIENT_STATUSES,
-  CLIENT_STATUS_LABEL,
   CLIENT_MODALITIES,
   CLIENT_MODALITY_LABEL,
   MONTHS,
@@ -15,18 +13,14 @@ import {
   modalityPill,
 } from "./_meta";
 import {
-  setClientStatus,
   setClientModality,
   setClientRenewalExpectation,
   setClientMonthlyValue,
 } from "@/lib/actions/clients";
 import type { ClientRow } from "./clients-table";
+import { ClientStatusCell } from "./status-change-dialog";
 import { renewalCompetenceOptions } from "@/lib/renewal-expectation";
 
-const STATUS_OPTIONS = CLIENT_STATUSES.filter((s) => s !== "LEAD").map((s) => ({
-  value: s,
-  label: CLIENT_STATUS_LABEL[s],
-}));
 const MODALITY_OPTIONS = CLIENT_MODALITIES.map((m) => ({
   value: m,
   label: CLIENT_MODALITY_LABEL[m],
@@ -48,7 +42,8 @@ export type ClientColKey =
   | "segment";
 
 export type ColumnCtx = {
-  onStatusDone: (c: ClientRow) => (value: string) => void;
+  competence: string;
+  today: string;
 };
 
 export type ClientColumn = {
@@ -68,14 +63,17 @@ export const ALL_COLUMNS: ClientColumn[] = [
     key: "status",
     header: "Status",
     interactive: true,
+    // Status DA COMPETÊNCIA + programado; o clique abre o diálogo com
+    // vigência (os meses anteriores ficam preservados).
     render: (c, ctx) => (
-      <InlineSelect
-        ariaLabel={`Status de ${c.name}`}
-        value={c.status}
-        options={STATUS_OPTIONS}
+      <ClientStatusCell
+        clientId={c.id}
+        clientName={c.name}
+        status={c.status}
+        scheduled={c.scheduled}
+        competence={ctx.competence}
+        today={ctx.today}
         pillClass={clientStatusPill}
-        action={(v) => setClientStatus(c.id, v)}
-        onDone={ctx.onStatusDone(c)}
       />
     ),
   },

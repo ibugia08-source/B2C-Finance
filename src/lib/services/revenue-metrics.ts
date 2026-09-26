@@ -1,4 +1,5 @@
-import { clientActiveInMonth } from "@/lib/client-status";
+import { getActiveClientsByCompetences } from "@/lib/clients/status-history";
+import { toCompetence } from "@/lib/competence";
 import { BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { ownerCached } from "@/lib/owner-cache";
@@ -85,10 +86,12 @@ function clientEntityWhere(f: RevenueFilters): Record<string, unknown> {
 /**
  * Faturamento do período (mês selecionado ou intervalo).
  *
- * MRR por mês: Σ Client.monthlyValue dos clientes modality=MRR ativos no mês
- * (entrou antes do fim do mês; não perdido antes do início). Para o mês
- * corrente e futuros, Pausado/Inativo/Prospect também não contam; para meses
- * passados usamos entrada/saída (histórico de pausa não é rastreado).
+ * MRR por mês: Σ Client.monthlyValue dos clientes modality=MRR ATIVOS no
+ * encerramento da competência, pela linha do tempo de status (26/09/2026):
+ * pausa, saída e volta de cada mês são respeitadas; alteração programada só
+ * pesa em competência futura. LIMITAÇÃO conhecida: o VALOR ainda é o atual
+ * (Client.monthlyValue) — o histórico de valor existe em CommercialTerm, mas
+ * trocar a fonte do valor é outra tarefa (docs/STATUS_TEMPORAL_CLIENTES.md).
  *
  * TCV por período: Σ Billing revenueType=TCV (competência no período), que é
  * onde o valor cheio da adesão/renovação é lançado — sem rateio mensal.
@@ -147,12 +150,18 @@ async function getPeriodRevenueImpl(
   ]);
 
   // ---- MRR mês a mês ----
-  const now = new Date();
+  // Base = status no ENCERRAMENTO de cada competência, pela linha do tempo
+  // (26/09/2026). Nunca o status de hoje para um mês que já passou.
   let mrr = 0;
   let mrrClients = 0;
-
+  const ativosPorMes = wantMrr && mrrClientsRows.length > 0
+    ? await getActiveClientsByCompetences(
+        months.map(({ y, m }) => toCompetence(y, m)),
+        { clientIds: mrrClientsRows.map((c: { id: string }) => c.id) }
+      )
+    : new Map<string, Set<string>>();
   const activeInMonth = (c: (typeof mrrClientsRows)[number], y: number, m: number) =>
-    clientActiveInMonth(c, y, m, now);
+    ativosPorMes.get(toCompetence(y, m))?.has(c.id) ?? false;
 
   for (const { y, m } of months) {
     let monthTotal = 0;

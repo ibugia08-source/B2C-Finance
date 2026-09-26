@@ -30,6 +30,7 @@ import {
   CLIENT_MODALITY_LABEL,
   MONTHS,
   modalityPill,
+  clientStatusPill,
 } from "./_meta";
 import { setClientModality, setClientRenewalExpectation } from "@/lib/actions/clients";
 import { competenceShortLabel, renewalCompetenceOptions } from "@/lib/renewal-expectation";
@@ -40,7 +41,8 @@ import {
   STORAGE_KEY,
   type ClientColKey,
 } from "./columns";
-import type { ClientRow } from "./clients-table";
+import type { ClientRow, StatusContext } from "./clients-table";
+import { ClientStatusCell } from "./status-change-dialog";
 
 /**
  * AGRUPAMENTO DA CARTEIRA (F1.16 · ref. 02 §4.1).
@@ -69,7 +71,7 @@ function rotuloGrupo(c: ClientRow, by: GroupKey): string {
     case "modality":
       return c.modality ? CLIENT_MODALITY_LABEL[c.modality as keyof typeof CLIENT_MODALITY_LABEL] ?? c.modality : "Sem modalidade";
     case "status":
-      return c.status;
+      return c.status ?? "Sem registro na competência";
     case "renewalCompetence":
       return c.renewalCompetence
         ? competenceShortLabel(c.renewalCompetence)
@@ -110,10 +112,12 @@ export function ClientsPanel({
   clients,
   allFilteredIds,
   canDelete,
+  statusContext,
 }: {
   clients: ClientRow[];
   allFilteredIds: string[];
   canDelete: boolean;
+  statusContext: StatusContext;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lossClient, setLossClient] = useState<{ id: string; name: string } | null>(null);
@@ -179,10 +183,10 @@ export function ClientsPanel({
 
   const grupos = useMemo(() => montarGrupos(clients, groupBy), [clients, groupBy]);
 
-  const onStatusDone = useCallback((c: ClientRow) => (value: string) => {
-    if (value === "CHURNED") setLossClient({ id: c.id, name: c.name });
-  }, []);
-  const ctx = useMemo(() => ({ onStatusDone }), [onStatusDone]);
+  const ctx = useMemo(
+    () => ({ competence: statusContext.competence, today: statusContext.today }),
+    [statusContext.competence, statusContext.today]
+  );
 
   const allIds = allFilteredIds;
   const allSelected = allIds.length > 0 && selected.size === allIds.length;
@@ -354,19 +358,14 @@ export function ClientsPanel({
                   </span>
                 }
                 aside={
-                  <InlineSelect
-                    ariaLabel={`Status de ${c.name}`}
-                    value={c.status}
-                    options={[
-                      { value: "ACTIVE", label: "Ativo" },
-                      { value: "INACTIVE", label: "Inativo" },
-                      { value: "CHURNED", label: "Perdido" },
-                    ]}
-                    pillClass={() => ""}
-                    action={(v) => {
-                      if (v === "CHURNED") setLossClient({ id: c.id, name: c.name });
-                      return Promise.resolve({ ok: true });
-                    }}
+                  <ClientStatusCell
+                    clientId={c.id}
+                    clientName={c.name}
+                    status={c.status}
+                    scheduled={c.scheduled}
+                    competence={statusContext.competence}
+                    today={statusContext.today}
+                    pillClass={clientStatusPill}
                   />
                 }
               />
@@ -416,6 +415,7 @@ export function ClientsPanel({
           ids={selectedIds}
           count={selectedIds.length}
           onClear={clearSelection}
+          statusContext={statusContext}
         />
       )}
 

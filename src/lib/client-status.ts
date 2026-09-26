@@ -15,26 +15,15 @@ export const PORTFOLIO_ACTIVE_STATUSES = [...REVENUE_ACTIVE_STATUSES, "PAUSED"] 
 
 export type RevenueActiveStatus = (typeof REVENUE_ACTIVE_STATUSES)[number];
 
-/**
- * Cliente MRR fatura no mês (year, month 1-12)?
- * A regra que define a BASE DO MRR — Dashboard mensal e série anual usam
- * esta função; antes eram duas cópias que podiam divergir.
- */
-export function clientActiveInMonth(
-  c: { startedAt: Date | null; createdAt: Date; churnedAt: Date | null; status: string },
-  year: number,
-  month: number,
-  now: Date = new Date()
-): boolean {
-  const monthStart = new Date(year, month - 1, 1);
-  const monthEnd = new Date(year, month, 1);
-  const entered = c.startedAt ?? c.createdAt;
-  if (entered && entered >= monthEnd) return false; // ainda não era cliente
-  if (c.churnedAt && c.churnedAt < monthStart) return false; // já tinha saído
-  // Mês corrente/futuro: o status atual manda (Pausado/Perdido não faturam).
-  const key = year * 12 + (month - 1);
-  const currentKey = now.getFullYear() * 12 + now.getMonth();
-  if (key >= currentKey && !(REVENUE_ACTIVE_STATUSES as readonly string[]).includes(c.status))
-    return false;
-  return true;
+/** O status gera receita (entra na base do MRR, nas cobranças do mês)? */
+export function isRevenueActiveStatus(status: string | null | undefined): boolean {
+  return !!status && (REVENUE_ACTIVE_STATUSES as readonly string[]).includes(status);
 }
+
+/*
+ * "O cliente fatura no mês X?" deixou de morar aqui (26/09/2026). Antes era
+ * `clientActiveInMonth`: datas de entrada/saída para o passado e o status de
+ * HOJE para o mês corrente e futuros — o que fazia uma mudança de status em
+ * outubro reescrever setembro. A resposta agora vem da linha do tempo de
+ * status: `getActiveClientsByCompetences` (src/lib/clients/status-history.ts).
+ */

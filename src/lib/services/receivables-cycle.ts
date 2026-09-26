@@ -1,4 +1,3 @@
-import { REVENUE_ACTIVE_STATUSES } from "@/lib/client-status";
 import { prisma } from "@/lib/prisma";
 import { getValidDueDateForMonth } from "@/lib/financial/due-date";
 import { toNumber as n } from "@/lib/format";
@@ -22,8 +21,10 @@ import { MONEY_EPSILON } from "@/lib/billing-status";
  */
 
 
-/** Status ativo para efeito de faturamento mensal. */
-const CYCLE_ACTIVE = REVENUE_ACTIVE_STATUSES;
+/*
+ * Quem fatura no mês = ATIVO na competência pela linha do tempo de status
+ * (REVENUE_ACTIVE_STATUSES no encerramento do mês; hoje, no mês em curso).
+ */
 
 /**
  * Garante as mensalidades MRR do mês (idempotente):
@@ -56,10 +57,9 @@ export async function ensureMonthlyBillings(
   const monthEnd = new Date(year, month, 1);
   const today = hojeCivil();
 
-  const [clients, existing] = await Promise.all([
+  const [candidatos, existing] = await Promise.all([
     prisma.client.findMany({
       where: {
-        status: { in: CYCLE_ACTIVE as any },
         modality: "MRR",
         monthlyValue: { gt: 0 },
       },
@@ -81,6 +81,17 @@ export async function ensureMonthlyBillings(
       select: { clientId: true },
     }),
   ]);
+
+  // Quem fatura NESTA competência é decidido pela linha do tempo de status
+  // (encerramento do mês; hoje, no mês em curso) — não pelo status de hoje:
+  // abrir o mês passado não gera mensalidade para quem só entrou depois nem
+  // deixa de gerar para quem saiu depois (26/09/2026).
+  const { getActiveClientsForCompetence } = await import("@/lib/clients/status-history");
+  const { toCompetence } = await import("@/lib/competence");
+  const ativos = await getActiveClientsForCompetence(toCompetence(year, month), {
+    clientIds: candidatos.map((c) => c.id),
+  });
+  const clients = candidatos.filter((c) => ativos.has(c.id));
 
   const has = new Set(existing.map((b) => b.clientId));
   const rows: any[] = [];
