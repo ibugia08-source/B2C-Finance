@@ -646,7 +646,7 @@ export type LossSummary = {
   last3Months: LossBucket; // rolando: do 1º dia de (mês-2) até agora
 };
 
-function lossValue(l: { modality: string | null; monthlyValue: unknown; referenceValue: unknown }): number {
+export function lossValue(l: { modality: string | null; monthlyValue: unknown; referenceValue: unknown }): number {
   // MRR → mensal perdido; TCV → valor de referência da última adesão.
   if (l.modality === "TCV") return n(l.referenceValue) || n(l.monthlyValue);
   return n(l.monthlyValue) || n(l.referenceValue);

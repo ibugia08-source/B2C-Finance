@@ -30,12 +30,14 @@ import {
   getRenewalClientsDetail,
   periodMonths,
   getPreviousMonthComparison,
-  buildDashboardSummary,
 } from "@/lib/services/dashboard-main";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChartCard, HBarList } from "@/components/charts";
-import { MainChart, CompositionDonut, CombinedChart, RenewalsChart } from "@/components/dashboard/charts-lazy";
+import {
+  CompositionDonut, RenewalsChart, MrrTcvChart, ClientsYearChart, ChurnYearChart, TicketYearChart,
+} from "@/components/dashboard/charts-lazy";
+import { getDashboardEvolution } from "@/lib/services/dashboard-evolution";
 import { getRenewalHistory } from "@/lib/services/renewal-metrics";
 import { MetricCard, SecondaryStat } from "@/components/metric-card";
 import { getLiquidez } from "@/lib/services/liquidity";
@@ -50,7 +52,6 @@ import {
   CheckCircle2,
   ChevronDown,
   XCircle,
-  Sparkles,
 } from "lucide-react";
 
 /**
@@ -150,6 +151,18 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   // do detalhe é a mesma soma). A evolução mostra os 6 meses anteriores ao
   // ÚLTIMO mês do período + ele — mesmas regras do módulo Renovações.
   const renewalHistory = await getRenewalHistory(ultimoMes, 6);
+  // Séries de evolução (26/09/2026): MRR × TCV nos 12 meses até o mês em
+  // foco; clientes, churn e ticket médio de Jan..Dez do ano em foco.
+  const evolucao = await getDashboardEvolution({
+    anchor: `${ultimoMes.year}-${String(ultimoMes.month).padStart(2, "0")}`,
+    year: selectedYear,
+  });
+  // Ticket médio do mês = Faturamento total ÷ clientes ativos (a mesma
+  // fórmula do indicador ticket_medio), mês a mês do ano.
+  const serieAno = evolucao.year.map((p, i) => ({
+    ...p,
+    ticket: p.ativos ? Math.round(((yearly.faturamento[i] ?? 0) / p.ativos) * 100) / 100 : null,
+  }));
   const renovacaoEsperada =
     Math.round(renewalClientsDetail.reduce((s, r) => s + r.value, 0) * 100) / 100;
   // "Faturamento total esperado" soma só as renovações TCV (decisão do dono,
@@ -217,23 +230,12 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
   const mrrDelta = getPreviousMonthComparison(M.mrr, main.previous.mrr, prevHas);
   const tcvDelta = getPreviousMonthComparison(M.tcv, main.previous.tcv, prevHas);
 
-  // Resumo inteligente determinístico (sem IA) do mês filtrado.
-  const summary = buildDashboardSummary({
-    previsto, recebido, emAberto, vencido,
-    despesas: finance.despesas, resultado, margem: M.margem,
-    folhaPct: folhaPct ?? 0, recorrenciaPct: recorrenciaPct ?? 0,
-  });
-
   // Saudação pessoal (horário de Brasília — o servidor roda em UTC).
   const hourSP = Number(
     new Intl.DateTimeFormat("pt-BR", {
       hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo",
     }).format(new Date())
   );
-  // Segunda-feira no fuso de Brasília — o servidor roda em UTC.
-  const ehSegunda =
-    new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "America/Sao_Paulo" })
-      .format(new Date()) === "Mon";
   const setup = await mostrarSetup();
   const saudacao = hourSP < 12 ? "Bom dia" : hourSP < 18 ? "Boa tarde" : "Boa noite";
   const firstName = (viewer.name ?? "").trim().split(/\s+/)[0] ?? "";
@@ -430,26 +432,18 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
         </div>
       )}
 
-      {/* ===== Resumo determinístico + Saúde financeira =====
-          02 §5.1: "Resumo determinístico colapsável (aberto por padrão só
-          segunda-feira)" — na segunda a semana começa e vale ler; nos
-          outros dias ele fica recolhido para não empurrar os números. */}
+      {/* ===== PAINEL EXECUTIVO — ENTENDER =====
+          26/09/2026 (decisão do dono): saíram "Resultado mensal",
+          "Esperado × Recebido × Despesas" e o Resumo do mês; entraram a
+          evolução de MRR × TCV (3/6/12 meses) e, ao longo do ano, clientes
+          ativos, churn (com R$ perdido no tooltip) e ticket médio. */}
+      <h2 className="mb-3 text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Entender · {selectedYear}
+      </h2>
       <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <details open={ehSegunda} className="group">
-            <summary className="flex cursor-pointer select-none list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
-              <span className="flex items-center gap-1.5 text-caption font-medium uppercase tracking-wide text-primary">
-                <Sparkles className="h-3.5 w-3.5" /> Resumo do mês
-              </span>
-              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-base group-open:rotate-180" />
-            </summary>
-            <div className="space-y-1.5 px-5 pb-5 text-body leading-relaxed">
-              {summary.map((s, i) => (
-                <p key={`summary-${i}`} className={i === 0 ? "text-foreground" : "text-muted-foreground"}>{s}</p>
-              ))}
-            </div>
-          </details>
-        </Card>
+        <div className="lg:col-span-2">
+          <MrrTcvChart data={evolucao.mrrTcv} />
+        </div>
         <Card>
           <CardContent className="p-5">
             <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
@@ -479,29 +473,12 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
           </CardContent>
         </Card>
       </div>
-
-      {/* ===== PAINEL EXECUTIVO — ENTENDER (02 §5.1) =====
-          Exatamente TRÊS gráficos, os três que a spec nomeia. O teto de
-          §5.5 é 3 por home; antes desta tarefa a página tinha seis, e os
-          outros três desceram para "Análises complementares". */}
-      <h2 className="mb-3 text-caption font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Entender · {selectedYear}
-      </h2>
       <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <CombinedChart
-          title="Esperado × Recebido × Despesas"
-          question="O que foi previsto entrou em caixa — e as saídas acompanharam?"
-          labels={yearly.labels}
-          selectedIndex={selectedMonthIndex}
-          series={[
-            { label: "Esperado", values: yearly.faturamento, color: "hsl(var(--chart-1))" },
-            { label: "Recebido em caixa", values: yearly.recebido, color: "hsl(var(--chart-3))", dash: "6 3" },
-            { label: "Despesas", values: yearly.despesas, color: "hsl(var(--chart-2))", dash: "2 3" },
-          ]}
-        />
-        <MainChart title="Resultado mensal" variant="bar" diverging
-          data={yearly.labels.map((l, i) => ({ label: l, value: yearly.resultado[i] }))}
-          selectedIndex={selectedMonthIndex} />
+        <ClientsYearChart data={serieAno} year={selectedYear} />
+        <ChurnYearChart data={serieAno} year={selectedYear} />
+        <TicketYearChart data={serieAno} year={selectedYear} />
+      </div>
+      <div className="mb-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
         <ChartCard title="De onde vem o faturamento?" hint={`MRR · TCV · Receita extra — ${periodLabel(period)}`}>
           <CompositionDonut
             data={[
@@ -511,21 +488,20 @@ async function DashboardPageInner({ searchParams }: { searchParams?: Search }) {
             ]}
           />
         </ChartCard>
-      </div>
-
-      {/* Evolução das renovações: 6 meses anteriores + o último mês do período. */}
-      <div className="mb-3">
-        <RenewalsChart
-          data={renewalHistory.map((h) => ({
-            label: h.label,
-            expected: h.expected,
-            gained: h.gained,
-            lost: h.lost,
-            renewedCount: h.renewedCount,
-            lostCount: h.lostCount,
-          }))}
-          selectedIndex={renewalHistory.length - 1}
-        />
+        {/* Evolução das renovações: 6 meses anteriores + o último mês do período. */}
+        <div className="lg:col-span-2">
+          <RenewalsChart
+            data={renewalHistory.map((h) => ({
+              label: h.label,
+              expected: h.expected,
+              gained: h.gained,
+              lost: h.lost,
+              renewedCount: h.renewedCount,
+              lostCount: h.lostCount,
+            }))}
+            selectedIndex={renewalHistory.length - 1}
+          />
+        </div>
       </div>
 
       {/* ===== PAINEL EXECUTIVO — SECUNDÁRIOS VISÍVEIS (02 §5.1) =====

@@ -572,64 +572,6 @@ export function getPreviousMonthComparison(
 }
 
 // ===================================================================
-// Resumo inteligente do mês (determinístico) — §21
-// ===================================================================
-
-export type SummaryInput = {
-  previsto: number;
-  recebido: number;
-  emAberto: number;
-  vencido: number;
-  despesas: number;
-  resultado: number;
-  margem: number; // 0-1
-  folhaPct: number; // 0-100
-  recorrenciaPct: number; // 0-100
-};
-
-/**
- * Texto determinístico (sem IA) interpretando os números reais do mês.
- * Frases curtas, linguagem simples, sempre com base nos dados do período.
- */
-export function buildDashboardSummary(i: SummaryInput): string[] {
-  const brl = formatBRL;
-  const out: string[] = [];
-
-  if (i.previsto <= 0 && i.recebido <= 0 && i.despesas <= 0) {
-    return ["Ainda não há movimentação financeira registrada neste mês."];
-  }
-
-  out.push(
-    `Você recebeu ${brl(i.recebido)} de um faturamento previsto de ${brl(i.previsto)}.`
-  );
-  if (i.emAberto > 0) {
-    out.push(
-      i.vencido > 0
-        ? `Ainda existem ${brl(i.emAberto)} em aberto, sendo ${brl(i.vencido)} já vencidos.`
-        : `Ainda existem ${brl(i.emAberto)} em aberto, todos dentro do prazo.`
-    );
-  } else {
-    out.push("Todo o faturamento previsto do mês já foi recebido.");
-  }
-  if (i.recebido > 0) {
-    out.push(`As despesas representam ${Math.round((i.despesas / i.recebido) * 100)}% do valor recebido.`);
-  }
-  out.push(
-    i.resultado >= 0
-      ? `O resultado atual é positivo em ${brl(i.resultado)} (margem de ${Math.round(i.margem * 100)}%).`
-      : `O resultado atual está negativo em ${brl(i.resultado)} — as despesas superaram o recebido.`
-  );
-  if (i.recorrenciaPct > 0) {
-    out.push(
-      `${i.recorrenciaPct}% do faturamento vem de MRR — ${
-        i.recorrenciaPct >= 60 ? "receita bem previsível" : "há espaço para aumentar a recorrência"
-      }.`
-    );
-  }
-  return out;
-}
-
-// ===================================================================
 // Detalhes internos dos cards secundários — §11
 // ===================================================================
 

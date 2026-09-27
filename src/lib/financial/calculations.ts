@@ -129,7 +129,6 @@ export {
   getDashboardMainMetrics,
   getYearlySeries, // Faturamento/Despesas/Resultado do ano (getYearly*Series)
   getPreviousMonthComparison,
-  buildDashboardSummary,
   previousPeriodRange,
   getOpenByClient,
   getReceivedDetail,
@@ -143,7 +142,6 @@ export {
   type DashboardMainResult,
   type YearlySeries,
   type MetricDelta,
-  type SummaryInput,
   type NamedValue,
   type ClientOpenItem,
   type ReceivedItem,
