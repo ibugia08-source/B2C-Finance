@@ -526,10 +526,11 @@ const SCHEMAS: Record<string, Obj> = {
   ),
   PendingActionConfirm: obj(
     {
-      messageId: str("Id da mensagem do WhatsApp em que o usuário confirmou."),
-      confirmationCode: str("Código de 4 dígitos que o usuário digitou.", { pattern: "^\\d{4}$" }),
+      messageId: str("WhatsApp: id da mensagem em que o usuário confirmou. Telegram (botão): update_id do callback_query."),
+      confirmationCode: str("Código de 4 dígitos que o usuário digitou (obrigatório em `via: code`; proibido em `via: button`).", { pattern: "^\\d{4}$" }),
+      via: str("`code` (padrão) = SIM + código digitado; `button` = toque em Confirmar no Telegram (só para ações do canal TELEGRAM).", { enum: ["code", "button"] }),
     },
-    ["messageId", "confirmationCode"],
+    ["messageId"],
     { additionalProperties: false, description: "Não há corpo da ação: executa-se o payload guardado no preview." }
   ),
   PendingAction: obj({
@@ -1052,6 +1053,21 @@ PATHS["/integrations/resolve-identity"] = {
   },
 };
 
+PATHS["/integrations/recipients"] = op({
+  id: "listRecipients", tag: "Integração", summary: "Quem recebe um relatório ou aviso num canal",
+  description:
+    "Destinatários de um envio proativo: vínculo e usuário ativos com a preferência LIGADA em Configurações → Integrações → Canais (padrão: ninguém). Usuário restrito a uma agência fica de fora. Cada um traz o `identityId` — monte o relatório dele com `X-B2C-Identity` (RBAC dele). `today`/`timezone` são os da API (fuso oficial da operação).",
+  scope: "identities.resolve",
+  params: [
+    { name: "channel", in: "query", required: true, schema: str(undefined, { enum: ["TELEGRAM", "WHATSAPP"] }) },
+    { name: "purpose", in: "query", required: true, description: "morning_report | evening_report | aviso (payment.received, receivable.overdue, client.renewal.upcoming, expense.due_soon).", schema: str(undefined, { enum: ["morning_report", "evening_report", "payment.received", "receivable.overdue", "client.renewal.upcoming", "expense.due_soon"] }) },
+  ],
+  ok: sucesso(obj({
+    channel: str(), purpose: str(), timezone: str(undefined, { example: "America/Bahia" }), today: str(undefined, { format: "date" }),
+    recipients: arr(obj({ identityId: str(), externalIdentifier: str("Telegram User ID (= chat privado) ou telefone."), userName: str() })),
+  })),
+});
+
 PATHS["/knowledge/documents"] = op({
   id: "getKnowledgeDocuments", tag: "Integração", summary: "Base de conhecimento do agente (para indexar)",
   description:
@@ -1077,7 +1093,7 @@ const acaoOp = (o: { method: "get" | "post"; id: string; summary: string; descri
     security: [{ bearerAuth: ["agent_actions.manage"] }],
     "x-required-scope": "agent_actions.manage",
     parameters: [
-      ...(o.idem ? [{ ...PARAMETERS.IdempotencyKey, description: "`wa:<messageId>:<actionId>` — a mensagem do WhatsApp que confirmou + o id da ação (caracteres fora de `A-Za-z0-9._-` no messageId viram `_`).", example: "wa:wamid.HBgM_3EB0:cmupa0001" }] : []),
+      ...(o.idem ? [{ ...PARAMETERS.IdempotencyKey, description: "Pelo canal da ação: `wa:<messageId>:<actionId>` (WhatsApp — a mensagem que confirmou) ou `telegram:<update_id>:<actionId>` (Telegram — o callback do botão). Caracteres fora de `A-Za-z0-9._-` no messageId viram `_`.", example: "telegram:815000123:cmupa0001" }] : []),
       refParam("RequestId"), refParam("Source"), { ...PARAMETERS.Identity, required: true }, ...(o.params ?? []),
     ],
     ...(o.body ? { requestBody: { required: true, content: { "application/json": { schema: o.body.schema, example: o.body.example } } } } : {}),
@@ -1112,9 +1128,15 @@ PATHS["/agent/pending-actions"] = {
     ok: sucesso(arr(ref("PendingAction"))),
   }),
 };
+PATHS["/agent/pending-actions/{id}"] = acaoOp({
+  method: "get", id: "getAgentAction", summary: "Uma ação do usuário do vínculo",
+  description: "A ação, se for do usuário do vínculo (`X-B2C-Identity`); de outro usuário, vínculo ou workspace → 404. Vencida é lida como `EXPIRED`. O Telegram consulta antes de confirmar/cancelar pelo botão — o id do botão é só referência; a confirmação confere tudo de novo.",
+  params: P_ACAO,
+  ok: sucesso(ref("PendingAction")),
+});
 PATHS["/agent/pending-actions/{id}/confirm"] = acaoOp({
   method: "post", id: "confirmAgentAction", idem: true, summary: "Confirmar e executar a ação",
-  description: "Confere usuário, vínculo, código (5 tentativas), validade e se o estado ainda é o da prévia (senão 409 `state_changed`). Executa o payload GUARDADO pela rota de escrita oficial, com a mesma Idempotency-Key. 200 = despachada (`data.status` EXECUTED ou FAILED, `data.message` pronta para o WhatsApp); repetir a mesma confirmação devolve o mesmo resultado. Erros: 410 `action_expired`, 409 `action_not_pending`, 422 `confirmation_mismatch`.",
+  description: "Confere usuário, vínculo, código (5 tentativas; no Telegram, `via: button` dispensa o código), validade e se o estado ainda é o da prévia (senão 409 `state_changed`). Executa o payload GUARDADO pela rota de escrita oficial, com a mesma Idempotency-Key. 200 = despachada (`data.status` EXECUTED ou FAILED, `data.message` pronta para a mensagem); repetir a mesma confirmação devolve o mesmo resultado; outra confirmação de ação já decidida → 409 `action_not_pending` (nunca executa de novo). Erros: 410 `action_expired`, 409 `action_not_pending`, 422 `confirmation_mismatch`.",
   params: P_ACAO,
   body: { schema: ref("PendingActionConfirm"), example: { messageId: "wamid.HBgM_3EB0", confirmationCode: "4821" } },
   ok: sucesso(ref("PendingAction")),
@@ -1152,7 +1174,7 @@ A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigênci
 Para agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em \`POST /integrations/resolve-identity\` e manda o \`identityId\` em \`X-B2C-Identity\`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.
 
 ## Ações do agente com confirmação
-O agente de WhatsApp não escreve direto: propõe em \`POST /agent/pending-actions\` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário responde "SIM <código>" e a integração confirma em \`POST /agent/pending-actions/{id}/confirm\` com \`Idempotency-Key: wa:<messageId>:<actionId>\`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.
+O agente (Telegram ou WhatsApp) não escreve direto: propõe em \`POST /agent/pending-actions\` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — "SIM <código>" no WhatsApp, botão Confirmar no Telegram — e a integração chama \`POST /agent/pending-actions/{id}/confirm\` com \`Idempotency-Key: wa:<messageId>:<actionId>\` ou \`telegram:<update_id>:<actionId>\`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.
 
 ## Trilha de atividades
 Toda chamada (exceto \`/health\`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (\`X-B2C-Source\`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.

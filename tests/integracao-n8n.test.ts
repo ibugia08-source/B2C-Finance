@@ -85,8 +85,9 @@ describe("workflows versionados", () => {
   it("existem o agente, os dois relatórios diários e o teste de conexão", () => {
     expect(arquivos.sort()).toEqual([
       "b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json", "b2c-finance-telegram-agent-readonly.json",
-      "daily-evening-report.json", "daily-morning-report.json", "knowledge-ingest.json", "sistema.teste-conexao.v1.json",
-      "telegram-connection-test.json",
+      "b2c-finance-telegram-agent.json", "daily-evening-report.json", "daily-morning-report.json", "knowledge-ingest.json",
+      "sistema.teste-conexao.v1.json", "telegram-connection-test.json", "telegram-daily-evening-report.json",
+      "telegram-daily-morning-report.json",
     ]);
   });
 

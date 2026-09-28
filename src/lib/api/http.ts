@@ -304,6 +304,9 @@ export function defineEndpoint<
       const sucesso = corpoDeSucesso(out.data, requestId, {
         ...(out.meta ?? {}),
         ...(chave ? { idempotency: { key: chave, replayed: false } } : {}),
+        // Em nome de quem a API respondeu (X-B2C-Identity). Quem monta algo
+        // por pessoa (relatório do Telegram) confere isto antes de entregar.
+        ...(auth.delegacao ? { onBehalfOf: { identityId: auth.delegacao.identityId } } : {}),
       });
       if (reserva?.tipo === "nova") {
         // A operação JÁ aconteceu: se guardar o resultado falhar, a chave fica

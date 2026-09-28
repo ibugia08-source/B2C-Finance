@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * Gera os relatórios diários por WhatsApp (n8n):
- *   workflows/daily-morning-report.json   manhã: o que vence, o que está atrasado, prioridades
- *   workflows/daily-evening-report.json   noite: o que aconteceu no dia e o que ficou pendente
+ * Gera os relatórios diários (n8n):
+ *   workflows/daily-morning-report.json            WhatsApp · manhã: o que vence, o que está atrasado, prioridades
+ *   workflows/daily-evening-report.json            WhatsApp · noite: o que aconteceu no dia e o que ficou pendente
+ *   workflows/telegram-daily-morning-report.json   Telegram · manhã (destinatários e RBAC por pessoa, pela API)
+ *   workflows/telegram-daily-evening-report.json   Telegram · noite (idem + ações do agente)
  *
  *   node integrations/n8n/scripts/build-report-workflows.mjs    (parte de npm run n8n:build)
  *
@@ -16,6 +18,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { CRED_TELEGRAM } from "./lib/pecas.mjs";
+import { JS_FORMATAR } from "./build-telegram-workflows.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CRED_B2C = { httpHeaderAuth: { id: "CONFIGURAR_B2C_FINANCE_API", name: "B2C Finance API" } };
@@ -145,7 +150,7 @@ return m.destinatarios.map((to) => {
   return { json: { to, origem: m.origem, payload } };
 });`;
 
-const PROMPT_IA = (tipo, secoes) => `Você recebe os dados do ${tipo} do B2C Finance, já consolidados e formatados, e uma MENSAGEM PADRÃO pronta. Reescreva a mensagem para o WhatsApp de forma clara e organizada.
+const PROMPT_IA = (tipo, secoes, canal = "WhatsApp") => `Você recebe os dados do ${tipo} do B2C Finance, já consolidados e formatados, e uma MENSAGEM PADRÃO pronta. Reescreva a mensagem para o ${canal} de forma clara e organizada.
 
 REGRAS (obrigatórias):
 1. Use SOMENTE os dados fornecidos. Não invente números, clientes, datas, causas nem tendências.
@@ -153,14 +158,14 @@ REGRAS (obrigatórias):
 3. Seções, nesta ordem, SÓ quando houver dado: ${secoes}. Sem dado → omita a seção (não escreva "nenhum" nem "zero", a menos que o dado diga isso).
 4. NÃO faça recomendações próprias. "Prioridades" só pode repetir as ações que vieram nos dados; se não vieram, não crie.
 5. Se algo "não pôde ser consultado" ou está "sem acesso", diga isso numa linha no fim — nunca trate como zero.
-6. Formato WhatsApp: curto, *negrito* só nos títulos das seções, listas com "•", no máximo 5 itens por lista, sem tabelas, sem markdown de links.
+6. Formato ${canal}: curto, *negrito* só nos títulos das seções, listas com "•", no máximo 5 itens por lista, sem tabelas, sem markdown de links.
 7. Responda APENAS com a mensagem final, em português.`;
 
-const chain = (pos, tipo, secoes) => ({
+const chain = (pos, tipo, secoes, canal = "WhatsApp") => ({
   parameters: {
     promptType: "define",
     text: "=DADOS (JSON):\n{{ JSON.stringify($json.dados) }}\n\nMENSAGEM PADRÃO (fonte da verdade):\n{{ $json.mensagemPadrao }}",
-    messages: { messageValues: [{ type: "SystemMessagePromptTemplate", message: PROMPT_IA(tipo, secoes) }] },
+    messages: { messageValues: [{ type: "SystemMessagePromptTemplate", message: PROMPT_IA(tipo, secoes, canal) }] },
   },
   name: "IA organiza a mensagem",
   type: "@n8n/n8n-nodes-langchain.chainLlm",
@@ -393,7 +398,7 @@ workflow({
 // NOITE
 // ---------------------------------------------------------------------------
 
-const CONSOLIDAR_NOITE = `// Fechamento do dia: o que foi feito e o que ficou pendente. MENSAGEM
+const consolidarNoite = (extraNoite = "") => `// Fechamento do dia: o que foi feito e o que ficou pendente. MENSAGEM
 // PADRÃO só com o que a API trouxe; seção sem dado não aparece.
 ${JS_HELPERS}
 const prep = $('Preparar data e destinatários').first().json;
@@ -455,7 +460,7 @@ if (up && (up.created.count > 0 || up.won.count > 0)) {
   dados.upsells = partes;
   secoes.push('*Upsells* — ' + partes.join(' · ') + '\\n' + lista(up.created.items, (u) => curto(u.client.name) + ' — ' + curto(u.title || 'oportunidade', 40) + ' — ' + rs(u.value)));
 }
-// Pendências
+${extraNoite}// Pendências
 const pend = [];
 const naoFeitas = (rot.data.actions || []).filter((a) => !a.done);
 for (const a of naoFeitas) pend.push(a.text);
@@ -481,6 +486,8 @@ dados.naoConsultado = falhas;
 dados.semAcesso = semAcesso;
 return [{ json: { dados, mensagemPadrao, valoresPermitidos: [...valores], destinatarios: prep.destinatarios } }];`;
 
+const CONSOLIDAR_NOITE = consolidarNoite();
+
 workflow({
   nome: "B2C Finance · Relatório da noite (WhatsApp)",
   arquivo: "daily-evening-report.json",
@@ -501,4 +508,267 @@ workflow({
   ],
 });
 
-console.log("Relatórios gerados: daily-morning-report.json, daily-evening-report.json");
+// ---------------------------------------------------------------------------
+// TELEGRAM (Fase 16 · bloco 2) — telegram-daily-morning-report.json e
+// telegram-daily-evening-report.json
+//
+// A MESMA consolidação e a mesma regra "IA organiza, não cria" dos relatórios
+// do WhatsApp. O que muda:
+//  · QUEM recebe vem da API (GET /integrations/recipients): só quem tem a
+//    preferência LIGADA no vínculo — nunca todo vinculado, nunca variável;
+//  · UM relatório por pessoa, montado com X-B2C-Identity = vínculo dela: a
+//    API recorta pelo RBAC de cada um (quem não vê o caixa não recebe o caixa);
+//  · "hoje" e o fuso vêm da API (fuso oficial da operação);
+//  · saída em HTML seguro (mesmo formatador do agente do Telegram).
+// ---------------------------------------------------------------------------
+
+const TG = {
+  destinatarios: "API: destinatários",
+  itens: "Um item por destinatário",
+  loop: "Um destinatário por vez",
+  preparar: "Preparar data e destinatários",
+  envio: "Preparar envio (Telegram)",
+  formatar: "Formatar para o Telegram",
+  enviar: "Telegram: enviar relatório",
+};
+
+const getApiDelegado = (nome, caminhoExpr, pos, notaNo) => ({
+  ...getApi(nome, caminhoExpr, pos, notaNo),
+  parameters: {
+    ...getApi(nome, caminhoExpr, pos, notaNo).parameters,
+    headerParameters: {
+      parameters: [
+        { name: "X-B2C-Source", value: "telegram" },
+        { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+        // O relatório é DA PESSOA: a API recorta pelo RBAC dela.
+        // $node[…] (e não $('…')): dentro do loop, o n8n 1.123 não resolve
+        // $('…').first() em parâmetro de nó HTTP ("could not be cloned") e o
+        // cabeçalho sairia VAZIO — o relatório viria com os scopes da conta.
+        { name: "X-B2C-Identity", value: `={{ $node['${TG.preparar}'].json.identityId }}` },
+      ],
+    },
+    options: { response: { response: { neverError: true } } },
+  },
+});
+
+const JS_ITENS = (finalidade) => `// Quem recebe = a API diz (preferência "${finalidade}" LIGADA no vínculo, em
+// Configurações → Integrações → Canais → Envios). Ninguém marcado = nada enviado.
+const r = $input.first().json || {};
+if (r.success !== true || !r.data) {
+  throw new Error('Não consegui consultar os destinatários na API B2C: ' + ((r.error && r.error.code) || 'sem resposta'));
+}
+const d = r.data;
+return d.recipients.map((p) => ({
+  json: { identityId: p.identityId, chatId: p.externalIdentifier, userName: p.userName, hoje: d.today, tz: d.timezone },
+}));`;
+
+const JS_PREPARAR_TG = (periodo) => `// Um destinatário por vez: data (da API, fuso oficial), vínculo e chat.
+// Mesmo formato do "Preparar" dos relatórios do WhatsApp — a consolidação é a mesma.
+const p = $input.first().json;
+return [{ json: { periodo: '${periodo}', tz: p.tz, hoje: p.hoje, competencia: p.hoje.slice(0, 7), destinatarios: [String(p.chatId)], identityId: p.identityId, userName: p.userName } }];`;
+
+const JS_ENVIO_TG = (gets) => `// Mensagem validada → item do formatador do Telegram (um chat privado).
+// TRAVA: só entrega se TODA consulta que respondeu foi feita EM NOME desta
+// pessoa (meta.onBehalfOf = vínculo dela). Senão o relatório pode ter sido
+// montado com os scopes da integração inteira — vai só um aviso, sem dado.
+const m = $json;
+const prep = $('${TG.preparar}').first().json;
+const consultas = ${JSON.stringify(gets.map((g) => g.nome))};
+const semDelegacao = consultas.filter((n) => {
+  const j = $(n).first().json || {};
+  return j.success === true && !(j.meta && j.meta.onBehalfOf && j.meta.onBehalfOf.identityId === prep.identityId);
+});
+if (semDelegacao.length) {
+  return [{ json: { chatId: prep.destinatarios[0], texto: 'Não consegui montar o seu relatório com segurança agora. A tentativa foi registrada.', origem: 'bloqueado', semDelegacao } }];
+}
+return [{ json: { chatId: m.destinatarios[0], texto: m.mensagem, origem: m.origem } }];`;
+
+// Seção extra da NOITE no Telegram: ações do agente (as do próprio destinatário) hoje.
+const EXTRA_NOITE_TG = `// Ações do agente hoje (as desta pessoa, pelo Telegram/WhatsApp, executadas após a confirmação dela)
+const ag = resposta('API: ações do agente');
+if (ag.ok && Array.isArray(ag.data)) {
+  const diaLocal = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: prep.tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  const feitasAg = ag.data.filter((a) => a.status === 'EXECUTED' && a.executedAt && diaLocal(a.executedAt) === prep.hoje);
+  if (feitasAg.length) {
+    dados.acoesDoAgente = feitasAg.map((a) => ({ acao: a.tool, sobre: a.summary && a.summary.label }));
+    secoes.push('*Ações pelo agente* — ' + feitasAg.length + '\\n' + lista(feitasAg, (a) => (a.summary && a.summary.label ? curto(a.summary.label) + ' — ' : '') + String(a.tool || a.operation).replace(/_/g, ' ') + (a.summary && a.summary.amount != null ? ' — ' + rs(a.summary.amount) : '')));
+  }
+}
+`;
+
+function workflowTelegram({ nome, arquivo, periodo, finalidade, agenda, gets, consolidar, tipo, secoes, notas }) {
+  const nosGet = gets.map((g, i) => getApiDelegado(g.nome, g.caminho, [1100 + i * 220, 300], g.nota));
+  const xC = 1100 + gets.length * 220;
+  const cadeia = [TG.preparar, ...gets.map((g) => g.nome), "Consolidar dados", "IA organiza a mensagem", "Validar mensagem", TG.envio, TG.formatar, TG.enviar];
+  const nodes = [
+    ...notas.map((n, i) => nota(`Nota: ${n.titulo}`, n.texto, n.pos, n.w, n.h, n.cor ?? [7, 5, 6, 3][i % 4])),
+    agendamento(agenda.nome, agenda.env, agenda.padrao, [0, 300]),
+    {
+      parameters: {},
+      name: "Executar agora (teste)",
+      type: "n8n-nodes-base.manualTrigger",
+      typeVersion: 1,
+      position: [0, 480],
+      notes: "Roda o relatório na hora, sem esperar o horário (teste).",
+      notesInFlow: true,
+    },
+    {
+      parameters: {
+        url: `={{ $env.B2C_FINANCE_API_URL }}/integrations/recipients?channel=TELEGRAM&purpose=${finalidade}`,
+        authentication: "genericCredentialType",
+        genericAuthType: "httpHeaderAuth",
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: "X-B2C-Source", value: "telegram" },
+            { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+          ],
+        },
+        options: { response: { response: { neverError: true } } },
+      },
+      name: TG.destinatarios,
+      type: "n8n-nodes-base.httpRequest",
+      typeVersion: 4.2,
+      position: [220, 300],
+      credentials: CRED_B2C,
+      notes: `GET /integrations/recipients (purpose=${finalidade}) · identities.resolve`,
+      notesInFlow: true,
+    },
+    code(TG.itens, JS_ITENS(finalidade), [440, 300], "Só quem marcou este relatório (preferência no vínculo)."),
+    {
+      parameters: { batchSize: 1, options: {} },
+      name: TG.loop,
+      type: "n8n-nodes-base.splitInBatches",
+      typeVersion: 3,
+      position: [660, 300],
+      notes: "Um relatório por pessoa, com o RBAC dela.",
+      notesInFlow: true,
+    },
+    code(TG.preparar, JS_PREPARAR_TG(periodo), [880, 300], "Data (API), vínculo e chat desta pessoa."),
+    ...nosGet,
+    code("Consolidar dados", consolidar, [xC, 300], "Só dados da API; monta a mensagem padrão."),
+    chain([xC + 220, 300], tipo, secoes, "Telegram"),
+    modelo([xC + 220, 500]),
+    code("Validar mensagem", JS_VALIDAR, [xC + 460, 300], "R$ desconhecido ou falha da IA → mensagem padrão."),
+    code(TG.envio, JS_ENVIO_TG(gets), [xC + 680, 300], "Só entrega se a API respondeu em nome desta pessoa."),
+    code(TG.formatar, JS_FORMATAR, [xC + 900, 300], "HTML seguro + partes (limite do Telegram)."),
+    {
+      parameters: {
+        resource: "message",
+        operation: "sendMessage",
+        chatId: "={{ $json.chatId }}",
+        text: "={{ $json.text }}",
+        additionalFields: { appendAttribution: false, parse_mode: "HTML", disable_web_page_preview: true },
+      },
+      name: TG.enviar,
+      type: "n8n-nodes-base.telegram",
+      typeVersion: 1.2,
+      position: [xC + 1120, 300],
+      credentials: CRED_TELEGRAM,
+      // Falha no envio para uma pessoa (bloqueou o bot) não derruba os outros.
+      onError: "continueRegularOutput",
+      notes: "sendMessage em HTML. Falhou para um → segue para o próximo.",
+      notesInFlow: true,
+    },
+  ];
+  const liga = (de, para, saida = 0) => [de, saida, para];
+  const ligacoes = [
+    liga(agenda.nome, TG.destinatarios),
+    liga("Executar agora (teste)", TG.destinatarios),
+    liga(TG.destinatarios, TG.itens),
+    liga(TG.itens, TG.loop),
+    liga(TG.loop, TG.preparar, 1),
+    ...cadeia.slice(0, -1).map((n, i) => liga(n, cadeia[i + 1])),
+    liga(TG.enviar, TG.loop),
+  ];
+  const connections = {};
+  for (const [de, saida, para] of ligacoes) {
+    const c = (connections[de] ??= { main: [] });
+    while (c.main.length <= saida) c.main.push([]);
+    c.main[saida].push({ node: para, type: "main", index: 0 });
+  }
+  connections["Modelo de IA"] = { ai_languageModel: [[{ node: "IA organiza a mensagem", type: "ai_languageModel", index: 0 }]] };
+  const wf = {
+    name: nome,
+    nodes,
+    connections,
+    settings: {
+      executionOrder: "v1",
+      // Fuso do AGENDAMENTO (o cron). A DATA do relatório vem da API (today/timezone).
+      timezone: TZ_PADRAO,
+      saveDataSuccessExecution: "none",
+      saveDataErrorExecution: "all",
+      saveManualExecutions: true,
+    },
+    pinData: {},
+    active: false,
+    meta: {
+      b2c: {
+        workflow: arquivo.replace(".json", ""),
+        channel: "TELEGRAM",
+        version: 1,
+        apiVersion: "v1",
+        readOnly: true,
+        recipients: `GET /integrations/recipients?channel=TELEGRAM&purpose=${finalidade}`,
+        requiredScopes: ["identities.resolve", "reports.read", "routine.read", "dashboard.read", "receivables.read", "expenses.read", "clients.read", "upsells.read", ...(periodo === "noite" ? ["agent_actions.manage"] : [])].sort(),
+        generatedBy: "integrations/n8n/scripts/build-report-workflows.mjs",
+      },
+    },
+    tags: [],
+  };
+  writeFileSync(join(RAIZ, "workflows", arquivo), JSON.stringify(wf, null, 2) + "\n");
+}
+
+const NOTA_CONFIG_TG = (envCron, padrao, finalidade) => `### Configuração\n- **Horário:** \`${envCron}\` (cron, padrão \`${padrao}\`), no fuso do workflow (Settings → Timezone, \`${TZ_PADRAO}\`).\n- **Data do relatório:** a da API (\`today\`, fuso oficial da operação).\n- **Quem recebe:** Configurações → Integrações → Canais → **Envios** (\`${finalidade}\`). Ninguém marcado = nada enviado.\n- **Conteúdo:** o de cada pessoa, com as permissões dela (X-B2C-Identity).`;
+const NOTA_TG = `### Telegram\nChat privado de cada pessoa (Telegram User ID). Bot token só na credencial "Telegram Bot". Envio que falhar para uma pessoa (ex.: bloqueou o bot) não impede os outros.`;
+
+const DESTINO_TG = (finalidade) => [
+  { titulo: "sem dado inventado", texto: NOTA_REGRAS, pos: [1300, 40], w: 700, h: 220 },
+  { titulo: "Telegram", texto: NOTA_TG, pos: [2020, 40], w: 440, h: 220 },
+];
+
+workflowTelegram({
+  nome: "B2C Finance · Telegram · Relatório da manhã",
+  arquivo: "telegram-daily-morning-report.json",
+  periodo: "manha",
+  finalidade: "morning_report",
+  agenda: { nome: "Agendamento (manhã)", env: "TELEGRAM_MORNING_REPORT_CRON", padrao: "0 7 * * 1-6" },
+  gets: [
+    { nome: "API: relatório do dia", caminho: "/reports/daily?date={{ $node['Preparar data e destinatários'].json.hoje }}", nota: "GET /reports/daily (reports.read) — RBAC da pessoa" },
+    { nome: "API: rotina do dia", caminho: "/routine/daily", nota: "GET /routine/daily (routine.read) — RBAC da pessoa" },
+    { nome: "API: indicadores do mês", caminho: "/dashboard/summary?competence={{ $node['Preparar data e destinatários'].json.competencia }}", nota: "GET /dashboard/summary (dashboard.read) — RBAC da pessoa" },
+  ],
+  consolidar: CONSOLIDAR_MANHA,
+  tipo: "INÍCIO DO DIA",
+  secoes: "Recebimentos previstos hoje; Recebido; Vencidos; Despesas vencendo; MRR atual; Renovações do mês; Churn do mês; Prioridades de hoje",
+  notas: [
+    { titulo: "sobre", texto: "## Relatório da manhã · Telegram (somente leitura)\nCron → API (quem recebe) → para cada pessoa: API B2C com o RBAC dela → IA organiza → Telegram.\nNunca acessa banco/Supabase/Prisma — só a API. Tokens só nas credenciais.\n**Chega desativado.** Ative depois do teste (docs/TELEGRAM.md).", pos: [-480, 40], w: 440, h: 300 },
+    { titulo: "configuração", texto: NOTA_CONFIG_TG("TELEGRAM_MORNING_REPORT_CRON", "0 7 * * 1-6", "morning_report"), pos: [-480, 360], w: 440, h: 320 },
+    ...DESTINO_TG("morning_report"),
+  ],
+});
+
+workflowTelegram({
+  nome: "B2C Finance · Telegram · Relatório da noite",
+  arquivo: "telegram-daily-evening-report.json",
+  periodo: "noite",
+  finalidade: "evening_report",
+  agenda: { nome: "Agendamento (noite)", env: "TELEGRAM_EVENING_REPORT_CRON", padrao: "0 19 * * 1-5" },
+  gets: [
+    { nome: "API: dados do dia", caminho: "/reports/daily?date={{ $node['Preparar data e destinatários'].json.hoje }}", nota: "GET /reports/daily (reports.read + áreas) — RBAC da pessoa" },
+    { nome: "API: rotina do dia", caminho: "/routine/daily", nota: "GET /routine/daily (routine.read) — RBAC da pessoa" },
+    { nome: "API: ações do agente", caminho: "/agent/pending-actions?limit=20", nota: "GET /agent/pending-actions (agent_actions.manage) — as da pessoa" },
+  ],
+  consolidar: consolidarNoite(EXTRA_NOITE_TG),
+  tipo: "FECHAMENTO DO DIA",
+  secoes: "Ações executadas; Recebimentos; Despesas pagas; Clientes cadastrados; Status alterados; Upsells; Ações pelo agente; Pendências",
+  notas: [
+    { titulo: "sobre", texto: "## Relatório da noite · Telegram (somente leitura)\nCron → API (quem recebe) → para cada pessoa: dados do dia, rotina e ações do agente com o RBAC dela → IA organiza → Telegram.\nRecebido, despesas pagas, cobranças, clientes cadastrados, status alterados, upsells, ações do agente e pendências.\nNunca acessa banco/Supabase/Prisma. **Chega desativado.**", pos: [-480, 40], w: 440, h: 320 },
+    { titulo: "configuração", texto: NOTA_CONFIG_TG("TELEGRAM_EVENING_REPORT_CRON", "0 19 * * 1-5", "evening_report"), pos: [-480, 380], w: 440, h: 320 },
+    ...DESTINO_TG("evening_report"),
+  ],
+});
+
+console.log(
+  "Relatórios gerados: daily-morning-report.json, daily-evening-report.json (WhatsApp); telegram-daily-morning-report.json, telegram-daily-evening-report.json (Telegram)"
+);

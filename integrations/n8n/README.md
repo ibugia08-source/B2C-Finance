@@ -1,10 +1,10 @@
 # B2C Finance × n8n
 
-Integração do B2C Finance com o n8n, principalmente para o **agente de WhatsApp**. Tudo fica versionado neste repositório, junto com a API que ela consome.
+Integração do B2C Finance com o n8n: o **agente** (Telegram, canal principal; WhatsApp, opcional) e os relatórios diários. Tudo fica versionado neste repositório, junto com a API que ela consome.
 
-> **Telegram é o canal principal** (Fase 16): `b2c-finance-telegram-agent-readonly.json` + `telegram-connection-test.json`. Guia: [`docs/TELEGRAM.md`](../../docs/TELEGRAM.md).
+> **Telegram é o canal principal** (Fase 16): `b2c-finance-telegram-agent.json` (consulta + escrita com botões Confirmar/Cancelar) ou `b2c-finance-telegram-agent-readonly.json`, `telegram-connection-test.json` e os relatórios `telegram-daily-*-report.json`. Guia: [`docs/TELEGRAM.md`](../../docs/TELEGRAM.md).
 >
-> **Agentes do WhatsApp:**
+> **Agentes do WhatsApp (canal opcional, mantido):**
 > - `b2c-finance-ai-agent.json` consulta e **propõe escritas com confirmação**. Nada é gravado sem o usuário responder `SIM <código>`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](../../docs/N8N_AGENT_WRITE_ACTIONS.md).
 > - `b2c-finance-ai-agent-readonly.json` é o somente leitura, mantido como referência e alternativa de volta.
 >
@@ -19,8 +19,11 @@ integrations/n8n/
 │   ├── b2c-finance-ai-agent.json          WhatsApp → identidade → SIM/NÃO (sem IA) ou AI Agent (11 GET + 10 que propõem + conhecimento) → WhatsApp
 │   ├── b2c-finance-ai-agent-readonly.json WhatsApp → identidade (API) → AI Agent (11 ferramentas GET) → WhatsApp
 │   ├── knowledge-ingest.json              indexa a base de conhecimento no Qdrant (manual; serve aos dois canais)
+│   ├── b2c-finance-telegram-agent.json    Telegram (mensagem ou botão) → identidade → botão: GET/confirm/cancel na API | AI Agent (11 GET + 10 que propõem + conhecimento) → prévia com [Confirmar] [Cancelar]
 │   ├── b2c-finance-telegram-agent-readonly.json Telegram → identidade (API) → AI Agent (11 GET + conhecimento) → Telegram
 │   ├── telegram-connection-test.json      Telegram + API + identidade + Qdrant (manual)
+│   ├── telegram-daily-morning-report.json relatório da manhã no Telegram: destinatários pela API, um por pessoa com o RBAC dela
+│   ├── telegram-daily-evening-report.json relatório da noite no Telegram (idem + ações do agente)
 │   ├── daily-morning-report.json          relatório da manhã por WhatsApp (cron)
 │   ├── daily-evening-report.json          relatório da noite por WhatsApp (cron)
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
@@ -40,7 +43,7 @@ integrations/n8n/
     ├── build-workflows.mjs           gera os agentes do WhatsApp, a indexação e o teste de conexão
     ├── build-telegram-workflows.mjs  gera os workflows do Telegram
     ├── lib/pecas.mjs                 peças comuns aos canais (ferramentas, conhecimento, prompt)
-    ├── build-report-workflows.mjs    gera os relatórios da manhã e da noite
+    ├── build-report-workflows.mjs    gera os relatórios da manhã e da noite (WhatsApp e Telegram)
     ├── check-secrets.mjs             barra segredo versionado (roda no CI)
     ├── validate-with-n8n.cjs         confere os nós contra uma instalação real do n8n
     ├── import.sh / export.sh         CLI do n8n (exportação normalizada)

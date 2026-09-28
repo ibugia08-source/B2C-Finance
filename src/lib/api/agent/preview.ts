@@ -8,7 +8,8 @@ import { MONEY_EPSILON } from "@/lib/billing-status";
 import { todayKey } from "@/lib/competence";
 import { classifyEffectiveDate } from "@/lib/clients/status-history";
 import { ApiError } from "../auth";
-import { ClientCreateBody, ClientPatchBody, StatusChangeBody } from "../v1/clients-write";
+import { ClientCreateBody, ClientPatchBody, StatusChangeBody, entradaDoCadastro } from "../v1/clients-write";
+import { ClientInputSchema } from "@/lib/services/client-service";
 import { PaymentBody } from "../v1/payments-write";
 import { ExpenseCreateBody, ExpensePatchBody, ExpensePayBody } from "../v1/expenses-write";
 import { UpsellCreateBody, UpsellPatchBody } from "../v1/upsells-write";
@@ -124,6 +125,18 @@ type Montador = (ctx: DomainContext, targetId: string | null, b: any) => Promise
 
 const PREVIEWS: Record<OperacaoDoAgente, Montador> = {
   async "clients.create"(_ctx, _t, b: z.output<typeof ClientCreateBody>) {
+    // A MESMA regra do cadastro (ex.: MRR precisa de prazo): recusa aqui, antes
+    // do "Confirmar", para o agente perguntar o que falta.
+    const regra = ClientInputSchema.safeParse(entradaDoCadastro(b));
+    if (!regra.success) {
+      throw new ApiError(
+        400,
+        "validation_error",
+        `Falta dado para cadastrar: ${regra.error.issues[0]?.message ?? "confira os campos"}`,
+        undefined,
+        regra.error.issues.map((i) => ({ field: ["input", ...i.path].join("."), message: i.message }))
+      );
+    }
     const responsavel = await nomeDoColaborador(b.responsibleId);
     const parecidos = await prisma.client.findMany({
       where: { name: { contains: b.name, mode: "insensitive" } },

@@ -4,7 +4,7 @@
     "title": "B2C Finance API",
     "version": "1.0.0",
     "summary": "API V1 do B2C Finance: leitura e escritas controladas (contas de serviço com scopes).",
-    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, routine.write, reports.read, identities.resolve, knowledge.read, agent_actions.manage.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas e Idempotency-Key\nA V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por `POST /clients/{id}/status-changes`, com data de vigência. Toda escrita exige o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Quem está falando (delegação)\nPara agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em `POST /integrations/resolve-identity` e manda o `identityId` em `X-B2C-Identity`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.\n\n## Ações do agente com confirmação\nO agente de WhatsApp não escreve direto: propõe em `POST /agent/pending-actions` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário responde \"SIM <código>\" e a integração confirma em `POST /agent/pending-actions/{id}/confirm` com `Idempotency-Key: wa:<messageId>:<actionId>`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
+    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, routine.write, reports.read, identities.resolve, knowledge.read, agent_actions.manage.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas e Idempotency-Key\nA V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por `POST /clients/{id}/status-changes`, com data de vigência. Toda escrita exige o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Quem está falando (delegação)\nPara agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em `POST /integrations/resolve-identity` e manda o `identityId` em `X-B2C-Identity`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.\n\n## Ações do agente com confirmação\nO agente (Telegram ou WhatsApp) não escreve direto: propõe em `POST /agent/pending-actions` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — \"SIM <código>\" no WhatsApp, botão Confirmar no Telegram — e a integração chama `POST /agent/pending-actions/{id}/confirm` com `Idempotency-Key: wa:<messageId>:<actionId>` ou `telegram:<update_id>:<actionId>`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
   },
   "servers": [
     {
@@ -3515,6 +3515,161 @@
         }
       }
     },
+    "/integrations/recipients": {
+      "get": {
+        "operationId": "listRecipients",
+        "tags": [
+          "Integração"
+        ],
+        "summary": "Quem recebe um relatório ou aviso num canal",
+        "description": "Destinatários de um envio proativo: vínculo e usuário ativos com a preferência LIGADA em Configurações → Integrações → Canais (padrão: ninguém). Usuário restrito a uma agência fica de fora. Cada um traz o `identityId` — monte o relatório dele com `X-B2C-Identity` (RBAC dele). `today`/`timezone` são os da API (fuso oficial da operação).\n\n**Scope obrigatório:** `identities.resolve`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "identities.resolve"
+            ]
+          }
+        ],
+        "x-required-scope": "identities.resolve",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Identity"
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TELEGRAM",
+                "WHATSAPP"
+              ]
+            }
+          },
+          {
+            "name": "purpose",
+            "in": "query",
+            "required": true,
+            "description": "morning_report | evening_report | aviso (payment.received, receivable.overdue, client.renewal.upcoming, expense.due_soon).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "morning_report",
+                "evening_report",
+                "payment.received",
+                "receivable.overdue",
+                "client.renewal.upcoming",
+                "expense.due_soon"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "channel": {
+                          "type": "string"
+                        },
+                        "purpose": {
+                          "type": "string"
+                        },
+                        "timezone": {
+                          "type": "string",
+                          "example": "America/Bahia"
+                        },
+                        "today": {
+                          "type": "string",
+                          "format": "date"
+                        },
+                        "recipients": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "identityId": {
+                                "type": "string"
+                              },
+                              "externalIdentifier": {
+                                "type": "string",
+                                "description": "Telegram User ID (= chat privado) ou telefone."
+                              },
+                              "userName": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "identityId",
+                              "externalIdentifier",
+                              "userName"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "channel",
+                        "purpose",
+                        "timezone",
+                        "today",
+                        "recipients"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/knowledge/documents": {
       "get": {
         "operationId": "getKnowledgeDocuments",
@@ -3867,6 +4022,112 @@
         }
       }
     },
+    "/agent/pending-actions/{id}": {
+      "get": {
+        "operationId": "getAgentAction",
+        "tags": [
+          "Agente"
+        ],
+        "summary": "Uma ação do usuário do vínculo",
+        "description": "A ação, se for do usuário do vínculo (`X-B2C-Identity`); de outro usuário, vínculo ou workspace → 404. Vencida é lida como `EXPIRED`. O Telegram consulta antes de confirmar/cancelar pelo botão — o id do botão é só referência; a confirmação confere tudo de novo.\n\n**Scope obrigatório:** `agent_actions.manage` + **X-B2C-Identity** (a ação é sempre de um usuário).",
+        "security": [
+          {
+            "bearerAuth": [
+              "agent_actions.manage"
+            ]
+          }
+        ],
+        "x-required-scope": "agent_actions.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "name": "X-B2C-Identity",
+            "in": "header",
+            "required": true,
+            "description": "Delegação: id do vínculo devolvido por `POST /integrations/resolve-identity`. A API recorta os scopes pelo RBAC do usuário vinculado (conta ∩ usuário) e o registra como ator. Exige `identities.resolve` na integração. Inválido/desativado/de outro workspace → 403 `invalid_identity`; usuário sem a permissão → 403 `user_forbidden`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Id da ação pendente.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PendingAction"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/agent/pending-actions/{id}/confirm": {
       "post": {
         "operationId": "confirmAgentAction",
@@ -3874,7 +4135,7 @@
           "Agente"
         ],
         "summary": "Confirmar e executar a ação",
-        "description": "Confere usuário, vínculo, código (5 tentativas), validade e se o estado ainda é o da prévia (senão 409 `state_changed`). Executa o payload GUARDADO pela rota de escrita oficial, com a mesma Idempotency-Key. 200 = despachada (`data.status` EXECUTED ou FAILED, `data.message` pronta para o WhatsApp); repetir a mesma confirmação devolve o mesmo resultado. Erros: 410 `action_expired`, 409 `action_not_pending`, 422 `confirmation_mismatch`.\n\n**Scope obrigatório:** `agent_actions.manage` + **X-B2C-Identity** (a ação é sempre de um usuário).",
+        "description": "Confere usuário, vínculo, código (5 tentativas; no Telegram, `via: button` dispensa o código), validade e se o estado ainda é o da prévia (senão 409 `state_changed`). Executa o payload GUARDADO pela rota de escrita oficial, com a mesma Idempotency-Key. 200 = despachada (`data.status` EXECUTED ou FAILED, `data.message` pronta para a mensagem); repetir a mesma confirmação devolve o mesmo resultado; outra confirmação de ação já decidida → 409 `action_not_pending` (nunca executa de novo). Erros: 410 `action_expired`, 409 `action_not_pending`, 422 `confirmation_mismatch`.\n\n**Scope obrigatório:** `agent_actions.manage` + **X-B2C-Identity** (a ação é sempre de um usuário).",
         "security": [
           {
             "bearerAuth": [
@@ -3888,12 +4149,12 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "`wa:<messageId>:<actionId>` — a mensagem do WhatsApp que confirmou + o id da ação (caracteres fora de `A-Za-z0-9._-` no messageId viram `_`).",
+            "description": "Pelo canal da ação: `wa:<messageId>:<actionId>` (WhatsApp — a mensagem que confirmou) ou `telegram:<update_id>:<actionId>` (Telegram — o callback do botão). Caracteres fora de `A-Za-z0-9._-` no messageId viram `_`.",
             "schema": {
               "type": "string",
               "pattern": "^[A-Za-z0-9._:-]{1,255}$"
             },
-            "example": "wa:wamid.HBgM_3EB0:cmupa0001"
+            "example": "telegram:815000123:cmupa0001"
           },
           {
             "$ref": "#/components/parameters/RequestId"
@@ -7476,17 +7737,24 @@
         "properties": {
           "messageId": {
             "type": "string",
-            "description": "Id da mensagem do WhatsApp em que o usuário confirmou."
+            "description": "WhatsApp: id da mensagem em que o usuário confirmou. Telegram (botão): update_id do callback_query."
           },
           "confirmationCode": {
             "type": "string",
-            "description": "Código de 4 dígitos que o usuário digitou.",
+            "description": "Código de 4 dígitos que o usuário digitou (obrigatório em `via: code`; proibido em `via: button`).",
             "pattern": "^\\d{4}$"
+          },
+          "via": {
+            "type": "string",
+            "description": "`code` (padrão) = SIM + código digitado; `button` = toque em Confirmar no Telegram (só para ações do canal TELEGRAM).",
+            "enum": [
+              "code",
+              "button"
+            ]
           }
         },
         "required": [
-          "messageId",
-          "confirmationCode"
+          "messageId"
         ],
         "additionalProperties": false,
         "description": "Não há corpo da ação: executa-se o payload guardado no preview."

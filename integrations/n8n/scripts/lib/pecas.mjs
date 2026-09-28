@@ -86,6 +86,71 @@ export function ferramenta(t, i, fonte = "whatsapp") {
 }
 
 // ---------------------------------------------------------------------------
+// Ferramentas de escrita (uma por item de schemas/agent-write-tools.json)
+// ---------------------------------------------------------------------------
+
+// Texto seguro dentro de '...' numa expressão do n8n.
+export const aspas = (t) => t.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+/**
+ * Ferramenta de escrita = nó HTTP Request usado como ferramenta
+ * (n8n-nodes-base.httpRequestTool, parâmetros do modelo por $fromAI).
+ *
+ * Por que não o toolHttpRequest das consultas: ele descarta o corpo da
+ * resposta de ERRO e entrega ao modelo só "Request failed with status code
+ * 422". Numa proposta recusada o usuário precisa ouvir o PORQUÊ ("essa
+ * cobrança já está quitada", "falta o valor", "seu perfil não pode"), que
+ * vem em error.code/error.message da API. Com `neverError`, o JSON de erro
+ * chega inteiro ao modelo (auditoria final, 28/09/2026).
+ */
+export function ferramentaDeEscrita(t, i, fonte = "whatsapp") {
+  const campos = Object.entries(t.input)
+    .map(([k, v]) => `${k} (${v.type}${t.required.includes(k) ? ", obrigatório" : ""}): ${v.description}`)
+    .join("; ");
+  const semInput = Object.keys(t.input).length === 0;
+  // Operação FIXA no corpo: a ferramenta não escolhe outra operação.
+  const partes = [`operation: '${t.operation}'`];
+  if (t.target) partes.push(`targetId: $fromAI('targetId', '${aspas(t.target.description)}', 'string')`);
+  partes.push(
+    semInput
+      ? "input: {}"
+      : `input: $fromAI('input', '${aspas(`Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`)}', 'json')`
+  );
+  return {
+    parameters: {
+      toolDescription: `${t.description} Risco: WRITE_CONFIRMATION — não executa nada; a API monta a prévia e o usuário confirma.`,
+      method: "POST",
+      url: `={{ ($json.allowedTools || []).includes('${t.name}') ? $env.B2C_FINANCE_API_URL : '${BLOQUEADA}' }}/agent/pending-actions`,
+      authentication: "genericCredentialType",
+      genericAuthType: "httpHeaderAuth",
+      sendHeaders: true,
+      headerParameters: {
+        parameters: [
+          { name: "X-B2C-Source", value: fonte },
+          { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+          // Delegação: a API recorta pelo RBAC de quem está falando.
+          { name: "X-B2C-Identity", value: "={{ $json.identityId }}" },
+          // A ação fica ligada à mensagem que a pediu (o workflow a acha depois da IA).
+          { name: "X-B2C-Message-Id", value: "={{ $json.messageId }}" },
+        ],
+      },
+      sendBody: true,
+      specifyBody: "json",
+      jsonBody: `={{ JSON.stringify({ ${partes.join(", ")} }) }}`,
+      // Erro da API (4xx) volta como JSON para o modelo explicar ao usuário.
+      options: { response: { response: { neverError: true } } },
+    },
+    name: t.name,
+    type: "n8n-nodes-base.httpRequestTool",
+    typeVersion: 4.2,
+    position: [1500 + (i % 5) * 170, 1000 + Math.floor(i / 5) * 180],
+    credentials: CRED_B2C,
+    notes: `POST /agent/pending-actions · ${t.operation} · scope ${t.scope} + agent_actions.manage · WRITE_CONFIRMATION`,
+    notesInFlow: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Nós genéricos
 // ---------------------------------------------------------------------------
 

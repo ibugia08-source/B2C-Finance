@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getViewer } from "@/lib/auth/viewer";
 import { domainContextFor } from "@/lib/auth/domain-session";
 import {
+  atualizarPreferencias,
   desvincularIdentidade,
   reativarIdentidade,
   vincularIdentidade,
@@ -38,6 +39,17 @@ export async function desvincularCanalAction(id: string) {
 
 export async function reativarCanalAction(id: string) {
   const r = await reativarIdentidade(await domainContextFor(await getViewer()), id);
+  if (r.ok) revalidatePath(PAGINA);
+  return r;
+}
+
+/** Preferências de envio do vínculo: relatórios diários e avisos (opt-in). */
+export async function preferenciasCanalAction(id: string, formData: FormData) {
+  const r = await atualizarPreferencias(await domainContextFor(await getViewer()), id, {
+    receiveMorningReport: formData.get("receiveMorningReport") === "on",
+    receiveEveningReport: formData.get("receiveEveningReport") === "on",
+    notificationEvents: formData.getAll("notificationEvents").map(String),
+  });
   if (r.ok) revalidatePath(PAGINA);
   return r;
 }

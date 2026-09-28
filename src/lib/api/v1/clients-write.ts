@@ -81,9 +81,13 @@ const SNAPSHOT = {
   contractIndefinite: true, startedAt: true, notes: true, status: true,
 } as const;
 
-export async function criarClienteApi(ctx: DomainContext, b: z.output<typeof ClientCreateBody>) {
-  if (b.responsibleId) await colaborador(b.responsibleId);
-  const input: ClientInput = {
+/**
+ * Corpo da API → entrada do domínio no cadastro. Exportado para a prévia do
+ * agente validar com a MESMA regra (ClientInputSchema) antes de pedir
+ * confirmação — senão faltava o prazo só aparecia depois do "Confirmar".
+ */
+export function entradaDoCadastro(b: z.output<typeof ClientCreateBody>): ClientInput {
+  return {
     name: b.name,
     legalName: b.legalName ?? null,
     document: b.document ?? null,
@@ -109,7 +113,11 @@ export async function criarClienteApi(ctx: DomainContext, b: z.output<typeof Cli
     notes: b.notes ?? null,
     permitirDuplicado: b.allowDuplicate,
   };
-  const r = await salvarCliente(ctx, input);
+}
+
+export async function criarClienteApi(ctx: DomainContext, b: z.output<typeof ClientCreateBody>) {
+  if (b.responsibleId) await colaborador(b.responsibleId);
+  const r = await salvarCliente(ctx, entradaDoCadastro(b));
   if (!r.ok) throw falhaDoDominio(r);
   const id = r.id!;
   await auditar(ctx, { tipo: "CREATE", entity: "Client", id, motivo: "Cliente cadastrado pela API" });

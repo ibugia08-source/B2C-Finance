@@ -38,6 +38,7 @@ export default async function CanaisPage() {
     criadoEm: v.createdAt.toISOString(),
     desativadoEm: v.deactivatedAt?.toISOString() ?? null,
     ultimoUso: v.lastResolvedAt?.toISOString() ?? null,
+    envios: { manha: v.receiveMorningReport, noite: v.receiveEveningReport, avisos: v.notificationEvents },
   }));
   const opcoes = usuarios.filter((u) => u.active).map((u) => ({ id: u.id, label: `${u.name} · ${papel(u.role)}` }));
 

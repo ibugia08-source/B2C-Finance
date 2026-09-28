@@ -6,6 +6,10 @@ import { type DomainContext, domainUser, inDomain } from "@/lib/engines/domain";
 import {
   ROTULO_DO_CANAL, metadadosDoCanal, normalizarIdentificador, variantesDoIdentificador, type Canal,
 } from "@/lib/messaging/channels";
+import {
+  SCOPE_DA_FINALIDADE, ehAviso, ehFinalidadeDeRelatorio, normalizarAvisos, type AvisoProativo, type Finalidade,
+} from "@/lib/messaging/notifications";
+import { SCOPE_REQUIRES_PERMISSIONS } from "@/lib/api/scopes";
 import { parseDataScope } from "@/lib/scope";
 import { podeGerenciarIntegracoes, podeVerIntegracoes } from "./service-accounts";
 
@@ -61,6 +65,7 @@ export async function listarIdentidades(ctx: DomainContext) {
       select: {
         id: true, channel: true, externalIdentifier: true, isActive: true, createdAt: true,
         deactivatedAt: true, lastResolvedAt: true, metadata: true,
+        receiveMorningReport: true, receiveEveningReport: true, notificationEvents: true,
         user: { select: { id: true, name: true, email: true, role: true, active: true } },
       },
     })
@@ -159,6 +164,50 @@ async function mudarAtivo(ctx: DomainContext, id: string, ativo: boolean): Promi
   });
 }
 
+/**
+ * Preferências de envio do vínculo (relatórios diários e avisos). Só o
+ * administrador muda; padrão de tudo = desligado. Auditado.
+ */
+export async function atualizarPreferencias(
+  ctx: DomainContext,
+  id: string,
+  prefs: { receiveMorningReport: boolean; receiveEveningReport: boolean; notificationEvents: readonly string[] }
+): Promise<{ ok: true } | Falha> {
+  const u = gestor(ctx);
+  if (!u) return SEM_PERMISSAO;
+  const avisos = normalizarAvisos(prefs.notificationEvents);
+  if (avisos.length !== new Set(prefs.notificationEvents).size) {
+    return { ok: false, code: "INVALIDO", error: "Aviso desconhecido." };
+  }
+  return inDomain(ctx, async () => {
+    const atual = await prisma.messagingIdentity.findFirst({
+      where: { id },
+      select: {
+        id: true, channel: true, receiveMorningReport: true, receiveEveningReport: true, notificationEvents: true,
+        user: { select: { name: true } },
+      },
+    });
+    if (!atual) return { ok: false as const, code: "NAO_ENCONTRADO" as const, error: "Vínculo não encontrado." };
+    const antes = {
+      receiveMorningReport: atual.receiveMorningReport,
+      receiveEveningReport: atual.receiveEveningReport,
+      notificationEvents: atual.notificationEvents,
+    };
+    const depois = {
+      receiveMorningReport: !!prefs.receiveMorningReport,
+      receiveEveningReport: !!prefs.receiveEveningReport,
+      notificationEvents: avisos as string[],
+    };
+    if (JSON.stringify(antes) === JSON.stringify(depois)) return { ok: true as const };
+    await prisma.$transaction(async (tx) => {
+      await tx.messagingIdentity.updateMany({ where: { id }, data: depois });
+      await auditUpdate(tx, "MessagingIdentity", id, antes, depois,
+        auditCtx(ctx, `Envios do ${ROTULO_DO_CANAL[atual.channel]} de ${atual.user.name} alterados`));
+    });
+    return { ok: true as const };
+  });
+}
+
 export const desvincularIdentidade = (ctx: DomainContext, id: string) => mudarAtivo(ctx, id, false);
 export const reativarIdentidade = (ctx: DomainContext, id: string) => mudarAtivo(ctx, id, true);
 /** Nomes antigos (mesma regra — valem para qualquer canal). */
@@ -251,4 +300,40 @@ export async function resolverPorId(identityId: string): Promise<IdentidadeResol
     select: SELECT_IDENTIDADE,
   });
   return achada ? montar(achada) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Destinatários de envios proativos (usada pela API, no escopo do dono)
+// ---------------------------------------------------------------------------
+
+export type Destinatario = { identityId: string; externalIdentifier: string; userName: string };
+
+/**
+ * Quem recebe `finalidade` (relatório da manhã/noite ou um aviso) neste
+ * canal: vínculo ATIVO, usuário ATIVO, preferência LIGADA e RBAC que cobre o
+ * conteúdo (relatório = reports.read; aviso = a leitura da área). Usuário
+ * restrito a uma agência fica de fora — a delegação ainda não aplica esse
+ * recorte (o relatório dele mostraria a carteira inteira).
+ */
+export async function listarDestinatarios(canal: Canal, finalidade: Finalidade): Promise<Destinatario[]> {
+  const filtro =
+    finalidade === "morning_report" ? { receiveMorningReport: true }
+    : finalidade === "evening_report" ? { receiveEveningReport: true }
+    : ehAviso(finalidade) ? { notificationEvents: { has: finalidade as AvisoProativo } }
+    : null;
+  if (!filtro || (!ehAviso(finalidade) && !ehFinalidadeDeRelatorio(finalidade))) return [];
+  const linhas = await prisma.messagingIdentity.findMany({
+    where: { channel: canal, isActive: true, ...filtro, user: { active: true } },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true, externalIdentifier: true,
+      user: { select: { name: true, role: true, dataScope: true, scopeAgencyId: true, permissions: { select: { permission: true, enabled: true } } } },
+    },
+  });
+  const exige = SCOPE_REQUIRES_PERMISSIONS[SCOPE_DA_FINALIDADE[finalidade as keyof typeof SCOPE_DA_FINALIDADE]] ?? null;
+  if (!exige) return [];
+  return linhas
+    .filter((l) => parseDataScope({ role: l.user.role, dataScope: l.user.dataScope, scopeAgencyId: l.user.scopeAgencyId }).kind !== "AGENCY")
+    .filter((l) => exige.every((p) => hasPermission({ role: l.user.role, permissions: l.user.permissions }, p)))
+    .map((l) => ({ identityId: l.id, externalIdentifier: l.externalIdentifier, userName: l.user.name }));
 }

@@ -1352,34 +1352,34 @@ model ClientMonthDelinquency {
 // recebimentos (competência escolhida + cobrança criada) e, para MRR, se o
 // cliente permaneceu na lista de recebimentos mensais.
 model ClientRenewal {
-  id              String          @id @default(cuid())
-  clientId        String
-  client          Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  contractId      String? // contrato estendido (null = renovação só pelo cadastro)
-  renewedAt       DateTime        @default(now()) @db.Timestamptz(3)
-  months          Int? // prazo do novo ciclo; nulo = renovou com prazo indeterminado
-  totalValue      Decimal         @db.Decimal(14, 2) // valor do novo ciclo
-  monthlyValue    Decimal?        @db.Decimal(14, 2) // mensal resultante (MRR)
-  modality        ClientModality? // snapshot da modalidade na renovação
-  paymentMethod   String? // pix | boleto | cartão | transferência | outro
-  paymentMode     String? // à vista | parcelado | mensal
-  previousEndDate DateTime?       @db.Timestamptz(3) // fim de vigência antes da renovação
-  newEndDate      DateTime?       @db.Timestamptz(3) // novo fim de vigência
+  id                 String          @id @default(cuid())
+  clientId           String
+  client             Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contractId         String? // contrato estendido (null = renovação só pelo cadastro)
+  renewedAt          DateTime        @default(now()) @db.Timestamptz(3)
+  months             Int? // prazo do novo ciclo; nulo = renovou com prazo indeterminado
+  totalValue         Decimal         @db.Decimal(14, 2) // valor do novo ciclo
+  monthlyValue       Decimal?        @db.Decimal(14, 2) // mensal resultante (MRR)
+  modality           ClientModality? // snapshot da modalidade na renovação
+  paymentMethod      String? // pix | boleto | cartão | transferência | outro
+  paymentMode        String? // à vista | parcelado | mensal
+  previousEndDate    DateTime?       @db.Timestamptz(3) // fim de vigência antes da renovação
+  newEndDate         DateTime?       @db.Timestamptz(3) // novo fim de vigência
   /// Competência (YYYY-MM) da EXPECTATIVA que esta renovação atendeu — é o
   /// mês em que ela conta como "ganha" no módulo e na Visão geral.
   expectedCompetence String?
   /// Valor que se esperava renovar (snapshot antes da renovação).
-  expectedValue   Decimal?        @db.Decimal(14, 2)
-  billingId       String? // cobrança lançada nos recebimentos (se houver)
-  billingMonth    Int? // competência escolhida para o lançamento (1-12)
-  billingYear     Int?
-  keptMonthly     Boolean? // MRR: manteve o cliente nos recebimentos mensais?
-  paymentStatus   String? // aberto | pago_total | pago_parcial
-  notes           String?
-  createdBy       String? // e-mail de quem registrou
-  ownerId         String?
-  owner           User?           @relation("OwnerClientRenewal", fields: [ownerId], references: [id])
-  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  expectedValue      Decimal?        @db.Decimal(14, 2)
+  billingId          String? // cobrança lançada nos recebimentos (se houver)
+  billingMonth       Int? // competência escolhida para o lançamento (1-12)
+  billingYear        Int?
+  keptMonthly        Boolean? // MRR: manteve o cliente nos recebimentos mensais?
+  paymentStatus      String? // aberto | pago_total | pago_parcial
+  notes              String?
+  createdBy          String? // e-mail de quem registrou
+  ownerId            String?
+  owner              User?           @relation("OwnerClientRenewal", fields: [ownerId], references: [id])
+  createdAt          DateTime        @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([renewedAt])
@@ -1434,27 +1434,27 @@ model ClientStatusHistory {
 }
 
 model ClientLoss {
-  id             String                    @id @default(cuid())
-  clientId       String
-  client         Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lostAt         DateTime                  @default(now()) @db.Timestamptz(3)
-  modality       ClientModality? // snapshot da modalidade na perda
-  monthlyValue   Decimal?                  @db.Decimal(14, 2) // MRR mensal perdido
-  referenceValue Decimal?                  @db.Decimal(14, 2) // TCV de referência (última adesão)
-  reason         String? // motivo da perda (opcional)
+  id                String                    @id @default(cuid())
+  clientId          String
+  client            Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lostAt            DateTime                  @default(now()) @db.Timestamptz(3)
+  modality          ClientModality? // snapshot da modalidade na perda
+  monthlyValue      Decimal?                  @db.Decimal(14, 2) // MRR mensal perdido
+  referenceValue    Decimal?                  @db.Decimal(14, 2) // TCV de referência (última adesão)
+  reason            String? // motivo da perda (opcional)
   /// Competência (YYYY-MM) da expectativa de renovação que esta perda
   /// frustrou. Nulo = saída no meio do contrato, não conta como renovação perdida.
   renewalCompetence String?
   /// Valor que se esperava renovar (snapshot na perda).
-  expectedValue  Decimal?                  @db.Decimal(14, 2)
-  salesOwner     String? // snapshot do responsável na perda
+  expectedValue     Decimal?                  @db.Decimal(14, 2)
+  salesOwner        String? // snapshot do responsável na perda
   // 01 §4.3: "ClientLoss pertence à relação". Nulo só no legado
   // anterior ao backfill da F1.1.
-  relationshipId String?
-  relationship   ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
-  ownerId        String?
-  owner          User?                     @relation("OwnerClientLoss", fields: [ownerId], references: [id])
-  createdAt      DateTime                  @default(now()) @db.Timestamptz(3)
+  relationshipId    String?
+  relationship      ClientAgencyRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  ownerId           String?
+  owner             User?                     @relation("OwnerClientLoss", fields: [ownerId], references: [id])
+  createdAt         DateTime                  @default(now()) @db.Timestamptz(3)
 
   @@index([clientId])
   @@index([relationshipId])
@@ -4229,24 +4229,31 @@ enum MessagingChannel {
 /// canal em cada workspace (índice único PARCIAL, na migration); desvincular
 /// desativa (a linha fica para auditoria) e libera o número.
 model MessagingIdentity {
-  id                 String           @id @default(cuid())
-  ownerId            String
-  userId             String
-  user               User             @relation("MessagingIdentities", fields: [userId], references: [id], onDelete: Cascade)
-  channel            MessagingChannel
+  id                   String           @id @default(cuid())
+  ownerId              String
+  userId               String
+  user                 User             @relation("MessagingIdentities", fields: [userId], references: [id], onDelete: Cascade)
+  channel              MessagingChannel
   /// WhatsApp: telefone só com dígitos, com país (E.164 sem "+"), ex.: 5571999990000.
   /// Telegram: Telegram User ID (só dígitos), ex.: 123456789.
-  externalIdentifier String
-  isActive           Boolean          @default(true)
-  createdById        String
-  deactivatedAt      DateTime?        @db.Timestamptz(3)
-  deactivatedById    String?
-  lastResolvedAt     DateTime?        @db.Timestamptz(3)
+  externalIdentifier   String
+  isActive             Boolean          @default(true)
+  createdById          String
+  deactivatedAt        DateTime?        @db.Timestamptz(3)
+  deactivatedById      String?
+  lastResolvedAt       DateTime?        @db.Timestamptz(3)
   /// Dados de exibição do canal (Telegram: username, nome). NUNCA usados
   /// para identificar: a identidade é só channel + externalIdentifier.
-  metadata           Json?
-  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+  metadata             Json?
+  /// Recebe o relatório diário da manhã / da noite NESTE canal. Opt-in
+  /// explícito (padrão: não) — nada é enviado a todo vinculado.
+  receiveMorningReport Boolean          @default(false)
+  receiveEveningReport Boolean          @default(false)
+  /// Avisos proativos assinados (catálogo em lib/messaging/notifications).
+  /// Vazio = nenhum. Preparado: ainda sem entregador automático.
+  notificationEvents   String[]         @default([])
+  createdAt            DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime         @updatedAt @db.Timestamptz(3)
 
   @@index([ownerId, channel, externalIdentifier])
   @@index([userId])

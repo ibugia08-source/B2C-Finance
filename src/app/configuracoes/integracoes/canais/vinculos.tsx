@@ -8,6 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { formatInstantBR, formatInstantTimeBR } from "@/lib/format";
 import { desvincularCanalAction, reativarCanalAction } from "@/lib/actions/messaging-identities";
+import { AVISOS_PROATIVOS, type AvisoProativo } from "@/lib/messaging/notifications";
+import { EnviosDialog, type Envios } from "./envios-dialog";
 
 export type VinculoRow = {
   id: string;
@@ -21,7 +23,13 @@ export type VinculoRow = {
   criadoEm: string;
   desativadoEm: string | null;
   ultimoUso: string | null;
+  envios: Envios;
 };
+
+function resumoDosEnvios(e: Envios): string {
+  const partes = [e.manha && "Manhã", e.noite && "Noite", ...e.avisos.map((a) => AVISOS_PROATIVOS[a as AvisoProativo]?.label)].filter(Boolean);
+  return partes.length ? partes.join(" · ") : "Nenhum";
+}
 
 export function VinculosCanais({ rows, gerencia }: { rows: VinculoRow[]; gerencia: boolean }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -82,6 +90,7 @@ export function VinculosCanais({ rows, gerencia }: { rows: VinculoRow[]; gerenci
                 <TableHead>Situação</TableHead>
                 <TableHead>Vinculado em</TableHead>
                 <TableHead>Último uso</TableHead>
+                <TableHead>Envios</TableHead>
                 {gerencia && <TableHead className="text-right">Ações</TableHead>}
               </TableRow>
             </TableHeader>
@@ -111,12 +120,16 @@ export function VinculosCanais({ rows, gerencia }: { rows: VinculoRow[]; gerenci
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{formatInstantBR(r.criadoEm)}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.ultimoUso ? formatInstantTimeBR(r.ultimoUso) : "Nunca"}</TableCell>
+                  <TableCell className="text-caption text-muted-foreground">{resumoDosEnvios(r.envios)}</TableCell>
                   {gerencia && (
                     <TableCell className="text-right">
                       {r.ativo ? (
-                        <Button type="button" variant="outline" size="sm" disabled={pendente} onClick={() => desvincular(r)}>
-                          Desvincular
-                        </Button>
+                        <span className="inline-flex gap-2">
+                          <EnviosDialog id={r.id} canal={r.canal} usuario={r.usuario} envios={r.envios} />
+                          <Button type="button" variant="outline" size="sm" disabled={pendente} onClick={() => desvincular(r)}>
+                            Desvincular
+                          </Button>
+                        </span>
                       ) : (
                         <Button type="button" variant="outline" size="sm" disabled={pendente || !r.usuarioAtivo} onClick={() => reativar(r)}>
                           Reativar
@@ -132,7 +145,8 @@ export function VinculosCanais({ rows, gerencia }: { rows: VinculoRow[]; gerenci
       </Card>
       <p className="mt-3 text-caption text-muted-foreground">
         O agente atende com as permissões do usuário (papel e ajustes da matriz de permissões), limitadas às da integração.
-        Usuário restrito a uma agência ainda não é atendido pelo agente.
+        Usuário restrito a uma agência ainda não é atendido pelo agente. Relatórios e avisos só chegam a quem estiver marcado em
+        Envios.
       </p>
     </>
   );

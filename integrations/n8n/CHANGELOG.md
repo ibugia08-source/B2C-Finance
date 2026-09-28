@@ -2,6 +2,18 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-29 — Fase 16 · bloco 2: Telegram com escrita e relatórios
+
+- **Novos** (todos desativados):
+  - `workflows/b2c-finance-telegram-agent.json` — consulta + escrita com confirmação por **botões** (callback `confirm:<id>`/`cancel:<id>`, Idempotency-Key `telegram:<update_id>:<id>`, prévia editada com o resultado);
+  - `workflows/telegram-daily-morning-report.json` e `telegram-daily-evening-report.json` — destinatários pela API (preferência "Envios" do vínculo), um relatório por pessoa com `X-B2C-Identity`.
+- **Peças comuns:** a ferramenta de escrita foi para `scripts/lib/pecas.mjs` (parâmetro de canal); a consolidação dos relatórios é a mesma do WhatsApp. Os workflows do WhatsApp saíram **byte a byte iguais**, exceto o prompt do agente com escrita.
+- **Prompt** (`prompt-escrita`): confirmação por canal (código no WhatsApp, botões no Telegram), regra de status com vigência, pagamento, cadastro sem inventar dado e pedido BLOCKED.
+- **Teste de conexão do Telegram:** nova linha "Ações com confirmação" (scopes de escrita).
+- **Variáveis novas:** `TELEGRAM_MORNING_REPORT_CRON`, `TELEGRAM_EVENING_REPORT_CRON`.
+- **API usada:** `GET /integrations/recipients`, `GET /agent/pending-actions/{id}`, confirmação com `via: "button"`.
+- **Base de conhecimento:** o pacote mudou (AI_AGENT.md, API.md). Rode `knowledge-ingest.json` de novo.
+
 ## 2026-09-29 — Fase 16 · bloco 1: Telegram
 
 - **Novos:** `workflows/b2c-finance-telegram-agent-readonly.json` e `workflows/telegram-connection-test.json`, gerados por `scripts/build-telegram-workflows.mjs`. Os workflows do WhatsApp continuam; nenhum foi removido.

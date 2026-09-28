@@ -18,10 +18,11 @@ import { CORPO_DA_OPERACAO, montarPreview } from "./preview";
  * Fluxo: o agente PROPÕE (operação + alvo + corpo) → a API valida o corpo
  * com o schema da rota de escrita, lê o estado atual, monta o preview e
  * guarda a PendingAction com um código de 4 dígitos → o usuário responde
- * "SIM <código>" → a API confere que a confirmação é DESSA ação (mesmo
- * usuário, mesmo vínculo, mesmo código, dentro da validade, estado igual ao
+ * "SIM <código>" (WhatsApp) ou toca em Confirmar (Telegram, botão com o id
+ * da ação) → a API confere que a confirmação é DESSA ação (mesmo usuário,
+ * mesmo vínculo, código quando digitado, dentro da validade, estado igual ao
  * do preview) e executa o payload GUARDADO pela rota de escrita oficial, com
- * a Idempotency-Key "mensagem do WhatsApp + id da ação".
+ * a Idempotency-Key "mensagem/update + id da ação" (wa:… ou telegram:…).
  *
  * O que o agente NÃO consegue:
  *  · confirmar sozinho: não há ferramenta de confirmação; ela nasce da
@@ -60,12 +61,30 @@ export const PropostaBody = z
 
 export const ConfirmacaoBody = z
   .object({
-    /** Id da mensagem do WhatsApp em que o usuário confirmou. */
+    /**
+     * WhatsApp: id da mensagem em que o usuário confirmou.
+     * Telegram (botão): update_id do callback_query.
+     */
     messageId: z.string().trim().min(1).max(200),
-    /** Código que o usuário digitou ("SIM 4821" → "4821"). */
-    confirmationCode: z.string().trim().regex(/^\d{4}$/, "O código tem 4 dígitos."),
+    /** Código que o usuário digitou ("SIM 4821" → "4821"). Obrigatório em via "code". */
+    confirmationCode: z.string().trim().regex(/^\d{4}$/, "O código tem 4 dígitos.").optional(),
+    /**
+     * Como o usuário confirmou:
+     *  · "code"   — digitou SIM + código (WhatsApp);
+     *  · "button" — tocou em Confirmar na prévia (Telegram; o botão leva só o
+     *    id da ação, e a API confere que a ação é do usuário do vínculo).
+     */
+    via: z.enum(["code", "button"]).default("code"),
   })
-  .strict();
+  .strict()
+  .superRefine((b, c) => {
+    if (b.via === "code" && !b.confirmationCode) {
+      c.addIssue({ code: "custom", path: ["confirmationCode"], message: "Informe o código de 4 dígitos." });
+    }
+    if (b.via === "button" && b.confirmationCode) {
+      c.addIssue({ code: "custom", path: ["confirmationCode"], message: "Confirmação por botão não leva código." });
+    }
+  });
 
 export const CancelamentoBody = z
   .object({ messageId: z.string().trim().min(1).max(200).optional() })
@@ -127,8 +146,16 @@ const horaLocal = (d: Date) =>
 
 type Resumo = { label: string; amount: number | null };
 
-/** Mensagem de WhatsApp do preview (o texto guardado + como confirmar). */
-export function mensagemDoPreview(a: Pick<PendingAction, "preview" | "confirmationCode" | "expiresAt">): string {
+/**
+ * Mensagem do preview (o texto guardado + como confirmar), por canal:
+ *  · WhatsApp — responder SIM + código;
+ *  · Telegram — tocar nos botões Confirmar / Cancelar (o workflow anexa o
+ *    teclado; o código não aparece).
+ */
+export function mensagemDoPreview(a: Pick<PendingAction, "preview" | "confirmationCode" | "expiresAt"> & { channel?: string }): string {
+  if (a.channel === "TELEGRAM") {
+    return `${a.preview}\n\nToque em *Confirmar* ou *Cancelar*. Vale até ${horaLocal(a.expiresAt)}.`;
+  }
   return `${a.preview}\n\nResponda *SIM ${a.confirmationCode}* para confirmar ou *NÃO* para cancelar. Vale até ${horaLocal(a.expiresAt)}.`;
 }
 
@@ -145,7 +172,10 @@ export function serializarAcao(a: PendingAction) {
     targetId: a.targetId,
     summary: { label: resumo.label ?? null, amount: resumo.amount ?? null },
     preview: a.preview,
-    ...(a.status === "PENDING" ? { confirmationCode: a.confirmationCode, message: mensagemDoPreview(a) } : {}),
+    // Telegram confirma por botão: o código não sai (nem para a IA repetir).
+    ...(a.status === "PENDING"
+      ? { ...(a.channel === "TELEGRAM" ? {} : { confirmationCode: a.confirmationCode }), message: mensagemDoPreview(a) }
+      : {}),
     expiresAt: a.expiresAt.toISOString(),
     createdAt: a.createdAt.toISOString(),
     decidedAt: a.decidedAt?.toISOString() ?? null,
@@ -261,6 +291,9 @@ export async function listarAcoes(auth: ApiAuth, q: z.output<typeof ListaQuery>)
   return atuais.filter((a) => !q.status || a.status === q.status).slice(0, q.limit);
 }
 
+/** A ação, se for do usuário do vínculo (senão 404). Vencida → EXPIRED. */
+export const consultarAcao = (auth: ApiAuth, id: string) => carregarDoUsuario(auth, id);
+
 async function carregarDoUsuario(auth: ApiAuth, id: string): Promise<PendingAction> {
   const deleg = delegacaoObrigatoria(auth);
   const a = await prisma.pendingAction.findFirst({ where: { id } });
@@ -365,7 +398,16 @@ function resultadoGuardado(r: RespostaDaExecucao) {
     entityId: entidade,
     requestId: r.body?.meta?.requestId ?? null,
     replayed: r.body?.meta?.idempotency?.replayed ?? false,
-    ...(r.body?.success === true ? {} : { error: { code: r.body?.error?.code ?? "internal_error", message: r.body?.error?.message ?? null } }),
+    ...(r.body?.success === true
+      ? {}
+      : {
+          error: {
+            code: r.body?.error?.code ?? "internal_error",
+            message: r.body?.error?.message ?? null,
+            // Recusa genérica do domínio: o motivo de verdade vem no primeiro detalhe.
+            detail: Array.isArray(r.body?.error?.details) ? (r.body.error.details[0]?.message ?? null) : null,
+          },
+        }),
   };
 }
 
@@ -380,7 +422,8 @@ export function mensagemDoResultado(a: Pick<PendingAction, "operation" | "summar
   if (!r.error || r.httpStatus >= 500 || r.error.code === "idempotency_in_progress") {
     return "⚠️ Não consegui concluir agora. Confira no B2C Finance antes de pedir de novo.";
   }
-  return `❌ Não executei${rotulo}: ${r.error.message ?? "o B2C Finance recusou o pedido."}`;
+  const motivo = [r.error.message, r.error.detail].filter(Boolean).join(" — ");
+  return `❌ Não executei${rotulo}: ${motivo || "o B2C Finance recusou o pedido."}`;
 }
 
 export async function confirmarAcao(p: {
@@ -392,15 +435,32 @@ export async function confirmarAcao(p: {
   idempotencyKey: string | null;
   requestId: string;
 }) {
-  const esperada = chaveDaConfirmacao(p.body.messageId, p.id);
   if (!p.idempotencyKey) {
-    throw new ApiError(400, "idempotency_key_required", `Envie Idempotency-Key: ${esperada} (mensagem do WhatsApp + id da ação).`);
-  }
-  if (p.idempotencyKey !== esperada) {
-    throw new ApiError(400, "validation_error", "A Idempotency-Key da confirmação é a mensagem do WhatsApp + o id da ação (wa:<messageId>:<actionId>).");
+    throw new ApiError(
+      400,
+      "idempotency_key_required",
+      "Envie Idempotency-Key: wa:<messageId>:<actionId> (WhatsApp) ou telegram:<update_id>:<actionId> (Telegram)."
+    );
   }
 
   let a = await carregarDoUsuario(p.auth, p.id);
+
+  // A chave é derivada do CANAL da ação (gravado na proposta, pelo vínculo).
+  const canal = a.channel === "TELEGRAM" ? "TELEGRAM" : "WHATSAPP";
+  const esperada = chaveDaConfirmacao(p.body.messageId, p.id, canal);
+  if (p.idempotencyKey !== esperada) {
+    throw new ApiError(
+      400,
+      "validation_error",
+      canal === "TELEGRAM"
+        ? "A Idempotency-Key da confirmação é o update do Telegram + o id da ação (telegram:<update_id>:<actionId>)."
+        : "A Idempotency-Key da confirmação é a mensagem do WhatsApp + o id da ação (wa:<messageId>:<actionId>)."
+    );
+  }
+  // Botão só existe no Telegram; no WhatsApp a confirmação é sempre SIM + código.
+  if (p.body.via === "button" && canal !== "TELEGRAM") {
+    throw new ApiError(400, "validation_error", "Confirmação por botão só vale para ações do Telegram. Responda SIM + código.");
+  }
 
   // A MESMA confirmação chegando de novo (reenvio da Meta, retry do n8n):
   // devolve o que aconteceu; se parou no meio, a Idempotency-Key da rota de
@@ -410,7 +470,7 @@ export async function confirmarAcao(p: {
   if (!(mesmaConfirmacao && a.status === "EXECUTING")) {
     if (a.status !== "PENDING") throw naoPendente(a);
 
-    if (!codigosIguais(p.body.confirmationCode, a.confirmationCode)) {
+    if (p.body.via === "code" && !codigosIguais(p.body.confirmationCode ?? "", a.confirmationCode)) {
       const tentativas = a.failedAttempts + 1;
       const esgotou = tentativas >= MAX_TENTATIVAS_DE_CODIGO;
       await prisma.pendingAction.updateMany({

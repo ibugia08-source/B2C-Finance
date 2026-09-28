@@ -1651,7 +1651,7 @@
       "catalogVersion": "1.0.0",
       "apiVersion": "v1",
       "readOnly": true,
-      "knowledgeVersion": "1.0.0+dd1d552090c7",
+      "knowledgeVersion": "1.0.0+f6113fe4e141",
       "knowledgeCollection": "b2c_finance_conhecimento",
       "systemPrompt": "docs/AI_AGENT_SYSTEM_PROMPT.md (prompt-base + prompt-leitura)",
       "requiredScopes": [

@@ -132,7 +132,8 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
   - **integração:** `identities.resolve`, `knowledge.read`;
   - **escrita, só se o agente com escrita for usado:** `agent_actions.manage`, `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
 - [ ] Copie o token (aparece uma vez) direto para a credencial do n8n. Nunca em arquivo, chat ou workflow.
-- [ ] Em Configurações → Integrações → **WhatsApp**, vincule o número de cada pessoa da equipe ao usuário dela.
+- [ ] Em Configurações → Integrações → **Canais**, vincule o Telegram User ID (ou o número do WhatsApp) de cada pessoa ao usuário dela.
+- [ ] Em **Canais → Envios**, marque quem recebe o relatório da manhã e o da noite (padrão: ninguém).
 - [ ] Opcional: `B2C_PENDING_ACTION_TTL_MINUTES` na Vercel (padrão 10).
 
 ### 3.2 Base de conhecimento (Qdrant)
@@ -157,7 +158,21 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
 - [ ] Conferir em Configurações → Integrações → Atividades: as leituras, `agent_actions.*` e `payments.register` com o nome da pessoa como ator.
 - [ ] Ativar o agente escolhido no n8n.
 
-### 3.4 Meta (WhatsApp Cloud API)
+### 3.3b Telegram (canal principal)
+
+- [ ] Bot no @BotFather; token **só** na credencial "Telegram Bot" do n8n.
+- [ ] Importar `telegram-connection-test.json`, definir `TELEGRAM_TEST_USER_ID` e executar: tudo OK, e "Ações com confirmação: OK" se for usar escrita.
+- [ ] Importar **um** agente de Telegram (um bot aceita um só webhook): `b2c-finance-telegram-agent.json` (com escrita) ou `b2c-finance-telegram-agent-readonly.json`.
+- [ ] Teste manual **antes de ativar**, no privado com o bot:
+  1. `/start`, `/help`, `/status`;
+  2. "Quanto recebemos hoje?";
+  3. pagamento de uma cobrança de teste → prévia com botões → **Cancelar** (nada gravado) → pedir de novo → **Confirmar** → tocar Confirmar de novo ("Essa ação já foi processada.");
+  4. "Deixe <cliente de teste> inativo a partir do mês que vem" → confira que o mês atual continua Ativo;
+  5. "Exclua <cliente>" → recusa, sem prévia.
+- [ ] Conferir em Atividades: origem **Telegram**, `agent_actions.*` e a escrita com o nome da pessoa como ator.
+- [ ] Ativar o agente. Relatórios: importar `telegram-daily-*-report.json`, "Executar agora (teste)", ativar.
+
+### 3.4 Meta (WhatsApp Cloud API — opcional)
 
 - [ ] URL de callback = o webhook do agente escolhido; verify token = `WHATSAPP_VERIFY_TOKEN`.
 - [ ] App Secret em `WHATSAPP_WEBHOOK_SECRET` (valida `X-Hub-Signature-256`).
@@ -169,6 +184,6 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
 
 ## 4. Voltar atrás
 
-- **Agente com problema:** desative-o no n8n e ative o `b2c-finance-ai-agent-readonly.json` (só consulta).
+- **Agente com problema:** desative-o no n8n e ative o somente leitura do mesmo canal (`b2c-finance-telegram-agent-readonly.json` ou `b2c-finance-ai-agent-readonly.json`).
 - **Integração comprometida:** revogue o token em Configurações → Integrações. O efeito é imediato e toda chamada passa a dar 401.
 - **Número ou Telegram indevido:** desvincule em Configurações → Integrações → Canais. O corte é imediato.

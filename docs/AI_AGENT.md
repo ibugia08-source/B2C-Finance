@@ -12,8 +12,8 @@ O agente é o assistente financeiro da agência por mensagem. O canal principal 
 
 | Canal | Versão disponível |
 |---|---|
-| Telegram | Consulta (somente leitura). A escrita com confirmação chega numa próxima etapa. |
-| WhatsApp | Consulta e escrita com confirmação. |
+| Telegram (principal) | Consulta e escrita com confirmação pelos botões **Confirmar** / **Cancelar**. Há também uma versão só de consulta. |
+| WhatsApp (opcional) | Consulta e escrita com confirmação por `SIM` + código. |
 
 ## De onde vem cada resposta
 
@@ -42,8 +42,8 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 | Comando | O que faz |
 |---|---|
 | `/start` | Diz se a pessoa está conectada. Se não estiver vinculada, mostra o Telegram User ID dela. |
-| `/help` | Exemplos de perguntas. |
-| `/status` | "B2C Finance conectado", com o nome e o perfil da pessoa. |
+| `/help` | Exemplos de perguntas e de pedidos ("A Face Love pagou R$ 1.500 hoje.", "Deixe a Alpha inativa a partir de outubro.") e o aviso de que toda alteração pede confirmação. |
+| `/status` | "B2C Finance conectado", com o nome, o perfil, o canal e o modo do agente ("Leitura e ações controladas" ou "Somente leitura"). Não mostra ids nem permissões. |
 
 ## O que ele faz
 
@@ -82,14 +82,29 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
    Competência: Setembro/2026
    Data de pagamento: hoje
    Deseja registrar?
-   Responda *SIM 4821* para confirmar ou *NÃO* para cancelar.
    ```
 
-4. **A pessoa responde `SIM` seguido do código** da prévia. Um "sim" solto não confirma nada. `NÃO` cancela.
-5. **O B2C Finance confere** se a confirmação é daquela ação, da mesma pessoa, dentro da validade (10 minutos) e com os dados iguais aos da prévia.
-6. **Executa e responde com o resultado real** (ex.: "✅ Pagamento registrado — Face Love (R$ 1.500,00)"), ou explica por que não executou.
+   - **Telegram:** a prévia vem com os botões **[Confirmar] [Cancelar]**.
+   - **WhatsApp:** a prévia termina com "Responda *SIM 4821* para confirmar ou *NÃO* para cancelar."
 
-**Cada pessoa tem uma ação aguardando confirmação por vez.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e o SIM, nada é executado e é preciso pedir de novo.
+4. **A pessoa confirma:** no Telegram, tocando em **Confirmar**; no WhatsApp, respondendo `SIM` seguido do código. Um "sim" solto não confirma nada (no Telegram, o bot reenvia a prévia com os botões). Cancelar/`NÃO` cancela.
+5. **O B2C Finance confere** se a confirmação é daquela ação, da mesma pessoa, dentro da validade (10 minutos) e com os dados iguais aos da prévia.
+6. **Executa e responde com o resultado real** (ex.: "✅ Pagamento registrado — Face Love (R$ 1.500,00)"), ou explica por que não executou. No Telegram, a própria mensagem da prévia é atualizada com o resultado e perde os botões.
+
+**Tocar de novo não repete nada.** Uma ação já executada, cancelada ou vencida responde "Essa ação já foi processada." (ou que o prazo acabou) e não executa outra vez.
+
+**Faltou dado essencial?** O agente pergunta antes de montar a prévia (ex.: o dia de pagamento de um cliente recorrente). Ele não inventa CNPJ, responsável, datas, categoria nem vencimento.
+
+**Status com data:** "Deixe a Alpha inativa a partir de outubro" vira uma mudança de status com vigência a partir de 1º de outubro. Setembro continua mostrando a Alpha como ativa.
+
+**Cada pessoa tem uma ação aguardando confirmação por vez, por canal.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e a confirmação, nada é executado e é preciso pedir de novo.
+
+## Relatórios diários e avisos
+
+- **Relatório da manhã e da noite no Telegram** só chegam para quem o administrador marcou em Configurações → Integrações → Canais → **Envios**. Ninguém recebe só por estar vinculado.
+- **Cada pessoa recebe o relatório com as permissões dela:** o que ela não pode ver no B2C Finance não aparece.
+- **A data é a do fuso oficial da operação** (America/Bahia).
+- **Avisos** (recebimento, inadimplência, renovação, despesa vencendo) já podem ser marcados, mas o envio automático ainda não está ligado.
 
 Toda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou e o canal (Telegram ou WhatsApp).
 

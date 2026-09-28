@@ -2,7 +2,7 @@
 rag: true
 titulo: API B2C Finance V1
 categoria: api
-atualizado_em: 2026-09-28
+atualizado_em: 2026-09-29
 dados_atuais: nao
 ---
 
@@ -389,9 +389,24 @@ Além dessas verificações:
 3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API, com a origem do header `X-B2C-Source` (`telegram`, `whatsapp`, `n8n`).
 4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.
 
+**Quem recebe relatórios e avisos:** `GET /integrations/recipients?channel=TELEGRAM&purpose=…`, também com `identities.resolve`.
+- `purpose`: `morning_report`, `evening_report` ou um aviso (`payment.received`, `receivable.overdue`, `client.renewal.upcoming`, `expense.due_soon`).
+- Devolve `today` e `timezone` (o fuso oficial da operação) e `recipients`: `identityId`, `externalIdentifier` (no Telegram, o chat privado) e `userName`.
+- Só entra quem tem a preferência **ligada** no vínculo (Configurações → Integrações → Canais → Envios; padrão desligado), com vínculo e usuário ativos e com o RBAC do conteúdo (relatório: `reports.read`; aviso: a leitura da área). Usuário restrito a uma agência fica de fora.
+- O relatório de cada pessoa é montado com `X-B2C-Identity` = o `identityId` dela, ou seja, com o RBAC dela.
+
 ## 4.2 Ações do agente com confirmação
 
-O agente de WhatsApp não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`. O usuário responde "SIM <código>" e a integração confirma em `POST /agent/pending-actions/{id}/confirm`, com `Idempotency-Key: wa:<messageId>:<actionId>`.
+O agente (Telegram ou WhatsApp) não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`, no canal do vínculo.
+
+| Canal | Como o usuário confirma | Corpo de `POST /agent/pending-actions/{id}/confirm` | `Idempotency-Key` |
+|---|---|---|---|
+| Telegram | Toque em **Confirmar** (botão com `confirm:<actionId>`) | `{ "messageId": "<update_id>", "via": "button" }` | `telegram:<update_id>:<actionId>` |
+| WhatsApp | "SIM <código>" | `{ "messageId": "<id da mensagem>", "confirmationCode": "4821" }` | `wa:<messageId>:<actionId>` |
+
+- `GET /agent/pending-actions/{id}` mostra a ação só ao usuário dela (outro usuário, vínculo ou workspace: 404); vencida aparece como `EXPIRED`. O Telegram consulta antes de confirmar ou cancelar pelo botão.
+- A confirmação por botão só vale para ação do canal TELEGRAM. O mesmo update repetido é replay; outro toque numa ação já decidida dá 409 `action_not_pending` e nunca executa de novo.
+- No Telegram, a resposta da proposta não traz o código.
 
 A execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).
 

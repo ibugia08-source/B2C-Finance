@@ -1,6 +1,8 @@
-# Agente do WhatsApp com escrita controlada
+# Agente com escrita controlada (WhatsApp e Telegram)
 
-Workflow: `integrations/n8n/workflows/b2c-finance-ai-agent.json`. O agente somente leitura (`b2c-finance-ai-agent-readonly.json`) continua no repositório, sem mudança, como referência e alternativa de volta.
+> **Telegram (canal principal):** o mesmo mecanismo, com confirmação por botão — ver a seção 10 e `docs/TELEGRAM.md`. O WhatsApp continua disponível como canal opcional.
+
+Workflow do WhatsApp: `integrations/n8n/workflows/b2c-finance-ai-agent.json`. O agente somente leitura (`b2c-finance-ai-agent-readonly.json`) continua no repositório, sem mudança, como referência e alternativa de volta.
 
 O agente **consulta** direto e **propõe** escritas. Nada é gravado no B2C Finance até o próprio usuário responder **`SIM <código>`**. Toda escrita passa pela API, pela mesma rota e pelo mesmo RBAC da API pública. O agente nunca acessa banco, Supabase ou Prisma.
 
@@ -112,7 +114,8 @@ A confirmação precisa apontar para uma ação persistida, e o workflow garante
 |---|---|---|
 | POST | `/api/v1/agent/pending-actions` | Propõe: `{ operation, targetId?, input }` → 201 com a prévia, o código e a mensagem pronta. Header opcional `X-B2C-Message-Id`. |
 | GET | `/api/v1/agent/pending-actions?status=&sourceMessageId=&limit=` | As ações do usuário do vínculo. |
-| POST | `/api/v1/agent/pending-actions/{id}/confirm` | `{ messageId, confirmationCode }` + `Idempotency-Key` → 200 (`EXECUTED`/`FAILED`, com `message`). |
+| GET | `/api/v1/agent/pending-actions/{id}` | A ação, se for do usuário do vínculo (senão 404). Vencida = `EXPIRED`. |
+| POST | `/api/v1/agent/pending-actions/{id}/confirm` | `{ messageId, confirmationCode }` (WhatsApp) ou `{ messageId, via: "button" }` (Telegram) + `Idempotency-Key` → 200 (`EXECUTED`/`FAILED`, com `message`). |
 | POST | `/api/v1/agent/pending-actions/{id}/cancel` | `{ messageId? }` → 200 (`CANCELLED`). |
 
 **Erros da confirmação:**
@@ -147,3 +150,14 @@ A validade é de 10 minutos, ajustável com `B2C_PENDING_ACTION_TTL_MINUTES` (1 
 - **A memória da conversa não guarda o resultado da confirmação**, porque a confirmação não passa pela IA. Se o usuário perguntar em seguida "registrou?", o agente consulta a API.
 - **O rótulo "hoje"** da prévia usa o fuso America/Bahia. Uma data de pagamento ausente é fixada na prévia, então o que executa é a data mostrada, mesmo que a confirmação chegue depois da meia-noite.
 - **Usuário restrito a uma agência** continua recusado, como no agente somente leitura.
+
+## 10. Telegram: confirmação por botão
+
+Workflow: `integrations/n8n/workflows/b2c-finance-telegram-agent.json` (mesmas ferramentas, mesma API, mesmo prompt).
+
+- **Prévia:** depois da IA, se ela propôs uma ação nesta mensagem, o workflow envia a prévia da API com o teclado inline **[Confirmar] [Cancelar]**. A resposta da proposta no Telegram não traz o código.
+- **O botão leva só a referência:** `callback_data = confirm:<actionId>` ou `cancel:<actionId>` (até 64 bytes). Nenhum valor, cliente ou payload vai no botão.
+- **Toque (callback_query):** identidade = `from.id` de quem tocou, resolvida pela API → `GET /agent/pending-actions/{id}` com o vínculo dessa pessoa (de outra pessoa = 404) → só `PENDING` segue → `POST …/confirm` com `{ messageId: <update_id>, via: "button" }` ou `POST …/cancel`.
+- **Idempotency-Key:** `telegram:<update_id>:<actionId>`. O mesmo update reenviado pelo Telegram é replay; outro toque é 409 `action_not_pending` → "Essa ação já foi processada."
+- **Depois:** `answerCallbackQuery` com um aviso curto e `editMessageText` na prévia, que passa a mostrar o resultado real da API e perde os botões.
+- **"sim" digitado** com ação aguardando: o bot reenvia a prévia com os botões. Texto nunca confirma.

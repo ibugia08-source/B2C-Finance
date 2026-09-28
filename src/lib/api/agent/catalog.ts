@@ -133,10 +133,14 @@ export const TTL_PADRAO_MINUTOS = 10;
 export const MAX_TENTATIVAS_DE_CODIGO = 5;
 
 /**
- * Idempotency-Key da execução: mensagem do WhatsApp que confirmou + id da
- * ação. O id da Meta ("wamid.HBg…=") pode ter caracteres fora do formato
- * aceito — viram "_".
+ * Idempotency-Key da execução: a mensagem/update que confirmou + id da ação.
+ *  · WHATSAPP → `wa:<id da mensagem>:<ação>` (o id da Meta, "wamid.HBg…=",
+ *    pode ter caracteres fora do formato aceito — viram "_");
+ *  · TELEGRAM → `telegram:<update_id do callback>:<ação>`.
+ * O mesmo update reenviado gera a MESMA chave (replay, sem duplicar); outro
+ * toque é outro update — e aí quem barra é o status da ação (já executada).
  */
-export function chaveDaConfirmacao(messageId: string, actionId: string): string {
-  return `wa:${messageId.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200)}:${actionId}`;
+export function chaveDaConfirmacao(messageId: string, actionId: string, canal: "WHATSAPP" | "TELEGRAM" = "WHATSAPP"): string {
+  const prefixo = canal === "TELEGRAM" ? "telegram" : "wa";
+  return `${prefixo}:${messageId.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200)}:${actionId}`;
 }

@@ -5,6 +5,8 @@
 > - [`integrations/n8n/workflows/daily-evening-report.json`](../integrations/n8n/workflows/daily-evening-report.json) (noite)
 >
 > Credenciais, importação e WhatsApp: [`integrations/n8n/README.md`](../integrations/n8n/README.md).
+>
+> **Telegram (canal principal, 29/09/2026):** `telegram-daily-morning-report.json` e `telegram-daily-evening-report.json` usam a mesma consolidação, mas com destinatários pela preferência de cada vínculo e um relatório por pessoa, com o RBAC dela. Ver [`docs/TELEGRAM.md`](TELEGRAM.md) §13. Os relatórios por WhatsApp continuam disponíveis como canal opcional.
 
 Dois workflows **somente leitura** mandam, no horário configurado, um resumo pelo WhatsApp:
 
