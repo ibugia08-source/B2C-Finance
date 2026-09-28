@@ -6,6 +6,6 @@ import { competenciaAtual, indicadoresDaCompetencia } from "@/lib/api/v1/insight
 export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
-  { scope: "dashboard.read", query: z.object({ competence: competenciaSchema.optional() }).strict() },
+  { action: "dashboard.summary", scope: "dashboard.read", query: z.object({ competence: competenciaSchema.optional() }).strict() },
   async ({ query }) => ({ data: await indicadoresDaCompetencia(query.competence ?? competenciaAtual()) })
 );

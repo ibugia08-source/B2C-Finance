@@ -4,6 +4,7 @@ import { domainContextFor } from "@/lib/auth/domain-session";
 import { listarIntegracoes, podeGerenciarIntegracoes } from "@/lib/services/service-accounts";
 import { IntegrationsPanel, type IntegracaoRow } from "./integrations-panel";
 import { NovaIntegracaoDialog } from "./nova-integracao-dialog";
+import { IntegracoesTabs } from "./tabs";
 
 /**
  * CONFIGURAÇÕES → INTEGRAÇÕES → API (28/09/2026 — docs/API_AUTHENTICATION.md).
@@ -41,6 +42,7 @@ export default async function IntegracoesPage() {
         description="Chaves com que sistemas externos, como o n8n, acessam o B2C Finance pela API."
         actions={gerencia ? <NovaIntegracaoDialog /> : undefined}
       />
+      <IntegracoesTabs ativa="chaves" />
       <IntegrationsPanel rows={rows} gerencia={gerencia} />
     </div>
   );

@@ -26,6 +26,8 @@ Todas as rotas desta versão são **somente leitura** (`GET`). Nenhuma delas gra
 - **Erros:** nunca expõem stack trace nem mensagem interna. O detalhe fica no log do servidor, ligado ao `requestId`.
 - **Cache:** respostas com `Cache-Control: no-store`.
 - **Rate limit:** 120 requisições por minuto por IP. Acima disso, **429** `rate_limited`.
+- **Trilha de atividades:** toda chamada, exceto `/health`, é registrada para o dono do workspace (Configurações → Integrações → Atividades). Envie `X-B2C-Source: n8n` ou `whatsapp` para identificar a origem. Ver [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
+- **Escritas (próxima fase):** exigirão `Idempotency-Key`. A infraestrutura já está pronta; ver [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
 
 ### Formato de sucesso
 

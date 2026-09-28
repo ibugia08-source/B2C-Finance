@@ -6,10 +6,10 @@ import { detalharDespesaApi } from "@/lib/api/v1/expenses";
 export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
-  { scope: "expenses.read", params: z.object({ id: idSchema }) },
+  { action: "expenses.get", scope: "expenses.read", params: z.object({ id: idSchema }) },
   async ({ params }) => {
     const d = await detalharDespesaApi(params.id);
     if (!d) throw naoEncontrado("Despesa");
-    return { data: d };
+    return { data: d, audit: { entityType: "Transaction", entityId: d.id, label: d.description, amount: d.amount } };
   }
 );

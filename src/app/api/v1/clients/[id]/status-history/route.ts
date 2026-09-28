@@ -6,10 +6,10 @@ import { historicoDeStatusApi } from "@/lib/api/v1/clients";
 export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
-  { scope: "client_status.read", params: z.object({ id: idSchema }) },
+  { action: "clients.status_history", scope: "client_status.read", params: z.object({ id: idSchema }) },
   async ({ params }) => {
     const h = await historicoDeStatusApi(params.id);
     if (!h) throw naoEncontrado("Cliente");
-    return { data: h };
+    return { data: h, audit: { entityType: "Client", entityId: h.clientId } };
   }
 );

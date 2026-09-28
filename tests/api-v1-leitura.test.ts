@@ -167,7 +167,7 @@ describe("contrato", () => {
   });
 
   it("erro interno não expõe mensagem nem stack", async () => {
-    const quebra = defineEndpoint({ scope: null }, async () => {
+    const quebra = defineEndpoint({ action: "teste", scope: null }, async () => {
       throw new Error("SEGREDO_INTERNO em /var/app/lib.ts:42");
     });
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});

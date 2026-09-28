@@ -6,7 +6,7 @@ import { defineEndpoint } from "@/lib/api/http";
  */
 export const dynamic = "force-dynamic";
 
-export const GET = defineEndpoint({ scope: null }, async ({ auth }) => ({
+export const GET = defineEndpoint({ action: "me", scope: null }, async ({ auth }) => ({
   data: {
     type: "service_account",
     id: auth.serviceAccountId,

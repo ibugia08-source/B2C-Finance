@@ -17,7 +17,7 @@ const Query = z
   })
   .strict();
 
-export const GET = defineEndpoint({ scope: "upsells.read", query: Query }, async ({ query }) => {
+export const GET = defineEndpoint({ action: "upsells.list", scope: "upsells.read", query: Query }, async ({ query }) => {
   const r = await listarUpsellsApi(query);
   return { data: r.itens, meta: { ...metaDePaginacao(query.page, query.pageSize, r.total), totalValue: r.totalValue } };
 });

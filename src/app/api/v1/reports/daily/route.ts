@@ -7,7 +7,7 @@ import { todayKey } from "@/lib/competence";
 export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
-  { scope: "reports.read", query: z.object({ date: dataSchema.optional() }).strict() },
+  { action: "reports.daily", scope: "reports.read", query: z.object({ date: dataSchema.optional() }).strict() },
   async ({ query, auth }) => {
     const r = await relatorioDiario(query.date ?? todayKey(), auth.scopes);
     return { data: r.data, meta: { omittedSections: r.omitted } };

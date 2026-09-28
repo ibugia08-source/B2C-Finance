@@ -28,7 +28,7 @@ const Query = z
   })
   .strict();
 
-export const GET = defineEndpoint({ scope: "receivables.read", query: Query }, async ({ query }) => {
+export const GET = defineEndpoint({ action: "receivables.list", scope: "receivables.read", query: Query }, async ({ query }) => {
   const porData = query.dateFrom || query.dateTo;
   if (porData && !(query.dateFrom && query.dateTo)) {
     throw new ApiError(400, "validation_error", "Informe dateFrom e dateTo juntos.");

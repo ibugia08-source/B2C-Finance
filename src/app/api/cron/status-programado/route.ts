@@ -3,7 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { materializarStatusProgramados } from "@/lib/clients/status-history";
 
 /**
- * JOB DIÁRIO — ALTERAÇÕES DE STATUS PROGRAMADAS (26/09/2026).
+ * JOB DIÁRIO — ALTERAÇÕES DE STATUS PROGRAMADAS (26/09/2026) e, desde
+ * 28/09/2026, a RETENÇÃO da trilha e das Idempotency-Keys da API.
  *
  * Status programado (ex.: Inativo a partir de 01/10) não mexe no status
  * atual antes da data. Quando a data chega, ESTE job materializa: roda a
@@ -45,7 +46,18 @@ export async function GET(req: Request) {
       revalidateClientStatus();
     }
     if (r.falhas.length) console.error("[cron status-programado] falhas", r.falhas);
-    return NextResponse.json(r);
+    // Retenção da API (28/09/2026) no MESMO job diário — um cron a mais
+    // esbarraria no limite de jobs do plano. Falha aqui não desfaz nem
+    // esconde o resultado do status programado.
+    let retencaoApi: unknown = null;
+    try {
+      const { aplicarRetencaoDaApi } = await import("@/lib/api/activity");
+      retencaoApi = await aplicarRetencaoDaApi();
+    } catch (e) {
+      console.error("[cron retenção da API]", e);
+      retencaoApi = { erro: true };
+    }
+    return NextResponse.json({ ...r, retencaoApi });
   } catch (e) {
     console.error("[cron status-programado]", e);
     return NextResponse.json({ error: "Falha ao aplicar as alterações programadas." }, { status: 500 });

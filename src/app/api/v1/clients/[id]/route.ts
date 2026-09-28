@@ -7,13 +7,13 @@ export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
   {
-    scope: "clients.read",
+    action: "clients.get", scope: "clients.read",
     params: z.object({ id: idSchema }),
     query: z.object({ competence: competenciaSchema.optional() }).strict(),
   },
   async ({ params, query }) => {
     const c = await detalharClienteApi(params.id, query.competence);
     if (!c) throw naoEncontrado("Cliente");
-    return { data: c };
+    return { data: c, audit: { entityType: "Client", entityId: c.id, label: c.name } };
   }
 );

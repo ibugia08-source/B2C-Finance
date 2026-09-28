@@ -57,6 +57,8 @@ curl -s "$B2C_API/me" -H "Authorization: Bearer $B2C_TOKEN"
   - As escritas que virão exigirão o header `Idempotency-Key`, com um UUID novo por operação.
   - Reenviar a mesma chamada com a mesma chave devolverá a mesma resposta, sem duplicar o efeito.
   - **Já planeje o workflow gerando e guardando essa chave antes de chamar.**
+- **Identifique a origem das chamadas.** Envie `X-B2C-Source: whatsapp` (agente) ou `X-B2C-Source: n8n` (automações). Cada chamada aparece para o administrador em **Configurações → Integrações → Atividades da IA/API**.
+- **Idempotency-Key nas escritas:** use um id estável do evento de origem, como o id da mensagem do WhatsApp (`Idempotency-Key: wa_message_3EB0C4…`). Assim, se o n8n reenviar a mesma mensagem, o pagamento não é registrado duas vezes: a resposta volta com `Idempotent-Replayed: true`. Detalhes em [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
 - **Parâmetro desconhecido dá `400`.** Um filtro digitado errado não é ignorado, então você nunca recebe a lista inteira achando que filtrou.
 - **Limite de 120 requisições por minuto por IP.** Acima disso a resposta é `429`, com o header `Retry-After`.
 

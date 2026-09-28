@@ -4,7 +4,7 @@
     "title": "B2C Finance API",
     "version": "1.0.0",
     "summary": "API V1 de leitura do B2C Finance (contas de serviço com scopes).",
-    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, reports.read.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas (futuras)\nEsta versão é somente leitura. As operações de escrita que virão exigirão o header **`Idempotency-Key`** (UUID por operação): repetir a mesma chamada com a mesma chave devolve a mesma resposta sem duplicar o efeito (pagamento duas vezes, por exemplo).\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
+    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, reports.read.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas (futuras) e Idempotency-Key\nEsta versão é somente leitura; a infraestrutura das escritas já está pronta. Toda escrita exigirá o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
   },
   "servers": [
     {
@@ -73,6 +73,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           }
         ],
         "responses": {
@@ -170,6 +173,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           }
         ],
         "responses": {
@@ -258,6 +264,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "$ref": "#/components/parameters/Competence"
@@ -358,6 +367,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "$ref": "#/components/parameters/Competence"
@@ -609,6 +621,9 @@
             "$ref": "#/components/parameters/RequestId"
           },
           {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
             "$ref": "#/components/parameters/Id"
           },
           {
@@ -690,6 +705,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "$ref": "#/components/parameters/Id"
@@ -814,6 +832,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "$ref": "#/components/parameters/Competence"
@@ -1030,6 +1051,9 @@
             "$ref": "#/components/parameters/RequestId"
           },
           {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
             "$ref": "#/components/parameters/Id"
           }
         ],
@@ -1108,6 +1132,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "name": "status",
@@ -1259,6 +1286,9 @@
             "$ref": "#/components/parameters/RequestId"
           },
           {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
             "$ref": "#/components/parameters/Id"
           }
         ],
@@ -1377,6 +1407,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           }
         ],
         "responses": {
@@ -1451,6 +1484,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "name": "status",
@@ -1585,6 +1621,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           }
         ],
         "responses": {
@@ -1659,6 +1698,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "name": "date",
@@ -1765,6 +1807,9 @@
             "$ref": "#/components/parameters/RequestId"
           },
           {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
             "$ref": "#/components/parameters/Competence"
           }
         ],
@@ -1858,6 +1903,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
           },
           {
             "name": "q",
@@ -2057,6 +2105,20 @@
           "pattern": "^[A-Za-z0-9_-]{1,64}$"
         }
       },
+      "Source": {
+        "name": "x-b2c-source",
+        "in": "header",
+        "required": false,
+        "description": "Origem da chamada para a trilha de atividades: `n8n` ou `whatsapp`. Sem o header (ou outro valor) = API.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "n8n",
+            "whatsapp",
+            "api"
+          ]
+        }
+      },
       "RequestId": {
         "name": "x-request-id",
         "in": "header",
@@ -2152,7 +2214,11 @@
                   "validation_error",
                   "not_found",
                   "rate_limited",
-                  "internal_error"
+                  "internal_error",
+                  "idempotency_key_required",
+                  "idempotency_key_reused",
+                  "idempotency_in_progress",
+                  "unprocessable"
                 ]
               },
               "message": {

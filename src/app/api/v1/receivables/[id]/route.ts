@@ -6,10 +6,10 @@ import { detalharRecebivelApi } from "@/lib/api/v1/receivables";
 export const dynamic = "force-dynamic";
 
 export const GET = defineEndpoint(
-  { scope: "receivables.read", params: z.object({ id: idSchema }) },
+  { action: "receivables.get", scope: "receivables.read", params: z.object({ id: idSchema }) },
   async ({ params }) => {
     const r = await detalharRecebivelApi(params.id);
     if (!r) throw naoEncontrado("Recebimento");
-    return { data: r };
+    return { data: r, audit: { entityType: "Billing", entityId: r.id, label: r.client.name, amount: r.amount } };
   }
 );

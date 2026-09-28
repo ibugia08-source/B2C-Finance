@@ -116,6 +116,10 @@ const OWNED_MODELS = new Set<string>([
   // API oficial (28/09/2026) — contas de serviço. A busca pelo token é a
   // ÚNICA leitura sem escopo (por prefixo, em lib/api/auth.ts).
   "ServiceAccount",
+  // Atividades e Idempotency-Key da API (28/09/2026). A gravação e a busca
+  // da chave rodam sem escopo (com ownerId explícito); a tela lê escopada.
+  "ApiActivity",
+  "ApiIdempotencyKey",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

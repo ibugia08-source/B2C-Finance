@@ -4119,3 +4119,90 @@ model ServiceAccount {
 
   @@index([ownerId, status])
 }
+
+// ===========================================================================
+// API — ATIVIDADES E IDEMPOTÊNCIA (28/09/2026). docs/API_AUDIT_IDEMPOTENCY.md
+// Migration ADITIVA. Não substitui o AuditLog (diferença campo a campo,
+// append-only, sem retenção): aqui é UMA linha por chamada, com retenção.
+// ===========================================================================
+
+enum ActivitySource {
+  WEB
+  API
+  N8N
+  WHATSAPP
+  SYSTEM
+}
+
+enum ActivityKind {
+  READ
+  WRITE
+}
+
+enum ActivityResult {
+  SUCCESS
+  ERROR
+  DENIED
+  REPLAYED
+}
+
+/// Uma linha por chamada de integração: quem (conta de serviço / pessoa),
+/// de onde (origem), o quê (ação + entidade) e como terminou. Nunca guarda
+/// token, segredo, header de autorização nem corpo cru da requisição.
+/// Retenção: leituras 30 dias, escritas 400 dias (job diário).
+model ApiActivity {
+  id               String         @id @default(cuid())
+  ownerId          String
+  serviceAccountId String?
+  actorUserId      String?
+  source           ActivitySource
+  kind             ActivityKind
+  /// Ação estável: "payments.register", "clients.list"…
+  action           String
+  entityType       String?
+  entityId         String?
+  requestId        String
+  correlationId    String?
+  result           ActivityResult
+  httpStatus       Int
+  errorCode        String?
+  durationMs       Int?
+  /// Rótulo/valor para a tela (ex.: cliente, R$) + contexto. Higienizado.
+  metadata         Json?
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([ownerId, kind, createdAt(sort: Desc)])
+  @@index([serviceAccountId, createdAt(sort: Desc)])
+  @@index([requestId])
+  @@index([kind, createdAt])
+}
+
+enum IdempotencyState {
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Idempotency-Key das escritas da API. A mesma conta de serviço + a mesma
+/// chave executa UMA vez; o replay devolve a resposta guardada. Expira em
+/// 30 dias (job diário apaga as vencidas).
+model ApiIdempotencyKey {
+  id               String           @id @default(cuid())
+  ownerId          String
+  serviceAccountId String
+  key              String
+  /// Operação ("payments.register") — a mesma chave em outra operação é recusada.
+  operation        String
+  /// SHA-256 do corpo canônico: mesma chave com outro corpo é recusada.
+  requestHash      String
+  state            IdempotencyState @default(IN_PROGRESS)
+  responseStatus   Int?
+  responseBody     Json?
+  requestId        String
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  completedAt      DateTime?        @db.Timestamptz(3)
+  expiresAt        DateTime         @db.Timestamptz(3)
+
+  @@unique([serviceAccountId, key])
+  @@index([expiresAt])
+}

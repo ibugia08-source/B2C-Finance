@@ -39,6 +39,10 @@ export type ApiErrorCode =
   | "validation_error"
   | "not_found"
   | "rate_limited"
+  | "idempotency_key_required"
+  | "idempotency_key_reused"
+  | "idempotency_in_progress"
+  | "unprocessable"
   | "internal_error";
 
 export class ApiError extends Error {
@@ -54,11 +58,19 @@ export class ApiError extends Error {
   }
 }
 
-export type ApiAuthResult = { ok: true; auth: ApiAuth } | { ok: false; error: ApiError };
+export type ApiAuthResult =
+  | { ok: true; auth: ApiAuth }
+  | {
+      ok: false;
+      error: ApiError;
+      /** Só quando o token CONFERE (revogado, expirado, dono inativo): quem tentou. */
+      conta?: { serviceAccountId: string; ownerId: string };
+    };
 
-const falha = (code: ApiErrorCode, msg: string): ApiAuthResult => ({
+const falha = (code: ApiErrorCode, msg: string, conta?: { serviceAccountId: string; ownerId: string }): ApiAuthResult => ({
   ok: false,
   error: new ApiError(401, code, msg),
+  ...(conta ? { conta } : {}),
 });
 
 /** Extrai o token do header Authorization (só o esquema Bearer). */
@@ -101,11 +113,12 @@ export async function authenticateApiToken(
   const confere = hashesIguais(hashToken(token), conta?.tokenHash ?? HASH_FANTASMA);
   if (!conta || !confere) return falha("invalid_token", "Token inválido.");
 
+  const quem = { serviceAccountId: conta.id, ownerId: conta.ownerId };
   if (conta.status !== "ACTIVE" || conta.revokedAt) {
-    return falha("revoked_token", "Esta integração foi revogada.");
+    return falha("revoked_token", "Esta integração foi revogada.", quem);
   }
   if (conta.expiresAt && conta.expiresAt.getTime() <= now.getTime()) {
-    return falha("expired_token", "O token desta integração expirou. Rotacione a chave.");
+    return falha("expired_token", "O token desta integração expirou. Rotacione a chave.", quem);
   }
 
   // O dono dos dados precisa existir e estar ativo: conta de um workspace
@@ -114,7 +127,7 @@ export async function authenticateApiToken(
     where: { id: conta.ownerId },
     select: { active: true },
   });
-  if (!dono?.active) return falha("inactive_owner", "O workspace desta integração está inativo.");
+  if (!dono?.active) return falha("inactive_owner", "O workspace desta integração está inativo.", quem);
 
   await marcarUso(conta.id, conta.lastUsedAt, now);
 

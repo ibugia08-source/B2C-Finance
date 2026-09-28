@@ -7,4 +7,4 @@ import { rotinaDoDiaApi } from "@/lib/api/v1/insights";
  */
 export const dynamic = "force-dynamic";
 
-export const GET = defineEndpoint({ scope: "routine.read" }, async ({ ctx }) => ({ data: await rotinaDoDiaApi(ctx) }));
+export const GET = defineEndpoint({ action: "routine.daily", scope: "routine.read" }, async ({ ctx }) => ({ data: await rotinaDoDiaApi(ctx) }));

@@ -16,7 +16,11 @@ const Query = z
   })
   .strict();
 
-export const GET = defineEndpoint({ scope: "clients.read", query: Query }, async ({ query }) => {
+export const GET = defineEndpoint({ action: "search", scope: "clients.read", query: Query }, async ({ query }) => {
   const r = await buscarClientesApi(query.q, query.limit);
-  return { data: r.results, meta: { query: query.q, type: query.type, total: r.total } };
+  return {
+    data: r.results,
+    meta: { query: query.q, type: query.type, total: r.total },
+    audit: { metadata: { query: query.q, results: r.total } },
+  };
 });

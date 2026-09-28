@@ -65,6 +65,13 @@ const PARAMETERS = {
     "2026-09"
   ),
   Id: { name: "id", in: "path", required: true, description: "Id do registro.", schema: str(undefined, { pattern: "^[A-Za-z0-9_-]{1,64}$" }) },
+  Source: {
+    name: "x-b2c-source",
+    in: "header",
+    required: false,
+    description: "Origem da chamada para a trilha de atividades: `n8n` ou `whatsapp`. Sem o header (ou outro valor) = API.",
+    schema: str(undefined, { enum: ["n8n", "whatsapp", "api"] }),
+  },
   RequestId: {
     name: "x-request-id",
     in: "header",
@@ -100,6 +107,7 @@ const SCHEMAS: Record<string, Obj> = {
             enum: [
               "missing_token", "invalid_token", "revoked_token", "expired_token", "inactive_owner",
               "insufficient_scope", "validation_error", "not_found", "rate_limited", "internal_error",
+              "idempotency_key_required", "idempotency_key_reused", "idempotency_in_progress", "unprocessable",
             ],
           }),
           message: str("Mensagem em português para humanos."),
@@ -406,7 +414,7 @@ function op(o: {
       description: (o.description ?? "") + scopeTxt,
       security: [{ bearerAuth: o.scope ? [o.scope] : [] }],
       "x-required-scope": o.scope,
-      parameters: [refParam("RequestId"), ...(o.params ?? [])],
+      parameters: [refParam("RequestId"), refParam("Source"), ...(o.params ?? [])],
       responses: {
         "200": o.ok,
         "400": refResp("BadRequest"),
@@ -615,8 +623,14 @@ Toda rota exige um scope (\`x-required-scope\`). Sem ele: 403 \`insufficient_sco
 ## Status temporal e competências
 O status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.
 
-## Escritas (futuras)
-Esta versão é somente leitura. As operações de escrita que virão exigirão o header **\`Idempotency-Key\`** (UUID por operação): repetir a mesma chamada com a mesma chave devolve a mesma resposta sem duplicar o efeito (pagamento duas vezes, por exemplo).
+## Escritas (futuras) e Idempotency-Key
+Esta versão é somente leitura; a infraestrutura das escritas já está pronta. Toda escrita exigirá o header **\`Idempotency-Key\`** (1–255 caracteres \`A-Z a-z 0-9 . _ : -\`; ex.: o id da mensagem do WhatsApp, \`wa_message_3EB0C4…\`):
+- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header \`Idempotent-Replayed: true\` e \`meta.idempotency.replayed = true\`;
+- repetir enquanto a primeira ainda roda → 409 \`idempotency_in_progress\`; mesma chave com outros dados → 422 \`idempotency_key_reused\`; escrita sem a chave → 400 \`idempotency_key_required\`;
+- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.
+
+## Trilha de atividades
+Toda chamada (exceto \`/health\`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (\`X-B2C-Source\`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.
 
 ## Contrato
 Sucesso: \`{ success: true, data, meta: { requestId, generatedAt } }\`. Erro: \`{ success: false, error: { code, message }, meta: { requestId } }\`. Dinheiro em reais (número, 2 casas); datas de calendário \`AAAA-MM-DD\`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP.`;

@@ -23,7 +23,7 @@ const Query = z
   })
   .strict();
 
-export const GET = defineEndpoint({ scope: "clients.read", query: Query }, async ({ query }) => {
+export const GET = defineEndpoint({ action: "clients.list", scope: "clients.read", query: Query }, async ({ query }) => {
   const competence = query.competence ?? competenciaAtual();
   const r = await listarClientesApi({ ...query, competence });
   return {

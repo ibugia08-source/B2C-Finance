@@ -84,7 +84,7 @@ describe("token", () => {
 
   it("GET protegido com token válido responde 200", async () => {
     const k = await novaChave(donoA, ["clients.read"]);
-    const GET = defineEndpoint({ scope: null }, async ({ auth }) => ({ data: { id: auth.serviceAccountId } }));
+    const GET = defineEndpoint({ action: "teste", scope: null }, async ({ auth }) => ({ data: { id: auth.serviceAccountId } }));
     const res = await GET(req(k.token, { "x-request-id": "corr-1" }));
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -109,14 +109,14 @@ describe("token", () => {
         expect(r.error.code).toBe("invalid_token");
       }
     }
-    const GET = defineEndpoint({ scope: null }, async () => ({ data: {} }));
+    const GET = defineEndpoint({ action: "teste", scope: null }, async () => ({ data: {} }));
     const res = await GET(req("b2c_live_zzzzzzzz_" + "x".repeat(43)));
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
   });
 
   it("cookie de sessão não autentica a API", async () => {
-    const GET = defineEndpoint({ scope: null }, async () => ({ data: {} }));
+    const GET = defineEndpoint({ action: "teste", scope: null }, async () => ({ data: {} }));
     const res = await GET(req(undefined, { cookie: "b2c_session=qualquer.coisa" }));
     expect(res.status).toBe(401);
     const body = await res.json();
@@ -216,7 +216,7 @@ describe("scope", () => {
   it("scope ausente → 403 insufficient_scope, sem executar o handler", async () => {
     const k = await novaChave(donoA, ["dashboard.read"]);
     let executou = false;
-    const GET = defineEndpoint({ scope: "clients.read" }, async () => {
+    const GET = defineEndpoint({ action: "teste", scope: "clients.read" }, async () => {
       executou = true;
       return { data: {} };
     });
@@ -282,7 +282,7 @@ describe("isolamento por dono", () => {
     const deA = await createMrrClient(donoA, { name: "Cliente só do A" });
     const deB = await createMrrClient(donoB, { name: "Cliente só do B" });
     const k = await novaChave(donoA, ["clients.read"]);
-    const GET = defineEndpoint({ scope: "clients.read" }, async () => ({
+    const GET = defineEndpoint({ action: "teste", scope: "clients.read" }, async () => ({
       data: { ids: (await prisma.client.findMany({ select: { id: true } })).map((c) => c.id) },
     }));
     const res = await GET(req(k.token));
