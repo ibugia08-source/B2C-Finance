@@ -22,6 +22,20 @@ import type { Prisma } from "@prisma/client";
  * lib/engines/context.ts.
  */
 export async function escopoAtual(): Promise<DataScope> {
+  // Principal declarado (API com usuário delegado, webhook, cron) decide
+  // ANTES da sessão: usuário → o recorte DELE (agência, se for o caso);
+  // sistema → total. Sem isto, uma chamada sem cookie caía no "sem usuário"
+  // e enxergava a carteira inteira mesmo agindo por um usuário restrito.
+  const { getPrincipal } = await import("@/lib/auth/owner-scope");
+  const principal = getPrincipal();
+  if (principal?.kind === "system") return { kind: "WORKSPACE" };
+  if (principal?.kind === "user") {
+    const row = await prisma.user.findUnique({
+      where: { id: principal.user.id },
+      select: { role: true, dataScope: true, scopeAgencyId: true },
+    });
+    return parseDataScope(row ?? { role: principal.user.role });
+  }
   try {
     const { getCurrentUser } = await import("@/lib/auth/current-user");
     const u = await getCurrentUser();

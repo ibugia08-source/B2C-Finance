@@ -61,7 +61,7 @@ export async function changeClientStatusAction(input: {
   if (!viewer || !ctx) return NO_PERMISSION;
   try {
     const p = ChangeSchema.parse(input);
-    const r = await inDomain(ctx, () => changeClientStatus(
+    const r = await inDomain(ctx, async () => await changeClientStatus(
       {
         clientId: p.clientId,
         status: p.status,
@@ -89,7 +89,7 @@ export async function cancelScheduledStatusChangeAction(input: {
   if (!viewer || !ctx) return NO_PERMISSION;
   try {
     if (!isDateKey(input.effectiveFrom)) return { ok: false, error: "Data inválida." };
-    await inDomain(ctx, () => cancelScheduledStatusChange(
+    await inDomain(ctx, async () => await cancelScheduledStatusChange(
       {
         clientId: input.clientId,
         effectiveFrom: input.effectiveFrom,
@@ -126,7 +126,7 @@ export async function bulkChangeClientStatusAction(input: {
     const falhas: { id: string; error: string }[] = [];
     for (const id of Array.from(new Set(ids))) {
       try {
-        await inDomain(ctx, () => changeClientStatus(
+        await inDomain(ctx, async () => await changeClientStatus(
           {
             clientId: id,
             status,

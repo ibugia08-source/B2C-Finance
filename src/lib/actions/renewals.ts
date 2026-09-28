@@ -1,354 +1,46 @@
 "use server";
 import { prisma } from "@/lib/prisma";
-import { requirePermission, can } from "@/lib/auth/viewer";
+import { requirePermission } from "@/lib/auth/viewer";
 import { revalidateAgency, revalidateFinance } from "@/lib/revalidate";
-import { parseBRL, parseMonthParam, toNumber as n, formatDateBR } from "@/lib/format";
-import { getValidDueDateForMonth, addMonthsClamped } from "@/lib/financial/due-date";
-import { settleBilling as settleViaEngine } from "@/lib/engines/payment-engine";
-import { ensureClientBillingForMonth } from "@/lib/services/receivables-cycle";
 import type { ActionResult } from "./clients";
+import { renovarCliente } from "@/lib/engines/renewal-engine";
+import { domainContextFor } from "@/lib/auth/domain-session";
 import {
-  PRAZO_INDETERMINADO, addCalendarMonths, civilCompetenceKey, civilToday, competenceKeyOf, currentYearMonth, expectationInMonth,
-  monthIndex, parseCompetenceKey, rollForward,
+  currentYearMonth, expectationInMonth, monthIndex, parseCompetenceKey,
 } from "@/lib/renewal-expectation";
 
-/**
- * FLUXO COMPLETO DE RENOVAÇÃO — "Sim, renovou" da Gestão do Mês e do módulo
- * Renovações, num só passo atômico do ponto de vista do usuário:
- *
- *  1. O dono escolhe a MODALIDADE do contrato renovado (mesma lógica do
- *     cadastro): MRR = mensalidade + dia de pagamento mensal (o cliente
- *     segue na lista de recebimentos todo mês; ciclo = mensal × prazo);
- *     TCV = valor total cheio, sem mensalidade automática.
- *  2. Estende o contrato (quando existe) e reativa o cliente; contrato e
- *     cadastro acompanham a modalidade escolhida (normalização do saveClient:
- *     MRR zera valor total; TCV zera mensalidade e dia recorrente).
- *  3. Opcionalmente LANÇA o valor no módulo de recebimentos, na competência
- *     escolhida (mês atual ou outro), como cobrança real (Billing).
- *  4. Registra o histórico auditável em ClientRenewal (aparece na ficha do
- *     cliente e no módulo Renovações).
- *
- * REGRAS DE COBRANÇA (auditoria 2026-08-13):
- *  - NUNCA chamar generateBillingsForContract aqui: as mensalidades do dia a
- *    dia nascem SEM contractId (ensureMonthlyBillings) e o dedupe daquela
- *    função é por contractId — gerar aqui duplicaria cobranças em massa.
- *    As mensalidades futuras do MRR nascem do CADASTRO (monthlyValue novo)
- *    pelo ciclo normal.
- *  - Renovação MRR + lançamento: materializa a mensalidade da competência
- *    via ensureClientBillingForMonth e ATUALIZA o valor se a cobrança já
- *    existia em aberto com o mensal antigo.
- *  - Contrato + cadastro + histórico são gravados numa transação; o
- *    lançamento/pagamento roda depois e falha vira warning (nunca deixa
- *    contrato estendido sem histórico).
- */
+/** Fluxo completo de renovação — ver engines/renewal-engine.ts (renovarCliente). */
 export async function renewClientFlow(
   formData: FormData
 ): Promise<ActionResult & { renewalId?: string }> {
   const viewer = await requirePermission("contratos.editar");
   try {
-    const clientId = String(formData.get("clientId") ?? "");
-    const contractId = String(formData.get("contractId") ?? "").trim() || null;
-    // Prazo do novo ciclo em meses, ou INDETERMINADO (só MRR): sem término e
-    // sem próxima expectativa automática.
-    const indeterminado = String(formData.get("months") ?? "").trim().toLowerCase() === PRAZO_INDETERMINADO;
-    const months = indeterminado ? 1 : Math.max(1, parseInt(String(formData.get("months") ?? "12"), 10) || 12);
-    const paymentMethod = String(formData.get("paymentMethod") ?? "").trim() || null;
-    const details = String(formData.get("details") ?? "").trim() || null;
-    const launch = String(formData.get("launch") ?? "") === "1";
-    const payStatus = String(formData.get("payStatus") ?? "aberto"); // aberto | total | parcial
-    const paidRaw = String(formData.get("paidAmount") ?? "").trim();
-
-    const today = new Date();
-    const comp = parseMonthParam(String(formData.get("competence") ?? "")) ?? {
-      month: today.getMonth() + 1,
-      year: today.getFullYear(),
+    // Formulário → entrada; o fluxo inteiro está em engines/renewal-engine
+    // (o mesmo que a API vai usar).
+    const campo = (k: string) => {
+      const v = formData.get(k);
+      return v == null ? null : String(v);
     };
-
-    const client = await prisma.client.findFirst({
-      where: { id: clientId },
-      select: {
-        id: true, name: true, modality: true, paymentDay: true,
-        monthlyValue: true, totalContractValue: true, expectedRenewalAt: true,
-      },
+    const r = await renovarCliente(await domainContextFor(viewer), {
+      clientId: campo("clientId"),
+      competence: campo("competence"),
+      contractId: campo("contractId"),
+      details: campo("details"),
+      forCompetence: campo("forCompetence"),
+      launch: campo("launch"),
+      modality: campo("modality"),
+      monthlyValue: campo("monthlyValue"),
+      months: campo("months"),
+      paidAmount: campo("paidAmount"),
+      payStatus: campo("payStatus"),
+      paymentDay: campo("paymentDay"),
+      paymentMethod: campo("paymentMethod"),
+      totalValue: campo("totalValue"),
     });
-    if (!client) return { ok: false, error: "Cliente não encontrado." };
-
-    // EXPECTATIVA ATENDIDA: a competência que esta renovação resolve. Vem do
-    // mês em exibição no módulo (forCompetence); sem ele, da expectativa
-    // atual do cliente; sem as duas, do mês de hoje. E o valor que se
-    // esperava, congelado ANTES de o cadastro mudar.
-    const expectedCompetence =
-      parseCompetenceKey(String(formData.get("forCompetence") ?? ""))
-        ? String(formData.get("forCompetence")).trim()
-        : client.expectedRenewalAt
-          ? civilCompetenceKey(client.expectedRenewalAt)
-          : competenceKeyOf(today);
-    const { expectedRenewalValues } = await import("@/lib/services/revenue-metrics");
-    const expectedValue = (await expectedRenewalValues([client])).get(client.id) ?? null;
-
-    const contract = contractId
-      ? await prisma.contract.findFirst({ where: { id: contractId, clientId } })
-      : null;
-    if (contractId && !contract)
-      return { ok: false, error: "Contrato não encontrado para este cliente." };
-
-    // GUARDA ANTI-DUPLO ENVIO (auditoria 2026-08-13): retry de rede ou duas
-    // abas não podem estender o contrato 2× nem lançar duas cobranças. Uma
-    // renovação do MESMO cliente registrada há poucos minutos bloqueia a
-    // repetição — renovar de novo de verdade (caso raro) espera a janela.
-    const recentRenewal = await prisma.clientRenewal.findFirst({
-      where: {
-        clientId,
-        renewedAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
-      },
-      select: { id: true },
-    });
-    if (recentRenewal) {
-      return {
-        ok: false,
-        error:
-          "Este cliente já tem uma renovação registrada há poucos minutos — confira o histórico dele antes de renovar novamente.",
-      };
-    }
-
-    // MODALIDADE do contrato renovado (mesma lógica do cadastro):
-    //  MRR → mensalidade + dia de pagamento mensal; TCV → valor total cheio.
-    const modRaw = String(formData.get("modality") ?? "").trim();
-    const staysMonthly = modRaw
-      ? modRaw === "MRR"
-      : (contract ? contract.type === "MRR" : client.modality !== "TCV");
-
-    let monthly: number | null = null;
-    let paymentDay: number | null = null;
-    let total: number;
-    if (staysMonthly) {
-      monthly = parseBRL(String(formData.get("monthlyValue") ?? "").trim());
-      if (!(monthly > 0))
-        return { ok: false, error: "Informe o valor da mensalidade." };
-      paymentDay = parseInt(String(formData.get("paymentDay") ?? ""), 10);
-      if (!Number.isInteger(paymentDay) || paymentDay < 1 || paymentDay > 31)
-        return { ok: false, error: "Informe o dia de pagamento mensal (1-31)." };
-      total = Math.round(monthly * months * 100) / 100;
-    } else {
-      if (indeterminado)
-        return { ok: false, error: "TCV é um valor fechado por um prazo: Indeterminado vale só para MRR." };
-      total = parseBRL(String(formData.get("totalValue") ?? "").trim());
-      if (!(total > 0))
-        return { ok: false, error: "Informe o valor total do contrato renovado." };
-    }
-
-    const base =
-      contract?.endDate && contract.endDate > today ? contract.endDate : today;
-    const previousEndDate = contract?.endDate ?? null;
-    const newEnd = indeterminado ? null : addMonthsClamped(base, months);
-
-    // ===== 1-2-5) Contrato + cadastro + histórico numa TRANSAÇÃO =====
-    const renewNote =
-      `Renovado em ${formatDateBR(today)}: ${indeterminado ? "prazo indeterminado" : `${months} mês(es)`}, R$ ${total.toFixed(2).replace(".", ",")} (${staysMonthly ? "MRR" : "TCV"})` +
-      (paymentMethod ? `, ${paymentMethod}` : "") +
-      (details ? ` — ${details}` : "");
-
-    const writes: any[] = [];
-    if (contract) {
-      writes.push(
-        prisma.contract.update({
-          where: { id: contract.id },
-          data: {
-            status: "ACTIVE",
-            endDate: newEnd,
-            renewalDate: newEnd,
-            totalValue: n(contract.totalValue) + total,
-            paymentMethod,
-            canceledAt: null,
-            notes: [contract.notes, renewNote].filter(Boolean).join("\n"),
-            // O contrato acompanha a modalidade escolhida na renovação —
-            // TCV trava a geração de mensalidades (recurrence NONE, mensal 0).
-            ...(staysMonthly
-              ? { type: "MRR" as const, recurrence: "MONTHLY" as const, monthlyValue: monthly! }
-              : { type: "TCV" as const, recurrence: "NONE" as const, monthlyValue: 0 }),
-          },
-        })
-      );
-    }
-    writes.push(
-      prisma.client.update({
-        where: { id: clientId },
-        data: {
-          status: "ACTIVE",
-          churnedAt: null,
-          contractMonths: indeterminado ? null : months,
-          contractIndefinite: indeterminado,
-          // Próxima expectativa = a expectativa atendida + o novo prazo (o
-          // ciclo segue a data do cliente, não o dia em que se registrou).
-          // Renovação registrada com atraso anda até o mês corrente.
-          // Indeterminado: nenhuma — só volta a Renovações se agendado.
-          expectedRenewalAt: indeterminado
-            ? null
-            : rollForward(
-                addCalendarMonths(client.expectedRenewalAt ?? civilToday(today), months),
-                months,
-                today
-              ),
-          // Normalização por modalidade — a MESMA regra do saveClient:
-          // MRR zera o valor total; TCV zera mensalidade e dia recorrente.
-          ...(staysMonthly
-            ? {
-                modality: "MRR" as const,
-                monthlyValue: monthly,
-                paymentDay,
-                totalContractValue: null,
-              }
-            : {
-                modality: "TCV" as const,
-                totalContractValue: total,
-                monthlyValue: null,
-                paymentDay: null,
-              }),
-        },
-      })
-    );
-    writes.push(
-      prisma.clientRenewal.create({
-        data: {
-          clientId,
-          contractId: contract?.id ?? null,
-          months: indeterminado ? null : months,
-          totalValue: total,
-          monthlyValue: monthly,
-          modality: staysMonthly ? "MRR" : "TCV",
-          paymentMethod,
-          previousEndDate,
-          newEndDate: newEnd,
-          billingMonth: launch ? comp.month : null,
-          billingYear: launch ? comp.year : null,
-          keptMonthly: staysMonthly,
-          expectedCompetence,
-          expectedValue,
-          paymentStatus: launch ? payStatus : null,
-          notes: details,
-          createdBy: viewer.email,
-        },
-      })
-    );
-    const results = await prisma.$transaction(writes);
-    const renewal = results[results.length - 1] as { id: string };
-
-    // ===== 3) Lançamento nos recebimentos (fora da transação; falha = warning) =====
-    let billingId: string | null = null;
-    let warning: string | undefined;
-    if (launch) {
-      if (staysMonthly) {
-        // MRR que segue mensal: a "cobrança da renovação" é a própria
-        // mensalidade da competência — materializa sem duplicar.
-        const ensured = await ensureClientBillingForMonth(
-          clientId, comp.month, comp.year, viewer.email
-        );
-        if (ensured.ok) {
-          billingId = ensured.billingId;
-          if (!ensured.created) {
-            // Mensalidade já existia (valor antigo): atualiza se ainda em aberto.
-            const existing = await prisma.billing.findUnique({
-              where: { id: billingId },
-              select: { paidTotal: true, status: true, amount: true },
-            });
-            if (
-              existing &&
-              existing.status !== "CANCELED" &&
-              n(existing.paidTotal) === 0 &&
-              monthly != null &&
-              Math.abs(n(existing.amount) - monthly) > 0.005
-            ) {
-              await prisma.billing.update({
-                where: { id: billingId },
-                data: { amount: monthly },
-              });
-            }
-          }
-        } else {
-          warning = `Renovado, mas a mensalidade não foi lançada: ${ensured.error}`;
-        }
-      } else {
-        // Idempotência do lançamento TCV: reusa APENAS cobrança que nasceu de
-        // renovação (descrição "Renovação — …") com o mesmo valor nesta
-        // competência — repetição do fluxo não cria segunda cobrança cheia.
-        // O filtro de descrição é essencial: sem ele, a cobrança de ADESÃO
-        // TCV do mesmo valor no mesmo mês seria "reusada" e o ciclo renovado
-        // nunca seria faturado (revisão adversarial 2026-08-13).
-        const existingTcv = await prisma.billing.findFirst({
-          where: {
-            clientId,
-            competenceMonth: comp.month,
-            competenceYear: comp.year,
-            revenueType: "TCV",
-            status: { not: "CANCELED" },
-            amount: total,
-            description: { startsWith: "Renovação — " },
-          },
-          select: { id: true },
-        });
-        if (existingTcv) {
-          billingId = existingTcv.id;
-        } else {
-          const due = getValidDueDateForMonth(
-            comp.year, comp.month, client.paymentDay ?? contract?.billingDay ?? today.getDate()
-          );
-          const created = await prisma.billing.create({
-            data: {
-              clientId,
-              contractId: contract?.id ?? null,
-              description: `Renovação — ${contract?.title ?? client.name} (${String(comp.month).padStart(2, "0")}/${comp.year})`,
-              competenceMonth: comp.month,
-              competenceYear: comp.year,
-              amount: total,
-              dueDate: due,
-              revenueType: "TCV",
-              status: "PENDING",
-            },
-            select: { id: true },
-          });
-          billingId = created.id;
-        }
-      }
-
-      if (billingId) {
-        await prisma.clientRenewal.update({
-          where: { id: renewal.id },
-          data: { billingId },
-        });
-      }
-
-      // Situação do pagamento informada na renovação (total/parcial).
-      if (billingId && payStatus !== "aberto") {
-        if (!can(viewer, "recebimentos.registrar_pagamento")) {
-          warning = "Renovado e lançado; sem permissão para registrar o pagamento.";
-        } else {
-          const billing = await prisma.billing.findUnique({
-            where: { id: billingId },
-            select: { amount: true, paidTotal: true },
-          });
-          const open = Math.max(0, n(billing?.amount) - n(billing?.paidTotal));
-          const payAmount =
-            payStatus === "parcial" ? Math.min(parseBRL(paidRaw), open) : open;
-          if (payAmount > 0) {
-            const settled = await settleViaEngine({
-              billingId,
-              amount: payAmount,
-              paidAt: today,
-              method: "OTHER",
-              accountId: null,
-              notes: "Pagamento registrado na renovação do contrato.",
-            });
-            if (!settled.ok) warning = `Renovado, mas o pagamento falhou: ${settled.error}`;
-          } else if (payStatus === "parcial") {
-            warning = "Renovado; valor parcial inválido — pagamento não registrado.";
-          }
-        }
-      }
-    }
-
-    revalidateAgency({ clientId, contractId: contract?.id ?? null });
+    if (!r.ok) return r;
+    revalidateAgency({ clientId: r.clientId, contractId: r.contractId ?? null });
     revalidateFinance();
-    return { ok: true, id: renewal.id, renewalId: renewal.id, ...(warning ? { warning } : {}) };
+    return { ok: true, id: r.id, renewalId: r.renewalId, ...(r.warning ? { warning: r.warning } : {}) };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao renovar o contrato." };
   }

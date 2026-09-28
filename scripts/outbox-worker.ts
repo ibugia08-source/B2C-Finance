@@ -38,6 +38,11 @@ async function main() {
     // Canal `webhook` = gateway de pagamento (F5.2): pedidos de emissão de
     // link. Sem configuração, o evento espera — igual aos outros canais.
     if (evento.channel === "webhook") {
+      // Só pedido de emissão de cobrança vai ao gateway. Evento de negócio
+      // publicado neste canal por engano (ex.: `despesa.paga` antigo) NÃO é
+      // entregue a ele — fica para reprocessamento/dead-letter, visível.
+      if (evento.eventType !== "GATEWAY_CHARGE_REQUESTED")
+        throw new Error(`Evento “${evento.eventType}” não pertence ao gateway de pagamento.`);
       if (!emissaoConfigurada()) throw new Error("Gateway de pagamento não configurado.");
       await entregarNoGateway(evento);
       return;

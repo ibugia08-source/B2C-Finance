@@ -19,7 +19,13 @@ import { runWithoutScope } from "@/lib/auth/owner-scope";
  * canais reais entram na Fase 3 (régua) e 4 (AvanceCRM).
  */
 
-export type OutboxChannel = "whatsapp" | "crm" | "email" | "webhook";
+/**
+ * Canais. `webhook` é EXCLUSIVO do gateway de pagamento (pedido de emissão
+ * de link). `integracao` = eventos de negócio para integrações externas
+ * (n8n / API — docs/API_IMPLEMENTATION_PLAN.md §12); ainda sem entregador:
+ * o evento fica PENDENTE até o canal existir, em vez de ir para o lugar errado.
+ */
+export type OutboxChannel = "whatsapp" | "crm" | "email" | "webhook" | "integracao";
 
 export type PublishInput = {
   workspaceId: string;

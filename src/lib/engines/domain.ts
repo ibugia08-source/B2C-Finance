@@ -67,10 +67,38 @@ export function statusCapabilities(ctx: DomainContext): StatusCapabilities {
 /**
  * Roda `fn` com o dono e o principal do contexto fixados. Toda função de
  * domínio entra por aqui — é o que torna o `ownerId` obrigatório de fato.
- * Aninhar é seguro (mesmo dono, mesmo principal).
+ * Aninhar é seguro (mesmo dono, mesmo principal). `fn` deve ser `async` e
+ * dar `await` nas consultas — PrismaPromise devolvida crua roda FORA do escopo.
  */
 export async function inDomain<T>(ctx: DomainContext, fn: () => Promise<T>): Promise<T> {
   if (!ctx?.ownerId) throw new Error("Contexto de domínio sem dono (ownerId) — operação recusada.");
   const { runWithPrincipal } = await import("@/lib/auth/owner-scope");
   return runWithPrincipal(ctx.ownerId, ctx.principal, fn);
+}
+
+/**
+ * DONO DO REGISTRO (D5 do plano da API). A extensão do Prisma filtra por dono
+ * nas leituras e em updateMany/deleteMany, mas `update`/`delete` por id único
+ * NÃO conferem o dono. Toda função de domínio que recebe um id de fora
+ * (formulário, API) carrega o registro por leitura ESCOPADA antes de alterar;
+ * este helper é a forma explícita disso para quem não precisa do registro.
+ * Id de outro dono = "não encontrado" (nunca "proibido": não confirma que existe).
+ */
+export async function exigirDoDono(
+  ctx: DomainContext,
+  model: "client" | "billing" | "payment" | "transaction" | "contract" | "upsell" | "account",
+  id: string,
+  rotulo = "Registro"
+): Promise<void> {
+  const { prisma } = await import("@/lib/prisma");
+  // `await` DENTRO do callback: PrismaPromise devolvida sem await executa fora
+  // do contexto do dono (armadilha documentada em auth/owner-scope.ts).
+  const achado = await inDomain(ctx, async () =>
+    await (prisma as any)[model].findFirst({ where: { id }, select: { id: true } })
+  );
+  if (!achado) throw new DomainNotFoundError(`${rotulo} não encontrado.`);
+}
+
+export class DomainNotFoundError extends Error {
+  readonly code = "NAO_ENCONTRADO" as const;
 }

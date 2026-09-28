@@ -39,13 +39,18 @@
   | `acessoAoRelatorio`, `executarRelatorio` | `reports/run.ts` |
 
 - **O que já era domínio e foi mantido:** status temporal (`clients/status-history.ts`), Dashboard (`computePeriodMetrics` e afins), Caixa (`getCashSummary`, `projecaoDeCaixa`), Projeções, Renovações e motores de pagamento, despesa e cobrança.
+**28/09/2026 — continuação.**
+
+- **D3 corrigida:** `escopoAtual` lê o principal antes da sessão (usuário delegado continua no recorte de agência dele; sistema = total).
+- **D5:** helper `exigirDoDono(ctx, model, id)` em `engines/domain.ts` ("não encontrado" para id de outro dono). As funções de domínio já carregam o registro por leitura escopada antes de alterar.
+- **D12 corrigida:** `despesa.paga` passa ao canal novo `integracao` (sem entregador ainda, então o evento fica pendente). O worker só entrega ao gateway `GATEWAY_CHARGE_REQUESTED`; eventos antigos mal roteados não chegam mais a ele.
+- **D17 reclassificada:** as cópias "2" são duplicatas locais do iCloud/Finder, **ignoradas pelo `.gitignore`** (`*\ 2.ts`) — nunca foram para produção. Não é dívida do repositório.
+- **Extraídas:**
+  - `renovarCliente` (`engines/renewal-engine.ts`, fluxo completo de renovação);
+  - `salvarContrato`, `encerrarContrato` e `cancelarContrato` (`services/contract-service.ts`).
 - **Continua pendente:**
-  - **D3** (`escopoAtual` já lê o principal via `getCurrentUser`; falta teste dedicado).
-  - **D5** (`findOwnedOrThrow`).
-  - **D8**: actions que contornam motores.
-  - **D12**: canal de `despesa.paga`.
-  - **D17**: cópias "2".
-  - Extração de renovação, grade de Recebimentos e contratos.
+  - **D8**: actions que contornam motores (`saveBilling`, `includeClientInMonth`, `addPastDelinquency`, `cancelBilling` da action, folha, `deleteExpense`). Passar por elas no motor **acrescenta a guarda de período**, que hoje não existe nesses caminhos. É mudança de comportamento e exige decisão do dono.
+  - Grade de Recebimentos (`receivables-inline`), que não é exposta na V1.
 
 ---
 

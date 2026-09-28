@@ -208,7 +208,7 @@ export async function registerPayment(
   opts: SettleOptions = {}
 ): Promise<SettleResult> {
   const parsed = RegisterPaymentInputSchema.parse(input);
-  return inDomain(ctx, () => settleBilling(parsed, opts));
+  return inDomain(ctx, async () => await settleBilling(parsed, opts));
 }
 
 /**

@@ -66,7 +66,9 @@ export async function setExpenseStatus(
       await publish(tx as any, {
         workspaceId,
         eventType: "despesa.paga",
-        channel: "webhook",
+        // Evento de NEGÓCIO para integrações — não é do gateway de pagamento
+        // (antes ia no canal `webhook`, que o worker entrega ao gateway).
+        channel: "integracao",
         sourceType: "Transaction",
         sourceId: id,
         payload: { amount: n(despesa.amount), competence: competencia },

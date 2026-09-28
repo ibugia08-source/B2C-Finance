@@ -269,4 +269,110 @@ describe("funções de domínio extraídas", () => {
       expect(Array.isArray(linhas)).toBe(true);
     }
   });
+
+  it("salvarContrato: TCV é valor cheio sem recorrência; MRR deriva a mensalidade pelo prazo", async () => {
+    const { salvarContrato, encerrarContrato, cancelarContrato } = await import("@/lib/services/contract-service");
+    const c = await createMrrClient(owner, { name: "Contratos Domínio" });
+    const base = {
+      clientId: c.id, status: "ACTIVE" as const, setupFee: null, renewalDate: null,
+      billingDay: 5, autoRenew: false, notes: null, services: [],
+    };
+    const tcv = await salvarContrato(ctxDe(owner), {
+      ...base, title: "TCV", type: "TCV", recurrence: "MONTHLY", monthlyValue: 500, totalValue: 6000,
+      startDate: new Date(2026, 0, 1), endDate: null,
+    });
+    const mrr = await salvarContrato(ctxDe(owner), {
+      ...base, title: "MRR", type: "MRR", recurrence: "MONTHLY", monthlyValue: 0, totalValue: 5100,
+      startDate: new Date(2026, 0, 1), endDate: new Date(2026, 2, 31),
+    });
+    expect(tcv.ok && mrr.ok).toBe(true);
+    const ler = (id: string) => runWithoutScope(async () => prisma.contract.findUniqueOrThrow({ where: { id } }));
+    const t = await ler((tcv as any).id);
+    expect(t.recurrence).toBe("NONE");
+    expect(Number(t.monthlyValue)).toBe(0);
+    const m = await ler((mrr as any).id);
+    expect(Number(m.monthlyValue)).toBe(1700);
+    expect((await encerrarContrato(ctxDe(owner), t.id)).ok).toBe(true);
+    expect((await ler(t.id)).status).toBe("ENDED");
+    expect((await cancelarContrato(ctxDe(owner), m.id)).ok).toBe(true);
+    expect((await ler(m.id)).status).toBe("CANCELED");
+    // Cliente de outro dono: recusado.
+    const alheio = await createMrrClient(outro, { name: "Contrato Alheio" });
+    const r = await salvarContrato(ctxDe(owner), {
+      ...base, clientId: alheio.id, title: "X", type: "MRR", recurrence: "MONTHLY", monthlyValue: 1,
+      totalValue: 0, startDate: new Date(2026, 0, 1), endDate: null,
+    });
+    expect(r).toMatchObject({ ok: false, error: "Cliente não encontrado." });
+  });
+
+  it("renovarCliente: renova pelo domínio; sem permissão de pagamento, lança e avisa", async () => {
+    const { renovarCliente } = await import("@/lib/engines/renewal-engine");
+    const c = await createMrrClient(owner, { name: "Renova Domínio", monthlyValue: 1000 });
+    const r = await renovarCliente(ctxDe(owner, usuario("COMERCIAL", ["contratos.editar"])), {
+      clientId: c.id, months: "12", modality: "MRR", monthlyValue: "1.300,00", paymentDay: "10",
+      launch: "1", payStatus: "total", competence: "2026-09",
+    });
+    expect(r.ok, (r as any).error).toBe(true);
+    expect((r as any).warning).toMatch(/sem permissão para registrar o pagamento/);
+    const cli = await runWithoutScope(async () => prisma.client.findUniqueOrThrow({ where: { id: c.id } }));
+    expect(Number(cli.monthlyValue)).toBe(1300);
+    expect(cli.contractMonths).toBe(12);
+    const hist = await runWithoutScope(async () => prisma.clientRenewal.findMany({ where: { clientId: c.id } }));
+    expect(hist).toHaveLength(1);
+    expect(hist[0].createdBy).toBe("comercial@b2c.local");
+  });
+});
+
+describe("recorte, dono e eventos", () => {
+  it("escopoAtual segue o principal: usuário restrito à agência continua restrito sem cookie", async () => {
+    const { escopoAtual } = await import("@/lib/services/data-scope");
+    const { runWithPrincipal, systemPrincipal } = await import("@/lib/auth/owner-scope");
+    const agencia = await runWithoutScope(async () =>
+      prisma.agency.findFirstOrThrow({ orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true } })
+    );
+    const membro = await runWithoutScope(async () =>
+      prisma.user.create({
+        data: {
+          name: "Membro agência", email: `membro-${owner.id}@b2c.local`, passwordHash: "x", role: "COMERCIAL",
+          workspaceOwnerId: owner.id, dataScope: "AGENCY", scopeAgencyId: agencia.id,
+        },
+        select: { id: true, email: true },
+      })
+    );
+    try {
+      const p: Principal = {
+        kind: "user", origin: "API",
+        user: { id: membro.id, name: "Membro", email: membro.email, role: "COMERCIAL", permissions: [], workspaceOwnerId: owner.id },
+      };
+      expect(await runWithPrincipal(owner.id, p, () => escopoAtual())).toEqual({ kind: "AGENCY", agencyId: agencia.id });
+      expect(await runWithPrincipal(owner.id, systemPrincipal("job"), () => escopoAtual())).toEqual({ kind: "WORKSPACE" });
+    } finally {
+      await runWithoutScope(async () => prisma.user.delete({ where: { id: membro.id } }));
+    }
+  });
+
+  it("exigirDoDono: id de outro dono = não encontrado", async () => {
+    const { exigirDoDono } = await import("@/lib/engines/domain");
+    const meu = await createMrrClient(owner, { name: "Meu" });
+    const alheio = await createMrrClient(outro, { name: "Alheio" });
+    await expect(exigirDoDono(ctxDe(owner), "client", meu.id, "Cliente")).resolves.toBeUndefined();
+    await expect(exigirDoDono(ctxDe(owner), "client", alheio.id, "Cliente")).rejects.toThrow("Cliente não encontrado.");
+  });
+
+  it("despesa paga publica no canal de integração — nunca no canal do gateway", async () => {
+    const { setExpenseStatus } = await import("@/lib/engines/expense-engine");
+    const { runWithPrincipal } = await import("@/lib/auth/owner-scope");
+    const d = await asOwner(owner, async () =>
+      prisma.transaction.create({
+        data: { description: "Despesa evento", amount: 100, type: "despesa", status: "pendente", date: new Date(), dueDate: new Date(), belongsTo: "empresa" },
+        select: { id: true },
+      })
+    );
+    const r = await runWithPrincipal(owner.id, usuario("ADMIN"), () => setExpenseStatus(d.id, "pago"));
+    expect(r.ok, (r as any).error).toBe(true);
+    const ev = await runWithoutScope(async () =>
+      prisma.outboxEvent.findFirst({ where: { eventType: "despesa.paga", sourceId: d.id } })
+    );
+    expect(ev?.channel).toBe("integracao");
+  });
 });

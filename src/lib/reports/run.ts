@@ -30,5 +30,5 @@ export async function executarRelatorio(
   def: ReportDef,
   query: ReportQuery
 ): Promise<ReportRow[]> {
-  return inDomain(ctx, () => def.build(query));
+  return inDomain(ctx, async () => await def.build(query));
 }
