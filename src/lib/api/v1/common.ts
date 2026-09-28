@@ -12,7 +12,12 @@ export const statusDoCliente = (s: string | null | undefined) =>
   s ? { code: s, label: CLIENT_STATUS_LABEL[s] ?? s } : null;
 
 /** Dia civil ("AAAA-MM-DD") de uma data gravada como data civil. */
-export const dia = (d: Date | null | undefined): string | null => (d ? civilDateKeyOf(d) : null);
+export const dia = (d: Date | string | null | undefined): string | null => {
+  if (!d) return null;
+  // Texto vindo de cache (ownerCached serializa Date) — ver `instante`.
+  const x = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(x.getTime()) ? null : civilDateKeyOf(x);
+};
 
 export const competenciaAtual = (): Competence => todayKey().slice(0, 7);
 

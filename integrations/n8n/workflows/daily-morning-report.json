@@ -1,0 +1,499 @@
+{
+  "name": "B2C Finance · Relatório da manhã (WhatsApp)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Relatório da manhã (somente leitura)\nCron → API B2C (relatório do dia, rotina, indicadores) → IA organiza → WhatsApp.\nNunca acessa banco/Supabase/Prisma — só a API. Tokens só nas credenciais.\n**Chega desativado.** Ative depois do teste (docs/N8N_DAILY_REPORTS.md).",
+        "height": 300,
+        "width": 440,
+        "color": 7
+      },
+      "name": "Nota: sobre",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Configuração\n- **Horário:** `B2C_MORNING_REPORT_CRON` (cron, padrão `0 7 * * 1-6`).\n- **Fuso do agendamento:** Workflow Settings → Timezone (`America/Bahia`).\n- **Data do relatório:** `B2C_REPORT_TIMEZONE` (padrão `America/Bahia`, o fuso da API).\n- **Quem recebe:** `B2C_REPORT_RECIPIENTS`.\n- **Envio:** `WHATSAPP_REPORT_MODE` = text | template.",
+        "height": 300,
+        "width": 440,
+        "color": 5
+      },
+      "name": "Nota: configuração",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Sem dado inventado\nA consolidação monta a **mensagem padrão** só com o que a API trouxe (seção sem dado some; falha de consulta aparece como \"não consegui consultar\", nunca zero).\nA IA só **reorganiza**. Se citar um R$ que não está nos dados — ou falhar — vai a mensagem padrão. Sem dados de ações, não há \"prioridades\".",
+        "height": 220,
+        "width": 700,
+        "color": 6
+      },
+      "name": "Nota: sem dado inventado",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### WhatsApp\nMensagem livre (`text`) só é entregue dentro da janela de 24 h da Meta. Para envio diário garantido, use um **modelo aprovado** (`template`, com uma variável {{1}}).",
+        "height": 220,
+        "width": 440,
+        "color": 3
+      },
+      "name": "Nota: WhatsApp",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1820,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "={{ $env.B2C_MORNING_REPORT_CRON || '0 7 * * 1-6' }}"
+            }
+          ]
+        }
+      },
+      "name": "Agendamento (manhã)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "notes": "Cron em B2C_MORNING_REPORT_CRON (padrão 0 7 * * 1-6), no fuso do workflow.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "name": "Executar agora (teste)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        480
+      ],
+      "notes": "Roda o relatório na hora, sem esperar o horário (teste).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Data de HOJE no fuso do negócio e destinatários (configuração por variável).\n// B2C_REPORT_TIMEZONE (padrão America/Bahia) — o mesmo fuso que a API usa.\n// B2C_REPORT_RECIPIENTS — números E.164 sem +, separados por vírgula.\nconst tz = $env.B2C_REPORT_TIMEZONE || 'America/Bahia';\nconst hoje = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());\nconst destinatarios = String($env.B2C_REPORT_RECIPIENTS || '').split(',').map((s) => s.replace(/\\D/g, '')).filter(Boolean);\nif (destinatarios.length === 0) throw new Error('B2C_REPORT_RECIPIENTS vazio — defina quem recebe o relatório (ver ENV.example).');\nreturn [{ json: { periodo: 'manha', tz, hoje, competencia: hoje.slice(0, 7), destinatarios } }];"
+      },
+      "name": "Preparar data e destinatários",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "notes": "Hoje (fuso configurável) e quem recebe.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/reports/daily?date={{ $('Preparar data e destinatários').first().json.hoje }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "API: relatório do dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "GET /reports/daily (reports.read)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/routine/daily",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "API: rotina do dia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "GET /routine/daily (routine.read)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/dashboard/summary?competence={{ $('Preparar data e destinatários').first().json.competencia }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "API: indicadores do mês",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "GET /dashboard/summary (dashboard.read)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta relatório do dia + rotina + indicadores do mês e monta a MENSAGEM\n// PADRÃO — só com o que a API trouxe. Seção sem dado não aparece.\nconst BRL = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0)).replace(/\\u00a0/g, ' ');\nconst DATA = (d) => (d ? d.split('-').reverse().join('/') : '');\nconst resposta = (nome) => {\n  const j = $(nome).first().json || {};\n  if (j.success === true) return { ok: true, data: j.data || {}, omitidas: (j.meta && j.meta.omittedSections) || [] };\n  return { ok: false, data: {}, omitidas: [], erro: (j.error && (j.error.code || j.error.message)) || 'sem resposta' };\n};\nconst valores = new Set(); // todo R$ que a mensagem pode citar\nconst rs = (v) => { const t = BRL(v); valores.add(t.replace('R$ ', '')); return t; };\nconst curto = (t, n = 60) => { const s = String(t || ''); return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s; };\nconst lista = (itens, fmt, max = 5) => {\n  const linhas = itens.slice(0, max).map((x) => '• ' + fmt(x));\n  if (itens.length > max) linhas.push('• … e mais ' + (itens.length - max));\n  return linhas.join('\\n');\n};\nconst prep = $('Preparar data e destinatários').first().json;\nconst rel = resposta('API: relatório do dia');\nconst rot = resposta('API: rotina do dia');\nconst dash = resposta('API: indicadores do mês');\nconst semAcesso = [...rel.omitidas];\nconst falhas = [];\nif (!rel.ok) falhas.push('relatório do dia');\nif (!rot.ok) falhas.push('rotina');\nif (!dash.ok) falhas.push('indicadores');\n\nconst secoes = [];\nconst dados = { data: prep.hoje };\n\n// Recebimentos previstos hoje (em aberto)\nconst due = rel.data.receivables && rel.data.receivables.dueToday;\nif (due) {\n  const abertos = (due.items || []).filter((b) => b.openAmount > 0);\n  if (abertos.length) {\n    dados.recebimentosPrevistosHoje = { quantidade: abertos.length, valor: rs(due.openAmount) };\n    secoes.push('*Recebimentos previstos hoje* — ' + abertos.length + ' · ' + rs(due.openAmount) + '\\n' + lista(abertos, (b) => curto(b.client.name) + ' — ' + rs(b.openAmount)));\n  }\n}\n// Recebido (hoje até agora + no mês)\nconst rec = rel.data.receivables && rel.data.receivables.received;\nconst recMes = dash.data.metrics && dash.data.metrics.recebido_competencia;\nif ((rec && rec.count > 0) || (recMes && recMes.value)) {\n  const partes = [];\n  if (rec && rec.count > 0) partes.push('hoje: ' + rs(rec.amount) + ' (' + rec.count + ')');\n  if (recMes && recMes.value) partes.push('no mês: ' + rs(recMes.value));\n  dados.recebido = partes;\n  secoes.push('*Recebido* — ' + partes.join(' · '));\n}\n// Vencidos (cobranças)\nconst col = rot.data.collections;\nif (col && col.overdue && col.overdue.length) {\n  dados.vencidos = { clientes: col.overdue.length, valor: rs(col.overdueTotal) };\n  secoes.push('*Vencidos* — ' + col.overdue.length + ' cliente(s) · ' + rs(col.overdueTotal) + '\\n' + lista(col.overdue, (q) => curto(q.client.name) + ' — ' + rs(q.totalOverdue) + ' (' + q.daysOverdue + 'd)'));\n}\n// Despesas vencendo (vencidas + próximos dias)\nconst pag = rot.data.payments;\nif (pag && ((pag.overdue && pag.overdue.length) || (pag.dueSoon && pag.dueSoon.length))) {\n  const itens = [...(pag.overdue || []).map((p) => ({ ...p, _v: true })), ...(pag.dueSoon || [])];\n  const partes = [];\n  if (pag.overdueTotal > 0) partes.push('vencidas ' + rs(pag.overdueTotal));\n  if (pag.dueSoonTotal > 0) partes.push('próximos dias ' + rs(pag.dueSoonTotal));\n  dados.despesasVencendo = partes;\n  secoes.push('*Despesas vencendo* — ' + partes.join(' · ') + '\\n' + lista(itens, (p) => curto(p.description) + ' — ' + rs(p.amount) + (p._v ? ' (vencida)' : p.dueDate ? ' (' + DATA(p.dueDate) + ')' : '')));\n}\n// MRR atual\nconst m = dash.data.metrics || {};\nif (m.mrr_oficial && m.mrr_oficial.value != null) {\n  dados.mrr = rs(m.mrr_oficial.value);\n  secoes.push('*MRR atual* — ' + rs(m.mrr_oficial.value) + (m.clientes_ativos && m.clientes_ativos.value != null ? ' · ' + m.clientes_ativos.value + ' clientes ativos' : ''));\n}\n// Renovações pendentes do mês\nconst ren = rot.data.renewals;\nif (ren && ren.pendingCount > 0) {\n  dados.renovacoes = { pendentes: ren.pendingCount, valorEsperado: rs(ren.pendingExpectedValue) };\n  secoes.push('*Renovações do mês* — ' + ren.pendingCount + ' pendente(s) · ' + rs(ren.pendingExpectedValue) + ' esperado');\n}\n// Churn do mês\nif (m.churn_quantidade && m.churn_quantidade.value) {\n  dados.churn = { clientes: m.churn_quantidade.value, valor: m.churn_valor && m.churn_valor.value != null ? rs(m.churn_valor.value) : null };\n  secoes.push('*Churn do mês* — ' + m.churn_quantidade.value + ' cliente(s)' + (dados.churn.valor ? ' · ' + dados.churn.valor : ''));\n}\n// Prioridades: SÓ as ações que a rotina trouxe (nada criado aqui)\nconst acoes = (rot.data.actions || []).filter((a) => !a.done);\nif (acoes.length) {\n  dados.prioridades = acoes.map((a) => a.text);\n  secoes.push('*Prioridades de hoje*\\n' + lista(acoes, (a) => a.text));\n  for (const a of acoes) for (const v of a.text.matchAll(/R\\$\\s?([\\d.]+,\\d{2})/g)) valores.add(v[1]);\n}\n\nconst rodape = [];\nif (falhas.length) rodape.push('Não consegui consultar: ' + falhas.join(', ') + '.');\nif (semAcesso.length) rodape.push('Sem acesso a: ' + semAcesso.join(', ') + '.');\nconst cabecalho = '*Bom dia! Resumo do B2C Finance — ' + DATA(prep.hoje) + '*';\nconst corpo = secoes.length ? secoes.join('\\n\\n') : 'Nada previsto nem pendente registrado para hoje.';\nconst mensagemPadrao = [cabecalho, corpo, rodape.join(' ')].filter(Boolean).join('\\n\\n');\ndados.naoConsultado = falhas;\ndados.semAcesso = semAcesso;\nreturn [{ json: { dados, mensagemPadrao, valoresPermitidos: [...valores], destinatarios: prep.destinatarios } }];"
+      },
+      "name": "Consolidar dados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ],
+      "notes": "Só dados da API; monta a mensagem padrão.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=DADOS (JSON):\n{{ JSON.stringify($json.dados) }}\n\nMENSAGEM PADRÃO (fonte da verdade):\n{{ $json.mensagemPadrao }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "Você recebe os dados do INÍCIO DO DIA do B2C Finance, já consolidados e formatados, e uma MENSAGEM PADRÃO pronta. Reescreva a mensagem para o WhatsApp de forma clara e organizada.\n\nREGRAS (obrigatórias):\n1. Use SOMENTE os dados fornecidos. Não invente números, clientes, datas, causas nem tendências.\n2. Copie os valores em R$ EXATAMENTE como aparecem (ex.: R$ 1.500,00). Não some, não arredonde, não calcule nada novo.\n3. Seções, nesta ordem, SÓ quando houver dado: Recebimentos previstos hoje; Recebido; Vencidos; Despesas vencendo; MRR atual; Renovações do mês; Churn do mês; Prioridades de hoje. Sem dado → omita a seção (não escreva \"nenhum\" nem \"zero\", a menos que o dado diga isso).\n4. NÃO faça recomendações próprias. \"Prioridades\" só pode repetir as ações que vieram nos dados; se não vieram, não crie.\n5. Se algo \"não pôde ser consultado\" ou está \"sem acesso\", diga isso numa linha no fim — nunca trate como zero.\n6. Formato WhatsApp: curto, *negrito* só nos títulos das seções, listas com \"•\", no máximo 5 itens por lista, sem tabelas, sem markdown de links.\n7. Responda APENAS com a mensagem final, em português."
+            }
+          ]
+        }
+      },
+      "name": "IA organiza a mensagem",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1320,
+        300
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Reescreve a mensagem padrão; não cria dados. Falhou → segue a padrão.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0
+        }
+      },
+      "name": "Modelo de IA",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        500
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_OPENAI",
+          "name": "OpenAI"
+        }
+      },
+      "notes": "Temperatura 0: organizar, não criar.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aceita o texto da IA só se TODO valor em R$ que ela citou existir nos\n// dados consolidados. Qualquer valor desconhecido, texto vazio ou erro da IA →\n// usa a MENSAGEM PADRÃO (montada só com dados da API). A IA organiza; não cria.\nconst base = $('Consolidar dados').first().json;\nconst ia = String(($json && ($json.text || $json.output)) || '').trim();\nconst normal = (s) => s.replace(/\\u00a0/g, ' ');\nconst citados = [...normal(ia).matchAll(/R\\$\\s?(-?[\\d.]+,\\d{2})/g)].map((m) => m[1]);\nconst desconhecidos = citados.filter((v) => !base.valoresPermitidos.includes(v));\nlet mensagem = base.mensagemPadrao;\nlet origem = 'padrao';\nlet motivo = 'ia_sem_texto';\nif (ia && desconhecidos.length === 0 && ia.length <= 3900) {\n  mensagem = ia;\n  origem = 'ia';\n  motivo = null;\n} else if (ia && desconhecidos.length) {\n  motivo = 'valores_nao_encontrados_nos_dados: ' + desconhecidos.join(', ');\n} else if (ia) {\n  motivo = 'texto_longo_demais';\n}\nreturn [{ json: { mensagem, origem, motivo, destinatarios: base.destinatarios } }];"
+      },
+      "name": "Validar mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ],
+      "notes": "R$ desconhecido ou falha da IA → mensagem padrão.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Um item por destinatário. WHATSAPP_REPORT_MODE:\n//  · \"text\" (padrão): mensagem livre — a Meta só entrega se o destinatário\n//    falou com o número nas últimas 24 h (janela de atendimento);\n//  · \"template\": modelo APROVADO na Meta (WHATSAPP_REPORT_TEMPLATE, idioma\n//    WHATSAPP_REPORT_TEMPLATE_LANG) com UMA variável {{1}} no corpo — a\n//    Meta não aceita quebra de linha em variável, então o texto vira uma linha.\nconst m = $json;\nconst modo = String($env.WHATSAPP_REPORT_MODE || 'text').toLowerCase();\nreturn m.destinatarios.map((to) => {\n  let payload;\n  if (modo === 'template') {\n    const linha = m.mensagem.replace(/[*_~]/g, '').replace(/\\s*\\n+\\s*/g, ' | ').replace(/\\s{2,}/g, ' ').slice(0, 1000);\n    payload = {\n      messaging_product: 'whatsapp', to, type: 'template',\n      template: {\n        name: $env.WHATSAPP_REPORT_TEMPLATE,\n        language: { code: $env.WHATSAPP_REPORT_TEMPLATE_LANG || 'pt_BR' },\n        components: [{ type: 'body', parameters: [{ type: 'text', text: linha }] }],\n      },\n    };\n  } else {\n    payload = { messaging_product: 'whatsapp', to, type: 'text', text: { preview_url: false, body: m.mensagem } };\n  }\n  return { json: { to, origem: m.origem, payload } };\n});"
+      },
+      "name": "Um envio por destinatário",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        300
+      ],
+      "notes": "Texto ou modelo aprovado (WHATSAPP_REPORT_MODE).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
+      },
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_WHATSAPP_API",
+          "name": "WhatsApp API"
+        }
+      },
+      "notes": "WhatsApp Cloud API (texto ou modelo aprovado).",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Agendamento (manhã)": {
+      "main": [
+        [
+          {
+            "node": "Preparar data e destinatários",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar agora (teste)": {
+      "main": [
+        [
+          {
+            "node": "Preparar data e destinatários",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar data e destinatários": {
+      "main": [
+        [
+          {
+            "node": "API: relatório do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: relatório do dia": {
+      "main": [
+        [
+          {
+            "node": "API: rotina do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: rotina do dia": {
+      "main": [
+        [
+          {
+            "node": "API: indicadores do mês",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: indicadores do mês": {
+      "main": [
+        [
+          {
+            "node": "Consolidar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar dados": {
+      "main": [
+        [
+          {
+            "node": "IA organiza a mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA organiza a mensagem": {
+      "main": [
+        [
+          {
+            "node": "Validar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar mensagem": {
+      "main": [
+        [
+          {
+            "node": "Um envio por destinatário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Um envio por destinatário": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo de IA": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IA organiza a mensagem",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bahia",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "b2c": {
+      "workflow": "daily-morning-report",
+      "version": 1,
+      "apiVersion": "v1",
+      "readOnly": true,
+      "requiredScopes": [
+        "reports.read",
+        "routine.read",
+        "dashboard.read",
+        "receivables.read",
+        "expenses.read",
+        "clients.read",
+        "upsells.read"
+      ],
+      "generatedBy": "integrations/n8n/scripts/build-report-workflows.mjs"
+    }
+  },
+  "tags": []
+}

@@ -2,6 +2,18 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-28 (3)
+
+- `workflows/daily-morning-report.json` e `workflows/daily-evening-report.json`: relatórios por WhatsApp.
+  - O fluxo é: cron (por variável) → API → mensagem padrão só com dados → IA organiza → validação (R$ desconhecido → mensagem padrão) → envio.
+  - Os dois chegam desativados e têm o gatilho "Executar agora (teste)".
+- `ENV.example`: variáveis novas de horário, destinatários, fuso e modo de envio:
+  - `B2C_REPORT_RECIPIENTS`;
+  - `B2C_MORNING_REPORT_CRON` / `B2C_EVENING_REPORT_CRON`;
+  - `B2C_REPORT_TIMEZONE`;
+  - `WHATSAPP_REPORT_MODE` / `_TEMPLATE` / `_TEMPLATE_LANG`.
+- `schemas/agent-tools.json` 1.0.0: a descrição de `gerar_relatorio_diario` cita as seções novas do `/reports/daily`.
+
 ## 2026-09-28 (2)
 
 - `workflows/b2c-finance-ai-agent-readonly.json` **substitui** `agente-whatsapp.consulta.v1.json`. O fluxo completo é:

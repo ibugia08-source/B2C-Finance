@@ -181,6 +181,26 @@ export async function relatorioDiario(date: string, scopes: string[]) {
   } else omitted.push("receivables");
 
   if (pode("expenses.read")) {
+    // PAGAS NO DIA: a despesa não guarda data de pagamento; o fato fica na
+    // trilha (AuditLog: status → "pago", gravado pelo motor ao pagar). Uma
+    // consulta à trilha + uma às despesas, sem N+1.
+    const marcadasPagas = await prisma.auditLog.findMany({
+      where: { entity: "Transaction", field: "status", newValue: "pago", createdAt: instantesDoDia(date) },
+      select: { entityId: true, createdAt: true },
+    });
+    const idsPagas = [...new Set(marcadasPagas.map((a) => a.entityId))];
+    const pagas = idsPagas.length
+      ? await prisma.transaction.findMany({
+          where: { id: { in: idsPagas }, type: "despesa", status: "pago" },
+          orderBy: [{ amount: "desc" }, { id: "asc" }],
+      select: {
+        id: true, description: true, amount: true, date: true, dueDate: true, status: true, expenseType: true,
+        recurrence: true, recurrenceGroupId: true, origin: true, notes: true, createdAt: true,
+        category: { select: { id: true, name: true } }, client: { select: { id: true, name: true } },
+        account: { select: { id: true, name: true } },
+      },
+        })
+      : [];
     const despesas = await prisma.transaction.findMany({
       where: { type: "despesa", status: { not: "cancelado" }, OR: [{ dueDate: diaCivilUtc(date) }, { dueDate: null, date: diaCivilUtc(date) }] },
       orderBy: [{ amount: "desc" }, { id: "asc" }],
@@ -199,27 +219,71 @@ export async function relatorioDiario(date: string, scopes: string[]) {
         paidAmount: r2(itens.filter((x) => x.rawStatus === "pago").reduce((s, x) => s + (x.amount ?? 0), 0)),
         items: itens,
       },
+      paid: {
+        count: pagas.length,
+        amount: r2(pagas.reduce((s, t) => s + Number(t.amount), 0)),
+        items: pagas.map((t) => serializarDespesa(t)),
+      },
     };
   } else omitted.push("expenses");
 
   if (pode("client_status.read") || pode("clients.read")) {
-    const [mudancas, novos] = await Promise.all([
+    const [mudancas, registradas, novos, cadastrados] = await Promise.all([
       prisma.clientStatusHistory.findMany({
         where: { effectiveFrom: new Date(`${date}T00:00:00.000Z`) },
         orderBy: { createdAt: "asc" },
         select: { clientId: true, status: true, reason: true, client: { select: { name: true } } },
+      }),
+      // Alterações REGISTRADAS no dia (qualquer vigência: hoje, programada
+      // ou retroativa) — o que a equipe/integração mudou hoje.
+      prisma.clientStatusHistory.findMany({
+        where: { createdAt: instantesDoDia(date), NOT: { origin: { startsWith: "BACKFILL" } } },
+        orderBy: { createdAt: "asc" },
+        select: { clientId: true, status: true, reason: true, effectiveFrom: true, client: { select: { name: true } } },
       }),
       prisma.client.findMany({
         where: { startedAt: diaCivilUtc(date) },
         orderBy: { name: "asc" },
         select: { id: true, name: true, modality: true },
       }),
+      prisma.client.findMany({
+        where: { createdAt: instantesDoDia(date) },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, modality: true },
+      }),
     ]);
     out.clients = {
       statusChanges: mudancas.map((m) => ({ client: { id: m.clientId, name: m.client.name }, status: statusDoCliente(m.status), reason: m.reason })),
+      statusChangesRecorded: registradas.map((m) => ({
+        client: { id: m.clientId, name: m.client.name },
+        status: statusDoCliente(m.status),
+        effectiveFrom: dia(m.effectiveFrom),
+        reason: m.reason,
+      })),
       newClients: novos,
+      createdClients: cadastrados,
     };
   } else omitted.push("clients");
+
+  if (pode("upsells.read")) {
+    const [criados, vendidos] = await Promise.all([
+      prisma.upsell.findMany({
+        where: { createdAt: instantesDoDia(date) },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, title: true, value: true, status: true, responsible: true, client: { select: { id: true, name: true } } },
+      }),
+      prisma.upsell.findMany({
+        where: { status: "WON", closedAt: instantesDoDia(date) },
+        orderBy: { closedAt: "asc" },
+        select: { id: true, title: true, value: true, status: true, responsible: true, client: { select: { id: true, name: true } } },
+      }),
+    ]);
+    const plano = (u: (typeof criados)[number]) => ({ ...u, value: dinheiro(u.value) });
+    out.upsells = {
+      created: { count: criados.length, value: r2(criados.reduce((s, u) => s + Number(u.value), 0)), items: criados.map(plano) },
+      won: { count: vendidos.length, value: r2(vendidos.reduce((s, u) => s + Number(u.value), 0)), items: vendidos.map(plano) },
+    };
+  } else omitted.push("upsells");
 
   return { data: out, omitted };
 }

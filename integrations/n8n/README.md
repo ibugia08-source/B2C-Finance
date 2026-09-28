@@ -11,6 +11,8 @@ integrations/n8n/
 ├── CHANGELOG.md
 ├── workflows/
 │   ├── b2c-finance-ai-agent-readonly.json WhatsApp → usuário/perfil → AI Agent (11 ferramentas GET) → WhatsApp
+│   ├── daily-morning-report.json          relatório da manhã por WhatsApp (cron)
+│   ├── daily-evening-report.json          relatório da noite por WhatsApp (cron)
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
 ├── schemas/
 │   ├── agent-tools.json              catálogo das ferramentas do agente (fonte de verdade)
@@ -21,7 +23,8 @@ integrations/n8n/
 │   ├── tool-calls.md                 conversa de exemplo, chamadas e respostas
 │   └── whatsapp-webhook-payload.json payload de exemplo da Meta
 └── scripts/
-    ├── build-workflows.mjs           gera os workflows a partir do catálogo e do prompt
+    ├── build-workflows.mjs           gera o agente e o teste de conexão (catálogo + prompt)
+    ├── build-report-workflows.mjs    gera os relatórios da manhã e da noite
     ├── check-secrets.mjs             barra segredo versionado (roda no CI)
     ├── validate-with-n8n.cjs         confere os nós contra uma instalação real do n8n
     ├── import.sh / export.sh         CLI do n8n (exportação normalizada)
@@ -57,6 +60,8 @@ integrations/n8n/
 >
 > Se uma versão diferente do n8n acusar algum parâmetro, recrie o nó da ferramenta a partir de [`schemas/agent-tools.json`](./schemas/agent-tools.json).
 
+> **Relatórios diários (manhã e noite) por WhatsApp:** configuração, horário, fuso e envio por modelo aprovado estão em [`docs/N8N_DAILY_REPORTS.md`](../../docs/N8N_DAILY_REPORTS.md).
+>
 > **Guia completo do agente somente leitura** (fluxo nó a nó, regras do prompt, perfis, testes executados num n8n real): [`docs/N8N_READONLY_AGENT.md`](../../docs/N8N_READONLY_AGENT.md).
 
 ## 1. Como importar o workflow

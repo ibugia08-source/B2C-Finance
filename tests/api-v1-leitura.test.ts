@@ -262,6 +262,16 @@ describe("busca", () => {
     expect(semAcento.body.data.map((x: any) => x.id)).toContain(ids.face);
   });
 
+  it("serializadores de data aceitam o texto que o cache devolve (ownerCached)", async () => {
+    const { instante } = await import("@/lib/api/http");
+    const { dia } = await import("@/lib/api/v1/common");
+    const d = new Date("2026-09-10T00:00:00.000Z");
+    expect(instante(d.toISOString() as any)).toBe(d.toISOString());
+    expect(dia(d.toISOString() as any)).toBe(dia(d));
+    expect(instante("lixo" as any)).toBeNull();
+    expect(dia(null)).toBeNull();
+  });
+
   it("pontuação e máscara", () => {
     const c = { id: "1", name: "Face Love Estética", legalName: "Face Love Clínica Ltda", document: "12345678000190", modality: "MRR" };
     expect(pontuar(c, "face love estética")).toBe(100);
@@ -365,8 +375,31 @@ describe("painéis e relatórios", () => {
     expect(r.body.data.receivables.dueToday.items.map((x: any) => x.id)).toEqual(expect.arrayContaining([ids.b1, ids.b2]));
     const soRel = await chave(A, ["reports.read"]);
     const parcial = await chamar(reportsDaily, `/reports/daily?date=${COMP}-01`, soRel);
-    expect(parcial.body.meta.omittedSections).toEqual(["receivables", "expenses", "clients"]);
+    expect(parcial.body.meta.omittedSections).toEqual(["receivables", "expenses", "clients", "upsells"]);
     expect(parcial.body.data.receivables).toBeUndefined();
+  });
+
+  it("relatório diário de HOJE: despesa paga no dia (trilha), clientes cadastrados, status registrados e upsells criados", async () => {
+    const { setExpenseStatus } = await import("@/lib/engines/expense-engine");
+    const hojeDesp = await asOwner(A, async () =>
+      await prisma.transaction.create({
+        data: { type: "despesa", description: `Paga hoje ${TAG}`, amount: 77, date: new Date(`${COMP}-02T12:00:00Z`), dueDate: new Date(`${COMP}-02T00:00:00Z`), status: "pendente", belongsTo: "empresa" },
+      })
+    );
+    const r1 = await asOwner(A, async () => await setExpenseStatus(hojeDesp.id, "pago"));
+    expect(r1.ok).toBe(true);
+    const r = await chamar(reportsDaily, `/reports/daily?date=${HOJE}`);
+    expect(r.status).toBe(200);
+    const d = r.body.data;
+    expect(d.expenses.paid.items.map((x: any) => x.id)).toContain(hojeDesp.id);
+    expect(d.expenses.paid.amount).toBeGreaterThanOrEqual(77);
+    expect(d.clients.createdClients.map((c: any) => c.id)).toEqual(expect.arrayContaining([ids.face, ids.outro, ids.inativo]));
+    expect(d.clients.statusChangesRecorded.some((m: any) => m.client.id === ids.inativo && m.status.code === "INACTIVE")).toBe(true);
+    expect(d.upsells.created.items.map((u: any) => u.id)).toContain(ids.up);
+    // O dia de ontem não vê nada disso.
+    const ontem = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+    const r0 = await chamar(reportsDaily, `/reports/daily?date=${ontem}`);
+    expect(r0.body.data.expenses.paid.items.map((x: any) => x.id)).not.toContain(hojeDesp.id);
   });
 
   it("relatório mensal: fechamento, carteira pela competência e recebimentos", async () => {

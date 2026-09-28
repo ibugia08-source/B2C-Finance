@@ -80,8 +80,10 @@ describe("workflows versionados", () => {
   const AGENTE = "workflows/b2c-finance-ai-agent-readonly.json";
   const N_AGENTE = "AI Agent B2C Finance (somente leitura)";
 
-  it("existem o agente somente leitura e o teste de conexão", () => {
-    expect(arquivos.sort()).toEqual(["b2c-finance-ai-agent-readonly.json", "sistema.teste-conexao.v1.json"]);
+  it("existem o agente, os dois relatórios diários e o teste de conexão", () => {
+    expect(arquivos.sort()).toEqual([
+      "b2c-finance-ai-agent-readonly.json", "daily-evening-report.json", "daily-morning-report.json", "sistema.teste-conexao.v1.json",
+    ]);
   });
 
   it("estrutura íntegra: nomes únicos, conexões para nós que existem, desativados, sem id", () => {
@@ -216,5 +218,142 @@ describe("sem segredo versionado", () => {
       expect(env).toMatch(new RegExp(`^${v}=`, "m"));
     }
     expect(env).toMatch(/^B2C_FINANCE_API_TOKEN=b2c_live_XXXXXXXX_COLE/m);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Relatórios diários (manhã e noite)
+// ---------------------------------------------------------------------------
+
+/** Executa o JS de um nó Code como o n8n faria, com $, $env e $json de teste. */
+async function rodarCode(js: string, ctx: { nos?: Record<string, any>; env?: Record<string, string>; json?: any }) {
+  const $ = (nome: string) => ({ first: () => ({ json: ctx.nos?.[nome] }) });
+  const fn = new Function("$", "$env", "$json", `return (async () => { ${js} })();`);
+  return fn($, ctx.env ?? {}, ctx.json ?? {});
+}
+
+describe("relatórios diários", () => {
+  const RELATORIOS = {
+    manha: { arquivo: "workflows/daily-morning-report.json", cron: "B2C_MORNING_REPORT_CRON", gets: ["/reports/daily", "/routine/daily", "/dashboard/summary"] },
+    noite: { arquivo: "workflows/daily-evening-report.json", cron: "B2C_EVENING_REPORT_CRON", gets: ["/reports/daily", "/routine/daily"] },
+  };
+
+  for (const [nome, r] of Object.entries(RELATORIOS)) {
+    it(`${nome}: cron por variável, fuso documentado, só GET na API, desativado, com notas`, () => {
+      const wf = ler(r.arquivo);
+      expect(wf.active).toBe(false);
+      expect(wf.settings.timezone).toBe("America/Bahia");
+      const cron = wf.nodes.find((n: any) => n.type === "n8n-nodes-base.scheduleTrigger");
+      expect(cron.parameters.rule.interval[0].field).toBe("cronExpression");
+      expect(cron.parameters.rule.interval[0].expression).toMatch(new RegExp(`\\$env\\.${r.cron} \\|\\| '`));
+      expect(wf.nodes.some((n: any) => n.type === "n8n-nodes-base.manualTrigger")).toBe(true);
+      const http = wf.nodes.filter((n: any) => n.type === "n8n-nodes-base.httpRequest");
+      const api = http.filter((n: any) => String(n.parameters.url).includes("B2C_FINANCE_API_URL"));
+      expect(api.map((n: any) => String(n.parameters.url).replace(/^=\{\{ \$env\.B2C_FINANCE_API_URL \}\}/, "").split("?")[0])).toEqual(r.gets);
+      for (const n of api) {
+        expect(n.parameters.method ?? "GET").toBe("GET");
+        expect(n.credentials.httpHeaderAuth.name).toBe("B2C Finance API");
+        expect(n.onError).toBe("continueRegularOutput"); // falha vira "não consegui consultar", não zero
+      }
+      for (const n of http.filter((x: any) => !api.includes(x))) expect(String(n.parameters.url)).toContain("WHATSAPP_API_URL");
+      const tipos = new Set(wf.nodes.map((n: any) => n.type));
+      for (const t of tipos) expect(String(t)).not.toMatch(/postgres|supabase|mysql|redis|mongo/i);
+      expect(wf.nodes.filter((n: any) => n.type === "n8n-nodes-base.stickyNote").length).toBeGreaterThanOrEqual(3);
+      // Toda a cadeia até o envio está ligada.
+      expect(wf.connections["Validar mensagem"].main[0][0].node).toBe("Um envio por destinatário");
+      expect(wf.connections["Um envio por destinatário"].main[0][0].node).toBe("Enviar WhatsApp");
+    });
+  }
+
+  const js = (arquivo: string, no: string) => ler(arquivo).nodes.find((n: any) => n.name === no).parameters.jsCode as string;
+  const ok = (data: any, omitted: string[] = []) => ({ success: true, data, meta: { omittedSections: omitted } });
+
+  it("manhã: mensagem padrão só com o que veio; seção sem dado some; falha vira 'não consegui consultar'", async () => {
+    const out = await rodarCode(js(RELATORIOS.manha.arquivo, "Consolidar dados"), {
+      nos: {
+        "Preparar data e destinatários": { hoje: "2026-09-28", competencia: "2026-09", destinatarios: ["5571999990000"] },
+        "API: relatório do dia": ok({ receivables: { dueToday: { openAmount: 1500, items: [{ openAmount: 1500, client: { name: "Face Love" } }] }, received: { count: 0, amount: 0, items: [] } } }, ["expenses"]),
+        "API: rotina do dia": { success: false, error: { code: "internal_error" } },
+        "API: indicadores do mês": ok({ metrics: { mrr_oficial: { value: 45200 }, clientes_ativos: { value: 38 }, churn_quantidade: { value: 0 } } }),
+      },
+    });
+    const m = out[0].json.mensagemPadrao as string;
+    expect(m).toContain("*Recebimentos previstos hoje* — 1 · R$ 1.500,00");
+    expect(m).toContain("• Face Love — R$ 1.500,00");
+    expect(m).toContain("*MRR atual* — R$ 45.200,00 · 38 clientes ativos");
+    expect(m).not.toContain("Churn"); // zero churn: seção some
+    expect(m).not.toContain("Prioridades"); // rotina falhou: nenhuma prioridade inventada
+    expect(m).not.toContain("Vencidos");
+    expect(m).toContain("Não consegui consultar: rotina.");
+    expect(m).toContain("Sem acesso a: expenses.");
+    expect(out[0].json.valoresPermitidos).toEqual(expect.arrayContaining(["1.500,00", "45.200,00"]));
+  });
+
+  it("validação: R$ que a IA inventou → mensagem padrão; texto fiel → usa a IA; IA falhou → padrão", async () => {
+    const base = { mensagemPadrao: "*Resumo*\nMRR R$ 45.200,00", valoresPermitidos: ["45.200,00"], destinatarios: ["5571999990000"] };
+    const validar = js(RELATORIOS.manha.arquivo, "Validar mensagem");
+    const nos = { "Consolidar dados": base };
+    const inventou = await rodarCode(validar, { nos, json: { text: "MRR R$ 45.200,00. Sugiro cortar R$ 9.999,00." } });
+    expect(inventou[0].json).toMatchObject({ origem: "padrao", mensagem: base.mensagemPadrao });
+    expect(inventou[0].json.motivo).toContain("9.999,00");
+    const fiel = await rodarCode(validar, { nos, json: { text: "Resumo: MRR de R$ 45.200,00." } });
+    expect(fiel[0].json).toMatchObject({ origem: "ia", mensagem: "Resumo: MRR de R$ 45.200,00." });
+    const falhou = await rodarCode(validar, { nos, json: { error: "timeout" } });
+    expect(falhou[0].json.origem).toBe("padrao");
+  });
+
+  it("noite: ações executadas, recebimentos, despesas pagas, cadastros, status (sem o inicial), upsells e pendências", async () => {
+    const out = await rodarCode(js(RELATORIOS.noite.arquivo, "Consolidar dados"), {
+      nos: {
+        "Preparar data e destinatários": { hoje: "2026-09-28", competencia: "2026-09", destinatarios: ["5571999990000"] },
+        "API: dados do dia": ok({
+          receivables: { dueToday: { openAmount: 0 }, received: { count: 1, amount: 1500, items: [{ amount: 1500, client: { name: "Face Love" } }] } },
+          expenses: { paid: { count: 1, amount: 300, items: [{ description: "CRM", amount: 300 }] } },
+          clients: {
+            createdClients: [{ id: "c1", name: "Alpha Estética", modality: "MRR" }],
+            statusChangesRecorded: [
+              { client: { id: "c1", name: "Alpha Estética" }, status: { label: "Ativo" }, effectiveFrom: "2026-09-28" },
+              { client: { id: "c2", name: "Beta" }, status: { label: "Inativo" }, effectiveFrom: "2026-10-01" },
+            ],
+          },
+          upsells: { created: { count: 1, value: 900, items: [{ client: { name: "Face Love" }, title: "Tráfego", value: 900 }] }, won: { count: 0, value: 0, items: [] } },
+        }),
+        "API: rotina do dia": ok({
+          actions: [{ text: "Cobrar Face Love — R$ 1.500,00", done: true }, { text: "Resolver 2 pagamento(s) vencido(s) — R$ 800,00", done: false }],
+          collections: { overdue: [], overdueTotal: 0 },
+          payments: { overdueTotal: 800 },
+        }),
+      },
+    });
+    const m = out[0].json.mensagemPadrao as string;
+    for (const trecho of [
+      "*Ações executadas* — 1", "• Cobrar Face Love — R$ 1.500,00",
+      "*Recebimentos* — 1 · R$ 1.500,00", "*Despesas pagas* — 1 · R$ 300,00",
+      "*Clientes cadastrados* — 1", "• Alpha Estética (MRR)",
+      "*Status alterados* — 1", "• Beta → Inativo a partir de 01/10/2026",
+      "*Upsells* — 1 criado(s) · R$ 900,00", "*Pendências*", "• Pagamentos vencidos: R$ 800,00",
+    ]) expect(m, trecho).toContain(trecho);
+    expect(m).not.toContain("Alpha Estética → Ativo"); // status inicial do cadastro não é "alteração"
+    expect(m).not.toContain("Não consegui consultar");
+    expect(out[0].json.valoresPermitidos).toEqual(expect.arrayContaining(["1.500,00", "300,00", "900,00", "800,00"]));
+  });
+
+  it("envio: texto na janela de 24 h ou modelo aprovado (uma linha, sem formatação)", async () => {
+    const envio = js(RELATORIOS.noite.arquivo, "Um envio por destinatário");
+    const json = { mensagem: "*Fechamento*\n\n• A — R$ 1,00", origem: "ia", destinatarios: ["5571999990000", "5571988880000"] };
+    const texto = await rodarCode(envio, { json, env: {} });
+    expect(texto).toHaveLength(2);
+    expect(texto[0].json.payload).toMatchObject({ type: "text", to: "5571999990000", text: { body: json.mensagem } });
+    const modelo = await rodarCode(envio, { json, env: { WHATSAPP_REPORT_MODE: "template", WHATSAPP_REPORT_TEMPLATE: "relatorio_diario" } });
+    const p = modelo[1].json.payload;
+    expect(p).toMatchObject({ type: "template", to: "5571988880000", template: { name: "relatorio_diario", language: { code: "pt_BR" } } });
+    expect(p.template.components[0].parameters[0].text).toBe("Fechamento | • A — R$ 1,00");
+  });
+
+  it("sem destinatário configurado, o relatório falha com mensagem clara (não envia para ninguém)", async () => {
+    await expect(rodarCode(js(RELATORIOS.manha.arquivo, "Preparar data e destinatários"), { env: {} })).rejects.toThrow(/B2C_REPORT_RECIPIENTS/);
+    const ok2 = await rodarCode(js(RELATORIOS.manha.arquivo, "Preparar data e destinatários"), { env: { B2C_REPORT_RECIPIENTS: "+55 71 99999-0000, 5571988880000" } });
+    expect(ok2[0].json.destinatarios).toEqual(["5571999990000", "5571988880000"]);
+    expect(ok2[0].json.hoje).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

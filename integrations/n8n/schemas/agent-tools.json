@@ -150,7 +150,7 @@
     },
     {
       "name": "gerar_relatorio_diario",
-      "description": "Resumo de um dia: cobranças que vencem, pagamentos recebidos, despesas do dia, mudanças de status e clientes novos. Seções sem permissão vêm listadas em meta.omittedSections — diga que não tem acesso, nunca que é zero.",
+      "description": "Resumo de um dia: cobranças que vencem e pagamentos recebidos; despesas do dia e despesas pagas no dia; mudanças de status (com vigência no dia e registradas no dia); clientes com entrada e cadastrados no dia; upsells criados e vendidos no dia. Seções sem permissão vêm listadas em meta.omittedSections — diga que não tem acesso, nunca que é zero.",
       "scope": "reports.read",
       "http": { "method": "GET", "path": "/reports/daily", "query": ["date"] },
       "inputSchema": {

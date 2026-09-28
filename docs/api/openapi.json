@@ -2259,7 +2259,7 @@
           "Relatórios"
         ],
         "summary": "Relatório do dia",
-        "description": "Seções sem o scope da área saem de `data` e entram em `meta.omittedSections`.\n\n**Scope obrigatório:** `reports.read`.",
+        "description": "O que venceu, entrou e mudou no dia (fuso America/Bahia): cobranças do dia e pagamentos recebidos; despesas do dia e despesas pagas no dia; status com vigência no dia e registrados no dia; clientes com entrada e cadastrados no dia; upsells criados e vendidos no dia. Seções sem o scope da área saem de `data` e entram em `meta.omittedSections`.\n\n**Scope obrigatório:** `reports.read`.",
         "security": [
           {
             "bearerAuth": [
@@ -5065,10 +5065,35 @@
                   "paidAmount",
                   "items"
                 ]
+              },
+              "paid": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Expense"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "amount",
+                  "items"
+                ],
+                "description": "Despesas MARCADAS COMO PAGAS no dia (pela trilha de auditoria: status → pago)."
               }
             },
             "required": [
-              "dueToday"
+              "dueToday",
+              "paid"
             ]
           },
           "clients": {
@@ -5097,7 +5122,40 @@
                     "status",
                     "reason"
                   ]
-                }
+                },
+                "description": "Status com vigência começando no dia."
+              },
+              "statusChangesRecorded": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "$ref": "#/components/schemas/Ref"
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/ClientStatus"
+                    },
+                    "effectiveFrom": {
+                      "type": "string",
+                      "description": "Data de calendário (AAAA-MM-DD).",
+                      "format": "date"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "client",
+                    "status",
+                    "effectiveFrom",
+                    "reason"
+                  ]
+                },
+                "description": "Alterações de status REGISTRADAS no dia (qualquer vigência)."
               },
               "newClients": {
                 "type": "array",
@@ -5122,12 +5180,96 @@
                     "name",
                     "modality"
                   ]
-                }
+                },
+                "description": "Entrada (startedAt) no dia."
+              },
+              "createdClients": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "modality": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "modality"
+                  ]
+                },
+                "description": "Cadastrados no sistema no dia."
               }
             },
             "required": [
               "statusChanges",
-              "newClients"
+              "statusChangesRecorded",
+              "newClients",
+              "createdClients"
+            ]
+          },
+          "upsells": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "value",
+                  "items"
+                ]
+              },
+              "won": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "value",
+                  "items"
+                ]
+              }
+            },
+            "required": [
+              "created",
+              "won"
             ]
           }
         },

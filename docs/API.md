@@ -231,7 +231,9 @@ Os relatórios exigem `reports.read`. **Cada seção** depende também do scope 
   |---|---|---|
   | `receivables` | Cobranças que vencem no dia e pagamentos confirmados no dia | `receivables.read` |
   | `expenses` | Despesas que vencem no dia (ou lançadas no dia, quando não têm vencimento) | `expenses.read` |
-  | `clients` | Mudanças de status com vigência no dia e clientes que entraram no dia | `clients.read` ou `client_status.read` |
+  | `expenses.paid` | Despesas **marcadas como pagas** no dia (pela trilha de auditoria, porque a despesa não guarda data de pagamento) | `expenses.read` |
+  | `clients` | Mudanças de status com vigência no dia (`statusChanges`) e **registradas** no dia (`statusChangesRecorded`); clientes com entrada no dia (`newClients`) e **cadastrados** no dia (`createdClients`) | `clients.read` ou `client_status.read` |
+  | `upsells` | Oportunidades **criadas** e **vendidas** no dia | `upsells.read` |
 
 - **Mensal** (padrão: a competência atual):
 

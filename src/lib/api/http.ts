@@ -379,6 +379,13 @@ export function dinheiro(v: unknown): number | null {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
-export function instante(d: Date | null | undefined): string | null {
-  return d ? d.toISOString() : null;
+/**
+ * Instante → ISO. Aceita também TEXTO: resultados de `ownerCached` voltam
+ * serializados em cache hit (Date vira string) — sem isto, a 2ª chamada de
+ * uma rota que lê dado em cache (ex.: /routine/daily) quebrava com 500.
+ */
+export function instante(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const x = d instanceof Date ? d : new Date(d);
+  return Number.isNaN(x.getTime()) ? null : x.toISOString();
 }

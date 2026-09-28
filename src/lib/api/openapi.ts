@@ -287,10 +287,25 @@ const SCHEMAS: Record<string, Obj> = {
         dueToday: obj({ count: int(), amount: dinheiro(), openAmount: dinheiro(), items: arr(ref("Receivable")) }),
         received: obj({ count: int(), amount: dinheiro(), items: arr({ type: "object" }) }),
       }),
-      expenses: obj({ dueToday: obj({ count: int(), amount: dinheiro(), paidAmount: dinheiro(), items: arr(ref("Expense")) }) }),
+      expenses: obj({
+        dueToday: obj({ count: int(), amount: dinheiro(), paidAmount: dinheiro(), items: arr(ref("Expense")) }),
+        paid: {
+          ...obj({ count: int(), amount: dinheiro(), items: arr(ref("Expense")) }),
+          description: "Despesas MARCADAS COMO PAGAS no dia (pela trilha de auditoria: status → pago).",
+        },
+      }),
       clients: obj({
-        statusChanges: arr(obj({ client: ref("Ref"), status: ref("ClientStatus"), reason: nulo(str()) })),
-        newClients: arr(obj({ id: str(), name: str(), modality: nulo(str()) })),
+        statusChanges: { ...arr(obj({ client: ref("Ref"), status: ref("ClientStatus"), reason: nulo(str()) })), description: "Status com vigência começando no dia." },
+        statusChangesRecorded: {
+          ...arr(obj({ client: ref("Ref"), status: ref("ClientStatus"), effectiveFrom: data(), reason: nulo(str()) })),
+          description: "Alterações de status REGISTRADAS no dia (qualquer vigência).",
+        },
+        newClients: { ...arr(obj({ id: str(), name: str(), modality: nulo(str()) })), description: "Entrada (startedAt) no dia." },
+        createdClients: { ...arr(obj({ id: str(), name: str(), modality: nulo(str()) })), description: "Cadastrados no sistema no dia." },
+      }),
+      upsells: obj({
+        created: obj({ count: int(), value: dinheiro(), items: arr({ type: "object" }) }),
+        won: obj({ count: int(), value: dinheiro(), items: arr({ type: "object" }) }),
       }),
     },
     ["date"]
@@ -799,7 +814,8 @@ const PATHS: Record<string, Obj> = {
   }),
   "/reports/daily": op({
     id: "getDailyReport", tag: "Relatórios", summary: "Relatório do dia", scope: "reports.read",
-    description: "Seções sem o scope da área saem de `data` e entram em `meta.omittedSections`.",
+    description:
+      "O que venceu, entrou e mudou no dia (fuso America/Bahia): cobranças do dia e pagamentos recebidos; despesas do dia e despesas pagas no dia; status com vigência no dia e registrados no dia; clientes com entrada e cadastrados no dia; upsells criados e vendidos no dia. Seções sem o scope da área saem de `data` e entram em `meta.omittedSections`.",
     params: [q("date", data(), "Dia (padrão: hoje, fuso America/Bahia).", "2026-09-28")],
     ok: sucesso(ref("DailyReport"), { metaExtra: obj({ omittedSections: arr(str()) }) }),
   }),
