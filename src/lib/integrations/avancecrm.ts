@@ -249,8 +249,10 @@ async function processarComDono(
       nota: "A conta não tem dono definido — o evento fica guardado até ter.",
     };
   }
-  const { runWithOwner } = await import("@/lib/auth/owner-scope");
-  return runWithOwner(ws.ownerId, () => processar(envelope));
+  // Sem pessoa por trás: o webhook age como SISTEMA (guardas e auditoria
+  // sabem disso; sem principal, a guarda de permissão agora nega).
+  const { runWithPrincipal, systemPrincipal } = await import("@/lib/auth/owner-scope");
+  return runWithPrincipal(ws.ownerId, systemPrincipal("webhook-avancecrm", "API"), () => processar(envelope));
 }
 
 async function processar(

@@ -34,7 +34,12 @@ function autorizado(req: Request): boolean {
 export async function GET(req: Request) {
   if (!autorizado(req)) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   try {
-    const r = await materializarStatusProgramados();
+    // O job age como SISTEMA: a auditoria dos efeitos (perda, relação,
+    // cobranças) sai com origem JOB, não como "UI" sem autor.
+    const { runWithPrincipal, systemPrincipal } = await import("@/lib/auth/owner-scope");
+    const r = await materializarStatusProgramados(undefined, undefined, (ownerId, fn) =>
+      ownerId ? runWithPrincipal(ownerId, systemPrincipal("cron-status-programado"), fn) : fn()
+    );
     if (r.atualizados > 0) {
       const { revalidateClientStatus } = await import("@/lib/revalidate");
       revalidateClientStatus();

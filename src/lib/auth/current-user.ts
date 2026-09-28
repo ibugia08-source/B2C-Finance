@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE, verifySessionToken } from "./session";
+import { getPrincipal } from "./owner-scope";
 import type { PermissionOverride } from "@/lib/permissions";
 
 export type CurrentUser = {
@@ -17,6 +18,18 @@ export type CurrentUser = {
 };
 
 /**
+ * Usuário que está agindo. Com PRINCIPAL declarado (runWithPrincipal — API,
+ * webhook, cron), vale ele: usuário → o próprio; sistema → null (não há
+ * pessoa). Sem principal, lê a sessão do cookie, como sempre.
+ */
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const principal = getPrincipal();
+  if (principal?.kind === "user") return principal.user;
+  if (principal?.kind === "system") return null;
+  return getSessionUser();
+}
+
+/**
  * Lê a sessão do cookie e devolve o usuário ativo correspondente.
  * Retorna null quando não há sessão válida ou o usuário foi desativado.
  *
@@ -24,7 +37,7 @@ export type CurrentUser = {
  * mesma renderização compartilham 1 única consulta ao banco (o include de
  * permissions vem junto, sem query extra).
  */
-export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+const getSessionUser = cache(async (): Promise<CurrentUser | null> => {
   const token = cookies().get(SESSION_COOKIE)?.value;
   const payload = verifySessionToken(token);
   if (!payload) return null;

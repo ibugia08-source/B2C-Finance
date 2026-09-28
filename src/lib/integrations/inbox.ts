@@ -113,7 +113,7 @@ export async function receberNaCaixa(opts: {
   }
 
   try {
-    const r = await processarComDono(workspaceId, envelope, opts.processar);
+    const r = await processarComDono(workspaceId, envelope, opts.processar, opts.fonte);
     await runWithoutScope(async () =>
       prisma.webhookInbox.update({
         where: { id: inbox.id },
@@ -143,7 +143,8 @@ export async function receberNaCaixa(opts: {
 async function processarComDono(
   workspaceId: string,
   envelope: EnvelopeGenerico,
-  processar: (envelope: EnvelopeGenerico) => Promise<Desfecho>
+  processar: (envelope: EnvelopeGenerico) => Promise<Desfecho>,
+  fonte: string
 ): Promise<Desfecho> {
   const ws = await runWithoutScope(async () =>
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } })
@@ -151,6 +152,8 @@ async function processarComDono(
   if (!ws?.ownerId) {
     return { situacao: "IGNORADO", nota: "A conta não tem dono definido — o evento fica guardado até ter." };
   }
-  const { runWithOwner } = await import("@/lib/auth/owner-scope");
-  return runWithOwner(ws.ownerId, () => processar(envelope));
+  // Sem pessoa por trás: o webhook age como SISTEMA (guardas e auditoria
+  // sabem disso; sem principal, a guarda de permissão agora nega).
+  const { runWithPrincipal, systemPrincipal } = await import("@/lib/auth/owner-scope");
+  return runWithPrincipal(ws.ownerId, systemPrincipal(`webhook-${fonte}`, "API"), () => processar(envelope));
 }

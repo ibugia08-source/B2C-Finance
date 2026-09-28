@@ -1,7 +1,9 @@
 "use server";
 import { z } from "zod";
 import { ClientStatus } from "@prisma/client";
-import { can, tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
+import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
+import { domainContextFor } from "@/lib/auth/domain-session";
+import { type DomainContext, domainActor, inDomain, statusCapabilities } from "@/lib/engines/domain";
 import { revalidateClientStatus } from "@/lib/revalidate";
 import type { ActionResult } from "./clients";
 import {
@@ -19,16 +21,19 @@ import { isDateKey } from "@/lib/competence";
  * permissão (RBAC existente) e o formato da resposta.
  */
 
-async function capacidades(): Promise<{ viewer: Awaited<ReturnType<typeof tryPermission>>; caps: StatusCapabilities }> {
+/**
+ * Sessão → contexto de domínio (o mesmo formato que a API vai montar pela
+ * chave). Permissões = RBAC existente, lidas do principal.
+ */
+async function capacidades(): Promise<{
+  viewer: Awaited<ReturnType<typeof tryPermission>>;
+  ctx: DomainContext | null;
+  caps: StatusCapabilities;
+}> {
   const viewer = await tryPermission("clientes.alterar_status");
-  return {
-    viewer,
-    caps: {
-      alterar: !!viewer,
-      programar: !!viewer && can(viewer, "clientes.programar_status"),
-      retroativo: !!viewer && can(viewer, "clientes.alterar_status_retroativo"),
-    },
-  };
+  if (!viewer) return { viewer, ctx: null, caps: { alterar: false, programar: false, retroativo: false } };
+  const ctx = await domainContextFor(viewer);
+  return { viewer, ctx, caps: statusCapabilities(ctx) };
 }
 
 const ChangeSchema = z.object({
@@ -52,21 +57,21 @@ export async function changeClientStatusAction(input: {
   reason?: string | null;
   renewalCompetence?: string | null;
 }): Promise<ActionResult & { programada?: boolean; aviso?: string }> {
-  const { viewer, caps } = await capacidades();
-  if (!viewer) return NO_PERMISSION;
+  const { viewer, ctx, caps } = await capacidades();
+  if (!viewer || !ctx) return NO_PERMISSION;
   try {
     const p = ChangeSchema.parse(input);
-    const r = await changeClientStatus(
+    const r = await inDomain(ctx, () => changeClientStatus(
       {
         clientId: p.clientId,
         status: p.status,
         effectiveFrom: p.effectiveFrom,
         reason: p.reason ?? null,
         renewalCompetence: p.renewalCompetence ?? null,
-        actor: { id: viewer.id, email: viewer.email },
+        actor: domainActor(ctx),
       },
       caps
-    );
+    ));
     revalidateClientStatus(p.clientId);
     return { ok: true, programada: r.programada, ...(r.aviso ? { aviso: r.aviso } : {}) };
   } catch (e: any) {
@@ -80,19 +85,19 @@ export async function cancelScheduledStatusChangeAction(input: {
   effectiveFrom: string;
   reason?: string | null;
 }): Promise<ActionResult> {
-  const { viewer, caps } = await capacidades();
-  if (!viewer) return NO_PERMISSION;
+  const { viewer, ctx, caps } = await capacidades();
+  if (!viewer || !ctx) return NO_PERMISSION;
   try {
     if (!isDateKey(input.effectiveFrom)) return { ok: false, error: "Data inválida." };
-    await cancelScheduledStatusChange(
+    await inDomain(ctx, () => cancelScheduledStatusChange(
       {
         clientId: input.clientId,
         effectiveFrom: input.effectiveFrom,
         reason: input.reason ?? null,
-        actor: { id: viewer.id, email: viewer.email },
+        actor: domainActor(ctx),
       },
       caps
-    );
+    ));
     revalidateClientStatus(input.clientId);
     return { ok: true };
   } catch (e: any) {
@@ -111,8 +116,8 @@ export async function bulkChangeClientStatusAction(input: {
   effectiveFrom: string;
   reason?: string | null;
 }): Promise<ActionResult & { alterados?: number; falhas?: { id: string; error: string }[] }> {
-  const { viewer, caps } = await capacidades();
-  if (!viewer) return NO_PERMISSION;
+  const { viewer, ctx, caps } = await capacidades();
+  if (!viewer || !ctx) return NO_PERMISSION;
   try {
     const ids = z.array(z.string().min(1)).min(1, "Selecione ao menos um cliente.").max(500).parse(input.ids);
     const status = z.nativeEnum(ClientStatus).parse(input.status);
@@ -121,16 +126,16 @@ export async function bulkChangeClientStatusAction(input: {
     const falhas: { id: string; error: string }[] = [];
     for (const id of Array.from(new Set(ids))) {
       try {
-        await changeClientStatus(
+        await inDomain(ctx, () => changeClientStatus(
           {
             clientId: id,
             status,
             effectiveFrom: input.effectiveFrom,
             reason: input.reason ?? null,
-            actor: { id: viewer.id, email: viewer.email },
+            actor: domainActor(ctx),
           },
           caps
-        );
+        ));
         alterados++;
       } catch (e: any) {
         falhas.push({ id, error: e?.message ?? "Falha." });
@@ -153,12 +158,12 @@ export async function bulkChangeClientStatusAction(input: {
  * começaram a valer (só as do dono logado). Idempotente.
  */
 export async function applyDueScheduledStatusAction(): Promise<ActionResult & { atualizados?: number }> {
-  const { viewer } = await capacidades();
-  if (!viewer) return NO_PERMISSION;
+  const { viewer, ctx } = await capacidades();
+  if (!viewer || !ctx) return NO_PERMISSION;
   try {
-    const { resolveOwnerId } = await import("@/lib/auth/owner-scope");
-    const ownerId = await resolveOwnerId();
-    const r = await materializarStatusProgramados(undefined, ownerId ?? null);
+    const r = await materializarStatusProgramados(undefined, ctx.ownerId, (o, fn) =>
+      o ? inDomain({ ...ctx, ownerId: o }, fn) : fn()
+    );
     revalidateClientStatus();
     if (r.falhas.length) return { ok: false, error: r.falhas[0].erro };
     return { ok: true, atualizados: r.atualizados };

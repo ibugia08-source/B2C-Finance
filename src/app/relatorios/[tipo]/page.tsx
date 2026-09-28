@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getReport, canViewReport } from "@/lib/reports/registry";
+import { acessoAoRelatorio, executarRelatorio } from "@/lib/reports/run";
+import { domainContextFor } from "@/lib/auth/domain-session";
 import { parseReportQuery, parsePresentation, type SearchParams } from "@/lib/reports/query";
 import { periodLabel } from "@/lib/period";
 import { presentReport } from "@/lib/reports/present";
@@ -27,17 +28,20 @@ export default async function RelatorioPage({
   searchParams?: SearchParams;
 }) {
   const viewer = await requirePagePermission("relatorios.visualizar");
-  const def = getReport(params.tipo);
-  if (!def) notFound();
-  // Permissão por relatório (ex.: folha exige folha.visualizar).
-  if (!canViewReport(viewer, def)) redirect("/acesso-restrito");
+  // Existe + permissão por relatório (ex.: folha exige folha.visualizar):
+  // a MESMA pergunta da exportação e da futura API (lib/reports/run).
+  const ctx = await domainContextFor(viewer);
+  const acesso = acessoAoRelatorio(ctx, params.tipo);
+  if (!acesso.ok && acesso.code === "NAO_ENCONTRADO") notFound();
+  if (!acesso.ok) redirect("/acesso-restrito");
+  const def = acesso.def;
 
   await markOverdueBillings();
 
   const sp = searchParams ?? {};
   const query = parseReportQuery(sp);
   const pres = parsePresentation(sp);
-  const rows = await def.build(query);
+  const rows = await executarRelatorio(ctx, def, query);
   const presented = presentReport(def, rows, pres);
 
   // Opções dos selects (pequenas, só id+nome)

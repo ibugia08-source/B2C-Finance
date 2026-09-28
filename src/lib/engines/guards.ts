@@ -22,12 +22,26 @@ export const OK: Guard = { ok: true };
  * e em job — inclusive os motores inteiros.
  */
 export async function guardPermission(permission: string): Promise<Guard> {
+  const NEGADO: Guard = { ok: false, error: "Você não tem permissão para esta ação." };
+  // Principal declarado (27/09/2026): sistema não é pessoa — segue; usuário
+  // (interface ou API delegada) passa pelo MESMO RBAC da sessão.
+  const { getPrincipal } = await import("@/lib/auth/owner-scope");
+  const principal = getPrincipal();
+  if (principal?.kind === "system") return OK;
+  if (principal?.kind === "user") {
+    const { hasPermission } = await import("@/lib/permissions");
+    return hasPermission(principal.user, permission) ? OK : NEGADO;
+  }
   try {
     const { tryPermission } = await import("@/lib/auth/viewer");
-    return (await tryPermission(permission))
-      ? OK
-      : { ok: false, error: "Você não tem permissão para esta ação." };
-  } catch {
+    return (await tryPermission(permission)) ? OK : NEGADO;
+  } catch (e: any) {
+    // DENTRO de uma requisição sem sessão (rota sem cookie), `getViewer`
+    // lança o redirect do Next. Antes isso caía aqui e virava OK — uma rota
+    // sem login passava pela guarda. Agora: sem sessão e sem principal
+    // declarado, NEGA. Quem roda sem pessoa (webhook, cron) declara
+    // `systemPrincipal` e entra pelo ramo de cima.
+    if (typeof e?.digest === "string" && e.digest.startsWith("NEXT_REDIRECT")) return NEGADO;
     // FORA de uma requisição — job, script, teste — a própria importação
     // quebra (o módulo avalia `cache()` do React no topo). Degradar para OK é
     // a mesma escolha de `guardPeriod` logo abaixo, e pelo mesmo motivo: não
@@ -36,8 +50,7 @@ export async function guardPermission(permission: string): Promise<Guard> {
     //
     // O que segura a ponta do usuário é a camada de cima: toda Server Action
     // chama `requirePermission` ANTES de entrar no serviço. Esta guarda é a
-    // segunda tranca, não a única — e uma segunda tranca que impede o sistema
-    // de rodar sozinho não protege ninguém.
+    // segunda tranca, não a única.
     return OK;
   }
 }

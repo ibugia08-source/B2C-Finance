@@ -19,12 +19,19 @@ import type { Period } from "@/lib/period";
 // Permissões controláveis por teste (RBAC existente, sem sistema paralelo).
 const perms = new Set<string>(["*"]);
 vi.mock("@/lib/auth/viewer", () => {
-  const v = { id: "teste", name: "Teste", email: "teste@b2c.local", role: "ADMIN", permissions: [], personId: null };
+  // Usuário simulado com o RBAC REAL: "*" = ADMIN; senão, papel sem
+  // permissões + overrides do conjunto `perms` (hasPermission de verdade).
+  const v = () => ({
+    id: "teste", name: "Teste", email: "teste@b2c.local",
+    role: perms.has("*") ? "ADMIN" : "LEITURA",
+    permissions: [...perms].map((permission) => ({ permission, enabled: true })),
+    workspaceOwnerId: null, personId: null,
+  });
   const tem = (p: string) => perms.has("*") || perms.has(p);
   return {
-    requirePermission: async () => v,
-    tryPermission: async (p: string) => (tem(p) ? v : null),
-    getViewer: async () => v,
+    requirePermission: async () => v(),
+    tryPermission: async (p: string) => (tem(p) ? v() : null),
+    getViewer: async () => v(),
     NO_PERMISSION: { ok: false, error: "Sem permissão." },
     can: (_v: unknown, p: string) => tem(p),
   };

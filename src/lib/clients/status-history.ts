@@ -610,7 +610,9 @@ export async function sincronizarStatusAtual(
 export async function materializarStatusProgramados(
   today: DateKey = todayKey(),
   /** Só os clientes deste dono (ação manual). Omitido = todos (job). */
-  ownerId?: string | null
+  ownerId?: string | null,
+  /** Como rodar cada cliente sob o dono dele (o job declara principal de sistema). */
+  comDono: <T>(ownerId: string | null, fn: () => Promise<T>) => Promise<T> = (o, fn) => runWithOwner(o, fn)
 ): Promise<{
   verificados: number;
   atualizados: number;
@@ -628,7 +630,7 @@ export async function materializarStatusProgramados(
   let atualizados = 0;
   const falhas: { clientId: string; erro: string }[] = [];
   for (const c of divergentes) {
-    const r = await runWithOwner(c.ownerId, () => sincronizarStatusAtual(c.id, { today }));
+    const r = await comDono(c.ownerId, () => sincronizarStatusAtual(c.id, { today }));
     if (r.mudou) atualizados++;
     else if (r.aviso) falhas.push({ clientId: c.id, erro: r.aviso });
   }

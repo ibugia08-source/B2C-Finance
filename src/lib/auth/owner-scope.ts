@@ -14,10 +14,37 @@ import { AsyncLocalStorage } from "async_hooks";
  *   2. sessão do usuário logado (cookie), resolvida sob demanda.
  */
 
+/**
+ * QUEM está agindo nesta execução (27/09/2026 — preparação da API).
+ *
+ * A sessão do navegador era a única fonte de identidade; uma chamada de
+ * máquina (API, webhook, job) não tem cookie. O principal diz, sem cookie:
+ *  · "user"   — uma pessoa (interface hoje; API com delegação no futuro).
+ *    `getCurrentUser`, as guardas dos motores e a auditoria usam este
+ *    usuário como se fosse o da sessão — mesmo RBAC, mesmo recorte.
+ *  · "system" — o próprio sistema (webhook, cron, script). Não há pessoa,
+ *    então não há permissão de pessoa a conferir; a auditoria sai com a
+ *    origem certa em vez de "UI".
+ */
+export type PrincipalUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  permissions: { permission: string; enabled: boolean }[];
+  workspaceOwnerId: string | null;
+};
+
+export type Principal =
+  | { kind: "user"; user: PrincipalUser; origin: "UI" | "API" }
+  | { kind: "system"; name: string; origin: "JOB" | "API" | "IMPORT" };
+
 export type OwnerContext = {
   ownerId: string | null;
   /** true → ignora o escopo (scripts de manutenção / seed). */
   bypass?: boolean;
+  /** Quem age (ver `Principal`). Ausente = a sessão do cookie decide. */
+  principal?: Principal;
 };
 
 // SINGLETON GLOBAL de propósito: em dev o bundler pode instanciar este
@@ -39,7 +66,31 @@ const storage = (g.__b2cOwnerScope ??= new AsyncLocalStorage<OwnerContext>());
  * resolve e o escopo cai no fail-closed (`__no_owner__`).
  */
 export function runWithOwner<T>(ownerId: string | null, fn: () => Promise<T>): Promise<T> {
-  return storage.run({ ownerId }, fn);
+  // O principal de fora continua valendo (ex.: ownerCached dentro de uma
+  // chamada de sistema): trocar o dono não troca QUEM age.
+  return storage.run({ ownerId, principal: storage.getStore()?.principal }, fn);
+}
+
+/**
+ * Executa `fn` com dono E principal explícitos — a porta de entrada de toda
+ * execução sem sessão de navegador (webhook, cron, futura API).
+ */
+export function runWithPrincipal<T>(
+  ownerId: string,
+  principal: Principal,
+  fn: () => Promise<T>
+): Promise<T> {
+  return storage.run({ ownerId, principal }, fn);
+}
+
+/** Principal de sistema (webhook, cron, script). */
+export function systemPrincipal(name: string, origin: "JOB" | "API" | "IMPORT" = "JOB"): Principal {
+  return { kind: "system", name, origin };
+}
+
+/** Principal declarado nesta execução (undefined = decide a sessão). */
+export function getPrincipal(): Principal | undefined {
+  return storage.getStore()?.principal;
 }
 
 /** Executa `fn` ignorando totalmente o escopo (acesso completo). */

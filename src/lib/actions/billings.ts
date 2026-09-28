@@ -9,6 +9,7 @@ import {
   RevenueType,
 } from "@prisma/client";
 import { tryPermission, NO_PERMISSION } from "@/lib/auth/viewer";
+import { domainContextFor } from "@/lib/auth/domain-session";
 import { formatBRL, parseBRL, parseDateBR, toNumber as n, clean, formatDateBR } from "@/lib/format";
 import type { ActionResult } from "./clients";
 import { hojeCivil, hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
@@ -156,21 +157,17 @@ export async function saveBilling(formData: FormData): Promise<ActionResult> {
 
 // ---------- Pagamento (total ou parcial) ----------
 
-const PaymentSchema = z.object({
-  billingId: z.string().min(1),
-  amount: z.number().positive("Valor deve ser maior que zero."),
-  paidAt: z.date(),
-  method: z.nativeEnum(PaymentMethod),
-  accountId: z.string().nullable(),
-  notes: z.string().trim().nullable(),
-});
+// O contrato de entrada é o do MOTOR (RegisterPaymentInputSchema) — um só
+// para a interface e para a API.
 
 export async function registerBillingPayment(
   formData: FormData
 ): Promise<ActionResult> {
-  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
+  const viewer = await tryPermission("recebimentos.registrar_pagamento");
+  if (!viewer) return NO_PERMISSION;
   try {
-    const parsed = PaymentSchema.parse({
+    const { RegisterPaymentInputSchema } = await import("@/lib/engines/payment-engine");
+    const parsed = RegisterPaymentInputSchema.parse({
       billingId: String(formData.get("billingId") ?? ""),
       amount: parseBRL(String(formData.get("amount") ?? "0")),
       paidAt: parseDateBR(String(formData.get("paidAt") ?? "")) ?? hojeCivilParaGravar(),
@@ -182,8 +179,8 @@ export async function registerBillingPayment(
     // 03 §4.1: nenhuma action toca fato contábil direto. A permissão, a
     // guarda de período e a de idempotência ficam no motor — aqui só chega
     // o que já passou por elas.
-    const { settleBilling: settleViaEngine } = await import("@/lib/engines/payment-engine");
-    const result = await settleViaEngine(parsed);
+    const { registerPayment } = await import("@/lib/engines/payment-engine");
+    const result = await registerPayment(await domainContextFor(viewer), parsed);
     if (!result.ok) return result;
 
     revalidateBilling(result.clientId);
@@ -237,27 +234,12 @@ const QUICK_UNDO_WINDOW_MS = 15 * 60 * 1000;
  * Retorna o id do PAGAMENTO em `id` para o toast "Desfazer".
  */
 export async function quickSettleBilling(billingId: string): Promise<ActionResult> {
-  if (!(await tryPermission("recebimentos.registrar_pagamento"))) return NO_PERMISSION;
+  const viewer = await tryPermission("recebimentos.registrar_pagamento");
+  if (!viewer) return NO_PERMISSION;
   try {
-    const b = await prisma.billing.findUnique({ where: { id: billingId } });
-    if (!b) return { ok: false, error: "Cobrança não encontrada." };
-    if (b.status === "CANCELED")
-      return { ok: false, error: "Cobrança removida do mês — recoloque-a antes." };
-    if (b.status === "PAID") return { ok: false, error: "Cobrança já quitada." };
-    const open = n(b.amount) - n(b.paidTotal);
-    if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
-
-    const { settleBilling: settleViaEngine, quickSettlePaidAt, QUICK_SETTLE_NOTE } =
-      await import("@/lib/engines/payment-engine");
-    const paidAt = quickSettlePaidAt(b.competenceYear, b.competenceMonth, b.dueDate);
-    const res = await settleViaEngine({
-      billingId: b.id,
-      amount: open,
-      paidAt,
-      method: "OTHER",
-      accountId: null,
-      notes: QUICK_SETTLE_NOTE,
-    });
+    // Regra no motor (settleOpenBalance) — a mesma que a API vai usar.
+    const { settleOpenBalance } = await import("@/lib/engines/payment-engine");
+    const res = await settleOpenBalance(await domainContextFor(viewer), billingId);
     if (!res.ok) return res;
 
     revalidateBilling(res.clientId);
@@ -786,29 +768,14 @@ export async function registerBillingContact(
   channel: "whatsapp" | "copia",
   excerpt: string
 ): Promise<ActionResult> {
-  if (!(await tryPermission("recebimentos.gerar_cobranca"))) return NO_PERMISSION;
+  const viewer = await tryPermission("recebimentos.gerar_cobranca");
+  if (!viewer) return NO_PERMISSION;
   try {
-    const b = await prisma.billing.findUnique({ where: { id: billingId } });
-    if (!b) return { ok: false, error: "Cobrança não encontrada." };
-    await prisma.collectionHistory.create({
-      data: {
-        billingId: b.id,
-        clientId: b.clientId,
-        status: "CONTACTED",
-        channel,
-        message:
-          channel === "whatsapp"
-            ? `Cobrança enviada via WhatsApp: "${excerpt.slice(0, 180)}…"`
-            : `Mensagem de cobrança copiada: "${excerpt.slice(0, 180)}…"`,
-      },
-    });
-    if (b.collectionStatus === "NOT_CONTACTED") {
-      await prisma.billing.update({
-        where: { id: b.id },
-        data: { collectionStatus: "CONTACTED" },
-      });
-    }
-    revalidateBilling(b.clientId);
+    // Regra em services/billing-collection (a mesma da API).
+    const { registrarContatoDeCobranca } = await import("@/lib/services/billing-collection");
+    const r = await registrarContatoDeCobranca(await domainContextFor(viewer), { billingId, channel, excerpt });
+    if (!r.ok) return r;
+    revalidateBilling(r.clientId);
     return { ok: true };
   } catch (e: any) {
     return { ok: false, error: e?.message ?? "Falha ao registrar o contato." };
@@ -855,18 +822,13 @@ export async function rescheduleBilling(
 
 // ---------- Interações de cobrança (observação / promessa) ----------
 
-const NoteSchema = z.object({
-  billingId: z.string().min(1),
-  status: z.nativeEnum(CollectionStatus),
-  channel: z.string().trim().nullable(),
-  message: z.string().trim().min(1, "Escreva a observação."),
-  nextActionAt: z.date().nullable(),
-});
-
 export async function addCollectionNote(formData: FormData): Promise<ActionResult> {
-  if (!(await tryPermission("recebimentos.gerar_cobranca"))) return NO_PERMISSION;
+  const viewer = await tryPermission("recebimentos.gerar_cobranca");
+  if (!viewer) return NO_PERMISSION;
   try {
-    const parsed = NoteSchema.parse({
+    // Formulário → entrada tipada; regra em services/billing-collection.
+    const { registrarNotaDeCobranca } = await import("@/lib/services/billing-collection");
+    const r = await registrarNotaDeCobranca(await domainContextFor(viewer), {
       billingId: String(formData.get("billingId") ?? ""),
       status: (clean(formData.get("status")) ?? "CONTACTED") as CollectionStatus,
       channel: clean(formData.get("channel")),
@@ -876,26 +838,8 @@ export async function addCollectionNote(formData: FormData): Promise<ActionResul
         return raw == null ? null : parseDateBR(raw);
       })(),
     });
-
-    const b = await prisma.billing.findUnique({ where: { id: parsed.billingId } });
-    if (!b) return { ok: false, error: "Cobrança não encontrada." };
-
-    await prisma.collectionHistory.create({
-      data: {
-        billingId: b.id,
-        clientId: b.clientId,
-        status: parsed.status,
-        channel: parsed.channel,
-        message: parsed.message,
-        nextActionAt: parsed.nextActionAt,
-      },
-    });
-    await prisma.billing.update({
-      where: { id: b.id },
-      data: { collectionStatus: parsed.status },
-    });
-
-    revalidateBilling(b.clientId);
+    if (!r.ok) return r;
+    revalidateBilling(r.clientId);
     return { ok: true };
   } catch (e: any) {
     return {

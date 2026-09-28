@@ -10,6 +10,10 @@ import {
 } from "@/lib/services/payment-accounting";
 import { applyCredit } from "@/lib/services/customer-credit";
 import { hojeCivilParaGravar, mesCivilAtual } from "@/lib/civil-date";
+import { z } from "zod";
+import { PaymentMethod } from "@prisma/client";
+import { toNumber as n } from "@/lib/format";
+import { type DomainContext, inDomain } from "./domain";
 
 /**
  * PaymentEngine (F1.5 · ref. 03 §4.1).
@@ -175,4 +179,63 @@ export function quickSettlePaidAt(
   const atual = mesCivilAtual(now);
   const nowKey = atual.year * 12 + (atual.month - 1);
   return compKey < nowKey ? dueDate : hojeCivilParaGravar(now);
+}
+
+// ============================================================================
+// ENTRADAS DE DOMÍNIO (27/09/2026 — preparação da API)
+//
+// A interface (Server Action) e a futura API chamam ESTAS funções com um
+// DomainContext; por dentro é o mesmo settleBilling de sempre (permissão →
+// período do caixa → idempotência → núcleo contábil → auditoria → outbox).
+// ============================================================================
+
+/** Contrato de entrada de "registrar pagamento" (valores já normalizados). */
+export const RegisterPaymentInputSchema = z.object({
+  billingId: z.string().min(1),
+  amount: z.number().positive("Valor deve ser maior que zero."),
+  /** Data CIVIL do pagamento (dia UTC), no formato que parseDateBR grava. */
+  paidAt: z.date(),
+  method: z.nativeEnum(PaymentMethod),
+  accountId: z.string().nullable(),
+  notes: z.string().trim().nullable(),
+});
+export type RegisterPaymentInput = z.input<typeof RegisterPaymentInputSchema>;
+
+/** Registra um pagamento numa cobrança (o gesto "$" de Recebimentos). */
+export async function registerPayment(
+  ctx: DomainContext,
+  input: RegisterPaymentInput,
+  opts: SettleOptions = {}
+): Promise<SettleResult> {
+  const parsed = RegisterPaymentInputSchema.parse(input);
+  return inDomain(ctx, () => settleBilling(parsed, opts));
+}
+
+/**
+ * Quita o SALDO EM ABERTO de uma cobrança (o "Pago" de 1 clique). Data:
+ * competência passada → vencimento; corrente/futura → hoje (quickSettlePaidAt).
+ * Extraída de actions/billings.ts (quickSettleBilling) sem mudança de regra.
+ */
+export async function settleOpenBalance(
+  ctx: DomainContext,
+  billingId: string
+): Promise<SettleResult> {
+  return inDomain(ctx, async () => {
+    const b = await prisma.billing.findUnique({ where: { id: billingId } });
+    if (!b) return { ok: false, error: "Cobrança não encontrada." };
+    if (b.status === "CANCELED")
+      return { ok: false, error: "Cobrança removida do mês — recoloque-a antes." };
+    if (b.status === "PAID") return { ok: false, error: "Cobrança já quitada." };
+    const open = n(b.amount) - n(b.paidTotal);
+    if (open <= 0) return { ok: false, error: "Sem saldo em aberto." };
+    const paidAt = quickSettlePaidAt(b.competenceYear, b.competenceMonth, b.dueDate);
+    return settleBilling({
+      billingId: b.id,
+      amount: open,
+      paidAt,
+      method: "OTHER",
+      accountId: null,
+      notes: QUICK_SETTLE_NOTE,
+    });
+  });
 }

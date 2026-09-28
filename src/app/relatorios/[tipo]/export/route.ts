@@ -3,7 +3,8 @@ import * as XLSX from "xlsx";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { hasPermission } from "@/lib/permissions";
 import { markOverdueBillings } from "@/lib/services/billing-metrics";
-import { getReport, canViewReport } from "@/lib/reports/registry";
+import { acessoAoRelatorio, executarRelatorio } from "@/lib/reports/run";
+import { domainContextFor } from "@/lib/auth/domain-session";
 import {
   parseReportQuery,
   parsePresentation,
@@ -25,12 +26,14 @@ export async function GET(
   if (!user || !hasPermission(user, "relatorios.exportar")) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
-  const def = getReport(params.tipo);
-  if (!def) return NextResponse.json({ error: "Relatório inexistente" }, { status: 404 });
-  // Exportar exige também ver ESTE relatório (ex.: folha → folha.visualizar).
-  if (!canViewReport(user, def)) {
-    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
-  }
+  // Exportar exige também ver ESTE relatório (ex.: folha → folha.visualizar)
+  // — a mesma pergunta da tela e da futura API (lib/reports/run).
+  const ctx = await domainContextFor(user);
+  const acesso = acessoAoRelatorio(ctx, params.tipo);
+  if (!acesso.ok && acesso.code === "NAO_ENCONTRADO")
+    return NextResponse.json({ error: "Relatório inexistente" }, { status: 404 });
+  if (!acesso.ok) return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  const def = acesso.def;
 
   const sp: SearchParams = Object.fromEntries(req.nextUrl.searchParams.entries());
   const formato = sp.formato === "xlsx" ? "xlsx" : "csv";
@@ -38,7 +41,7 @@ export async function GET(
   await markOverdueBillings();
   const query = parseReportQuery(sp);
   const pres = parsePresentation(sp);
-  const rows = await def.build(query);
+  const rows = await executarRelatorio(ctx, def, query);
   // exportação: sem agrupamento visual — linhas planas ordenadas
   const presented = presentReport(def, rows, { ...pres, agrupar: undefined });
   const flat = presented.groups.flatMap((g) => g.rows);

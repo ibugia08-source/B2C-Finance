@@ -37,6 +37,26 @@ export async function contextFromRequest(
   // Um motor de domínio não pode quebrar por não haver usuário logado:
   // ele degrada para contexto de sistema, que é a verdade do caso (não
   // houve pessoa). O fato continua auditado, com actor nulo e origem JOB.
+  // Principal declarado (API, webhook, cron) decide ANTES de qualquer
+  // leitura de sessão: vale igual em rota, job e teste.
+  const { getPrincipal } = await import("@/lib/auth/owner-scope");
+  const principal = getPrincipal();
+  if (principal) {
+    let cid: string | null = null;
+    try {
+      const { headers } = await import("next/headers");
+      cid = headers().get("x-correlation-id");
+    } catch {
+      /* fora de request */
+    }
+    return {
+      actorId: principal.kind === "user" ? principal.user.id : null,
+      actorEmail: principal.kind === "user" ? principal.user.email : `sistema:${principal.name}`,
+      origin: opts.origin ?? principal.origin,
+      reason: opts.reason ?? null,
+      correlationId: cid ?? newCorrelationId(),
+    };
+  }
   try {
     const { getCurrentUser } = await import("@/lib/auth/current-user");
     const u = await getCurrentUser();

@@ -18,6 +18,37 @@
 
 ---
 
+## Status da implementação
+
+**27/09/2026 — preparação interna (F0 parcial + F3 parcial), sem endpoint.**
+
+- **Principal no contexto de execução** (`auth/owner-scope.ts`): `Principal` (usuário | sistema), `runWithPrincipal` e `systemPrincipal`. `getCurrentUser`, `guardPermission` e `contextFromRequest` consultam o principal antes do cookie.
+- **D1 corrigida:** dentro de uma requisição sem sessão e sem principal, `guardPermission` **nega**. Os webhooks (gateway, AvanceCRM) e o cron de status declaram principal de sistema.
+- **D2 corrigida:** a auditoria usa a origem e o ator do principal (`sistema:<nome>` para jobs e webhooks).
+- **Contexto de domínio** (`engines/domain.ts`): `DomainContext` (dono obrigatório + principal), `DomainResult`, `inDomain`, `domainCan`, `domainActor` e `statusCapabilities`. O construtor a partir da sessão é `auth/domain-session.ts` → `domainContextFor(viewer)`.
+- **Funções extraídas**, todas chamadas pelas actions e prontas para a API:
+
+  | Função | Arquivo |
+  |---|---|
+  | `salvarCliente`, `registrarPerdaDeCliente` | `services/client-service.ts` |
+  | `registerPayment`, `settleOpenBalance`, `RegisterPaymentInputSchema` | `engines/payment-engine.ts` |
+  | `registrarContatoDeCobranca`, `registrarNotaDeCobranca` | `services/billing-collection.ts` |
+  | `salvarDespesa` | `services/expense-service.ts` |
+  | `alterarStatusDoUpsell`, `excluirUpsell`, `desfazerCobrancaDoUpsell` | `services/upsell-service.ts` |
+  | `montarRotinaDoDia`, `gatesDaRotina` | `services/daily-routine.ts` |
+  | `acessoAoRelatorio`, `executarRelatorio` | `reports/run.ts` |
+
+- **O que já era domínio e foi mantido:** status temporal (`clients/status-history.ts`), Dashboard (`computePeriodMetrics` e afins), Caixa (`getCashSummary`, `projecaoDeCaixa`), Projeções, Renovações e motores de pagamento, despesa e cobrança.
+- **Continua pendente:**
+  - **D3** (`escopoAtual` já lê o principal via `getCurrentUser`; falta teste dedicado).
+  - **D5** (`findOwnedOrThrow`).
+  - **D8**: actions que contornam motores.
+  - **D12**: canal de `despesa.paga`.
+  - **D17**: cópias "2".
+  - Extração de renovação, grade de Recebimentos e contratos.
+
+---
+
 ## Sumário
 
 1. [Mapa da arquitetura atual](#1-mapa-da-arquitetura-atual)
