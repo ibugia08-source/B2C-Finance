@@ -4,7 +4,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, can, type Viewer } from "@/lib/auth/viewer";
-import { isKnownPermission, isKnownRole } from "@/lib/permissions";
+import { ADMIN_ONLY_PERMISSIONS, isKnownPermission, isKnownRole } from "@/lib/permissions";
 import type { ActionResult } from "./clients";
 
 const RoleSchema = z
@@ -125,7 +125,9 @@ function parseOverrides(formData: FormData): { permission: string; enabled: bool
   if (!raw) return [];
   try {
     const parsed = OverridesSchema.parse(JSON.parse(String(raw)));
-    return parsed.filter((p) => isKnownPermission(p.permission));
+    // Travadas na matriz (ADMIN_ONLY) também são recusadas AQUI: a trava da
+    // tela não vale contra um POST montado à mão.
+    return parsed.filter((p) => isKnownPermission(p.permission) && !ADMIN_ONLY_PERMISSIONS.has(p.permission));
   } catch {
     return [];
   }

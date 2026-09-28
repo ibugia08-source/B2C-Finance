@@ -370,6 +370,22 @@ export const PERMISSION_MODULES: PermissionModule[] = [
     ],
   },
   {
+    // API oficial (28/09/2026): contas de serviço que acessam /api/v1 (n8n).
+    // Gerenciar é travado no ADMIN (ADMIN_ONLY_PERMISSIONS): quem cria uma
+    // integração decide o que um sistema externo lê e escreve sem ninguém
+    // olhando — é poder de administrador, não de operação.
+    key: "integracoes",
+    label: "Integrações (API)",
+    permissions: [
+      { id: "integracoes.visualizar", label: "Ver integrações e o último uso", sensitive: true },
+      {
+        id: "integracoes.gerenciar",
+        label: "Criar, revogar e rotacionar chaves de API",
+        sensitive: true,
+      },
+    ],
+  },
+  {
     key: "usuarios",
     label: "Usuários",
     permissions: [
@@ -409,6 +425,9 @@ export function isKnownPermission(id: string): boolean {
 export const ADMIN_ONLY_PERMISSIONS = new Set<string>([
   "motor.regras_contabeis",
   "motor.metricas",
+  // Chave de API dá a um sistema externo acesso aos dados sem pessoa no
+  // circuito: só o administrador cria, revoga e rotaciona.
+  "integracoes.gerenciar",
 ]);
 
 /**

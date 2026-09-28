@@ -1,5 +1,6 @@
 import type { Principal, PrincipalUser } from "@/lib/auth/owner-scope";
 import { hasPermission } from "@/lib/permissions";
+import { scopePermite } from "@/lib/api/scopes";
 import type { StatusCapabilities } from "@/lib/clients/status-history";
 
 /**
@@ -37,9 +38,15 @@ export type DomainResult<T extends object = object> =
   | ({ ok: true; id?: string; warning?: string } & T)
   | { ok: false; error: string; code?: "DUPLICADO_NOME" };
 
-/** O principal pode fazer isto? Sistema não é pessoa: pode. */
+/**
+ * O principal pode fazer isto? Sistema não é pessoa: pode — exceto a CONTA DE
+ * SERVIÇO da API, que pode só o que os scopes dela cobrem (fail-closed).
+ */
 export function domainCan(ctx: DomainContext, permission: string): boolean {
-  if (ctx.principal.kind === "system") return true;
+  if (ctx.principal.kind === "system") {
+    const sa = ctx.principal.serviceAccount;
+    return sa ? scopePermite(sa.scopes, permission) : true;
+  }
   return hasPermission(ctx.principal.user, permission);
 }
 

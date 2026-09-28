@@ -4070,3 +4070,52 @@ model WebhookInbox {
   @@index([eventType])
   @@index([receivedAt])
 }
+
+// ===========================================================================
+// API OFICIAL (/api/v1) — IDENTIDADE DE MÁQUINA (28/09/2026)
+// docs/API_AUTHENTICATION.md. Migration ADITIVA: nenhuma tabela existente muda.
+// ===========================================================================
+
+enum ServiceAccountType {
+  INTEGRATION
+}
+
+enum ServiceAccountStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// Conta de serviço: a credencial com que um sistema externo (n8n, agente de
+/// WhatsApp) chama a API. NÃO é um usuário: não faz login, não tem cookie,
+/// não tem papel — o que ela pode é exatamente a lista de `scopes`.
+///
+/// O token NUNCA é gravado. O banco guarda só o SHA-256 dele (`tokenHash`) e
+/// o prefixo público (`tokenPrefix`), que identifica a linha sem revelar o
+/// segredo. Rotacionar troca os dois; o token anterior deixa de valer na hora.
+model ServiceAccount {
+  id          String               @id @default(cuid())
+  /// Dono dos dados que a conta enxerga (escopo do Prisma, como todo o resto).
+  ownerId     String
+  type        ServiceAccountType   @default(INTEGRATION)
+  status      ServiceAccountStatus @default(ACTIVE)
+  name        String
+  description String?
+  /// SHA-256 (hex) do token completo. Conferido em tempo constante.
+  tokenHash   String
+  /// "b2c_live_xxxxxxxx" — público; chave de busca (índice único).
+  tokenPrefix String               @unique
+  /// Catálogo em src/lib/api/scopes.ts. Sem curinga.
+  scopes      String[]
+  createdAt   DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime             @updatedAt @db.Timestamptz(3)
+  /// Gravado no máximo uma vez por minuto (não a cada requisição).
+  lastUsedAt  DateTime?            @db.Timestamptz(3)
+  expiresAt   DateTime?            @db.Timestamptz(3)
+  revokedAt   DateTime?            @db.Timestamptz(3)
+  revokedById String?
+  /// Última rotação do token (null = token original).
+  rotatedAt   DateTime?            @db.Timestamptz(3)
+  createdById String
+
+  @@index([ownerId, status])
+}

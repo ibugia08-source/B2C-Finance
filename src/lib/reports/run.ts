@@ -1,4 +1,4 @@
-import { type DomainContext, domainUser, inDomain } from "@/lib/engines/domain";
+import { type DomainContext, domainCan, domainUser, inDomain } from "@/lib/engines/domain";
 import { canViewReport, getReport } from "./registry";
 import type { ReportQuery } from "./query";
 import type { ReportDef, ReportRow } from "./shared";
@@ -19,6 +19,14 @@ export function acessoAoRelatorio(ctx: DomainContext, key: string): AcessoAoRela
   const def = getReport(key);
   if (!def) return { ok: false, code: "NAO_ENCONTRADO", error: "Relatório inexistente." };
   const user = domainUser(ctx);
+  // Conta de serviço da API: relatórios.visualizar E cada permissão do
+  // relatório precisam estar cobertos pelos scopes (domainCan é fail-closed).
+  if (ctx.principal.kind === "system" && ctx.principal.serviceAccount) {
+    const perms = def.permission == null ? [] : Array.isArray(def.permission) ? def.permission : [def.permission];
+    if (!["relatorios.visualizar", ...perms].every((p) => domainCan(ctx, p)))
+      return { ok: false, code: "SEM_PERMISSAO", error: "Acesso negado a este relatório." };
+    return { ok: true, def };
+  }
   if (ctx.principal.kind !== "system" && !canViewReport(user, def))
     return { ok: false, code: "SEM_PERMISSAO", error: "Acesso negado a este relatório." };
   return { ok: true, def };

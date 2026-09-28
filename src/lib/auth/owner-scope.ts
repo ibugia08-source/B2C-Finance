@@ -35,9 +35,21 @@ export type PrincipalUser = {
   workspaceOwnerId: string | null;
 };
 
+/**
+ * Conta de serviço da API (28/09/2026 — docs/API_AUTHENTICATION.md). Quando
+ * presente num principal "system", ele NÃO é mais "o sistema pode tudo": o
+ * que ele pode é exatamente a lista de scopes (ver `scopePermite`).
+ */
+export type PrincipalServiceAccount = { id: string; name: string; scopes: string[] };
+
 export type Principal =
   | { kind: "user"; user: PrincipalUser; origin: "UI" | "API" }
-  | { kind: "system"; name: string; origin: "JOB" | "API" | "IMPORT" };
+  | {
+      kind: "system";
+      name: string;
+      origin: "JOB" | "API" | "IMPORT";
+      serviceAccount?: PrincipalServiceAccount;
+    };
 
 export type OwnerContext = {
   ownerId: string | null;

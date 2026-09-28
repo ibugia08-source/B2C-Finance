@@ -52,6 +52,21 @@
   - **D8**: actions que contornam motores (`saveBilling`, `includeClientInMonth`, `addPastDelinquency`, `cancelBilling` da action, folha, `deleteExpense`). Passar por elas no motor **acrescenta a guarda de período**, que hoje não existe nesses caminhos. É mudança de comportamento e exige decisão do dono.
   - Grade de Recebimentos (`receivables-inline`), que não é exposta na V1.
 
+**28/09/2026 — F1 (autenticação), parcial.** Detalhes em [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md).
+
+- **Modelo:** `ServiceAccount`, criado pela migration aditiva `20260928120000_service_accounts_api`, com RLS.
+  - Ficou um modelo só, com token por conta, no lugar do par `ApiClient`/`ApiKey` da seção 8.1.
+  - Rotacionar troca o token na hora.
+- **Hash:** SHA-256 do token, no lugar de HMAC com pepper (motivo no documento).
+- **Scopes:** formato `recurso.acao` (ex.: `clients.read`), que substitui o `recurso:acao` da seção 9.
+- **Autenticação:** `src/lib/api/{scopes,tokens,auth}.ts`, com `authenticateApiToken`, `requireApiScope` e `withApiAuth`.
+- **Rotas:**
+  - bypass de `/api/v1` no middleware, com rate limit por IP;
+  - `GET /api/v1/me`.
+- **Conta de serviço no domínio:** limitada pelos scopes também dentro do domínio (`domainCan`, `guardPermission`, relatórios), pelo mapa `PERMISSION_TO_SCOPE`.
+- **Tela:** Configurações → Integrações. Permissões `integracoes.visualizar` e `integracoes.gerenciar`, esta última só do ADMIN.
+- **Fica para as próximas fases:** `ApiRequestLog`, `ApiIdempotency`, delegação (`X-B2C-On-Behalf-Of`) e allowlist de IP.
+
 ---
 
 ## Sumário

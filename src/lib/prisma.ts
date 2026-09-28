@@ -113,6 +113,9 @@ const OWNED_MODELS = new Set<string>([
   "ScheduledReport",
   // F1.19 — central de notificações.
   "Notification",
+  // API oficial (28/09/2026) — contas de serviço. A busca pelo token é a
+  // ÚNICA leitura sem escopo (por prefixo, em lib/api/auth.ts).
+  "ServiceAccount",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

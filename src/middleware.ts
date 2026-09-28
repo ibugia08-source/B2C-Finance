@@ -47,6 +47,27 @@ function isLoginRateLimited(ip: string): boolean {
   return cur.count > LOGIN_MAX_PER_WINDOW;
 }
 
+// ===== Rate limit da API /api/v1 por IP =====
+// Mais folgado que o do login (um workflow do n8n faz várias chamadas
+// seguidas), mesmo formato: melhor esforço por instância. O limite por
+// CHAVE, compartilhado entre instâncias, é da fase de endurecimento.
+const API_MAX_PER_WINDOW = 120;
+const apiHits = new Map<string, { count: number; reset: number }>();
+
+function isApiRateLimited(ip: string): boolean {
+  const now = Date.now();
+  if (apiHits.size > 5000) {
+    for (const [k, v] of apiHits) if (v.reset < now) apiHits.delete(k);
+  }
+  const cur = apiHits.get(ip);
+  if (!cur || cur.reset < now) {
+    apiHits.set(ip, { count: 1, reset: now + LOGIN_WINDOW_MS });
+    return false;
+  }
+  cur.count += 1;
+  return cur.count > API_MAX_PER_WINDOW;
+}
+
 function b64urlDecodeToBytes(s: string): Uint8Array {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
@@ -155,6 +176,22 @@ export async function middleware(req: NextRequest) {
         status: 429,
         headers: { "Retry-After": "60" },
       });
+    }
+    return seguir();
+  }
+
+  // API oficial /api/v1 (28/09/2026): máquina não tem sessão. Quem
+  // autentica é o token Bearer da conta de serviço, conferido NA ROTA (em
+  // Node, com banco — o Edge não acessa o Prisma). O cookie é ignorado lá:
+  // estar logado no navegador não abre a API. Aqui só o limite por IP.
+  if (pathname === "/api/v1" || pathname.startsWith("/api/v1/")) {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
+    if (isApiRateLimited(ip)) {
+      return new NextResponse(
+        JSON.stringify({ error: { code: "rate_limited", message: "Muitas requisições. Aguarde um minuto." } }),
+        { status: 429, headers: { "Retry-After": "60", "Content-Type": "application/json; charset=utf-8" } }
+      );
     }
     return seguir();
   }

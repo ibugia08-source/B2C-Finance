@@ -27,7 +27,12 @@ export async function guardPermission(permission: string): Promise<Guard> {
   // (interface ou API delegada) passa pelo MESMO RBAC da sessão.
   const { getPrincipal } = await import("@/lib/auth/owner-scope");
   const principal = getPrincipal();
-  if (principal?.kind === "system") return OK;
+  if (principal?.kind === "system") {
+    // Conta de serviço da API: só o que os scopes cobrem (docs/API_AUTHENTICATION.md).
+    if (!principal.serviceAccount) return OK;
+    const { scopePermite } = await import("@/lib/api/scopes");
+    return scopePermite(principal.serviceAccount.scopes, permission) ? OK : NEGADO;
+  }
   if (principal?.kind === "user") {
     const { hasPermission } = await import("@/lib/permissions");
     return hasPermission(principal.user, permission) ? OK : NEGADO;
