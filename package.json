@@ -33,7 +33,9 @@
     "verificar:pdfs": "node scripts/verificar-pdfs.mjs",
     "docs": "node scripts/docs/gerar.mjs",
     "openapi:export": "tsx scripts/openapi-export.ts",
-    "openapi:lint": "npm run openapi:export && npx --yes @redocly/cli@1 lint docs/api/openapi.json --config docs/api/redocly.yaml"
+    "openapi:lint": "npm run openapi:export && npx --yes @redocly/cli@1 lint docs/api/openapi.json --config docs/api/redocly.yaml",
+    "n8n:build": "node integrations/n8n/scripts/build-workflows.mjs",
+    "n8n:check": "node integrations/n8n/scripts/check-secrets.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed-dev.ts"

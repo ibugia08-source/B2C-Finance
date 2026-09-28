@@ -166,6 +166,13 @@ describe("contrato", () => {
     expect(r3.status).toBe(400);
   });
 
+  it("parâmetro opcional em branco (ferramenta do n8n) conta como ausente", async () => {
+    const r = await chamar(clients, `/clients?competence=&status=&search=${TAG}`);
+    expect(r.status).toBe(200);
+    expect(r.body.meta.statusReference.competence).toBe(COMP);
+    expect((await chamar(clients, "/clients?naoExiste=")).status).toBe(400);
+  });
+
   it("erro interno não expõe mensagem nem stack", async () => {
     const quebra = defineEndpoint({ action: "teste", scope: null }, async () => {
       throw new Error("SEGREDO_INTERNO em /var/app/lib.ts:42");

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b2-c-finance.vercel.app/schemas/n8n/agent-tools.schema.json",
+  "title": "Catálogo de ferramentas do agente B2C Finance (n8n)",
+  "description": "Formato de schemas/agent-tools.json. Cada ferramenta é uma chamada GET da API V1, com entrada descrita em JSON Schema — o mesmo formato que os modelos (OpenAI/Anthropic function/tool calling) aceitam em `parameters`/`input_schema`.",
+  "type": "object",
+  "required": ["catalog", "version", "apiVersion", "readOnly", "tools"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "catalog": { "const": "b2c-finance-agent-tools" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "apiVersion": { "const": "v1" },
+    "readOnly": { "const": true, "description": "Nesta versão, nenhuma ferramenta escreve." },
+    "description": { "type": "string" },
+    "conventions": { "type": "object" },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "scope", "http", "inputSchema"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
+          "description": { "type": "string", "minLength": 40, "description": "Texto que o MODELO lê para decidir quando usar a ferramenta." },
+          "scope": { "type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$" },
+          "http": {
+            "type": "object",
+            "required": ["method", "path", "query"],
+            "additionalProperties": false,
+            "properties": {
+              "method": { "const": "GET" },
+              "path": { "type": "string", "pattern": "^/" },
+              "pathParams": { "type": "array", "items": { "type": "string" } },
+              "query": { "type": "array", "items": { "type": "string" } },
+              "fixedQuery": { "type": "object", "additionalProperties": { "type": "string" } }
+            }
+          },
+          "inputSchema": {
+            "type": "object",
+            "required": ["type", "properties", "additionalProperties"],
+            "properties": {
+              "type": { "const": "object" },
+              "properties": { "type": "object" },
+              "required": { "type": "array", "items": { "type": "string" } },
+              "additionalProperties": { "const": false }
+            }
+          },
+          "responsePath": { "type": "string" }
+        }
+      }
+    }
+  }
+}

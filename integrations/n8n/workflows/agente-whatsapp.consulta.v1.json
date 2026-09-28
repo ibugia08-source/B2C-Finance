@@ -1,0 +1,1212 @@
+{
+  "name": "B2C · Agente WhatsApp · Consulta (v1)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b2c-agente-whatsapp",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "b2c-agente-whatsapp"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida a assinatura do webhook do WhatsApp e extrai as mensagens de texto.\n// Meta (WhatsApp Cloud API): header X-Hub-Signature-256 = \"sha256=\" + HMAC-SHA256(App Secret, corpo CRU).\n// Requer: webhook com a opção \"Raw Body\" ligada e NODE_FUNCTION_ALLOW_BUILTIN=crypto no n8n.\n// Assinatura ausente/errada → o item é DESCARTADO (nada segue para o agente).\nconst crypto = require('crypto');\nconst segredo = $env.WHATSAPP_WEBHOOK_SECRET;\nconst autorizados = String($env.WHATSAPP_ALLOWED_NUMBERS || '')\n  .split(',').map((s) => s.replace(/\\D/g, '')).filter(Boolean);\nif (!segredo) throw new Error('WHATSAPP_WEBHOOK_SECRET não configurado — recusando processar o webhook.');\n\nconst saida = [];\nconst itens = $input.all();\nfor (let i = 0; i < itens.length; i++) {\n  const headers = itens[i].json.headers || {};\n  const recebida = String(headers['x-hub-signature-256'] || '');\n  let cru = null;\n  try { cru = await this.helpers.getBinaryDataBuffer(i, 'data'); } catch (e) { cru = null; }\n  if (!cru || !recebida.startsWith('sha256=')) continue;\n  const esperada = 'sha256=' + crypto.createHmac('sha256', segredo).update(cru).digest('hex');\n  const a = Buffer.from(recebida);\n  const b = Buffer.from(esperada);\n  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) continue; // tempo constante\n\n  const corpo = JSON.parse(cru.toString('utf8'));\n  for (const entrada of corpo.entry || []) {\n    for (const mudanca of entrada.changes || []) {\n      const v = mudanca.value || {};\n      for (const m of v.messages || []) {\n        if (m.type !== 'text' || !m.text || !m.text.body) continue; // só texto na v1\n        const de = String(m.from || '').replace(/\\D/g, '');\n        saida.push({\n          json: {\n            from: de,\n            text: String(m.text.body).slice(0, 2000),\n            messageId: m.id,\n            phoneNumberId: (v.metadata && v.metadata.phone_number_id) || $env.WHATSAPP_PHONE_NUMBER_ID,\n            autorizado: autorizados.includes(de),\n          },\n        });\n      }\n    }\n  }\n}\nreturn saida;"
+      },
+      "name": "Validar assinatura e extrair mensagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.autorizado }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Número autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "Você é o assistente financeiro do B2C Finance, atendendo a equipe da agência pelo WhatsApp.\n\n## O que você pode fazer\nVocê só CONSULTA dados, usando as ferramentas disponíveis. Você NÃO registra pagamento, não cadastra, não altera status e não apaga nada. Se pedirem uma dessas ações, explique que ainda não é possível pelo WhatsApp e que deve ser feito no B2C Finance.\n\n## Regras\n1. Cliente citado pelo nome: chame SEMPRE `buscar_clientes` primeiro.\n   - 1 resultado: siga com o id dele.\n   - Vários resultados: pergunte qual é, listando nome, razão social e documento mascarado. Nunca escolha sozinho.\n   - Nenhum resultado: diga que não encontrou. Nunca invente.\n2. Pergunta sobre um mês: passe `competence` (AAAA-MM). \"Mês passado\", \"setembro\" etc. → converta para AAAA-MM. Sem mês citado, as ferramentas usam o mês atual.\n3. O status do cliente tem VIGÊNCIA. Para \"estava ativo em março?\", use o status daquela competência (`consultar_cliente` com competence, ou `consultar_status_cliente`). Nunca responda sobre um mês passado com o status de hoje.\n4. Para \"quanto\", use os totais que a API já soma (`meta.totals`, `meta.totalAmount`, `meta.totalValue`) — não some página por página.\n5. Relatórios: seção listada em `meta.omittedSections` significa SEM ACESSO — diga isso; nunca diga que é zero.\n6. Erros das ferramentas:\n   - `insufficient_scope`: \"Não tenho permissão para consultar isso.\"\n   - `not_found`: o registro não existe (ou não é deste workspace).\n   - `validation_error`: revise o parâmetro (formato de data/mês) e tente de novo UMA vez.\n   - Outros: peça para tentar mais tarde; não mostre detalhes técnicos.\n7. Nunca mostre ids internos, token, documento completo ou dados de um cliente para quem não perguntou por ele.\n\n## Formato da resposta (WhatsApp)\n- Curta e direta: comece pela resposta, depois o detalhe essencial.\n- Dinheiro no formato R$ 1.500,00. Datas no formato 28/09/2026.\n- Listas com no máximo 10 itens; se houver mais, diga quantos são e ofereça filtrar.\n- Sem tabelas nem markdown pesado; use *negrito* do WhatsApp só no essencial.",
+          "maxIterations": 8
+        }
+      },
+      "name": "Agente B2C Finance",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list"
+        },
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "name": "Modelo de IA",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        560,
+        380
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ 'wa:' + $('Validar assinatura e extrair mensagem').item.json.from }}",
+        "contextWindowLength": 10
+      },
+      "name": "Memória da conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        720,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Encontra clientes pelo nome, razão social ou parte do CNPJ/CPF. SEMPRE use antes de qualquer consulta sobre um cliente citado pelo nome. Ignora acento e maiúsculas. Se vier mais de um resultado, pergunte ao usuário qual é (mostre nome, razão social e documento mascarado); nunca escolha sozinho. Devolve id, nome, razão social, documento mascarado, status de hoje e modalidade.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "type",
+              "valueProvider": "fieldValue",
+              "value": "client"
+            },
+            {
+              "name": "q",
+              "valueProvider": "modelRequired"
+            },
+            {
+              "name": "limit",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "q",
+              "description": "Texto buscado, como o usuário escreveu (ex.: \"face love\").",
+              "type": "string"
+            },
+            {
+              "name": "limit",
+              "description": "Máximo de resultados.",
+              "type": "number"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "buscar_clientes",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: clients.read · GET /search"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Detalhe de UM cliente pelo id (obtido em buscar_clientes): cadastro, contatos, responsável, valores, prazo, próxima renovação, status de hoje, alteração programada e situação financeira (em aberto, vencido, próximo vencimento). Com competence, traz também o status daquele mês.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/clients/{id}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "competence",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "id",
+              "description": "Id do cliente (de buscar_clientes).",
+              "type": "string"
+            },
+            {
+              "name": "competence",
+              "description": "Opcional. Mês AAAA-MM para saber o status NAQUELE mês.",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_cliente",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: clients.read · GET /clients/{id}"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Histórico de status do cliente com vigência (de quando até quando cada status valeu) e alterações programadas. Use para perguntas como \"desde quando está inativo?\" ou \"estava ativo em março?\". Mudar o status em outubro não altera setembro.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/clients/{id}/status-history",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "id",
+              "description": "Id do cliente (de buscar_clientes).",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_status_cliente",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: client_status.read · GET /clients/{id}/status-history"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Indicadores oficiais de um mês: faturamento, MRR, TCV, recebido, em aberto, vencido, resultado, margem, clientes ativos, novos, churn (quantidade e valor), ticket médio. Sem competence = mês atual (números parciais).",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/dashboard/summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "competence",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "competence",
+              "description": "Mês AAAA-MM. Padrão: o atual.",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_dashboard",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: dashboard.read · GET /dashboard/summary"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cobranças (recebimentos). Filtre por cliente (clientId de buscar_clientes), status e janela. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Janela: competence (padrão: mês atual) OU dateFrom+dateTo (vencimento). meta.totals traz a soma do filtro inteiro — use para responder \"quanto\".",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/receivables",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "clientId",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "status",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "competence",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "dateFrom",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "dateTo",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "page",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "pageSize",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "clientId",
+              "description": "Só deste cliente.",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "description": "Ex.: open, OVERDUE, \"PAID,PAID_LATE\".",
+              "type": "string"
+            },
+            {
+              "name": "competence",
+              "description": "Mês AAAA-MM (não use junto com dateFrom/dateTo).",
+              "type": "string"
+            },
+            {
+              "name": "dateFrom",
+              "description": "Vencimento a partir de (AAAA-MM-DD), junto com dateTo.",
+              "type": "string"
+            },
+            {
+              "name": "dateTo",
+              "description": "Vencimento até (AAAA-MM-DD), junto com dateFrom.",
+              "type": "string"
+            },
+            {
+              "name": "page",
+              "description": "page",
+              "type": "number"
+            },
+            {
+              "name": "pageSize",
+              "description": "pageSize",
+              "type": "number"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_recebimentos",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: receivables.read · GET /receivables"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Despesas (contas a pagar) pela data do lançamento — padrão: mês atual. status: pendente, pago, cancelado ou vencida (pendente com vencimento passado). category aceita o nome da categoria. meta.totalAmount soma o filtro inteiro.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/expenses",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "status",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "dateFrom",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "dateTo",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "category",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "page",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "pageSize",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "status",
+              "description": "status",
+              "type": "string"
+            },
+            {
+              "name": "dateFrom",
+              "description": "AAAA-MM-DD, junto com dateTo.",
+              "type": "string"
+            },
+            {
+              "name": "dateTo",
+              "description": "AAAA-MM-DD, junto com dateFrom.",
+              "type": "string"
+            },
+            {
+              "name": "category",
+              "description": "Nome ou id da categoria.",
+              "type": "string"
+            },
+            {
+              "name": "page",
+              "description": "page",
+              "type": "number"
+            },
+            {
+              "name": "pageSize",
+              "description": "pageSize",
+              "type": "number"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_despesas",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        520
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: expenses.read · GET /expenses"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Posição de caixa: saldo das contas, compromissos a pagar na janela, disponível, entradas e saídas previstas em 30 dias e saldo projetado (a receber vencido fica fora da projeção e vem separado).",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/cash/summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": []
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_caixa",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: cash.read · GET /cash/summary"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Oportunidades de upsell (venda adicional). status: OPPORTUNITY, NEGOTIATION, WON, LOST, PAUSED. responsible é o NOME do responsável. meta.totalValue soma o valor potencial do filtro.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/upsells",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "status",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "clientId",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "responsible",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "page",
+              "valueProvider": "modelOptional"
+            },
+            {
+              "name": "pageSize",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "status",
+              "description": "status",
+              "type": "string"
+            },
+            {
+              "name": "clientId",
+              "description": "Id do cliente (de buscar_clientes).",
+              "type": "string"
+            },
+            {
+              "name": "responsible",
+              "description": "Nome do responsável.",
+              "type": "string"
+            },
+            {
+              "name": "page",
+              "description": "page",
+              "type": "number"
+            },
+            {
+              "name": "pageSize",
+              "description": "pageSize",
+              "type": "number"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_upsells",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: upsells.read · GET /upsells"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Rotina do dia: ações prioritárias (com chave e se já foi concluída), cobranças vencidas e a vencer, pagamentos vencidos e a vencer, renovações pendentes do mês, caixa e upsells abertos. Use para \"o que tenho para hoje?\".",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/routine/daily",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": []
+        },
+        "optimizeResponse": false
+      },
+      "name": "consultar_rotina",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: routine.read · GET /routine/daily"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Resumo de um dia: cobranças que vencem, pagamentos recebidos, despesas do dia, mudanças de status e clientes novos. Seções sem permissão vêm listadas em meta.omittedSections — diga que não tem acesso, nunca que é zero.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/reports/daily",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "date",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "date",
+              "description": "Dia AAAA-MM-DD. Padrão: hoje.",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "gerar_relatorio_diario",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: reports.read · GET /reports/daily"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Resumo de uma competência: estado do fechamento, indicadores, carteira por status NAQUELE mês, recebimentos por status e despesas. Competências passadas mostram o que valia nelas. Seções sem permissão vêm em meta.omittedSections.",
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/reports/monthly",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "parametersQuery": {
+          "values": [
+            {
+              "name": "competence",
+              "valueProvider": "modelOptional"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "parametersHeaders": {
+          "values": [
+            {
+              "name": "X-B2C-Source",
+              "valueProvider": "fieldValue",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "valueProvider": "fieldValue",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "competence",
+              "description": "Mês AAAA-MM. Padrão: o atual.",
+              "type": "string"
+            }
+          ]
+        },
+        "optimizeResponse": false
+      },
+      "name": "gerar_relatorio_mensal",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "Scope: reports.read · GET /reports/monthly"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/{{ $('Validar assinatura e extrair mensagem').item.json.phoneNumberId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Validar assinatura e extrair mensagem').item.json.from, type: 'text', text: { body: $json.output } }) }}",
+        "options": {}
+      },
+      "name": "Responder no WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "WhatsApp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WHATSAPP_API_URL }}/{{ $('Validar assinatura e extrair mensagem').item.json.phoneNumberId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $('Validar assinatura e extrair mensagem').item.json.from, type: 'text', text: { body: 'Este número não está autorizado a consultar o B2C Finance. Fale com o administrador da agência.' } }) }}",
+        "options": {}
+      },
+      "name": "Responder número não autorizado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        700,
+        800
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "WhatsApp API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "b2c-agente-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "WhatsApp Verificação (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        60
+      ],
+      "webhookId": "b2c-agente-whatsapp-verificacao"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verificação do webhook (Meta): devolve hub.challenge se o hub.verify_token confere.\nconst q = $input.first().json.query || {};\nconst ok = q['hub.mode'] === 'subscribe' && q['hub.verify_token'] === $env.WHATSAPP_VERIFY_TOKEN;\nreturn [{ json: { ok, challenge: ok ? String(q['hub.challenge'] || '') : '' } }];"
+      },
+      "name": "Conferir verify token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.challenge }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : 403 }}"
+        }
+      },
+      "name": "Responder desafio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        60
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validar assinatura e extrair mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar assinatura e extrair mensagem": {
+      "main": [
+        [
+          {
+            "node": "Número autorizado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Número autorizado?": {
+      "main": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder número não autorizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente B2C Finance": {
+      "main": [
+        [
+          {
+            "node": "Responder no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo de IA": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_clientes": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_cliente": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_status_cliente": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_dashboard": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_recebimentos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_despesas": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_caixa": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_upsells": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_rotina": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gerar_relatorio_diario": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gerar_relatorio_mensal": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente B2C Finance",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Verificação (GET)": {
+      "main": [
+        [
+          {
+            "node": "Conferir verify token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir verify token": {
+      "main": [
+        [
+          {
+            "node": "Responder desafio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "b2c": {
+      "workflow": "agente-whatsapp.consulta",
+      "version": 1,
+      "catalogVersion": "1.0.0",
+      "apiVersion": "v1",
+      "readOnly": true,
+      "generatedBy": "integrations/n8n/scripts/build-workflows.mjs"
+    }
+  },
+  "tags": []
+}

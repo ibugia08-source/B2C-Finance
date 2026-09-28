@@ -8,6 +8,7 @@ Guia para quem vai integrar com a API, por exemplo num workflow do n8n ou no age
 | Documentação interativa (Swagger UI) | [`/api/docs`](https://b2-c-finance.vercel.app/api/docs) |
 | Referência de cada rota | [`API.md`](./API.md) |
 | Segurança e ciclo de vida do token | [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md) |
+| Workflows n8n, ferramentas do agente e configuração do WhatsApp | [`integrations/n8n/README.md`](../integrations/n8n/README.md) |
 
 > **Nunca** coloque um token real em código, print, issue ou documento. Este guia usa sempre `YOUR_API_TOKEN`.
 

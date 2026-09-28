@@ -1,0 +1,137 @@
+{
+  "name": "B2C · Sistema · Teste de conexão (v1)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Executar teste",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "GET /health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/me",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "GET /me",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_NO_N8N",
+          "name": "B2C Finance API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Confere se a integração tem os scopes que o agente de consulta usa.\nconst necessarios = [\"cash.read\",\"client_status.read\",\"clients.read\",\"dashboard.read\",\"expenses.read\",\"receivables.read\",\"reports.read\",\"routine.read\",\"upsells.read\"];\nconst me = $input.first().json;\nconst tem = (me.data && me.data.scopes) || [];\nconst faltando = necessarios.filter((s) => !tem.includes(s));\nreturn [{ json: { ok: faltando.length === 0, integracao: me.data && me.data.name, faltando, requestId: me.meta && me.meta.requestId } }];"
+      },
+      "name": "Conferir scopes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Executar teste": {
+      "main": [
+        [
+          {
+            "node": "GET /health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /health": {
+      "main": [
+        [
+          {
+            "node": "GET /me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET /me": {
+      "main": [
+        [
+          {
+            "node": "Conferir scopes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "b2c": {
+      "workflow": "sistema.teste-conexao",
+      "version": 1,
+      "apiVersion": "v1",
+      "readOnly": true,
+      "generatedBy": "integrations/n8n/scripts/build-workflows.mjs"
+    }
+  },
+  "tags": []
+}

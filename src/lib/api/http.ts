@@ -98,10 +98,23 @@ function erroDeValidacao(onde: "query" | "params" | "body", e: z.ZodError): ApiE
   );
 }
 
-/** Query string → objeto (a primeira ocorrência de cada chave). */
+/**
+ * Query string → objeto (a primeira ocorrência de cada chave). Valor VAZIO
+ * (`competence=`) conta como ausente: ferramentas de agente (n8n) mandam o
+ * parâmetro opcional em branco quando o modelo não o preenche, e isso não é
+ * um filtro — recusar com 400 só atrapalharia. Chave desconhecida continua
+ * sendo recusada, vazia ou não.
+ */
 function queryDe(req: Request): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of new URL(req.url).searchParams) if (!(k in out)) out[k] = v;
+  for (const [k, v] of new URL(req.url).searchParams) {
+    if (k in out) continue;
+    if (v.trim() === "") {
+      out[k] = undefined as unknown as string;
+      continue;
+    }
+    out[k] = v;
+  }
   return out;
 }
 

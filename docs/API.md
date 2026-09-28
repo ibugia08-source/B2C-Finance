@@ -2,7 +2,7 @@
 
 > 28/09/2026. Autenticação e scopes: [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md). Plano geral: [`API_IMPLEMENTATION_PLAN.md`](./API_IMPLEMENTATION_PLAN.md).
 >
-> **Especificação formal:** OpenAPI 3.1 em `/api/openapi.json` (cópia versionada: [`api/openapi.json`](./api/openapi.json)); interface interativa em `/api/docs`. Guia com exemplos curl: [`API_CONSUMER_GUIDE.md`](./API_CONSUMER_GUIDE.md). A fonte da especificação é `src/lib/api/openapi.ts`: depois de mudar uma rota, rode `npm run openapi:lint`, que regenera o arquivo e o valida. O teste `tests/api-openapi.test.ts` falha se a rota, o scope ou o arquivo divergirem.
+> **Especificação formal:** OpenAPI 3.1 em `/api/openapi.json` (cópia versionada: [`api/openapi.json`](./api/openapi.json)); interface interativa em `/api/docs`. Guia com exemplos curl: [`API_CONSUMER_GUIDE.md`](./API_CONSUMER_GUIDE.md). Integração n8n (workflows, catálogo das ferramentas do agente): [`integrations/n8n/`](../integrations/n8n/README.md). A fonte da especificação é `src/lib/api/openapi.ts`: depois de mudar uma rota, rode `npm run openapi:lint`, que regenera o arquivo e o valida. O teste `tests/api-openapi.test.ts` falha se a rota, o scope ou o arquivo divergirem.
 
 **Base URL:** `https://b2-c-finance.vercel.app/api/v1`.
 
