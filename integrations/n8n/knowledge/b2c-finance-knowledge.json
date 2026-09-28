@@ -1,0 +1,1219 @@
+{
+  "catalog": "b2c-finance-knowledge",
+  "version": "1.0.0+91a3dbccbb9d",
+  "principle": "RAG = conhecimento e documentação. API = dados atuais e verdade operacional. Nenhum trecho desta base é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.",
+  "collection": "b2c_finance_conhecimento",
+  "embedding": {
+    "provider": "openai",
+    "model": "text-embedding-3-small",
+    "dimensions": 1536,
+    "distance": "Cosine"
+  },
+  "documentos": [
+    {
+      "id": "agente",
+      "path": "docs/AI_AGENT.md",
+      "titulo": "O Agente B2C Finance (WhatsApp)",
+      "categoria": "agente",
+      "atualizado_em": "2026-09-28",
+      "sha256": "866fec2cfa7289e28f30d67172c389d994040c592ea965203273150569e9de26",
+      "trechos": 7
+    },
+    {
+      "id": "metricas",
+      "path": "docs/METRICAS_FINANCEIRAS.md",
+      "titulo": "Dicionário de métricas financeiras",
+      "categoria": "metricas",
+      "atualizado_em": "2026-09-28",
+      "sha256": "4abfddcb322fdfc27274135a8cd891a363f3b14210a34065594ded473f1b179a",
+      "trechos": 8
+    },
+    {
+      "id": "regras-mrr-tcv",
+      "path": "docs/REGRAS_MRR_TCV.md",
+      "titulo": "Regras de MRR, TCV, faturamento e renovação",
+      "categoria": "regras-de-receita",
+      "atualizado_em": "2026-09-28",
+      "sha256": "84d39185681dc2989ff77549e1eb9c2eb10de45f9cdd23acc940831c057a4968",
+      "trechos": 9
+    },
+    {
+      "id": "arquitetura",
+      "path": "docs/ARQUITETURA_FINANCEIRA.md",
+      "titulo": "Arquitetura financeira",
+      "categoria": "arquitetura",
+      "atualizado_em": "2026-09-28",
+      "sha256": "306c4fd55545894910893e9569117e802e46acedfe15673f99fefb0aebe5b977",
+      "trechos": 6
+    },
+    {
+      "id": "status-temporal",
+      "path": "docs/STATUS_TEMPORAL_CLIENTES.md",
+      "titulo": "Status do cliente com vigência",
+      "categoria": "status-de-clientes",
+      "atualizado_em": "2026-09-28",
+      "sha256": "96619d154328a4d4a466a49ed852b23d055f4c5450daea0b3fc67d7d3208b94d",
+      "trechos": 14
+    },
+    {
+      "id": "plano-de-contas",
+      "path": "docs/PLANO_DE_CONTAS.md",
+      "titulo": "Plano de contas do B2C Finance",
+      "categoria": "contabilidade",
+      "atualizado_em": "2026-09-28",
+      "sha256": "6016830142764839b34aaa3b2d708d33a6629a5782817391b2d1168ee21063bb",
+      "trechos": 8
+    },
+    {
+      "id": "politicas",
+      "path": "docs/POLITICAS_INTERNAS.md",
+      "titulo": "Políticas e regras operacionais do B2C Finance",
+      "categoria": "politicas",
+      "atualizado_em": "2026-09-28",
+      "sha256": "a978108acae40c63ccde3875aef0ed72b510f86dc91aaa9ae3035be578471d6a",
+      "trechos": 12
+    },
+    {
+      "id": "api",
+      "path": "docs/API.md",
+      "titulo": "API B2C Finance V1",
+      "categoria": "api",
+      "atualizado_em": "2026-09-28",
+      "sha256": "07fa92045349011fa4e848f554c558e306cd36ab8242e58e2f4ecc35ac834cfd",
+      "trechos": 23
+    }
+  ],
+  "trechos": [
+    {
+      "id": "agente#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Introdução\n\nO agente é o assistente financeiro da agência no **WhatsApp**. Ele responde perguntas sobre clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios, e **prepara** ações de escrita que só acontecem com a confirmação de quem pediu.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "Introdução",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: De onde vem cada resposta\n\nO agente usa **duas fontes, com papéis diferentes**:\n| Fonte | Para quê | Exemplos |\n|---|---|---|\n| **API do B2C Finance** (ferramentas de consulta) | **Dados atuais e verdade operacional.** É a única fonte de números, nomes, datas e situações. | Saldo e caixa, MRR do mês, clientes ativos hoje, recebimentos, despesas, status de um cliente, inadimplência, rotina do dia |\n| **Base de conhecimento** (documentação indexada) | **Conceitos, regras e procedimentos.** Nunca traz número atual. | O que é MRR e TCV, como se calcula o resultado, o que significa \"Vencido\" × \"Inadimplente\", por que um mês fechado recusa lançamento, o que é cada conta do plano de contas |\nUma pergunta pode precisar das duas. Em \"o MRR caiu?\", o número vem da API e a explicação do que entra no MRR vem da base de conhecimento. Se a base de conhecimento citar um valor, ele é só exemplo e nunca deve ser usado como dado.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "De onde vem cada resposta",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Quem pode usar\n\n- **Só números de WhatsApp vinculados** a um usuário ativo, pelo administrador, em Configurações → Integrações → WhatsApp. Número não vinculado recebe uma resposta genérica, sem dado nenhum.\n- **O agente age com as permissões dessa pessoa** no B2C Finance. Quem não vê recebimentos no sistema também não vê pelo WhatsApp.\n- **Usuários restritos a uma agência** ainda não são atendidos pelo WhatsApp.\n- **O agente entende só mensagens de texto.**",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "Quem pode usar",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: O que ele faz\n\n**Consulta direto (READ):**\n- buscar cliente pelo nome ou documento;\n- detalhe e histórico de status do cliente;\n- indicadores do mês (dashboard);\n- recebimentos, despesas e caixa;\n- oportunidades de upsell;\n- rotina do dia;\n- relatórios do dia e do mês.\n**Prepara e pede confirmação (WRITE_CONFIRMATION):**\n- **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.\n- **Recebimentos:** registrar pagamento recebido.\n- **Despesas:** lançar, editar (em aberto), marcar como paga.\n- **Upsell:** cadastrar e atualizar oportunidade em aberto.\n- **Rotina:** concluir ação da rotina de hoje.\n**Nunca faz (BLOCKED):**\n- excluir cliente, recebimento, pagamento ou despesa;\n- reabrir competência;\n- alterar permissões ou gerenciar usuários;\n- alterar o plano de contas.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "O que ele faz",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Como funciona uma ação de escrita\n\n1. **A pessoa pede** (ex.: \"registra o pagamento da Face Love\").\n2. **O agente identifica o cliente e a cobrança pela API.** Se houver dúvida (dois clientes parecidos, duas cobranças em aberto), ele pergunta.\n3. **O B2C Finance monta uma prévia** com a situação atual:\n   ```\n   Encontrei:\n   *Face Love Distribuidora*\n   Recebimento em aberto: R$ 1.500,00\n   Competência: Setembro/2026\n   Data de pagamento: hoje\n   Deseja registrar?\n   Responda *SIM 4821* para confirmar ou *NÃO* para cancelar.\n   ```\n4. **A pessoa responde `SIM` seguido do código** da prévia. Um \"sim\" solto não confirma nada. `NÃO` cancela.\n5. **O B2C Finance confere** se a confirmação é daquela ação, da mesma pessoa, dentro da validade (10 minutos) e com os dados iguais aos da prévia.\n6. **Executa e responde com o resultado real** (ex.: \"✅ Pagamento registrado — Face Love (R$ 1.500,00)\"), ou explica por que não executou.\n**Cada pessoa tem uma ação aguardando confirmação por vez.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e o SIM, nada é executado e é preciso pedir de novo.\nToda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "Como funciona uma ação de escrita",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Seu perfil não tem permissão para isso.\"\n- **Não encontrou:** o agente diz que não encontrou e pede outro nome ou parte do CNPJ. Ele não adivinha.\n- **Problema técnico:** \"Tive um problema técnico agora; tente de novo em instantes.\" O agente não mostra detalhes técnicos.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "Respostas típicas",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Limites conhecidos\n\n- **A confirmação não passa pela IA.** Se a pessoa perguntar logo depois \"registrou?\", o agente consulta a API para responder.\n- **Valores e situações sempre de novo:** o agente não guarda números de uma conversa para outra; consulta a API a cada pergunta.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "categoria": "agente",
+        "secao": "Limites conhecidos",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Introdução\n\n> **Atualizado em 2026-07-20 (auditoria completa).** Fonte da verdade para nomes,\n> fórmulas e origem das métricas. Regra de ouro: antes de criar uma métrica nova,\n> verifique se ela já existe aqui com outro nome.\n**Camada central real:** `src/lib/services/dashboard-main.ts` (Dashboard) +\n`src/lib/services/revenue-metrics.ts` (regras MRR/TCV/recebimentos) — re-exportadas\npor `src/lib/financial/calculations.ts`. Ver `docs/ARQUITETURA_FINANCEIRA.md` para o\nmapa completo e as divergências conhecidas.\nRegras contábeis oficiais:\n- **TCV nunca é rateado** — entra cheio no mês da adesão/fechamento/renovação\n  (cobrança `Billing revenueType=TCV` na competência).\n- **MRR** = Σ `Client.monthlyValue` dos clientes `modality=MRR` ativos no mês.\n- **Receita Extra é apenas manual** (`ExtraRevenue origin=MANUAL` + `Income` avulsa\n  sem cobrança). Nunca gerar automática.\n- Pagamento de mês anterior recebido depois = **recuperação de inadimplência**\n  (conta no mês do pagamento; o mês original permanece em aberto no fechamento).\n---",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Introdução",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: 1ª linha do Dashboard (fórmulas OFICIAIS — `getDashboardMainMetrics`)\n\n| Métrica | Fórmula | Fonte |\n|---|---|---|\n| **Faturamento total** | `getPeriodRevenue().total` (MRR+TCV) **+ Receita Extra manual do mês** | `dashboard-main.ts` |\n| **Total de despesas** | Σ `Transaction type=despesa ≠cancelado` no período | `finance-metrics.ts` (`getFinanceSummary.despesas`) |\n| **Faturamento recebido** | `receiptsCorrectMonth` (pagos na competência + adiantamentos) **+ extra manual** | `revenue-metrics.ts` (`getReceiptsSummary`) |\n| **Em aberto** | `max(0, Faturamento total − Recebido)` | `dashboard-main.ts` |\n| **Vencido** (⊂ Em aberto) | Σ (amount−paidTotal) das cobranças abertas da competência com `dueDate < hoje` (`overdueOpenAmount`) | `revenue-metrics.ts` |\n| **Resultado do mês** | `Recebido − Despesas` | `dashboard-main.ts` |\n| **Margem operacional** | `Resultado / Recebido` (0 se nada recebido) | `dashboard-main.ts` |\nDecisões documentadas:\n- **Clamp em 0** no Em aberto (adiantamento pode fazer Recebido > Previsto).\n- A Receita Extra manual entra **dos dois lados** (previsto e recebido) — o Em\n  aberto continua = previsto MRR/TCV − recebido de cobranças, coerente com\n  Recebimentos e Rotina.\n- **Rotina diária** usa a MESMA fórmula do Em aberto (\"Falta receber\") e o mesmo\n  `overdueOpenAmount` (\"Vencido do mês\").\n- ⚠️ `expectedTotal` (Σ TODAS as cobranças da competência, incl. SETUP/ONE_TIME)\n  é uma métrica **diferente** do Faturamento total do card. Existe em\n  `getReceiptsSummary` para usos contábeis por cobrança emitida. Não misturar.",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "1ª linha do Dashboard (fórmulas OFICIAIS — `getDashboardMainMetrics`)",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Comparativo com mês anterior\n\n`getPreviousMonthComparison(current, previous, hadData)` (`dashboard-main.ts`) —\nmês cheio compara com o mês-calendário anterior; intervalo livre, com janela de\nmesmo tamanho. Sem base → \"Sem dados do mês anterior\".",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Comparativo com mês anterior",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Faturamento MRR / TCV (mês)\n\n- **MRR (oficial)** = `getPeriodRevenue().mrr` — Σ `Client.monthlyValue` dos\n  clientes MRR ATIVOS (Ativo/Em renovação/Inadimplente) no ENCERRAMENTO de cada\n  competência, pela linha do tempo de status (26/09/2026). Competência em\n  curso = status de hoje; futura = projeção com alterações programadas.\n  Limitação: o valor ainda é a mensalidade atual (ver STATUS_TEMPORAL_CLIENTES.md).\n- **TCV (oficial)** = `getPeriodRevenue().tcv` — Σ `Billing revenueType=TCV` da\n  competência (valor cheio, sem rateio).\n- ⚠️ Definições PARALELAS que ainda existem (usos legados/IA — não usar em telas):\n  `mrrAtivo` e `receitaReconhecidaMes` (base **Contract**), `series.mrr`\n  (Contract, `getMonthlySeries`), `kpis.tcvVendido` (Contract.totalValue por\n  startDate). Ver ARQUITETURA_FINANCEIRA.md.",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Faturamento MRR / TCV (mês)",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Séries anuais (gráficos do Dashboard)\n\n`getYearlySeries(year)` (`dashboard-main.ts`): faturamento (MRR+TCV+extra),\ndespesas, recebido (por competência) e resultado — Jan..Dez do ano filtrado.",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Séries anuais (gráficos do Dashboard)",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Indicadores gerenciais\n\n| Métrica | Fórmula oficial | Onde |\n|---|---|---|\n| Ticket médio geral | Faturamento total / clientes ativos | dashboard/page.tsx |\n| Custo por cliente | Despesas / clientes ativos | `getMonthlyCostPerClient` |\n| % Folha no faturamento | Folha do mês / Faturamento total | dashboard/page.tsx |\n| % Recorrência | MRR / Faturamento total | dashboard/page.tsx |\n| Folha (`folhaPeriodo`) | Σ PayrollItem (APPROVED/PAID) do mês, **DEDUCTION negativo** | `finance-metrics.ts` (bug do sinal corrigido em 2026-07-20) |\n| Churn / Receita perdida | count/Σ `ClientLoss` por `lostAt` no período | `getMonthlyChurn` |\n| Novos clientes | `startedAt` no período (fallback `createdAt`) + receita (MRR mensal / TCV total) | `getNewClientsSummary` |\n| Renovações | `Client.renewalMonth == mês` (base ativa) | `getRenewalOutlook` |\n| Inadimplência (mês) | = Vencido (`overdueOpenAmount`) | `revenue-metrics.ts` |\n| Inadimplência (aging acumulado) | `getDelinquentClients` — OVERDUE global + buckets 1-15/16-30/31-60/60+ | `billing-metrics.ts` |\n| Caixa disponível | Σ `Account.balance` + Σ `CashBox.currentAmount`; projeções 30/60/90 | `getCashSummary` |",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Indicadores gerenciais",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Módulo Clientes (KPIs da carteira)\n\nTodos pela COMPETÊNCIA selecionada (26/09/2026):\nClientes ativos = status que gera receita no encerramento da competência (hoje,\nna competência em curso), pela linha do tempo de status · Novos no mês =\nstartedAt (fallback createdAt) no mês — reativação não é novo · Perdidos no mês\n= perdas registradas (`ClientLoss.lostAt`) no mês, a mesma fonte do Dashboard —\nnão \"quem hoje está Perdido\" · Renovações do mês = livro de renovações (pendente\nsó se o cliente estava na carteira viva naquela competência).\nDashboard: clientes ativos, ticket médio, custo por cliente e churn rate usam a\ncarteira do encerramento do período (`getClientsBlock(period)`).",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Módulo Clientes (KPIs da carteira)",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "metricas#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Dicionário de métricas financeiras\nSeção: Lançar ao caixa\n\nResultado positivo do mês pode ser lançado (total/parcial) ao \"Caixa operacional\"\n(`launchResultToCash`). Anti-duplicidade: marcador `[resultado:YYYY-MM]` na\ndescrição do `CashBoxMovement`; disponível = resultado − já lançado.",
+      "metadata": {
+        "docId": "metricas",
+        "titulo": "Dicionário de métricas financeiras",
+        "categoria": "metricas",
+        "secao": "Lançar ao caixa",
+        "fonte": "docs/METRICAS_FINANCEIRAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Introdução\n\nEste documento explica **como o B2C Finance classifica e conta a receita**. Não traz números: MRR atual, faturamento do mês, clientes ativos e renovações do mês vêm sempre da API (`consultar_dashboard`, `consultar_cliente`, `gerar_relatorio_mensal`).",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Introdução",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Modalidades de cliente\n\nTodo cliente com contrato tem uma de duas modalidades.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Modalidades de cliente",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Modalidades de cliente › MRR — receita recorrente mensal\n\n- **Cadastro exige** o valor mensal (maior que zero) e o dia de pagamento (1 a 31). Em meses mais curtos, o dia vira o último dia do mês.\n- **Prazo** em meses ou **indeterminado**. O indeterminado vale só para MRR.\n- **Cobrança:** uma mensalidade por mês, a partir da data de entrada, vencendo no dia de pagamento. Pelo prazo do contrato ou, se indeterminado, em aberto.\n- **MRR de um mês** = soma das mensalidades dos clientes MRR que geram receita **no encerramento daquela competência**: Ativo, Em renovação e Inadimplente.\n  - No mês em curso vale o status de hoje.\n  - Nos meses futuros vale a projeção, com as alterações de status já programadas.\n  - O MRR previsto não depende de a cobrança existir: é calculado pelo cadastro.\n- **Limitação conhecida:** o valor usado nos meses passados ainda é a mensalidade **atual** do cliente. Um reajuste muda o MRR histórico daquele cliente.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Modalidades de cliente › MRR — receita recorrente mensal",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Modalidades de cliente › TCV — contrato de valor fechado\n\n- **Cadastro exige** o valor total do contrato (maior que zero), o prazo em meses e a data de entrada ou fechamento. TCV não aceita prazo indeterminado.\n- **Cobrança:** uma única cobrança com o valor **cheio**, no mês da entrada, vencendo no dia da entrada.\n- **Nunca é rateado** pelos meses do contrato, e **nunca** aparece como recorrência mensal.\n- **TCV de um mês** = soma das cobranças TCV daquela competência.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Modalidades de cliente › TCV — contrato de valor fechado",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Outros tipos de receita\n\n| Tipo | O que é |\n|---|---|\n| Setup | Implantação cobrada à parte. |\n| Avulso (one-time) | Serviço pontual. Upsell vendido gera uma cobrança avulsa na competência escolhida. |\n| Upsell | Venda adicional a um cliente existente. Enquanto está no funil (oportunidade, negociação, pausada) é só previsão; só vira receita quando vendido, com a cobrança lançada. |\n| Receita extra | **Somente manual.** Entrada sem cobrança a cliente (reembolso recebido, ajuste, outra entrada). O sistema nunca cria receita extra sozinho. |\n| Recuperação | Pagamento, em outro mês, de uma cobrança de mês anterior. É uma classificação **analítica**, não uma receita nova. |",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Outros tipos de receita",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Como os totais do mês se formam\n\n- **Faturamento total** = MRR + TCV da competência + receita extra manual do mês.\n- **Recebido** = pagamentos que casam com a competência (pagos no mês) + adiantamentos + receita extra manual.\n  - **Adiantamento** (pagar antes do mês da cobrança) conta no mês em que foi pago.\n- **Em aberto** = faturamento total − recebido. Nunca é negativo: se o adiantamento fizer o recebido passar do previsto, o em aberto fica zero.\n- **Vencido** é a parte do em aberto cujo vencimento já passou.\n- **Resultado do mês** = recebido − despesas do mês.\n- **Margem operacional** = resultado ÷ recebido. É zero se nada foi recebido.\n- **Pagamento atrasado de mês anterior** conta como recuperação no mês em que o dinheiro entrou. A competência original continua mostrando o valor em aberto no fechamento, porque foi assim que ela fechou.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Como os totais do mês se formam",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Carteira do mês\n\n- **Clientes ativos no mês:** clientes com status que gera receita no encerramento da competência, pela linha do tempo de status (ver `STATUS_TEMPORAL_CLIENTES.md`).\n- **Novos no mês:** data de entrada no mês. Reativação não é cliente novo.\n- **Perdidos no mês (churn):** perdas registradas no mês, com a data da saída. Não é \"quem hoje está Perdido\".\n- **Ticket médio:** faturamento total ÷ clientes ativos.\n- **% Recorrência:** MRR ÷ faturamento total.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Carteira do mês",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Renovação\n\n- **Data de expectativa de renovação** = data de entrada + prazo do contrato, recalculada a cada ciclo. É a fonte única de \"quando renova\".\n- **Agendamento manual** de uma renovação substitui o cálculo. Editar o cadastro só recalcula se a entrada ou o prazo mudarem.\n- **MRR com prazo indeterminado** não tem expectativa automática. Só entra em Renovações se for agendado à mão, e segue ativo até ser dado como perdido.\n- **O desfecho conta no mês da expectativa,** com o valor esperado congelado naquele momento. O desfecho é renovou, não renovou ou pendente.\n- **\"Renovações esperadas\"** soma MRR + TCV.\n- **\"Faturamento total esperado\"** = faturamento total + renovações esperadas **só de TCV**, para não contar a mensalidade MRR duas vezes.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Renovação",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "regras-mrr-tcv#009",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Regras de MRR, TCV, faturamento e renovação\nSeção: Para responder bem\n\n- **\"Qual é o MRR?\"** → consulte a API (`consultar_dashboard`). Este documento só explica o que o número significa.\n- **\"Por que o TCV de março está tão alto?\"** → o TCV entra cheio no mês da entrada, sem rateio. Confira na API quais cobranças TCV existem naquela competência.\n- **\"O cliente pagou em outubro a mensalidade de agosto; agosto melhora?\"** → não. O dinheiro conta em outubro como recuperação, e agosto continua com o valor em aberto no fechamento.",
+      "metadata": {
+        "docId": "regras-mrr-tcv",
+        "titulo": "Regras de MRR, TCV, faturamento e renovação",
+        "categoria": "regras-de-receita",
+        "secao": "Para responder bem",
+        "fonte": "docs/REGRAS_MRR_TCV.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Introdução\n\nMapa de onde cada cálculo vive, quem consome o quê, e as divergências conhecidas.\nComplementa `docs/METRICAS_FINANCEIRAS.md` (fórmulas oficiais).",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Introdução",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Camadas\n\n```\nsrc/lib/financial/calculations.ts      ← barrel \"oficial\" (re-exporta tudo)\nsrc/lib/services/\n  revenue-metrics.ts     ← REGRAS MRR/TCV/recebimentos (getPeriodRevenue,\n                            getReceiptsSummary, churn, novos, renovações, perdas)\n  dashboard-main.ts      ← métricas do Dashboard redesenhado (5 cards, séries\n                            anuais, detalhes, resumo, comparativo, lançar-ao-caixa)\n  dashboard-metrics.ts   ← orquestrador legado (getExecutiveDashboard, kpis,\n                            séries 12m, breakdowns, saúde, alertas)\n  finance-metrics.ts     ← resultado caixa (receitas/despesas/lucro), folha, caixa\n  expense-metrics.ts     ← resumo de despesas do mês\n  billing-metrics.ts     ← vencidos/aging/inadimplentes (global)\n  client-metrics.ts      ← inadimplência do mês por cliente + risco individual\n  contract-metrics.ts    ← mrrAtivo/tcvVendido/receitaReconhecida (base Contract)\n  upsell-metrics.ts, receivables-cycle.ts, payment-accounting.ts ...\n```\n**Realidade de consumo:** só `dashboard/page.tsx` importa do barrel\n`financial/calculations`; todas as outras páginas importam direto de\n`services/*`. O barrel é conveniência, não enforcement.",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Camadas",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Fluxo de dados canônico (MRR/TCV)\n\n```\nClient (modality, monthlyValue, totalContractValue, paymentDay 1-31)\n  └─ Contract (type MRR/TCV; TCV força recurrence=NONE, monthlyValue=0)\n       └─ Billing (competenceMonth/Year, revenueType, dueDate, amount, paidTotal)\n            └─ Payment (paidAt, amount)  → Income (espelho de caixa)\nExtraRevenue (origin=MANUAL)  → receita extra manual\nTransaction (type=despesa)    → despesas   ·   PayrollItem → folha\nCashBox/CashBoxMovement       → caixa/reservas\n```\n- MRR previsto NÃO depende de billing existir (Σ Client.monthlyValue dos MRR\n  ativos) — imune a mensalidade não gerada.\n- **Status do cliente tem vigência (26/09/2026):** \"ativo no mês X\" vem da linha\n  do tempo `ClientStatusHistory` (status no encerramento da competência; hoje\n  na competência em curso; projeção com alterações programadas no futuro) —\n  `src/lib/clients/status-history.ts`. `Client.status` = status vigente HOJE,\n  materializado. Detalhes: `docs/STATUS_TEMPORAL_CLIENTES.md`.\n- TCV previsto = billings TCV da competência (o cadastro TCV gera exatamente 1\n  cobrança cheia no mês do fechamento).\n- Recebido casa Payment.paidAt com a competência (pagou no mês ou adiantado);\n  atrasado de mês anterior vira RECUPERAÇÃO (não reabre o mês).",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Fluxo de dados canônico (MRR/TCV)",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Quem consome o quê\n\n| Superfície | Fonte |\n|---|---|\n| Dashboard (5 cards, gráficos, resumo) | `getDashboardMainMetrics` + `getYearlySeries` (dashboard-main) |\n| Dashboard (saúde, alertas, indicadores) | `getExecutiveDashboard` (dashboard-metrics) |\n| Rotina diária | queue (billing-metrics/collection-priority) + billings diretos + getCashSummary |\n| Clientes (KPIs, lista, filtro de status) | status DA COMPETÊNCIA (`getClientStatusesForCompetence`) + `ClientLoss` do mês + client-metrics (inadimplência mês) |\n| Status do cliente (qualquer tela) | `src/lib/clients/status-history.ts` — nunca `client.status` para um mês que não seja hoje |\n| Gestão do Mês (resumo do topo) | `getReceiptsSummary` + `getExpenseSummary` + `getPayrollSummary` — MESMAS fontes do Dashboard, de propósito (não criar cálculo novo aqui). Resultado do mês = `expectedTotal − despesas` (regra da planilha, 2026-08-13) |\n| Gestão do Mês (grid de clientes) | receivables-cycle + KPIs do ciclo calculados na página (paidTotal) |\n| Gestão do Mês (Recebimentos do Mês) | reuso das billings do grid + incomes avulsas/RECOVERY + extraRevenue MANUAL (zero query nova de billing) |\n| Gestão do Mês (contas/folha) | queries diretas por mês |\n| Renovações (seção + /renovacoes) | `getRenewalPanel` (renewal-metrics) = Client.renewalMonth ∪ Contract.renewalDate no mês + `expectedRenewalValues` (regra central) + ClientRenewal/ClientLoss do mês; faixa de previsibilidade via `getRenewalStrip` |\n| Upsell (Kanban) | prisma direto + `getUpsellKpis`; venda com lançamento cria Billing ONE_TIME na competência escolhida (`setUpsellStatus`) |\n| Relatórios | reports/registry.ts (mistura getPeriodRevenue + agregações próprias) |\n| IA (assistente/rotina) | ai/agency-context.ts → kpis (dashboard-metrics) + finance + séries |",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Quem consome o quê",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Quem consome o quê\n\n| Superfície | Fonte |\n|---|---|\n| Painel Anual | `getAnnualPanel` (annual-panel) → consome `getYearlySeries` do Dashboard + agregações mensais próprias; meta em `AnnualTarget` |\n| Painel Anual (simulador) | getCashSummary + getPeriodRevenue + agregações inline na página |",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Quem consome o quê",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "arquitetura#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Arquitetura financeira\nSeção: Regras invioláveis (validadas na auditoria)\n\n- ownerId: todas as queries passam pela extensão de `src/lib/prisma.ts`\n  (fail-closed). Sem PrismaClient cru; $executeRaw só para advisory locks.\n- TCV nunca rateado; nunca aparece como recorrência mensal.\n- Receita Extra: apenas manual.\n- Pool Vercel = 5 conexões → páginas pesadas buscam em FASES sequenciais\n  (nunca um Promise.all gigante — lição do crash do Dashboard, fix f67220a).\n- Datas de vencimento: dia 1-31 com clamp de fim de mês via\n  `getValidDueDateForMonth` (lib/financial/due-date.ts) — único ponto.",
+      "metadata": {
+        "docId": "arquitetura",
+        "titulo": "Arquitetura financeira",
+        "categoria": "arquitetura",
+        "secao": "Regras invioláveis (validadas na auditoria)",
+        "fonte": "docs/ARQUITETURA_FINANCEIRA.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: Introdução\n\nImplantado em 26/09/2026. Código central: `src/lib/clients/status-history.ts`.\nMigration: `prisma/migrations/20260926090000_status_temporal_clientes`.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "Introdução",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 1. O problema original\n\nO status do cliente era um campo só, `Client.status`, e todo número histórico lia o status de **hoje**.\nExemplo: em Setembro/2026 o cliente Alpha está Ativo. Alguém abre Outubro/2026 e muda Alpha para Inativo. A partir desse momento:\n- Setembro, Agosto e todo o passado passavam a mostrar Alpha como Inativo.\n- Os \"clientes ativos\" e o MRR dos meses passados mudavam, e a lista da carteira também.\n- Os relatórios de meses já fechados passavam a dizer outra coisa.\nHavia exceções parciais, mas elas não resolviam o problema:\n- O MRR de meses passados usava as datas de entrada e saída, sem histórico de pausa.\n- `churnedAt` era apagado na reativação.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "1. O problema original",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 2. A regra nova\n\n**O status tem vigência.** Toda mudança registra:\n- o cliente e o novo status;\n- o início da vigência, e o fim quando houver;\n- quem registrou e quando;\n- o motivo (opcional);\n- o dono dos dados (`ownerId`).\nUma mudança em Outubro não reescreve Setembro.\n| Conceito | Definição |\n|---|---|\n| **Status atual** | O intervalo que cobre **hoje**, no calendário da Bahia. |\n| **Status histórico** | O intervalo que cobre a data consultada. |\n| **Status da competência** | O status no **encerramento** do mês (último dia). Na competência em curso, o de **hoje**, porque o fim do mês ainda não chegou. |\n| **Status futuro (programado)** | Um intervalo que começa depois de hoje. Não altera o status atual, a Rotina, o Dashboard de hoje, o MRR vigente nem a contagem de clientes de hoje. Aparece só em projeções e nos meses futuros. |\nExemplo de linha do tempo com reativação:\n- Ativo de 10/01/2026 até 30/09/2026\n- Inativo de 01/10/2026 até 31/10/2026\n- Ativo a partir de 01/11/2026\nResultado por competência: Agosto e Setembro contam Ativo, Outubro conta Inativo, Novembro e Dezembro contam Ativo.\nMudança real no meio do mês (Ativo até 15/10, Perdido desde 16/10):\n- A linha do tempo guarda a data exata.\n- O encerramento de Outubro conta Perdido.\n- Os fatos financeiros de Outubro continuam todos lá.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "2. A regra nova",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 3. Fontes de verdade\n\n| Estrutura | Papel | Mutável? |\n|---|---|---|\n| `ClientStatusHistory` | **Fonte temporal oficial.** São intervalos de datas civis `[effectiveFrom, effectiveTo]`, inclusivos. `effectiveTo` nulo significa \"em diante\". | Só pela camada central e pelos gatilhos. |\n| `Client.status` | **Status vigente hoje, materializado.** Nunca é o status de um mês futuro. Continua existindo porque dezenas de telas de \"hoje\" o leem. | Pela transição do status atual. |\n| `Snapshot` (fotografia do fechamento) | Fotografia imutável da competência fechada, formato 3. A área \"carteira\" traz o status de cada cliente na competência. | Não. É gerada no fechamento. |\n| `ClientLoss` | O **fato** da perda: data, valor perdido, motivo e renovação frustrada. É gravado na data de vigência da saída. | Não é fonte de status. |\n| `AuditLog` | Trilha de auditoria, com os campos `status_vigencia`, `status_programado` e `status_programado_cancelado`. | Só recebe novas linhas (append-only). |\nNão foi criado um modelo de snapshot mensal por cliente. A fotografia de fechamento que já existia (`Snapshot`) passou a guardar o status da competência. Criar outro modelo seria manter duas fotografias concorrentes.\nTambém não foi criado um modelo de competência: o fechamento já existe em `ClosingPeriod`, com os estados OPEN, SOFT_CLOSED, CLOSED e REOPENED, versão e motivo de reabertura.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "3. Fontes de verdade",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 4. Integridade garantida pelo banco\n\n- `CHECK (effectiveTo IS NULL OR effectiveTo >= effectiveFrom)`: um intervalo não pode terminar antes de começar.\n- `EXCLUDE USING gist (clientId WITH =, daterange(effectiveFrom, effectiveTo, '[]') WITH &&) DEFERRABLE INITIALLY DEFERRED`: dois status válidos no mesmo dia não existem. Isso depende da extensão `btree_gist`.\n  - Sem a extensão, a migration cria no lugar um índice único por (cliente, início) e um único intervalo em aberto por cliente.\n- `clientId` é obrigatório e apagado em cascata junto com o cliente. `ownerId` é copiado do cliente.\n- A tabela tem RLS ligado e está em `OWNED_MODELS`, de modo que as leituras pelo Prisma já saem filtradas por dono.\n- Leitura em lote que encontre dois intervalos no mesmo dia registra um erro e deixa aquele cliente **sem status**. A leitura unitária (`statusAtDate`) lança `StatusTimelineConflictError`. Em nenhum caso o sistema escolhe um dos dois intervalos.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "4. Integridade garantida pelo banco",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar\n\nO algoritmo de vigência mora **uma vez**, no banco:\n- **`b2c_status_apply(cliente, status, D, ...)`**: aplica \"status S a partir de D\".\n  1. O intervalo que cobre D é encerrado em D−1.\n  2. S vale de D até a véspera da próxima mudança já registrada, que é preservada; se não houver próxima, vale em diante.\n  3. Uma mudança no mesmo dia de outra substitui aquela.\n  4. Intervalos vizinhos com o mesmo status são juntados.\n  5. Um advisory lock por cliente impede que duas abas se atropelem.\n- **`b2c_status_cancel(cliente, D)`**: remove a mudança que começa em D, e o intervalo anterior volta a cobrir o período dela.\nExemplo de reorganização: a linha do tempo é Ativo desde 01/01/2026, com Inativo programado para 01/10/2026. Depois se informa Pausado a partir de 01/09/2026. O resultado é:\n- Ativo de 01/01 até 31/08\n- Pausado de 01/09 até 30/09\n- Inativo a partir de 01/10\nA camada TypeScript (`changeClientStatus`) cuida do resto do fluxo, nesta ordem:\n1. Valida a data e as permissões. Vigência **futura** exige `clientes.programar_status`. Vigência **retroativa**, antes do mês corrente, exige `clientes.alterar_status_retroativo`.\n2. Verifica se a mudança atinge alguma **competência fechada**. O alcance vai de D até a véspera da próxima mudança; o futuro nunca está fechado.\n3. Em **uma transação**: aplica a vigência, confere a integridade e grava a auditoria. Se algo falhar, a transação é desfeita por inteiro.\n4. Se o **status vigente hoje** mudou, acompanha a transição com `sincronizarStatusAtual`: registra a perda, encerra ou reativa a relação e o termo, cancela as mensalidades futuras não pagas e atualiza `Client.status`. A data desses efeitos é o **início da vigência**, então uma perda retroativa a 01/09 é perda de Setembro.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar › Caminhos antigos de escrita\n\nOs gatilhos em `Client` garantem que nenhum caminho de escrita fique sem histórico:\n- **Na inclusão:** o cliente nasce com linha do tempo. O status vale a partir da data de entrada, ou de hoje se não houver. Se for Perdido ou Inativo com data de saída, fica Ativo até a véspera da saída.\n- **Numa troca de status** que não veio da camada central: a troca vale **a partir de hoje**. Se veio junto com a data de saída (`churnedAt`), vale a partir dessa data, limitada a hoje.\n  - Isso cobre as ações do dossiê (pausar, retomar, reativar), a renovação e a importação.\n  - A camada central marca a própria transação com `b2c.status_manual=1`, para o gatilho não duplicar o que ela já registrou.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar › Caminhos antigos de escrita",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar › Alteração futura\n\n- A alteração é registrada, mas não mexe no status atual.\n- Quando a data chega, o **job diário** faz a troca:\n  - A rota é `GET /api/cron/status-programado`, agendada no `vercel.json` para 03:10 UTC (00:10 na Bahia).\n  - A função é `materializarStatusProgramados`, que é idempotente.\n  - Ela roda a transição e atualiza `Client.status`.\n- **Nada é gravado durante a leitura de uma página.**\n- Se o job atrasar, as telas que leem a linha do tempo continuam certas. Só as telas que leem `Client.status` ficam um dia defasadas.\n- Reserva manual: o botão \"Aplicar alterações programadas vencidas\", em Clientes → Histórico de status a revisar, aplica só os clientes do dono logado.\n- Autenticação da rota:\n  - Com a variável `CRON_SECRET` configurada, exige `Authorization: Bearer`, que é o que a Vercel envia.\n  - Sem ela, aceita só requisições com o user-agent do cron da Vercel. **Recomendado configurar `CRON_SECRET`.**",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar › Alteração futura",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#009",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar › Cancelamento\n\n- Só é possível antes da vigência: `cancelScheduledStatusChange`, ou o link \"cancelar\" no detalhe do cliente.\n- O cancelamento fica registrado na auditoria (`status_programado_cancelado`).\n- Exemplo: Ativo desde 01/01 com Inativo programado para 01/10. Cancelado em Setembro, volta a ser Ativo desde 01/01, em diante.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar › Cancelamento",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#010",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar › Competência fechada\n\n- A mudança é bloqueada com a mensagem: \"Esta competência está encerrada. Para alterar informações históricas, é necessário reabrir o período.\"\n- O fechamento é o que já existe: `ClosingPeriod`, com o evento `CLIENT_STATUS_CHANGED` classificado como ECONÔMICO em `src/lib/periods/events.ts`.\n- Para alterar, é preciso reabrir o período com `fechamento.reabrir` e um motivo. A reabertura registra quem, quando, a competência e a versão. Com o período reaberto, a mudança passa.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar › Competência fechada",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#011",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 5. Escrita: um algoritmo, um lugar › Permissões\n\nAs permissões usam o RBAC existente (`src/lib/permissions.ts`), sem sistema paralelo. O ADMIN continua com acesso total (`*`).\n| Permissão pedida | Implementação |\n|---|---|\n| `clientes.alterar_status` | Já existia. |\n| `clientes.programar_status` | **Nova.** Concedida por padrão a quem já tinha `alterar_status`. |\n| `clientes.alterar_status_retroativo` | **Nova e sensível.** Por padrão, só GESTOR (e ADMIN). |\n| `competencias.visualizar`, `competencias.fechar`, `competencias.reabrir` | Equivalem às permissões existentes `fechamento.*`. Não foram duplicadas. |\nUsuários com lista de permissões personalizada não ganham as permissões novas automaticamente. Elas são concedidas em Configurações → Usuários.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "5. Escrita: um algoritmo, um lugar › Permissões",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#012",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 6. Leitura: sempre em lote\n\nTodas as leituras abaixo estão em `status-history.ts`:\n| Função | O que faz |\n|---|---|\n| `getClientStatusAtDate` | Status de um cliente numa data. |\n| `getClientStatusForCompetence` | Status de um cliente numa competência. |\n| `getCurrentClientStatus` | Status atual de um cliente. |\n| `getClientStatusTimeline` | Linha do tempo completa de um cliente. |\n| `getStatusesAtDate` | Status de todos os clientes numa data, em uma consulta. |\n| `getClientStatusesForCompetence` | Status de todos os clientes numa competência. |\n| `getStatusesForCompetences` | Status numa janela de competências, em uma consulta para a janela toda. |\n| `getActiveClientsForCompetence` e `getActiveClientsByCompetences` | Clientes ativos numa ou em várias competências. |\n| `getClientsByStatusForCompetence` | Clientes agrupados por status numa competência. |\n| `getNextScheduledStatusChange` e `getScheduledStatusChanges` | Próxima alteração programada, de um ou de vários clientes. |\n\"Ativo\" é o status que gera receita: Ativo, Em renovação ou Inadimplente (`REVENUE_ACTIVE_STATUSES`).\nOs helpers de competência ficam em `src/lib/competence.ts`:\n- `getCompetenceKey`, `getStartOfCompetence`, `getEndOfCompetence`, `getPreviousCompetence`, `getNextCompetence`;\n- `competenceReferenceDate`, `todayKey`, `addDays`.\nAs datas de vigência são a string `YYYY-MM-DD` (coluna `@db.Date`), sem hora e sem fuso. Por isso 01/10/2026 nunca vira 30/09/2026.\n**Custo medido** (consultas por página, antes → depois; banco local com 266 clientes):\n| Página | Antes | Depois |\n|---|---|---|\n| Clientes | 20 | 22 |\n| Dashboard | 24 | 24 |\n| Rotina | 18 | 18 |\n| Recebimentos | 31 | 32 |\n| Relatórios / Clientes | 21 | 22 |\n| Projeções | 16 | 19 |\nO custo é constante e não cresce com o número de clientes (sem N+1).",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "6. Leitura: sempre em lote",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#013",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 7. Integração por módulo\n\n- **Clientes (`/clientes?mes=`):**\n  - A lista, a coluna Status, o filtro de status e os KPIs usam o status **da competência**.\n  - \"Clientes ativos\" são os ativos no encerramento. \"Novos\" são contados pela data de entrada; reativação não conta como novo. \"Perdidos\" são as perdas registradas com saída no mês (`ClientLoss`, a mesma fonte do Dashboard); quem hoje está Perdido não entra por isso.\n  - A célula de status abre o diálogo \"Alterar status\", com novo status, início da vigência e motivo. A mensagem é \"Esta alteração passará a valer a partir de Outubro/2026. Os períodos anteriores serão preservados.\"\n    - Na competência em curso, a escolha entre \"a partir de hoje\" e \"a partir do início da competência\" é explícita.\n    - Olhando outro mês, o diálogo sugere o dia 1º daquele mês.\n  - Um cliente com alteração programada mostra a indicação \"Programado: Inativo em 01/10/2026\".\n  - A ação em massa usa o mesmo diálogo, com a confirmação \"Esta alteração será aplicada a N clientes…\".\n  - A edição do cadastro não troca mais o status.\n- **Detalhe do cliente:**\n  - Seção **Histórico de status**, com a linha do tempo, o status atual e a próxima alteração (que pode ser cancelada).\n  - Aviso quando o histórico foi reconstruído sem data suficiente.\n  - O seletor de status do cabeçalho virou o diálogo com vigência.\n- **Dashboard:**\n  - Clientes ativos, pausados, perdidos, MRR/TCV ativos, Pago/Devendo, ticket médio, custo por cliente e churn rate usam a carteira do **encerramento do período** (`getClientsBlock(period)`, `computePeriodMetrics`).\n  - O MRR (card, série anual e pop-up) vem de `getActiveClientsByCompetences`.\n  - Nos meses futuros da série, o MRR é **projetado** com as alterações programadas.\n- **MRR:** são ativos na competência × mensalidade.",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "7. Integração por módulo",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "status-temporal#014",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Status do cliente com vigência\nSeção: 7. Integração por módulo\n\n- **Limitação conhecida:** o **valor** ainda é a mensalidade atual (`Client.monthlyValue`). O histórico de valor existe em `CommercialTerm`, mas trocar a fonte do valor é outra tarefa. O risco é um reajuste mudar o MRR de meses passados. O status, não.\n- **TCV:** a regra não mudou. O TCV entra cheio no mês de entrada, fechamento ou renovação, pelas cobranças TCV da competência. Uma mudança posterior de status não o apaga.\n- **Recebimentos:**\n  - A geração das mensalidades do mês (`ensureMonthlyBillings`) e a lista de \"sem cobrança\" usam os ativos **da competência**.\n  - Cobranças que já existem, vencidas, pagas depois ou de meses anteriores, aparecem sempre. Status não esconde nem apaga fatos financeiros.\n- **Rotina diária:** usa o status vigente **hoje** (`Client.status`). Uma alteração programada não aparece antes da data.\n- **Relatórios:**\n  - O relatório Clientes (coluna e filtro de status) e o Executivo (clientes ativos e inadimplentes) usam o status no encerramento do período.\n  - O checklist de fechamento, a grade de avaliações e a fotografia do fechamento usam a carteira da competência.\n- **Projeções:** a seção \"Carteira projetada\" mostra o mês em curso (**Realizado**) e os próximos seis meses (**Projetado**, já com as alterações programadas), com clientes ativos, MRR e a quantidade de alterações programadas.\n- **Renovações:** uma expectativa pendente só conta se o cliente estava na carteira viva (inclui Pausado) naquela competência.\n- **Cache:** `revalidateClientStatus` invalida Agência, Projeções, Relatórios, Retenção, Avaliações, Fechamento e a página de revisão. O cache continua segmentado por dono (`ownerCached`).",
+      "metadata": {
+        "docId": "status-temporal",
+        "titulo": "Status do cliente com vigência",
+        "categoria": "status-de-clientes",
+        "secao": "7. Integração por módulo",
+        "fonte": "docs/STATUS_TEMPORAL_CLIENTES.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Introdução\n\nEste documento explica **como as contas são organizadas e o que cada uma significa**. Ele não traz saldos nem valores: saldo, resultado e totais de qualquer conta vêm sempre da API do B2C Finance.\nA fonte técnica é `prisma/chart-of-accounts.ts` (contas) e `src/lib/accounting/posting-rules.ts` (regras de lançamento). Substitui a proposta antiga em `PLANO_DE_CONTAS_GERENCIAL.md`, que é só histórico.",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Introdução",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Natureza das contas\n\nCada conta tem um **tipo**, e o tipo decide o resto:\n| Tipo | Saldo normal | Entra na DRE (resultado)? |\n|---|---|---|\n| Ativo | Devedor | Não — é patrimônio |\n| Passivo | Credor | Não — é patrimônio |\n| Patrimônio e sócios | Credor | Não — é patrimônio |\n| Receita | Credor | Sim |\n| Despesa | Devedor | Sim |\nConsequências práticas:\n- **Caixa, reservas, cartões, empréstimos e impostos a pagar nunca entram no resultado.** São contas de patrimônio.\n- **Principal de empréstimo é passivo; só o juro é despesa.**\n- **Transferências e reservas** ficam no grupo 15, fora do resultado.\n- **Retiradas e despesas pessoais do dono** vão para \"Distribuições e retiradas\" (3.2), fora do resultado operacional.",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Natureza das contas",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Grupos e contas\n\n**1 · Ativos**\n- 1.1 Caixa e bancos\n- 1.2 Reservas\n- 1.3 Contas a receber\n- 1.4 Adiantamentos e créditos de clientes\n- 1.5 Outros ativos\n**2 · Passivos**\n- 2.1 Contas a pagar\n- 2.2 Cartões a pagar\n- 2.3 Impostos a pagar\n- 2.4 Folha e comissões a pagar\n- 2.5 Empréstimos e parcelamentos\n- 2.6 Outros passivos\n**3 · Patrimônio e sócios**\n- 3.1 Capital e ajustes\n- 3.2 Distribuições e retiradas\n**4 · Receitas operacionais**\n- 4.1 MRR (mensalidade recorrente)\n- 4.2 TCV (contrato de valor fechado)\n- 4.3 Setup\n- 4.4 Avulso (one-time)\n- 4.5 Upsell\n- 4.6 Recuperação — classificação **analítica**: a receita já foi reconhecida na competência original; a recuperação não a duplica.\n**5 · Receitas extras**\n- 5.1 Reembolso recebido\n- 5.2 Ajuste positivo\n- 5.3 Outras receitas extras\n**6 · Custos diretos**\n- 6.1 Tráfego repassado\n- 6.2 Criativos e freelancers\n- 6.3 Comissão comercial\n- 6.4 Comissão de renovação e upsell\n**7 · Folha e pessoas**\n- 7.1 Salários · 7.2 Benefícios · 7.3 Encargos · 7.4 Bonificações · 7.5 Pró-labore\n**8 · Ferramentas e softwares**\n**9 · Marketing e vendas da agência**\n**10 · Administrativas**\n- 10.1 Aluguel e escritório · 10.2 Água, luz e internet · 10.3 Transporte · 10.4 Outras administrativas\n**11 · Impostos e contabilidade**\n- 11.1 Impostos sobre faturamento · 11.2 Honorários contábeis\n**12 · Financeiras**\n- 12.1 Juros · 12.2 Tarifas bancárias · 12.3 Antecipações · 12.4 Multas\n**13 · Investimentos (capex gerencial)** — ativo, não despesa.\n**14 · Ajustes, contra-receita e perdas**\n- 14.1 Contra-receita (reembolso a cliente) · 14.2 Perda com crédito (write-off) · 14.3 Chargebacks e estornos\n**15 · Transferência e controle** — fora do resultado.\n- 15.1 Transferência entre contas · 15.2 Movimentação de reservas",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Grupos e contas",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Grupos e contas\n\n**99 · Não classificado** — conta temporária. Lançamento sem conta definida fica aqui e aparece como pendência de classificação; o sistema nunca adivinha a conta.",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Grupos e contas",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Como os fatos viram lançamentos\n\nRegra de ouro: **reconhecer não é pagar.** Pagar uma dívida já reconhecida só move ativo e passivo; não cria despesa nova. É isso que impede empréstimo, fatura de cartão e transferência de aparecerem duas vezes no resultado.\n| Fato | Débito | Crédito | Afeta o resultado? |\n|---|---|---|---|\n| Receita reconhecida na competência | 1.3 Contas a receber | 4.x Receita (conforme a modalidade) | Sim |\n| Cliente paga | 1.1 Caixa e bancos | 1.3 Contas a receber | Não (a receita já foi reconhecida) |\n| Receita extra (sem cobrança) | 1.1 Caixa e bancos | 5.3 Outras receitas extras | Sim |\n| Despesa a prazo reconhecida | Conta de despesa | 2.1 Contas a pagar | Sim |\n| Despesa paga à vista | Conta de despesa | 1.1 Caixa e bancos | Sim |\n| Pagamento de conta já reconhecida | 2.1 Contas a pagar | 1.1 Caixa e bancos | Não |\n| Compra no cartão | Conta de despesa | 2.2 Cartões a pagar | Sim (a compra é a despesa) |\n| Pagamento da fatura do cartão | 2.2 Cartões a pagar | 1.1 Caixa e bancos | Não |\n| Entrada de empréstimo | 1.1 Caixa e bancos | 2.5 Empréstimos | Não (não é receita) |\n| Amortização do principal | 2.5 Empréstimos | 1.1 Caixa e bancos | Não |\n| Juros | 12.1 Juros | 1.1 Caixa e bancos | Sim |\n| Transferência entre contas ou reservas | 15.1 Transferência | 1.1 Caixa e bancos | Não |\n| Imposto provisionado | 11.1 Impostos | 2.3 Impostos a pagar | Sim |\n| Imposto pago | 2.3 Impostos a pagar | 1.1 Caixa e bancos | Não |\n| Reembolso ao cliente | 14.1 Contra-receita | 1.1 Caixa e bancos | Sim |\n| Write-off de recebível | 14.2 Perda com crédito | 1.3 Contas a receber | Sim |\n| Estorno | Inverso do lançamento original | — | Anula o original |",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Como os fatos viram lançamentos",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Como os fatos viram lançamentos\n\nAlgumas regras da matriz só passam a ser usadas quando a funcionalidade correspondente existe na tela. A existência da regra não significa que o fato já é registrado pelo sistema.",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Como os fatos viram lançamentos",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Categorias antigas → contas\n\nAs categorias do sistema antigo foram mapeadas assim:\n| Categoria antiga | Conta |\n|---|---|\n| Tráfego Pago | 6.1 Tráfego repassado |\n| Folha de Pagamento | 7.1 Salários |\n| Ferramentas | 8 Ferramentas e softwares |\n| Aluguel / Escritório | 10.1 |\n| Luz/Água | 10.2 |\n| Transporte | 10.3 |\n| Alimentação, Empresa | 10.4 |\n| Impostos | 11.1 |\n| Investimentos | 13 |\n| Reserva de Emergência | 15.2 |\n| Dívida a Receber | 1.3 |\n| Reembolsável | 1.4 |\n| Terceiros | 6.2 |\n| Pessoal, Família, Lazer, Carro, Cabelo/Estética | 3.2 Distribuições e retiradas (fora do resultado) |\nO que não casar fica sem conta e aparece no alerta de \"não classificado\".",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Categorias antigas → contas",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "plano-de-contas#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Plano de contas do B2C Finance\nSeção: Quem altera o plano de contas\n\nAlterar o plano de contas (criar, renomear, desativar ou reclassificar contas) é uma ação administrativa. **O agente do WhatsApp nunca faz isso**: é uma operação bloqueada para ele.",
+      "metadata": {
+        "docId": "plano-de-contas",
+        "titulo": "Plano de contas do B2C Finance",
+        "categoria": "contabilidade",
+        "secao": "Quem altera o plano de contas",
+        "fonte": "docs/PLANO_DE_CONTAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: Introdução\n\nRegras que o **próprio sistema aplica**: a tela, a API e o agente seguem as mesmas. Servem para explicar por que algo foi recusado e qual é o caminho certo.\nEste documento não traz dados. Qual competência está fechada, quanto um cliente deve ou se uma despesa foi paga, consulte na API.\n> **O que não está aqui não é política definida.** Descontos, multa e juros por atraso, prazos de cobrança da agência e condições comerciais **não** estão definidos no B2C Finance. Se perguntarem, diga que isso não está registrado no sistema e que quem decide é o responsável da agência. Não invente uma regra.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "Introdução",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 1. Competência (fechamento do mês)\n\n- **Estados de uma competência:** Aberto, Em fechamento, Fechado ou Reaberto.\n- **Fechado congela o resultado do mês.** Não se lança nem se altera nada que mude o resultado daquela competência: receita, despesa reconhecida, ajuste de cobrança, status de cliente naquele mês.\n- **Pagamento de cobrança antiga com o mês fechado:** registra-se no mês em que o dinheiro entrou. A cobrança antiga é quitada do mesmo jeito; a fotografia do mês fechado continua como fechou.\n- **Em fechamento:** só as pendências do próprio fechamento podem ser lançadas.\n- **Reabrir uma competência** exige justificativa e é feito na tela, por quem tem permissão. **Nunca pelo agente.**\n- **Tarefas operacionais** (avaliação de cliente, onboarding, contato de cobrança) não dependem do fechamento.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "1. Competência (fechamento do mês)",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 2. Status do cliente\n\n- **O status tem vigência:** vale a partir de uma data, e o histórico fica preservado. Veja `STATUS_TEMPORAL_CLIENTES.md`.\n- **Mudança a partir de hoje** vale na hora. **Data futura** fica programada e é aplicada automaticamente no dia.\n- **Data num mês que já passou** (retroativa) reescreve a carteira daquele mês. Só com confirmação explícita, e só se a competência não estiver fechada.\n- **Status nunca muda por edição de cadastro:** é sempre uma mudança de status com data.\n- **Perda (churn)** registra a data de saída e, quando é renovação frustrada, o mês da renovação.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "2. Status do cliente",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 3. Pagamentos de clientes\n\n- **A data do pagamento não pode ser futura.** Sem data, vale hoje.\n- **Valor acima do saldo em aberto** só com decisão explícita. O excedente vira crédito do cliente.\n- **Pagamento igual** (mesmo valor, mesma data, mesma cobrança) é tratado como possível duplicidade e recusado, salvo confirmação.\n- **Cobrança removida do mês** (cancelada) não recebe pagamento.\n- **Cobrança renegociada** recebe o pagamento nas parcelas do acordo.\n- **Cobrança já quitada** não recebe novo pagamento.\n- **Pagamento em mês posterior ao da cobrança** entra como recuperação no mês do caixa (ver `REGRAS_MRR_TCV.md`).",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "3. Pagamentos de clientes",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 4. Situação das cobranças\n\n| Situação | Significado |\n|---|---|\n| A vencer | Ainda não venceu. |\n| Pago | Pago até o vencimento. |\n| Pago com atraso | Pago depois do vencimento, dentro do mês. |\n| Recebido em outro mês | Pago em mês posterior ao da competência. |\n| Vencido | Passou do vencimento sem pagamento. É **automático**. |\n| Inadimplente | **Marcação manual** da equipe de cobrança, que pode acontecer até antes do vencimento. |\n| Parcial | Parte paga, parte em aberto. |\n| Removido do mês | Cobrança cancelada naquela competência. |\nAs datas seguem o calendário da Bahia (America/Bahia). O que vence hoje só fica vencido amanhã.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "4. Situação das cobranças",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 5. Despesas (contas a pagar)\n\n- **Toda despesa nasce a pagar.** Marcar como paga é um gesto próprio, que passa pela regra de fechamento.\n- **Edição pelo agente** só vale para despesa em aberto, e só naquela ocorrência (não reescreve a série da recorrência). Despesa paga ou cancelada se ajusta na tela.\n- **Despesa de cartão de crédito** (fatura) é tratada na tela, não pelo agente.\n- **A compra no cartão é a despesa;** pagar a fatura não gera despesa nova.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "5. Despesas (contas a pagar)",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 6. Upsell\n\n- **O funil tem as etapas** Oportunidade, Negociação, Pausada, Vendido e Recusado.\n- **Vender** lança uma cobrança na competência escolhida, e **desfazer** a venda cancela essa cobrança. Por isso **marcar como vendido ou recusado é feito na tela**, nunca pelo agente.\n- **Oportunidade já decidida** não é editada pelo agente.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "6. Upsell",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 7. Receita extra\n\n- **Receita extra é sempre lançada à mão,** por quem tem permissão. O sistema nunca cria receita extra automaticamente.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "7. Receita extra",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#009",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 8. Cadastro de clientes\n\n- **Nome ou documento (CNPJ/CPF) igual a um cliente existente** gera aviso de duplicidade. Cadastrar mesmo assim é decisão explícita.\n- **MRR exige** valor mensal e dia de pagamento. **TCV exige** valor total, prazo e data de entrada (ver `REGRAS_MRR_TCV.md`).",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "8. Cadastro de clientes",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#010",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 9. O que nunca é feito pelo agente do WhatsApp\n\n- **Excluir** cliente, recebimento, pagamento ou despesa.\n- **Reabrir competência.**\n- **Alterar permissões** ou **gerenciar usuários.**\n- **Alterar o plano de contas.**\n- **Qualquer escrita sem a confirmação** do próprio usuário (`SIM <código>`).\nEssas ações são feitas no B2C Finance, por quem tem a permissão, com o próprio login.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "9. O que nunca é feito pelo agente do WhatsApp",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#011",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 10. Permissões por papel\n\nCada pessoa tem um papel, com permissões padrão que o administrador pode ajustar por pessoa. As permissões de **quem está falando** são sempre verificadas pelo B2C Finance em cada pedido, e o agente não as altera.\n| Papel | Em resumo |\n|---|---|\n| Administrador | Acesso total a todos os módulos e configurações. |\n| Gestor | Acesso amplo de operação, sem exclusões nem gestão de usuários. |\n| Financeiro | Recebimentos, despesas, caixa (ver) e relatórios. |\n| Administrativo | Cadastro de clientes, acompanhamento e rotina diária. |\n| Comercial | Clientes, contratos, upsell e catálogo de serviços. |\n| Cobrança / Atendimento | Cobrança do dia a dia: recebimentos, mensagens e rotina. |\n| Closer | Clientes, contratos, upsell e catálogo. Não vê financeiro nem folha. |\n| SDR | Painel e rotina do dia, sem valores. |\n| Suporte / Automação | Onboarding e rotina operacional do cliente. Não vê valores. |\n| Contador | Só leitura do contábil e dos relatórios, para exportação. Não opera nada. |\n| Leitura | Só olha: dashboard e carteira, sem nenhum valor sensível. |",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "10. Permissões por papel",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "politicas#012",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 11. Privacidade\n\n- **O WhatsApp só atende números vinculados** a um usuário ativo pelo administrador (Configurações → Integrações → WhatsApp).\n- **Documentos (CNPJ/CPF) aparecem mascarados.** Não se repassam dados de um cliente a quem não perguntou por ele.\n- **Nenhuma mensagem mostra** token, chave, senha, id interno ou detalhe técnico de erro.",
+      "metadata": {
+        "docId": "politicas",
+        "titulo": "Políticas e regras operacionais do B2C Finance",
+        "categoria": "politicas",
+        "secao": "11. Privacidade",
+        "fonte": "docs/POLITICAS_INTERNAS.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#001",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: Introdução\n\n> 28/09/2026. Autenticação e scopes: [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md). Plano geral: [`API_IMPLEMENTATION_PLAN.md`](./API_IMPLEMENTATION_PLAN.md).\n>\n> **Especificação formal:** OpenAPI 3.1 em `/api/openapi.json` (cópia versionada: [`api/openapi.json`](./api/openapi.json)); interface interativa em `/api/docs`. Guia com exemplos curl: [`API_CONSUMER_GUIDE.md`](./API_CONSUMER_GUIDE.md). Integração n8n (workflows, catálogo das ferramentas do agente): [`integrations/n8n/`](../integrations/n8n/README.md). A fonte da especificação é `src/lib/api/openapi.ts`: depois de mudar uma rota, rode `npm run openapi:lint`, que regenera o arquivo e o valida. O teste `tests/api-openapi.test.ts` falha se a rota, o scope ou o arquivo divergirem.\n**Base URL:** `https://b2-c-finance.vercel.app/api/v1`.\nAs rotas `GET` são **somente leitura** e não gravam nada no banco. Em particular, a API **não** executa as rotinas que a interface roda ao abrir telas, como marcar cobranças vencidas ou gerar as mensalidades do mês. As escritas são **controladas** (seção 4) e **nenhuma é destrutiva**.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "Introdução",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#002",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 1. Regras comuns\n\n- **Autenticação:** `Authorization: Bearer b2c_live_…`, com o token de uma conta de serviço criada em **Configurações → Integrações**. Cookie de sessão não vale.\n- **Scope:** cada rota exige um scope (ver tabela na seção 3).\n  - Conta sem o scope recebe **403** `insufficient_scope`.\n  - Dentro das funções de domínio, a conta de serviço também só alcança o que os scopes cobrem.\n- **Dono (ownerId):** toda consulta roda no escopo do dono da conta de serviço.\n  - Registro de outro dono **não aparece** nas listas.\n  - No detalhe, id de outro dono responde **404** (nunca 403, para não confirmar que o registro existe).\n- **Parâmetros:** validados com Zod.\n  - Parâmetro **desconhecido** é recusado com 400. Um filtro digitado errado que fosse ignorado devolveria a lista inteira, e o agente acharia que filtrou.\n  - Datas no formato `AAAA-MM-DD`. Competência no formato `AAAA-MM`.\n- **requestId:**\n  - Cada resposta traz `meta.requestId` e o header `x-request-id`.\n  - Se a chamada enviar `x-request-id` (ou `x-correlation-id`), esse valor é reaproveitado. Use o id da execução do n8n.\n- **Erros:** nunca expõem stack trace nem mensagem interna. O detalhe fica no log do servidor, ligado ao `requestId`.\n- **Cache:** respostas com `Cache-Control: no-store`.\n- **Rate limit:** 120 requisições por minuto por IP. Acima disso, **429** `rate_limited`.\n- **Trilha de atividades:** toda chamada, exceto `/health`, é registrada para o dono do workspace (Configurações → Integrações → Atividades). Envie `X-B2C-Source: n8n` ou `whatsapp` para identificar a origem. Ver [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).\n- **Escritas:** exigem `Idempotency-Key` (ver seção 4 e [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md)).",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "1. Regras comuns",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#003",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 1. Regras comuns › Formato de sucesso\n\n```json\n{\n  \"success\": true,\n  \"data\": { },\n  \"meta\": { \"requestId\": \"…\", \"generatedAt\": \"2026-09-28T13:00:00.000Z\" }\n}\n```\nListas trazem `data` como array e `meta.pagination`:\n```json\n\"meta\": {\n  \"requestId\": \"…\", \"generatedAt\": \"…\",\n  \"pagination\": { \"page\": 1, \"pageSize\": 50, \"total\": 132, \"totalPages\": 3 }\n}\n```\nParâmetros de paginação: `page` (a partir de 1) e `pageSize` (padrão 50, máximo 200).",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "1. Regras comuns › Formato de sucesso",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#004",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 1. Regras comuns › Formato de erro\n\n```json\n{\n  \"success\": false,\n  \"error\": { \"code\": \"validation_error\", \"message\": \"Parâmetros de consulta inválidos.\",\n             \"details\": [{ \"field\": \"competence\", \"message\": \"Use o formato AAAA-MM (ex.: 2026-09).\" }] },\n  \"meta\": { \"requestId\": \"…\" }\n}\n```\n| HTTP | `code` | Quando |\n|---|---|---|\n| 400 | `validation_error` | Parâmetro inválido ou desconhecido. `details` lista os campos. |\n| 401 | `missing_token`, `invalid_token`, `revoked_token`, `expired_token`, `inactive_owner` | Credencial ausente ou inválida. |\n| 403 | `insufficient_scope` | A conta não tem o scope. O campo `scope` diz qual falta. |\n| 404 | `not_found` | O registro não existe para este dono. |\n| 429 | `rate_limited` | Limite por IP atingido. |\n| 500 | `internal_error` | Erro inesperado. Informe o `requestId`. |",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "1. Regras comuns › Formato de erro",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#005",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 1. Regras comuns › Convenções dos dados\n\n- **Dinheiro:** número em reais, com 2 casas (`1500.5`).\n- **Datas de calendário** (vencimento, entrada, renovação): `\"AAAA-MM-DD\"`.\n- **Instantes** (pagamento, criação): ISO 8601 em UTC.\n- **Status de cliente:** `{ \"code\": \"ACTIVE\", \"label\": \"Ativo\" }`.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "1. Regras comuns › Convenções dos dados",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#006",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 2. Status temporal do cliente\n\nO status do cliente tem vigência. A fonte é o histórico `ClientStatusHistory`, nunca `Client.status`.\n- **Nas listas:** o status é o **da competência** pedida em `competence` (padrão: a atual).\n  - Para um mês passado, vale o status do **último dia** daquele mês.\n  - Para o mês corrente, vale o status de **hoje**.\n- **Exemplo:** um cliente que ficou Inativo em outubro aparece como **Ativo** em `GET /clients?competence=2026-09`.\n- **Referência usada:** `meta.statusReference` informa a data de referência aplicada.\n- **Carteira da competência:** uma lista só inclui clientes que **tinham status** naquela competência. Quem entrou depois não aparece num mês anterior.\n- **No detalhe:** `status.current` é o status de hoje. Com `?competence=` a resposta também traz `status.atCompetence`. `status.scheduledChange` informa a próxima alteração programada.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "2. Status temporal do cliente",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#007",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints\n\n| Método e rota | Scope |\n|---|---|\n| `GET /health` | — (qualquer token válido) |\n| `GET /me` | — |\n| `GET /dashboard/summary` | `dashboard.read` |\n| `GET /clients` · `GET /clients/:id` | `clients.read` |\n| `GET /clients/:id/status-history` | `client_status.read` |\n| `GET /receivables` · `GET /receivables/:id` | `receivables.read` |\n| `GET /expenses` · `GET /expenses/:id` | `expenses.read` |\n| `GET /cash/summary` | `cash.read` |\n| `GET /upsells` | `upsells.read` |\n| `GET /routine/daily` | `routine.read` |\n| `GET /reports/daily` · `GET /reports/monthly` | `reports.read` (as seções dependem de outros scopes; ver 3.9) |\n| `GET /search` | `clients.read` (com `type=client`) |",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.1 `GET /health` e `GET /me`\n\n- `/health` retorna `{ status: \"ok\", apiVersion: \"v1\", database: \"ok\" }`. Chegar a esta resposta já prova que a credencial e o banco funcionam.\n- `/me` retorna a conta de serviço: id, nome, prefixo do token e scopes.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.1 `GET /health` e `GET /me`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#009",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.2 `GET /dashboard/summary?competence=AAAA-MM`\n\nRetorna os indicadores oficiais do mês. Eles saem do **mesmo motor de métricas** do Dashboard (`computePeriodMetrics`).\n```json\n{ \"competence\": \"2026-09\", \"partial\": true,\n  \"metrics\": { \"mrr_oficial\": { \"value\": 45200, \"name\": \"MRR oficial\", \"unit\": \"currency\" }, \"…\": {} } }\n```\n- **Chaves:**\n  - Faturamento e receita: `faturamento_total`, `mrr_oficial`, `tcv_faturado`, `tcv_vendido`, `receita_extra_reconhecida`, `faturamento_esperado`.\n  - Recebimento: `recebido_competencia`, `em_aberto`, `vencido`.\n  - Resultado: `resultado_mes`, `margem_gerencial`, `percentual_recorrencia`, `percentual_realizacao`.\n  - Clientes: `clientes_ativos`, `novos_clientes`, `churn_quantidade`, `churn_valor`, `churn_rate`, `ticket_medio`.\n  - Custos: `custo_por_cliente`, `percentual_folha`.\n- **`unit`:** `currency`, `percent` ou `count`.\n- **Valor nulo:** `null` significa que o indicador não é calculável (por exemplo, denominador zero).",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.2 `GET /dashboard/summary?competence=AAAA-MM`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#010",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.3 `GET /clients`\n\n| Parâmetro | Descrição |\n|---|---|\n| `competence` | `AAAA-MM`. Competência do status (padrão: a atual). |\n| `search` | Texto contido em nome, razão social, documento, e-mail, nicho, cidade ou responsáveis. |\n| `status` | `LEAD`, `PROSPECT`, `ACTIVE`, `INACTIVE`, `PAUSED`, `RENEWAL`, `DELINQUENT`, `CHURNED`. Também aceita `revenue_active` (Ativo, Renovação ou Inadimplente, isto é, quem gera receita) e `all`. **Sem `status`:** todos menos `CHURNED`, como na tela. |\n| `modality` | `MRR` ou `TCV`. |\n| `responsible` | Responsável comercial, pelo nome, sem diferenciar maiúsculas. |\n| `delinquency` | Inadimplência **na competência**: `paid`, `owing` ou `no_billing`. O ajuste manual do mês vence o cálculo pelas cobranças, como na tela. |\n| `renewalMonth` | `AAAA-MM`. Expectativa de renovação naquele mês. |\n| `segment` | Nicho, por nome ou id. |\n| `page`, `pageSize` | Paginação. |\n- **Item:**\n  - Identificação: `id`, `name`, `legalName`, `document` (**mascarado**), `status`, `modality`, `segment`, `responsible`.\n  - Contrato: `paymentDay`, `monthlyValue`, `totalContractValue`, `contractTerm` (`\"12 meses\"` ou `\"Indeterminado\"`), `expectedRenewalDate`, `startedAt`.\n  - Situação: `delinquency` `{ status, manual }` e `scheduledStatusChange`.\n- **Ordem:** por nome.\n- **Fonte das regras:** os filtros usam o mesmo código da tela Clientes (`src/lib/services/client-query.ts`).",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.3 `GET /clients`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#011",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.4 `GET /clients/:id` e `GET /clients/:id/status-history`\n\n- **Detalhe** (`?competence=` opcional):\n  - Cadastro com o **documento completo**, contatos e responsáveis.\n  - `status` com `current`, `atCompetence` e `scheduledChange`.\n  - `financial`, com contratos ativos, valor em aberto, vencido, receita total, próximo vencimento, situação e serviços ativos.\n- **Histórico de status:** `intervals[]` com os campos `status`, `effectiveFrom`, `effectiveTo` (null quando é o vigente), `reason`, `origin`, `needsReview` e `recordedAt`.\n  - `currentStatus` é o status de hoje.\n  - `scheduled[]` lista as alterações futuras.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.4 `GET /clients/:id` e `GET /clients/:id/status-history`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#012",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.5 `GET /receivables` e `GET /receivables/:id`\n\n| Parâmetro | Descrição |\n|---|---|\n| `competence` | `AAAA-MM`. Cobranças da competência. É a janela padrão, com a competência atual. |\n| `dateFrom`, `dateTo` | Janela por **vencimento**, com as duas datas inclusivas e máximo de 400 dias. Os dois são obrigatórios juntos e não se combinam com `competence`. |\n| `status` | Um ou mais, separados por vírgula: `UPCOMING`, `PAID`, `PAID_LATE`, `PAID_OTHER_MONTH`, `OVERDUE`, `DELINQUENT`, `PARTIAL`, `REMOVED`, `RENEGOTIATED`. O atalho `open` equivale a `UPCOMING`, `OVERDUE`, `DELINQUENT` e `PARTIAL`. |\n| `clientId` | Só as cobranças deste cliente. |\n- **Status:** é o mesmo da tela de Recebimentos (`cycleStatusOf`), **derivado na hora** a partir do vencimento. Uma cobrança pendente com vencimento passado já sai como `OVERDUE`, mesmo que o job ainda não a tenha marcado.\n- **Canceladas e renegociadas:**\n  - Cobranças removidas do mês (`REMOVED`) só aparecem quando pedidas.\n  - `RENEGOTIATED` é a dívida já acordada: não conta como vencida e tem `openAmount` igual a 0.\n- **Item:** `id`, `client`, `description`, `competence`, `amount`, `paidAmount`, `openAmount`, `dueDate`, `paidAt`, `status`, `daysLate`, `kind`, `revenueType`, `installmentNumber` e `collectionStatus`.\n- **Totais:** `meta.totals` traz `{ amount, paidAmount, openAmount }` do filtro inteiro, não só da página.\n- **Detalhe:** inclui `notes` e `payments[]`.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.5 `GET /receivables` e `GET /receivables/:id`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#013",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.6 `GET /expenses` e `GET /expenses/:id`\n\n| Parâmetro | Descrição |\n|---|---|\n| `dateFrom`, `dateTo` | Janela pela **data do lançamento**, inclusiva. O padrão é o mês atual. |\n| `status` | `pendente`, `pago`, `cancelado` ou `vencida`. `vencida` é pendente com vencimento antes de hoje, a mesma regra da tela. `pendente` exclui as vencidas. |\n| `category` | Id ou nome da categoria. |\n- **O que entra:** só lançamentos do tipo despesa.\n- **Item:** `id`, `description`, `amount`, `date`, `dueDate`, `status` (o derivado), `rawStatus`, `category`, `type`, `recurrence`, `recurring`, `paymentMethod`, `client` e `account`.\n- **Totais:** `meta.totalAmount` soma o filtro inteiro.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.6 `GET /expenses` e `GET /expenses/:id`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#014",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.7 `GET /cash/summary`\n\nUsa as mesmas fontes da tela Caixa (`getLiquidez` e `getCashSummary`).\n- **Posição de hoje:** `available`, `accountsBalance`, `commitments` e `breakdown[]`.\n- **Próximos 30 dias:** `next30Days`.\n- **`projection`:** saldo projetado. A receber vencido **não entra** no saldo projetado e aparece em separado.\n- **`month`:** entradas, saídas e projeções de 30, 60 e 90 dias.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.7 `GET /cash/summary`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#015",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.8 `GET /upsells`\n\n| Parâmetro | Descrição |\n|---|---|\n| `status` | `OPPORTUNITY`, `NEGOTIATION`, `WON`, `LOST` ou `PAUSED`. |\n| `clientId` | Id do cliente. |\n| `responsible` | Nome do responsável, sem diferenciar maiúsculas. O B2C Finance grava o responsável do upsell como **texto**, sem vínculo a um usuário, por isso não existe filtro `responsibleId`. |\n- **Totais:** `meta.totalValue` soma o valor potencial do filtro inteiro.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.8 `GET /upsells`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#016",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.9 `GET /routine/daily`\n\nRetorna a rotina do dia, com o **mesmo montador** da tela Rotina (`montarRotinaDoDia`).\n- **Conteúdo:** `actions[]`, `collections` (vencidos e próximos), `payments` (vencidos e próximos), `renewals`, `cash` e `openUpsells`.\n- **Seções limitadas pelos scopes:** cada seção só é preenchida se a conta tiver o scope da área:\n  - `receivables.read` → cobranças;\n  - `expenses.read` → pagamentos;\n  - `cash.read` → caixa;\n  - `clients.read` → renovações;\n  - `upsells.read` → upsell.\n- **Diferença para a tela:** a API **não** marca cobranças como vencidas antes de montar a rotina, porque isso seria uma escrita. A fila de cobrança usa o vencimento, então o conteúdo é o mesmo.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.9 `GET /routine/daily`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#017",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.10 `GET /reports/daily?date=AAAA-MM-DD` e `GET /reports/monthly?competence=AAAA-MM`\n\nOs relatórios exigem `reports.read`. **Cada seção** depende também do scope da área dela; o relatório não é um atalho para ler o que o scope não permite. As seções omitidas aparecem em `meta.omittedSections`.\n- **Diário** (padrão: hoje):\n  | Seção | Conteúdo | Scope exigido |\n  |---|---|---|\n  | `receivables` | Cobranças que vencem no dia e pagamentos confirmados no dia | `receivables.read` |\n  | `expenses` | Despesas que vencem no dia (ou lançadas no dia, quando não têm vencimento) | `expenses.read` |\n  | `expenses.paid` | Despesas **marcadas como pagas** no dia (pela trilha de auditoria, porque a despesa não guarda data de pagamento) | `expenses.read` |\n  | `clients` | Mudanças de status com vigência no dia (`statusChanges`) e **registradas** no dia (`statusChangesRecorded`); clientes com entrada no dia (`newClients`) e **cadastrados** no dia (`createdClients`) | `clients.read` ou `client_status.read` |\n  | `upsells` | Oportunidades **criadas** e **vendidas** no dia | `upsells.read` |\n- **Mensal** (padrão: a competência atual):\n  | Seção | Conteúdo | Scope exigido |\n  |---|---|---|\n  | `closing` | Estado do fechamento da competência | — (sempre incluída) |\n  | `indicators` | Os mesmos indicadores de `/dashboard/summary` | `dashboard.read` |\n  | `portfolio` | Carteira por status **na competência** | `clients.read` ou `client_status.read` |\n  | `receivables` | Contagem, totais e divisão por status | `receivables.read` |\n  | `expenses` | Total e divisão por status | `expenses.read` |",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.10 `GET /reports/daily?date=AAAA-MM-DD` e `GET /reports/monthly?competence=AAAA-MM`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#018",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.11 `GET /search?q=…&type=client`\n\nServe para o agente descobrir de qual cliente o usuário está falando. Exemplo: `GET /search?q=face%20love&type=client`.\n| Parâmetro | Descrição |\n|---|---|\n| `q` | De 2 a 100 caracteres. |\n| `type` | `client` (padrão). É o único tipo nesta versão. |\n| `limit` | De 1 a 25 (padrão 10). |\n- **Casamento:**\n  - Considera nome, razão social e documento.\n  - **Ignora acento, maiúsculas e espaços:** `facelove estetica` acha \"Face Love Estética\".\n  - Para o documento, bastam 4 dígitos ou mais.\n- **Ordem:** por relevância (`score` de 0 a 100) e, em empate, por nome.\n- **Resultado:** traz só o necessário para desambiguar:\n```json\n{ \"type\": \"client\", \"id\": \"cm…\", \"name\": \"Face Love Estética\", \"legalName\": \"Face Love Clínica Ltda\",\n  \"document\": \"**.***.***/0001-90\", \"status\": { \"code\": \"ACTIVE\", \"label\": \"Ativo\" }, \"modality\": \"MRR\", \"score\": 90 }\n```\n- **Status:** o `status` é o de **hoje**.\n- **Máscara do documento:** o CNPJ mostra filial e dígitos verificadores; o CPF mostra só os dígitos verificadores.\n- **Total:** `meta.total` diz quantos clientes casaram. Se houver vários, o agente deve perguntar ao usuário qual deles.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.11 `GET /search?q=…&type=client`",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#019",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\nToda escrita:\n- exige o **scope** próprio e o header **`Idempotency-Key`**;\n- roda no **dono da integração**:\n  - `ownerId` no corpo é recusado (400);\n  - id de outro dono dá 404;\n- chama a **mesma função de domínio da tela**;\n- grava o **AuditLog** (diferença campo a campo) e a linha em **Atividades da IA/API**;\n- devolve a **entidade resultante**;\n- **invalida o cache** das telas afetadas.\nOs corpos são validados com Zod em modo estrito: campo desconhecido dá 400. Os schemas e exemplos completos estão na OpenAPI (`/api/docs`).\n| Método e rota | Scope | Função de domínio | Resposta |\n|---|---|---|---|\n| `POST /clients` | `clients.create` | `salvarCliente` (duplicidade, MRR/TCV, contrato e cobranças) | 201, com o cliente (igual a `GET /clients/:id`) |\n| `PATCH /clients/:id` | `clients.update` | `salvarCliente` (sem mudar status) | 200, com o cliente |\n| `POST /clients/:id/status-changes` | `client_status.write` | `changeClientStatus` (linha do tempo) | 201, com `change` e `statusHistory` |\n| `POST /receivables/:id/payments` | `receivables.register_payment` | `registerPayment` (motor de Recebimentos) | 201, com `payment` e `receivable` |\n| `POST /expenses` | `expenses.create` | `salvarDespesa` | 201, com a despesa |\n| `PATCH /expenses/:id` | `expenses.update` | `salvarDespesa` | 200, com a despesa |\n| `POST /expenses/:id/pay` | `expenses.pay` | `setExpenseStatus` (motor) | 200, com `alreadyPaid` e `expense` |\n| `POST /upsells` | `upsells.create` | `salvarUpsell` | 201, com a oportunidade |\n| `PATCH /upsells/:id` | `upsells.update` | `salvarUpsell` | 200, com a oportunidade |\n| `POST /routine/actions/:id/complete` | `routine.write` | `concluirAcaoDaRotina` | 200, com a ação |\n`GET /upsells/:id` (`upsells.read`) também entrou, para ler o que foi escrito.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4. Escritas controladas",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#020",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\n**Fora da V1, de propósito:**\n- `DELETE` de qualquer coisa (clientes, cobranças, despesas, pagamentos);\n- reabrir competência;\n- gerir usuários e permissões;\n- decidir o funil do upsell (Vendido/Recusado lança ou cancela cobrança e pede a pergunta da tela);\n- despesa de cartão;\n- editar despesa paga ou a série de uma recorrência.\n**Status do cliente:**\n- **Nunca** muda por `PATCH /clients/:id`. O campo `status` no PATCH responde 400 e aponta para `POST /clients/:id/status-changes`.\n- O corpo da alteração é `{ \"status\": \"INACTIVE\", \"effectiveFrom\": \"2026-10-01\", \"reason\": \"…\" }`, e a mudança entra na linha do tempo:\n| Vigência | O que acontece |\n|---|---|\n| Hoje | Vale já. |\n| Futura | Fica programada; o status de hoje não muda. |\n| Mês passado | Exige `\"allowRetroactive\": true`, porque reescreve a carteira daquele mês. |\n| Competência fechada | 422 `competence_closed`. |\n**Pagamento:** antes do motor, a API confere:\n| Verificação | Regra | Se falhar |\n|---|---|---|\n| Dono | A cobrança pertence ao dono da integração. | 404 |\n| Estado | Cobrança quitada, removida ou renegociada não recebe. | 422 `invalid_state` |\n| Valor | Maior que zero, com no máximo 2 casas. Valor acima do saldo só com `\"allowOverpayment\": true` (o excedente vira crédito do cliente, como na tela). | 400 / 422 |\n| Data | `paidAt` não pode ser futura. O padrão é hoje. | 422 |\n| Competência | O mês do caixa (o do pagamento) não pode estar fechado. | 422 `competence_closed` |\n| Duplicidade | Já existe pagamento com o mesmo valor e a mesma data nesta cobrança. Para registrar mesmo assim, envie `\"allowDuplicate\": true`. | 409 `possible_duplicate` |\nAlém dessas verificações:",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4. Escritas controladas",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#021",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\n- O pagamento grava a identidade externa `api` + integração + Idempotency-Key, então a **trava única do banco** também impede o mesmo pedido de virar dois pagamentos.\n- O registro roda em **transação** no motor.\n**Upsell:**\n- **Campos:** `clientId`, `serviceId` ou `description`, `amount`, `responsibleId`, `expectedCloseDate`, `notes`, e `status` só do funil aberto (`OPPORTUNITY`, `NEGOTIATION`, `PAUSED`).\n- **`responsibleId`:** é o **colaborador** (o mesmo cadastro do responsável do cliente). O nome dele é gravado, e sem ele o responsável é herdado do cliente.\n- **Transação:** a oportunidade e os serviços dela são gravados na mesma transação.\n**Transações:**\n- Pagamento, pagar despesa e alteração de status já eram transacionais nos motores.\n- Despesa com recorrência passou a nascer numa transação (antes, uma falha no meio deixava a série pela metade).\n- O cadastro de cliente segue a regra da tela: cadastro primeiro, relação e onboarding depois, sem derrubar o cadastro se esses complementos falharem.\n**Códigos de erro das escritas:** `idempotency_key_required`, `idempotency_key_reused`, `idempotency_in_progress`, `duplicate`, `possible_duplicate`, `invalid_state`, `competence_closed`, `retroactive_requires_confirmation`, `unprocessable`.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4. Escritas controladas",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#022",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n**Resolver o número:** `POST /integrations/resolve-identity`, com o scope `identities.resolve` e o corpo `{ \"channel\": \"WHATSAPP\", \"externalIdentifier\": \"+5571999990000\" }`. Só o número: `userId` dá 400.\n- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → WhatsApp (tabela `MessagingIdentity`).\n- **O que devolve:**\n  - `identityId`;\n  - o usuário (id, nome, papel);\n  - as permissões relevantes;\n  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário.\n- **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.\n**Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:\n1. **Recarrega o vínculo** no workspace da integração e confere que ele e o usuário estão ativos.\n2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).\n   - Rota fora do que o usuário pode dá 403 `user_forbidden`.\n   - Nos relatórios, as seções que ele não vê entram em `omittedSections`.\n3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API.\n4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4.1 Quem está falando: identidade e delegação",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#023",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.2 Ações do agente com confirmação\n\nO agente de WhatsApp não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`. O usuário responde \"SIM <código>\" e a integração confirma em `POST /agent/pending-actions/{id}/confirm`, com `Idempotency-Key: wa:<messageId>:<actionId>`.\nA execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4.2 Ações do agente com confirmação",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    }
+  ]
+}

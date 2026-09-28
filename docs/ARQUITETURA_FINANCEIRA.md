@@ -1,3 +1,11 @@
+---
+rag: true
+titulo: Arquitetura financeira
+categoria: arquitetura
+atualizado_em: 2026-09-28
+dados_atuais: nao
+---
+
 # Arquitetura Financeira — B2C Finance (2026-07-20)
 
 Mapa de onde cada cálculo vive, quem consome o quê, e as divergências conhecidas.

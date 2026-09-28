@@ -5,6 +5,8 @@ Integração do B2C Finance com o n8n, principalmente para o **agente de WhatsAp
 > **Dois agentes:**
 > - `b2c-finance-ai-agent.json` consulta e **propõe escritas com confirmação**. Nada é gravado sem o usuário responder `SIM <código>`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](../../docs/N8N_AGENT_WRITE_ACTIONS.md).
 > - `b2c-finance-ai-agent-readonly.json` é o somente leitura, mantido como referência e alternativa de volta.
+>
+> **RAG = conhecimento e documentação. API = dados atuais.** A base de conhecimento (`consultar_conhecimento`, no Qdrant) explica conceitos e procedimentos, mas nunca é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência. Guia: [`docs/AI_AGENT_KNOWLEDGE.md`](../../docs/AI_AGENT_KNOWLEDGE.md). Prompt do agente: [`docs/AI_AGENT_SYSTEM_PROMPT.md`](../../docs/AI_AGENT_SYSTEM_PROMPT.md).
 
 ```
 integrations/n8n/
@@ -12,22 +14,26 @@ integrations/n8n/
 ├── ENV.example                       variáveis (sem segredo real)
 ├── CHANGELOG.md
 ├── workflows/
-│   ├── b2c-finance-ai-agent.json          WhatsApp → identidade → SIM/NÃO (sem IA) ou AI Agent (11 GET + 10 que propõem) → WhatsApp
+│   ├── b2c-finance-ai-agent.json          WhatsApp → identidade → SIM/NÃO (sem IA) ou AI Agent (11 GET + 10 que propõem + conhecimento) → WhatsApp
 │   ├── b2c-finance-ai-agent-readonly.json WhatsApp → identidade (API) → AI Agent (11 ferramentas GET) → WhatsApp
+│   ├── knowledge-ingest.json              indexa a base de conhecimento no Qdrant (manual)
 │   ├── daily-morning-report.json          relatório da manhã por WhatsApp (cron)
 │   ├── daily-evening-report.json          relatório da noite por WhatsApp (cron)
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
+├── knowledge/
+│   ├── manifest.json                 o que entra (e o que nunca entra) na base de conhecimento
+│   └── b2c-finance-knowledge.json    pacote gerado: documentos + trechos (servido em GET /knowledge/documents)
 ├── schemas/
 │   ├── agent-tools.json              catálogo das ferramentas de consulta (fonte de verdade)
 │   ├── agent-write-tools.json        ferramentas que propõem escrita + classificação de risco
 │   └── agent-tools.schema.json       JSON Schema do catálogo
 ├── examples/
 │   ├── system-prompt.md              instruções do agente somente leitura
-│   ├── system-prompt-write.md        instruções do agente com escrita (risco, prévia, bloqueadas)
 │   ├── tool-calls.md                 conversa de exemplo, chamadas e respostas
 │   └── whatsapp-webhook-payload.json payload de exemplo da Meta
 └── scripts/
-    ├── build-workflows.mjs           gera o agente e o teste de conexão (catálogo + prompt)
+    ├── build-knowledge.mjs           gera o pacote da base de conhecimento (docs → trechos)
+    ├── build-workflows.mjs           gera os agentes, a indexação e o teste de conexão
     ├── build-report-workflows.mjs    gera os relatórios da manhã e da noite
     ├── check-secrets.mjs             barra segredo versionado (roda no CI)
     ├── validate-with-n8n.cjs         confere os nós contra uma instalação real do n8n

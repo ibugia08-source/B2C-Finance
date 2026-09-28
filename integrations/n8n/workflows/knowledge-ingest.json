@@ -1,0 +1,384 @@
+{
+  "name": "B2C · Conhecimento · Indexar base (manual)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Indexar a base de conhecimento (RAG)\n\n**RAG = conhecimento e documentação. API = dados atuais.** Esta base só tem conceitos, regras e procedimentos — nunca saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.\n\n1. Lê o pacote na API (`GET /knowledge/documents`, scope `knowledge.read`).\n2. Apaga a coleção `b2c_finance_conhecimento` no Qdrant e grava os trechos de novo (embeddings text-embedding-3-small).\n\nRode de novo sempre que a versão do pacote mudar (docs alterados + deploy). Guia: docs/AI_AGENT_KNOWLEDGE.md.\n\nNunca use o banco do B2C Finance (nem Supabase) como vector store.",
+        "height": 420,
+        "width": 420,
+        "color": 6
+      },
+      "name": "Nota: sobre este workflow",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -60
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Reindexar agora",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "notes": "Indexação manual (não há gatilho automático).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/knowledge/documents",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "n8n"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "API: base de conhecimento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "notes": "GET /knowledge/documents (scope knowledge.read).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Confere o pacote antes de apagar qualquer coisa: se a API falhou, a\n// coleção atual fica intacta.\nconst r = $input.first().json || {};\nif (r.success !== true || !r.data || !Array.isArray(r.data.trechos) || r.data.trechos.length === 0) {\n  throw new Error('A API não devolveu a base de conhecimento (confira o scope knowledge.read). Nada foi apagado.');\n}\nif (r.data.embedding.model !== \"text-embedding-3-small\") {\n  throw new Error('Modelo de embedding do pacote (' + r.data.embedding.model + ') diferente do workflow: gere o workflow de novo.');\n}\nif (!$env.QDRANT_URL) throw new Error('QDRANT_URL não configurado.');\nreturn [{ json: { collection: r.data.collection, version: r.data.version, trechos: r.data.trechos.length } }];"
+      },
+      "name": "Conferir pacote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        200
+      ],
+      "notes": "Pacote válido antes de apagar a coleção.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $env.QDRANT_URL }}/collections/{{ $json.collection }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Qdrant: apagar coleção",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        200
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "CONFIGURAR_QDRANT",
+          "name": "Qdrant (conhecimento)"
+        }
+      },
+      "notes": "Reindexação limpa (coleção inexistente = segue).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Um item por trecho: texto + metadados (documento, seção, fonte, versão).\nconst pacote = $('API: base de conhecimento').first().json.data;\nreturn pacote.trechos.map((t) => ({ json: { text: t.text, ...t.metadata, trechoId: t.id, versao: pacote.version } }));"
+      },
+      "name": "Um item por trecho",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ],
+      "notes": "Um item por trecho, com metadados.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "b2c_finance_conhecimento",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "name": "Qdrant: gravar trechos",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        1100,
+        200
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "CONFIGURAR_QDRANT",
+          "name": "Qdrant (conhecimento)"
+        }
+      },
+      "notes": "Grava na coleção b2c_finance_conhecimento (recriada aqui).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-3-small",
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "name": "Embeddings (indexação)",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        420
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_OPENAI",
+          "name": "OpenAI"
+        }
+      },
+      "notes": "Mesmo modelo na indexação e na consulta (text-embedding-3-small).",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "dataType": "json",
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "docId",
+                "value": "={{ $json.docId }}"
+              },
+              {
+                "name": "titulo",
+                "value": "={{ $json.titulo }}"
+              },
+              {
+                "name": "categoria",
+                "value": "={{ $json.categoria }}"
+              },
+              {
+                "name": "secao",
+                "value": "={{ $json.secao }}"
+              },
+              {
+                "name": "fonte",
+                "value": "={{ $json.fonte }}"
+              },
+              {
+                "name": "atualizado_em",
+                "value": "={{ $json.atualizado_em }}"
+              },
+              {
+                "name": "tipo",
+                "value": "={{ $json.tipo }}"
+              },
+              {
+                "name": "trechoId",
+                "value": "={{ $json.trechoId }}"
+              },
+              {
+                "name": "versao",
+                "value": "={{ $json.versao }}"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Trecho → documento",
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        1220,
+        420
+      ],
+      "notes": "Texto do trecho + metadados.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "chunkSize": 4000,
+        "chunkOverlap": 0,
+        "options": {}
+      },
+      "name": "Sem nova divisão",
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        600
+      ],
+      "notes": "Os trechos já vêm no tamanho certo (por seção): não dividir de novo.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Quantos trechos foram gravados e de qual versão.\nconst p = $('Conferir pacote').first().json;\nreturn [{ json: { colecao: p.collection, versao: p.version, trechosNoPacote: p.trechos, gravados: $input.all().length } }];"
+      },
+      "name": "Resumo da indexação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ],
+      "notes": "Versão indexada e contagem.",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Reindexar agora": {
+      "main": [
+        [
+          {
+            "node": "API: base de conhecimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: base de conhecimento": {
+      "main": [
+        [
+          {
+            "node": "Conferir pacote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir pacote": {
+      "main": [
+        [
+          {
+            "node": "Qdrant: apagar coleção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant: apagar coleção": {
+      "main": [
+        [
+          {
+            "node": "Um item por trecho",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Um item por trecho": {
+      "main": [
+        [
+          {
+            "node": "Qdrant: gravar trechos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant: gravar trechos": {
+      "main": [
+        [
+          {
+            "node": "Resumo da indexação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings (indexação)": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant: gravar trechos",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trecho → documento": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant: gravar trechos",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sem nova divisão": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Trecho → documento",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "b2c": {
+      "workflow": "knowledge-ingest",
+      "version": 1,
+      "knowledgeVersion": "1.0.0+91a3dbccbb9d",
+      "collection": "b2c_finance_conhecimento",
+      "embeddingModel": "text-embedding-3-small",
+      "requiredScopes": [
+        "knowledge.read"
+      ],
+      "generatedBy": "integrations/n8n/scripts/build-workflows.mjs"
+    }
+  },
+  "tags": []
+}

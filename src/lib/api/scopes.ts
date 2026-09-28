@@ -91,6 +91,10 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
         label: "Identificar quem fala (WhatsApp → usuário) e agir com as permissões dele",
       },
       {
+        id: "knowledge.read",
+        label: "Ler a base de conhecimento (documentação para indexar no agente)",
+      },
+      {
         id: "agent_actions.manage",
         label: "Propor ações do agente e executá-las após a confirmação do usuário",
         write: true,

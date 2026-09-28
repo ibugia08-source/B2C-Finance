@@ -1,0 +1,33 @@
+{
+  "catalog": "b2c-finance-knowledge",
+  "version": "1.0.0",
+  "principle": "RAG = conhecimento e documentação. API = dados atuais e verdade operacional. Nenhum trecho desta base é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.",
+  "collection": "b2c_finance_conhecimento",
+  "embedding": { "provider": "openai", "model": "text-embedding-3-small", "dimensions": 1536, "distance": "Cosine" },
+  "chunking": { "maxChars": 1800, "splitOn": ["##", "###"] },
+  "documents": [
+    { "id": "agente", "path": "docs/AI_AGENT.md" },
+    { "id": "metricas", "path": "docs/METRICAS_FINANCEIRAS.md", "excludeSections": ["Funções legadas", "Divergências conhecidas"] },
+    { "id": "regras-mrr-tcv", "path": "docs/REGRAS_MRR_TCV.md" },
+    { "id": "arquitetura", "path": "docs/ARQUITETURA_FINANCEIRA.md", "excludeSections": ["DIVERGÊNCIAS CONHECIDAS"] },
+    { "id": "status-temporal", "path": "docs/STATUS_TEMPORAL_CLIENTES.md", "excludeSections": ["8. Migração", "9. Testes"] },
+    { "id": "plano-de-contas", "path": "docs/PLANO_DE_CONTAS.md" },
+    { "id": "politicas", "path": "docs/POLITICAS_INTERNAS.md" },
+    { "id": "api", "path": "docs/API.md", "excludeSections": ["5. Implementação"] }
+  ],
+  "neverIndex": {
+    "reason": "Documentos com números reais de um momento, auditorias datadas, propostas substituídas ou instruções internas do agente não entram na base: o agente os leria como fato atual.",
+    "paths": [
+      "docs/DIAGNOSTICO_2026.md",
+      "docs/AUDITORIA-ERP.md",
+      "docs/AUDITORIA_TECNICA.md",
+      "docs/ANALISE-E-PLANO-DE-MELHORIAS.md",
+      "docs/PLANO_DE_CONTAS_GERENCIAL.md",
+      "docs/AI_AGENT_SYSTEM_PROMPT.md",
+      "docs/AI_AGENT_KNOWLEDGE.md",
+      "docs/API_AUTHENTICATION.md",
+      "docs/AMBIENTES.md",
+      "docs/AMBIENTE_DEV.md"
+    ]
+  }
+}

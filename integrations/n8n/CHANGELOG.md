@@ -2,6 +2,19 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-28 (6)
+
+- **Base de conhecimento (RAG):**
+  - `knowledge/manifest.json` + `scripts/build-knowledge.mjs` → `knowledge/b2c-finance-knowledge.json`;
+  - servida em `GET /api/v1/knowledge/documents`, com o scope novo `knowledge.read`.
+- **Novo** `workflows/knowledge-ingest.json`: indexação manual no Qdrant. Ele apaga a coleção e grava os trechos, com embeddings `text-embedding-3-small` de 1536 dimensões.
+- `b2c-finance-ai-agent.json`:
+  - ferramenta `consultar_conhecimento` (Qdrant, retrieve-as-tool), só para conceitos e procedimentos;
+  - o prompt passa a vir de `docs/AI_AGENT_SYSTEM_PROMPT.md`, com os 10 princípios.
+- `examples/system-prompt-write.md` removido; o prompt agora vive em `docs/AI_AGENT_SYSTEM_PROMPT.md`.
+- **Credencial nova** "Qdrant (conhecimento)"; variável `QDRANT_URL`.
+- O teste de conexão mostra `faltandoParaConhecimento`.
+
 ## 2026-09-28 (5)
 
 - **Novo** `workflows/b2c-finance-ai-agent.json`: agente com escrita controlada. O somente leitura fica intacto.
@@ -11,7 +24,7 @@ Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN
   - **Depois da IA**, se houve proposta nesta mensagem, o WhatsApp recebe a prévia montada pela API.
   - **Webhook próprio:** `/webhook/b2c-finance-ai-agent-v2`.
 - **Scopes novos na integração:** `agent_actions.manage` e os de escrita. O teste de conexão mostra `faltandoParaEscrita`.
-- `examples/system-prompt-write.md`: prompt do agente com escrita.
+- `examples/system-prompt-write.md`: prompt do agente com escrita (substituído depois por `docs/AI_AGENT_SYSTEM_PROMPT.md`).
 
 ## 2026-09-28 (4)
 

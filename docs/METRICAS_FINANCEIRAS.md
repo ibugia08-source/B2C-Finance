@@ -1,3 +1,11 @@
+---
+rag: true
+titulo: Dicionário de métricas financeiras
+categoria: metricas
+atualizado_em: 2026-09-28
+dados_atuais: nao
+---
+
 # Dicionário de Métricas Financeiras — B2C Finance
 
 > **Atualizado em 2026-07-20 (auditoria completa).** Fonte da verdade para nomes,

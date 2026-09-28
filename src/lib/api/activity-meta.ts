@@ -35,6 +35,7 @@ export type WriteOperationKey = keyof typeof API_WRITE_OPERATIONS;
 export const API_READ_ACTIONS: Record<string, string> = {
   me: "Conferiu a credencial",
   "identities.resolve": "Identificou quem fala (WhatsApp)",
+  "knowledge.documents": "Baixou a base de conhecimento (indexação)",
   "agent_actions.propose": "Agente propôs uma ação (aguarda confirmação)",
   "agent_actions.list": "Consultou ações pendentes do agente",
   "agent_actions.confirm": "Usuário confirmou ação do agente",

@@ -1,3 +1,11 @@
+---
+rag: true
+titulo: Status do cliente com vigência
+categoria: status-de-clientes
+atualizado_em: 2026-09-28
+dados_atuais: nao
+---
+
 # Status do cliente com vigência (status temporal)
 
 Implantado em 26/09/2026. Código central: `src/lib/clients/status-history.ts`.

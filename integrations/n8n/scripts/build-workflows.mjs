@@ -3,13 +3,16 @@
  * Gera os workflows a partir das fontes versionadas:
  *   schemas/agent-tools.json        → uma ferramenta HTTP (GET) por item do catálogo
  *   schemas/agent-write-tools.json  → ferramentas que PROPÕEM escrita (agente com escrita)
- *   examples/system-prompt.md   → instruções do agente
+ *   examples/system-prompt.md        → instruções do agente somente leitura
+ *   docs/AI_AGENT_SYSTEM_PROMPT.md   → instruções do agente com escrita (fonte única)
+ *   knowledge/b2c-finance-knowledge.json → base de conhecimento (build-knowledge.mjs)
  *
  *   node integrations/n8n/scripts/build-workflows.mjs    (npm run n8n:build)
  *
  * Saída:
  *   workflows/b2c-finance-ai-agent-readonly.json  agente de consulta (WhatsApp) — referência/backup
- *   workflows/b2c-finance-ai-agent.json           agente com escrita controlada (prévia + SIM <código>)
+ *   workflows/b2c-finance-ai-agent.json           agente com escrita controlada (prévia + SIM <código>) + RAG
+ *   workflows/knowledge-ingest.json               indexa a base de conhecimento no Qdrant (manual)
  *   workflows/sistema.teste-conexao.v1.json       teste de conexão e scopes
  *
  * Depois de importar e ajustar no n8n, exporte de volta (scripts/export.sh);
@@ -516,7 +519,27 @@ const agente = {
 // ---------------------------------------------------------------------------
 
 const escrita = JSON.parse(readFileSync(join(RAIZ, "schemas/agent-write-tools.json"), "utf8"));
-const promptEscrita = readFileSync(join(RAIZ, "examples/system-prompt-write.md"), "utf8").trim();
+// Prompt do agente com escrita: fonte única em docs/AI_AGENT_SYSTEM_PROMPT.md
+// (só o trecho entre os marcadores).
+const docPrompt = readFileSync(join(RAIZ, "..", "..", "docs/AI_AGENT_SYSTEM_PROMPT.md"), "utf8");
+const promptEscrita = (docPrompt.split("<!-- prompt:inicio -->")[1] ?? "").split("<!-- prompt:fim -->")[0].trim();
+if (!promptEscrita) throw new Error("docs/AI_AGENT_SYSTEM_PROMPT.md sem o trecho entre <!-- prompt:inicio --> e <!-- prompt:fim -->.");
+
+// Base de conhecimento (RAG): o MESMO pacote que a API serve e a ingestão indexa.
+const conhecimento = JSON.parse(readFileSync(join(RAIZ, "knowledge/b2c-finance-knowledge.json"), "utf8"));
+const CRED_QDRANT = { qdrantApi: { id: "CONFIGURAR_QDRANT", name: "Qdrant (conhecimento)" } };
+const colecao = { __rl: true, value: conhecimento.collection, mode: "id" };
+const embeddings = (nome, pos) => ({
+  // Dimensões FIXAS (as do pacote): indexação e consulta precisam do mesmo tamanho.
+  parameters: { model: conhecimento.embedding.model, options: { dimensions: conhecimento.embedding.dimensions } },
+  name: nome,
+  type: "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+  typeVersion: 1.2,
+  position: pos,
+  credentials: CRED_IA,
+  notes: `Mesmo modelo na indexação e na consulta (${conhecimento.embedding.model}).`,
+  notesInFlow: true,
+});
 
 const NE = {
   ...N,
@@ -530,6 +553,8 @@ const NE = {
   apiCancelar: "API: cancelar ação",
   respostaAcao: "Resposta da ação",
   juntar: "Juntar resposta e contexto",
+  conhecimento: "consultar_conhecimento",
+  embConhecimento: "Embeddings (conhecimento)",
   proposta: "API: ação proposta nesta mensagem",
 };
 
@@ -761,7 +786,7 @@ const agenteEscrita = {
     ),
     nota(
       "Nota: agente e ferramentas",
-      `### 6–7 · Agente\nLeitura: GET na API. Escrita: todas as ferramentas fazem \`POST /agent/pending-actions\` com a operação FIXA — só propõem. Depois da IA, se houve proposta nesta mensagem, o WhatsApp recebe a **prévia da API** (com o código), não a paráfrase da IA.`,
+      `### 6–7 · Agente\nDados atuais: GET na API. Conceitos e procedimentos: \`consultar_conhecimento\` (Qdrant, RAG) — nunca número atual. Escrita: todas as ferramentas fazem \`POST /agent/pending-actions\` com a operação FIXA — só propõem. Depois da IA, se houve proposta nesta mensagem, o WhatsApp recebe a **prévia da API** (com o código), não a paráfrase da IA.`,
       [1460, 180], 1100, 1200, 6
     ),
     ...verificacaoNos,
@@ -802,7 +827,7 @@ const agenteEscrita = {
           systemMessage:
             "=" +
             promptEscrita +
-            "\n\n## Contexto desta conversa\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
+            "\n\n## Contexto desta conversa\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
           maxIterations: 10,
           returnIntermediateSteps: false,
         },
@@ -818,6 +843,25 @@ const agenteEscrita = {
     { ...agente.nodes.find((n) => n.name === N.modelo), position: [1500, 460] },
     { ...agente.nodes.find((n) => n.name === N.memoria), position: [1680, 460] },
     ...todasFerramentas,
+    {
+      parameters: {
+        mode: "retrieve-as-tool",
+        toolDescription:
+          "Base de CONHECIMENTO do B2C Finance: conceitos, regras e procedimentos (o que é MRR/TCV, como se calcula o resultado, status com vigência, fechamento de mês, plano de contas, políticas, o que o agente faz). NUNCA use para número ou situação atual — saldo, MRR, clientes ativos, recebimentos, despesas, status de hoje e inadimplência vêm das ferramentas de consulta da API. Valores citados nos trechos são exemplos.",
+        qdrantCollection: colecao,
+        topK: 4,
+        includeDocumentMetadata: true,
+        options: {},
+      },
+      name: NE.conhecimento,
+      type: "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      typeVersion: 1.3,
+      position: [2200, 1400],
+      credentials: CRED_QDRANT,
+      notes: `RAG (READ): coleção ${conhecimento.collection}, indexada por knowledge-ingest.json. Só conceitos.`,
+      notesInFlow: true,
+    },
+    embeddings(NE.embConhecimento, [2200, 1580]),
     code(NE.juntar, JS_JUNTAR, [2400, 400], "Resposta da IA + contexto (vínculo e mensagem) no mesmo item."),
     apiDeControle(
       NE.proposta, "GET", "/agent/pending-actions?sourceMessageId={{ encodeURIComponent($json.messageId) }}&limit=1",
@@ -862,6 +906,8 @@ const agenteEscrita = {
     [N.modelo]: { ai_languageModel: [[{ node: NE.agente, type: "ai_languageModel", index: 0 }]] },
     [N.memoria]: { ai_memory: [[{ node: NE.agente, type: "ai_memory", index: 0 }]] },
     ...Object.fromEntries(todasFerramentas.map((f) => [f.name, { ai_tool: [[{ node: NE.agente, type: "ai_tool", index: 0 }]] }])),
+    [NE.conhecimento]: { ai_tool: [[{ node: NE.agente, type: "ai_tool", index: 0 }]] },
+    [NE.embConhecimento]: { ai_embedding: [[{ node: NE.conhecimento, type: "ai_embedding", index: 0 }]] },
     [N.verificacao]: { main: [[{ node: N.desafio, type: "main", index: 0 }]] },
     [N.desafio]: { main: [[{ node: N.responderDesafio, type: "main", index: 0 }]] },
   },
@@ -871,6 +917,9 @@ const agenteEscrita = {
   meta: {
     b2c: {
       workflow: "b2c-finance-ai-agent",
+      knowledgeVersion: conhecimento.version,
+      knowledgeCollection: conhecimento.collection,
+      systemPrompt: "docs/AI_AGENT_SYSTEM_PROMPT.md",
       version: 1,
       catalogVersion: catalogo.version,
       writeCatalogVersion: escrita.version,
@@ -890,6 +939,161 @@ agenteEscrita.nodes = agenteEscrita.nodes.map((n) =>
   : n.name === N.verificacao ? { ...n, parameters: { ...n.parameters, path: "b2c-finance-ai-agent-v2" }, webhookId: "b2c-finance-ai-agent-v2-verificacao" }
   : n
 );
+
+// ---------------------------------------------------------------------------
+// Indexação da base de conhecimento (knowledge-ingest.json) — manual
+//   API (GET /knowledge/documents) → apaga a coleção → um item por trecho →
+//   Qdrant (embeddings OpenAI). Rodar de novo sempre que a versão mudar.
+// ---------------------------------------------------------------------------
+
+const NK = {
+  gatilho: "Reindexar agora",
+  api: "API: base de conhecimento",
+  conferir: "Conferir pacote",
+  apagar: "Qdrant: apagar coleção",
+  trechos: "Um item por trecho",
+  gravar: "Qdrant: gravar trechos",
+  emb: "Embeddings (indexação)",
+  loader: "Trecho → documento",
+  splitter: "Sem nova divisão",
+  resumo: "Resumo da indexação",
+};
+
+const JS_CONFERIR = `// Confere o pacote antes de apagar qualquer coisa: se a API falhou, a
+// coleção atual fica intacta.
+const r = $input.first().json || {};
+if (r.success !== true || !r.data || !Array.isArray(r.data.trechos) || r.data.trechos.length === 0) {
+  throw new Error('A API não devolveu a base de conhecimento (confira o scope knowledge.read). Nada foi apagado.');
+}
+if (r.data.embedding.model !== ${JSON.stringify(conhecimento.embedding.model)}) {
+  throw new Error('Modelo de embedding do pacote (' + r.data.embedding.model + ') diferente do workflow: gere o workflow de novo.');
+}
+if (!$env.QDRANT_URL) throw new Error('QDRANT_URL não configurado.');
+return [{ json: { collection: r.data.collection, version: r.data.version, trechos: r.data.trechos.length } }];`;
+
+const JS_TRECHOS = `// Um item por trecho: texto + metadados (documento, seção, fonte, versão).
+const pacote = $('${NK.api}').first().json.data;
+return pacote.trechos.map((t) => ({ json: { text: t.text, ...t.metadata, trechoId: t.id, versao: pacote.version } }));`;
+
+const metaCampo = (nome) => ({ name: nome, value: `={{ $json.${nome} }}` });
+
+const ingestao = {
+  name: "B2C · Conhecimento · Indexar base (manual)",
+  nodes: [
+    nota(
+      "Nota: sobre este workflow",
+      `## Indexar a base de conhecimento (RAG)\n\n**RAG = conhecimento e documentação. API = dados atuais.** Esta base só tem conceitos, regras e procedimentos — nunca saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.\n\n1. Lê o pacote na API (\`GET /knowledge/documents\`, scope \`knowledge.read\`).\n2. Apaga a coleção \`${conhecimento.collection}\` no Qdrant e grava os trechos de novo (embeddings ${conhecimento.embedding.model}).\n\nRode de novo sempre que a versão do pacote mudar (docs alterados + deploy). Guia: docs/AI_AGENT_KNOWLEDGE.md.\n\nNunca use o banco do B2C Finance (nem Supabase) como vector store.`,
+      [-460, -60], 420, 420, 6
+    ),
+    { parameters: {}, name: NK.gatilho, type: "n8n-nodes-base.manualTrigger", typeVersion: 1, position: [0, 200], notes: "Indexação manual (não há gatilho automático).", notesInFlow: true },
+    {
+      parameters: {
+        url: "={{ $env.B2C_FINANCE_API_URL }}/knowledge/documents",
+        authentication: "genericCredentialType",
+        genericAuthType: "httpHeaderAuth",
+        sendHeaders: true,
+        headerParameters: { parameters: [{ name: "X-B2C-Source", value: "n8n" }, { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" }] },
+        options: {},
+      },
+      name: NK.api,
+      type: "n8n-nodes-base.httpRequest",
+      typeVersion: 4.2,
+      position: [220, 200],
+      credentials: CRED_B2C,
+      notes: "GET /knowledge/documents (scope knowledge.read).",
+      notesInFlow: true,
+    },
+    code(NK.conferir, JS_CONFERIR, [440, 200], "Pacote válido antes de apagar a coleção."),
+    {
+      parameters: {
+        method: "DELETE",
+        url: "={{ $env.QDRANT_URL }}/collections/{{ $json.collection }}",
+        authentication: "predefinedCredentialType",
+        nodeCredentialType: "qdrantApi",
+        options: { response: { response: { neverError: true } } },
+      },
+      name: NK.apagar,
+      type: "n8n-nodes-base.httpRequest",
+      typeVersion: 4.2,
+      position: [660, 200],
+      credentials: CRED_QDRANT,
+      notes: "Reindexação limpa (coleção inexistente = segue).",
+      notesInFlow: true,
+    },
+    code(NK.trechos, JS_TRECHOS, [880, 200], "Um item por trecho, com metadados."),
+    {
+      parameters: { mode: "insert", qdrantCollection: colecao, options: {} },
+      name: NK.gravar,
+      type: "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      typeVersion: 1.3,
+      position: [1100, 200],
+      credentials: CRED_QDRANT,
+      notes: `Grava na coleção ${conhecimento.collection} (recriada aqui).`,
+      notesInFlow: true,
+    },
+    embeddings(NK.emb, [1040, 420]),
+    {
+      parameters: {
+        dataType: "json",
+        jsonMode: "expressionData",
+        jsonData: "={{ $json.text }}",
+        textSplittingMode: "custom",
+        options: {
+          metadata: {
+            metadataValues: ["docId", "titulo", "categoria", "secao", "fonte", "atualizado_em", "tipo", "trechoId", "versao"].map(metaCampo),
+          },
+        },
+      },
+      name: NK.loader,
+      type: "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      typeVersion: 1.1,
+      position: [1220, 420],
+      notes: "Texto do trecho + metadados.",
+      notesInFlow: true,
+    },
+    {
+      parameters: { chunkSize: 4000, chunkOverlap: 0, options: {} },
+      name: NK.splitter,
+      type: "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      typeVersion: 1,
+      position: [1320, 600],
+      notes: "Os trechos já vêm no tamanho certo (por seção): não dividir de novo.",
+      notesInFlow: true,
+    },
+    code(
+      NK.resumo,
+      `// Quantos trechos foram gravados e de qual versão.\nconst p = $('${NK.conferir}').first().json;\nreturn [{ json: { colecao: p.collection, versao: p.version, trechosNoPacote: p.trechos, gravados: $input.all().length } }];`,
+      [1320, 200],
+      "Versão indexada e contagem."
+    ),
+  ],
+  connections: {
+    [NK.gatilho]: { main: [[{ node: NK.api, type: "main", index: 0 }]] },
+    [NK.api]: { main: [[{ node: NK.conferir, type: "main", index: 0 }]] },
+    [NK.conferir]: { main: [[{ node: NK.apagar, type: "main", index: 0 }]] },
+    [NK.apagar]: { main: [[{ node: NK.trechos, type: "main", index: 0 }]] },
+    [NK.trechos]: { main: [[{ node: NK.gravar, type: "main", index: 0 }]] },
+    [NK.gravar]: { main: [[{ node: NK.resumo, type: "main", index: 0 }]] },
+    [NK.emb]: { ai_embedding: [[{ node: NK.gravar, type: "ai_embedding", index: 0 }]] },
+    [NK.loader]: { ai_document: [[{ node: NK.gravar, type: "ai_document", index: 0 }]] },
+    [NK.splitter]: { ai_textSplitter: [[{ node: NK.loader, type: "ai_textSplitter", index: 0 }]] },
+  },
+  settings: { executionOrder: "v1" },
+  pinData: {},
+  active: false,
+  meta: {
+    b2c: {
+      workflow: "knowledge-ingest",
+      version: 1,
+      knowledgeVersion: conhecimento.version,
+      collection: conhecimento.collection,
+      embeddingModel: conhecimento.embedding.model,
+      requiredScopes: ["knowledge.read"],
+      generatedBy: "integrations/n8n/scripts/build-workflows.mjs",
+    },
+  },
+  tags: [],
+};
 
 // ---------------------------------------------------------------------------
 // Teste de conexão (manual): /health, /me e os scopes que o agente precisa
@@ -923,12 +1127,15 @@ const teste = {
 const necessarios = ${JSON.stringify(scopesUsados)};
 // Agente com escrita (b2c-finance-ai-agent): além dos de consulta.
 const paraEscrita = ${JSON.stringify(scopesEscrita)};
+// Indexação da base de conhecimento (knowledge-ingest).
+const paraConhecimento = ["knowledge.read"];
 const me = $input.first().json;
 const tem = (me.data && me.data.scopes) || [];
 const faltando = necessarios.filter((s) => !tem.includes(s));
 const faltandoParaEscrita = paraEscrita.filter((s) => !tem.includes(s));
-const excesso = tem.filter((s) => !paraEscrita.includes(s));
-return [{ json: { ok: faltando.length === 0, okParaEscrita: faltandoParaEscrita.length === 0, integracao: me.data && me.data.name, faltando, faltandoParaEscrita, scopesAlemDoNecessario: excesso, requestId: me.meta && me.meta.requestId } }];`,
+const faltandoParaConhecimento = paraConhecimento.filter((s) => !tem.includes(s));
+const excesso = tem.filter((s) => !paraEscrita.includes(s) && !paraConhecimento.includes(s));
+return [{ json: { ok: faltando.length === 0, okParaEscrita: faltandoParaEscrita.length === 0, okParaConhecimento: faltandoParaConhecimento.length === 0, integracao: me.data && me.data.name, faltando, faltandoParaEscrita, faltandoParaConhecimento, scopesAlemDoNecessario: excesso, requestId: me.meta && me.meta.requestId } }];`,
       },
       name: "Conferir scopes",
       type: "n8n-nodes-base.code",
@@ -951,5 +1158,6 @@ return [{ json: { ok: faltando.length === 0, okParaEscrita: faltandoParaEscrita.
 const gravar = (arquivo, wf) => writeFileSync(join(RAIZ, "workflows", arquivo), JSON.stringify(wf, null, 2) + "\n");
 gravar("b2c-finance-ai-agent-readonly.json", agente);
 gravar("b2c-finance-ai-agent.json", agenteEscrita);
+gravar("knowledge-ingest.json", ingestao);
 gravar("sistema.teste-conexao.v1.json", teste);
 console.log(`Workflows gerados (somente leitura: ${ferramentas.length} ferramentas; com escrita: ${todasFerramentas.length} ferramentas, scopes: ${scopesEscrita.join(", ")}).`);

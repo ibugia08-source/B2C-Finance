@@ -136,7 +136,7 @@ A validade é de 10 minutos, ajustável com `B2C_PENDING_ACTION_TTL_MINUTES` (1 
    - os scopes de escrita que o agente pode usar: `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
 
    O teste de conexão mostra `faltandoParaEscrita`.
-3. **Credenciais e variáveis** são as mesmas do agente somente leitura (`integrations/n8n/README.md`).
+3. **Credenciais e variáveis** são as mesmas do agente somente leitura (`integrations/n8n/README.md`), mais a credencial "Qdrant (conhecimento)" da base de conhecimento (`docs/AI_AGENT_KNOWLEDGE.md`). O prompt do agente vive em `docs/AI_AGENT_SYSTEM_PROMPT.md`.
 4. **Teste antes de ativar** (o workflow chega **desativado**):
    - peça um pagamento de uma cobrança de teste e confira a prévia;
    - responda `sim` (deve pedir o código), `SIM 0000` (código errado) e `SIM <código>`;

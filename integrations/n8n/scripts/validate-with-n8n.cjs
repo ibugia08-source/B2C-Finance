@@ -56,6 +56,26 @@ function carregar(tiposUsados) {
   return tipos;
 }
 
+/** O tipo de credencial existe em algum pacote e define `authenticate`? */
+function credencialAutentica(nome) {
+  for (const p of PACOTES) {
+    const raiz = path.join(MOD, p.pasta);
+    const manifesto = require(path.join(raiz, "package.json"));
+    for (const rel of manifesto.n8n.credentials ?? []) {
+      const base = path.basename(rel).replace(".credentials.js", "");
+      if (base.toLowerCase() !== nome.toLowerCase()) continue;
+      for (const Classe of Object.values(require(path.join(raiz, rel)))) {
+        if (typeof Classe !== "function") continue;
+        try {
+          const inst = new Classe();
+          if (inst.name === nome) return !!inst.authenticate;
+        } catch { /* segue */ }
+      }
+    }
+  }
+  return false;
+}
+
 function validar(arquivo, tipos) {
   const wf = JSON.parse(fs.readFileSync(arquivo, "utf8"));
   const problemas = [];
@@ -71,7 +91,15 @@ function validar(arquivo, tipos) {
     const credsAceitas = new Set((desc.credentials ?? []).map((c) => c.name));
     for (const c of Object.keys(n.credentials ?? {})) {
       // httpHeaderAuth é credencial genérica (genericCredentialType), aceita por qualquer nó HTTP.
-      if (c !== "httpHeaderAuth" && !credsAceitas.has(c)) problemas.push(`${n.name}: credencial "${c}" não aceita por ${n.type}`);
+      if (c === "httpHeaderAuth") continue;
+      // HTTP Request com credencial PRÉ-DEFINIDA: vale a do nodeCredentialType,
+      // se o tipo existe e sabe se autenticar sozinho (propriedade `authenticate`).
+      if (n.type === "n8n-nodes-base.httpRequest" && n.parameters?.authentication === "predefinedCredentialType") {
+        if (n.parameters.nodeCredentialType !== c) problemas.push(`${n.name}: credencial "${c}" ≠ nodeCredentialType "${n.parameters.nodeCredentialType}"`);
+        else if (!credencialAutentica(c)) problemas.push(`${n.name}: credencial "${c}" não existe ou não tem "authenticate" (não serve para HTTP Request)`);
+        continue;
+      }
+      if (!credsAceitas.has(c)) problemas.push(`${n.name}: credencial "${c}" não aceita por ${n.type}`);
     }
   }
   return problemas;

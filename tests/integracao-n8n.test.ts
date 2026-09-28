@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { buildOpenApiSpec } from "@/lib/api/openapi";
 import { API_SCOPES } from "@/lib/api/scopes";
@@ -85,7 +85,7 @@ describe("workflows versionados", () => {
   it("existem o agente, os dois relatórios diários e o teste de conexão", () => {
     expect(arquivos.sort()).toEqual([
       "b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json", "daily-evening-report.json", "daily-morning-report.json",
-      "sistema.teste-conexao.v1.json",
+      "knowledge-ingest.json", "sistema.teste-conexao.v1.json",
     ]);
   });
 
@@ -566,13 +566,145 @@ describe("agente com escrita controlada", () => {
     expect(ok).not.toContain("cadastrar_cliente");
   });
 
-  it("prompt: classificação de risco, bloqueadas, nunca confirmar, não conceder permissão", () => {
-    const prompt = readFileSync(join(RAIZ, "examples/system-prompt-write.md"), "utf8").trim();
-    expect((no(N_AG).parameters.options.systemMessage as string).startsWith("=" + prompt)).toBe(true);
+  it("prompt: vem de docs/AI_AGENT_SYSTEM_PROMPT.md, com os 10 princípios, risco e bloqueadas", () => {
+    const doc = readFileSync(join(process.cwd(), "docs/AI_AGENT_SYSTEM_PROMPT.md"), "utf8");
+    const prompt = doc.split("<!-- prompt:inicio -->")[1].split("<!-- prompt:fim -->")[0].trim();
+    const sistema = no(N_AG).parameters.options.systemMessage as string;
+    expect(sistema.startsWith("=" + prompt)).toBe(true);
+    const PRINCIPIOS = [
+      "1. **Nunca invente dados.**",
+      "2. **Consulte a API para informações atuais.**",
+      "3. **Consulte a base de conhecimento para conceitos e procedimentos.**",
+      "4. **Busque o cliente antes de usar um ID.**",
+      "5. **Pergunte em caso de ambiguidade.**",
+      "6. **Não execute ações críticas.**",
+      "7. **Peça confirmação para escrita.**",
+      "8. **Respeite as permissões.**",
+      "9. **Explique o que executou.**",
+      "10. **Nunca revele token, segredo ou informação técnica sensível.**",
+    ];
+    for (const p of PRINCIPIOS) expect(prompt, p).toContain(p);
+    // Princípio 2: o que NUNCA vem da base de conhecimento.
+    for (const item of ["saldo atual", "MRR atual", "cliente ativo hoje", "recebimentos", "despesas", "status atual", "inadimplência"]) {
+      expect(prompt, item).toContain(item);
+    }
     for (const trecho of [
-      "READ", "WRITE_CONFIRMATION", "BLOCKED", "Não invente IDs", "buscar_clientes", "Alpha",
-      "não existe ferramenta de confirmação", "Nunca envie userId", ...Object.values(OPERACOES_BLOQUEADAS),
+      "READ", "WRITE_CONFIRMATION", "BLOCKED", "buscar_clientes", "Alpha", "consultar_conhecimento",
+      "não existe ferramenta de confirmação", "nunca envie userId", ...Object.values(OPERACOES_BLOQUEADAS),
     ]) expect(prompt, trecho).toContain(trecho);
-    expect(prompt).not.toContain("SOMENTE LEITURA");
+    expect(prompt).not.toMatch(/b2c_live_|Bearer\s|sk-/);
+    expect(sistema).toContain("Base de conhecimento: consultar_conhecimento");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Base de conhecimento (RAG)
+// ---------------------------------------------------------------------------
+
+describe("base de conhecimento (RAG = conhecimento; API = dados atuais)", () => {
+  const pacote = ler("knowledge/b2c-finance-knowledge.json");
+  const manifesto = ler("knowledge/manifest.json");
+  const agente = ler("workflows/b2c-finance-ai-agent.json");
+  const ingestao = ler("workflows/knowledge-ingest.json");
+  const noDe = (wf: any, nome: string) => wf.nodes.find((n: any) => n.name === nome);
+
+  it("o pacote versionado é exatamente o que o gerador produz (docs editados sem build não passam)", async () => {
+    const { gerarPacote } = await import("../integrations/n8n/scripts/build-knowledge.mjs");
+    expect(gerarPacote()).toEqual(pacote);
+  });
+
+  it("documentos pedidos estão na base; os com dado de uma data, proposta antiga ou prompt, nunca", () => {
+    const caminhos = pacote.documentos.map((d: any) => d.path);
+    for (const p of [
+      "docs/METRICAS_FINANCEIRAS.md", "docs/ARQUITETURA_FINANCEIRA.md", "docs/STATUS_TEMPORAL_CLIENTES.md", "docs/API.md",
+      "docs/AI_AGENT.md", "docs/PLANO_DE_CONTAS.md", "docs/REGRAS_MRR_TCV.md", "docs/POLITICAS_INTERNAS.md",
+    ]) expect(caminhos, p).toContain(p);
+    for (const p of manifesto.neverIndex.paths) {
+      expect(caminhos).not.toContain(p);
+      expect(existsSync(join(process.cwd(), p)), `neverIndex aponta para arquivo inexistente: ${p}`).toBe(true);
+    }
+    for (const p of ["docs/DIAGNOSTICO_2026.md", "docs/PLANO_DE_CONTAS_GERENCIAL.md", "docs/AI_AGENT_SYSTEM_PROMPT.md"]) {
+      expect(manifesto.neverIndex.paths).toContain(p);
+    }
+  });
+
+  it("cada trecho: aviso de conceito, documento e seção, metadados completos, tamanho limitado, id único", () => {
+    const ids = new Set();
+    for (const t of pacote.trechos) {
+      expect(t.text.startsWith("[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: ")).toBe(true);
+      expect(t.text.length).toBeLessThanOrEqual(manifesto.chunking.maxChars + 300);
+      expect(t.metadata).toMatchObject({ tipo: "conhecimento" });
+      for (const k of ["docId", "titulo", "categoria", "secao", "fonte", "atualizado_em"]) expect(t.metadata[k], `${t.id}.${k}`).toBeTruthy();
+      expect(ids.has(t.id)).toBe(false);
+      ids.add(t.id);
+    }
+    // Seções internas excluídas não vazam para a base.
+    const tudo = pacote.trechos.map((t: any) => t.text).join("\n");
+    expect(tudo).not.toContain("DIVERGÊNCIAS CONHECIDAS");
+    expect(tudo).not.toContain("Seção: 9. Testes");
+    expect(tudo).not.toContain("Seção: 5. Implementação");
+    expect(pacote.principle).toContain("RAG = conhecimento e documentação. API = dados atuais");
+  });
+
+  it("o gerador recusa documento sem 'dados_atuais: nao' ou sem cabeçalho", async () => {
+    const { lerCabecalho } = await import("../integrations/n8n/scripts/build-knowledge.mjs");
+    expect(() => lerCabecalho("# Sem cabeçalho", "x.md")).toThrow(/sem cabeçalho/);
+    expect(() => lerCabecalho("---\nrag: true\ntitulo: X\ncategoria: c\natualizado_em: 2026-09-28\ndados_atuais: sim\n---\n# X", "x.md")).toThrow(/dados_atuais/);
+    expect(lerCabecalho("---\nrag: true\ntitulo: X\ncategoria: c\natualizado_em: 2026-09-28\ndados_atuais: nao\n---\n# X", "x.md").meta.titulo).toBe("X");
+  });
+
+  it("agente: consultar_conhecimento (Qdrant) só para conceitos, mesma coleção/modelo/dimensões da indexação", () => {
+    const tool = noDe(agente, "consultar_conhecimento");
+    expect(tool.type).toBe("@n8n/n8n-nodes-langchain.vectorStoreQdrant");
+    expect(tool.parameters).toMatchObject({ mode: "retrieve-as-tool", topK: 4, includeDocumentMetadata: true });
+    expect(tool.parameters.qdrantCollection.value).toBe(pacote.collection);
+    expect(tool.credentials.qdrantApi).toEqual({ id: "CONFIGURAR_QDRANT", name: "Qdrant (conhecimento)" });
+    for (const t of ["NUNCA", "saldo", "MRR", "clientes ativos", "recebimentos", "despesas", "status de hoje", "inadimplência"]) {
+      expect(tool.parameters.toolDescription, t).toContain(t);
+    }
+    expect(agente.connections["consultar_conhecimento"].ai_tool[0][0].node).toBe("AI Agent B2C Finance");
+    const emb = noDe(agente, "Embeddings (conhecimento)");
+    const embIdx = noDe(ingestao, "Embeddings (indexação)");
+    for (const e of [emb, embIdx]) {
+      expect(e.parameters.model).toBe(pacote.embedding.model);
+      expect(e.parameters.options.dimensions).toBe(pacote.embedding.dimensions);
+    }
+    expect(agente.connections["Embeddings (conhecimento)"].ai_embedding[0][0].node).toBe("consultar_conhecimento");
+    expect(agente.meta.b2c.knowledgeVersion).toBe(pacote.version);
+  });
+
+  it("indexação: manual, lê a API, confere antes de apagar, grava na mesma coleção; nada de banco do B2C", () => {
+    expect(ingestao.active).toBe(false);
+    const prox = (n: string) => ingestao.connections[n].main[0][0].node;
+    expect(noDe(ingestao, "Reindexar agora").type).toBe("n8n-nodes-base.manualTrigger");
+    expect(prox("Reindexar agora")).toBe("API: base de conhecimento");
+    expect(prox("API: base de conhecimento")).toBe("Conferir pacote");
+    expect(prox("Conferir pacote")).toBe("Qdrant: apagar coleção");
+    expect(prox("Qdrant: apagar coleção")).toBe("Um item por trecho");
+    expect(prox("Um item por trecho")).toBe("Qdrant: gravar trechos");
+    expect(noDe(ingestao, "API: base de conhecimento").parameters.url).toBe("={{ $env.B2C_FINANCE_API_URL }}/knowledge/documents");
+    const apagar = noDe(ingestao, "Qdrant: apagar coleção");
+    expect(apagar.parameters).toMatchObject({ method: "DELETE", url: "={{ $env.QDRANT_URL }}/collections/{{ $json.collection }}", nodeCredentialType: "qdrantApi" });
+    const gravar = noDe(ingestao, "Qdrant: gravar trechos");
+    expect(gravar.parameters.mode).toBe("insert");
+    expect(gravar.parameters.qdrantCollection.value).toBe(pacote.collection);
+    expect(ingestao.meta.b2c.requiredScopes).toEqual(["knowledge.read"]);
+    const texto = JSON.stringify(ingestao.nodes.filter((n: any) => n.type !== "n8n-nodes-base.stickyNote").map((n: any) => ({ ...n, notes: undefined }))).toLowerCase();
+    for (const proibido of ["supabase", "prisma", "postgres", "database_url"]) expect(texto, proibido).not.toContain(proibido);
+  });
+
+  it("código da indexação: pacote inválido não apaga nada; um item por trecho com metadados", async () => {
+    const conferir = noDe(ingestao, "Conferir pacote").parameters.jsCode as string;
+    const rodar = (resp: any, env: any = { QDRANT_URL: "http://q" }) =>
+      new Function("$input", "$env", `return (async () => { ${conferir} })();`)({ first: () => ({ json: resp }) }, env);
+    await expect(rodar({ success: false })).rejects.toThrow(/Nada foi apagado/);
+    const ok = await rodar({ success: true, data: pacote });
+    expect(ok[0].json).toMatchObject({ collection: pacote.collection, version: pacote.version, trechos: pacote.trechos.length });
+    await expect(rodar({ success: true, data: { ...pacote, embedding: { ...pacote.embedding, model: "outro" } } })).rejects.toThrow(/Modelo/);
+    const trechos = noDe(ingestao, "Um item por trecho").parameters.jsCode as string;
+    const $ = () => ({ first: () => ({ json: { data: pacote } }) });
+    const itens = await new Function("$", `return (async () => { ${trechos} })();`)($);
+    expect(itens).toHaveLength(pacote.trechos.length);
+    expect(itens[0].json).toMatchObject({ text: pacote.trechos[0].text, docId: pacote.trechos[0].metadata.docId, versao: pacote.version });
   });
 });

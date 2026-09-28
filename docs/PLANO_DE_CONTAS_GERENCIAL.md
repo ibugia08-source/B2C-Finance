@@ -1,5 +1,7 @@
 # Plano de Contas Gerencial — B2C Finance (proposta · 2026-07-20)
 
+> **HISTÓRICO — não usar como referência atual.** O plano de contas foi implementado depois desta proposta, com outra estrutura. O documento vigente é [`PLANO_DE_CONTAS.md`](PLANO_DE_CONTAS.md). Este arquivo **não** entra na base de conhecimento do agente.
+
 Resultado da auditoria contábil: o que existe hoje, o que falta, e o plano de
 contas proposto para organizar lançamentos. **Nada disto foi implementado ainda**
 — este documento é a base de decisão (§11-12 da auditoria).

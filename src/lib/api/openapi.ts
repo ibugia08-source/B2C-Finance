@@ -499,6 +499,19 @@ const SCHEMAS: Record<string, Obj> = {
     allowedScopes: { ...arr(str(undefined, { enum: API_SCOPES })), description: "Scopes da integração ∩ RBAC do usuário: o que ela pode fazer POR ele." },
     delegation: obj({ header: { const: "X-B2C-Identity" }, value: str() }),
   }),
+  KnowledgeBundle: obj({
+    catalog: str(),
+    version: str("Versão do pacote (muda quando a documentação muda) — reindexe quando mudar."),
+    principle: str(),
+    collection: str("Nome sugerido da coleção no vector store."),
+    embedding: obj({ provider: str(), model: str(), dimensions: { type: "integer" }, distance: str() }),
+    documentos: arr(obj({ id: str(), path: str(), titulo: str(), categoria: str(), atualizado_em: str(), sha256: str(), trechos: { type: "integer" } })),
+    trechos: arr(obj({
+      id: str(),
+      text: str("Trecho pronto para gerar o embedding (já traz documento e seção no início)."),
+      metadata: obj({ docId: str(), titulo: str(), categoria: str(), secao: str(), fonte: str(), atualizado_em: str(), tipo: { const: "conhecimento" } }),
+    })),
+  }),
   PendingActionProposal: obj(
     {
       operation: str("Operação da API ou nome da ferramenta do agente. Bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) → 403 `operation_blocked`.", {
@@ -1037,6 +1050,14 @@ PATHS["/integrations/resolve-identity"] = {
     },
   },
 };
+
+PATHS["/knowledge/documents"] = op({
+  id: "getKnowledgeDocuments", tag: "Integração", summary: "Base de conhecimento do agente (para indexar)",
+  description:
+    "Documentação curada (métricas, regras MRR/TCV, status com vigência, plano de contas, políticas, API, o agente) em trechos com metadados, pronta para um vector store. RAG = conhecimento; dados atuais vêm só das rotas de dados. Guia: docs/AI_AGENT_KNOWLEDGE.md.",
+  scope: "knowledge.read",
+  ok: sucesso(ref("KnowledgeBundle")),
+});
 
 const P_ACAO = [{ name: "id", in: "path", required: true, description: "Id da ação pendente.", schema: str(undefined, { pattern: "^[A-Za-z0-9_-]{1,64}$" }) }];
 const EX_ACAO = {

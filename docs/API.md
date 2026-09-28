@@ -1,3 +1,11 @@
+---
+rag: true
+titulo: API B2C Finance V1
+categoria: api
+atualizado_em: 2026-09-28
+dados_atuais: nao
+---
+
 # API B2C Finance — V1 (leitura)
 
 > 28/09/2026. Autenticação e scopes: [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md). Plano geral: [`API_IMPLEMENTATION_PLAN.md`](./API_IMPLEMENTATION_PLAN.md).
