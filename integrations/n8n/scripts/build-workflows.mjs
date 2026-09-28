@@ -20,18 +20,13 @@
  * OpenAPI (só GET, scopes, parâmetros, nenhum acesso a banco).
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import {
+  RAIZ_N8N as RAIZ, catalogo, conhecimento, CRED_B2C, CRED_WA, CRED_IA, CRED_QDRANT, BLOQUEADA, cabecalhosDe,
+  ferramenta, code, se, nota, apiDeControle, jsPermissoes, colecao, embeddings, ferramentaConhecimento, montarPrompt,
+} from "./lib/pecas.mjs";
 
-const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
-const catalogo = JSON.parse(readFileSync(join(RAIZ, "schemas/agent-tools.json"), "utf8"));
 const prompt = readFileSync(join(RAIZ, "examples/system-prompt.md"), "utf8").trim();
-
-// Ids PLACEHOLDER, um por credencial: na importação o n8n liga pelo nome e
-// tipo (ou você escolhe no nó). Nunca um id real — check-secrets barra.
-const CRED_B2C = { httpHeaderAuth: { id: "CONFIGURAR_B2C_FINANCE_API", name: "B2C Finance API" } };
-const CRED_WA = { httpHeaderAuth: { id: "CONFIGURAR_WHATSAPP_API", name: "WhatsApp API" } };
-const CRED_IA = { openAiApi: { id: "CONFIGURAR_OPENAI", name: "OpenAI" } };
 
 // Nomes dos nós (referenciados em expressões — um lugar só).
 const N = {
@@ -56,65 +51,7 @@ const N = {
   responderDesafio: "Responder desafio da Meta",
 };
 
-// Host que nunca resolve: ferramenta fora do perfil do usuário não chega à API.
-const BLOQUEADA = "https://ferramenta-nao-liberada-para-este-perfil.invalid";
-
-const cabecalhos = {
-  sendHeaders: true,
-  specifyHeaders: "keypair",
-  parametersHeaders: {
-    values: [
-      { name: "X-B2C-Source", valueProvider: "fieldValue", value: "whatsapp" },
-      { name: "x-request-id", valueProvider: "fieldValue", value: "={{ 'n8n-' + $execution.id }}" },
-      // Delegação: a API recorta cada chamada pelo RBAC de quem está falando.
-      { name: "X-B2C-Identity", valueProvider: "fieldValue", value: "={{ $json.identityId }}" },
-    ],
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Ferramentas (uma por item do catálogo)
-// ---------------------------------------------------------------------------
-
-function ferramenta(t, i) {
-  const props = t.inputSchema.properties;
-  const obrigatorios = new Set(t.inputSchema.required ?? []);
-  const query = [
-    ...Object.entries(t.http.fixedQuery ?? {}).map(([name, value]) => ({ name, valueProvider: "fieldValue", value })),
-    ...t.http.query.map((name) => ({ name, valueProvider: obrigatorios.has(name) ? "modelRequired" : "modelOptional" })),
-  ];
-  return {
-    parameters: {
-      toolDescription: t.description,
-      method: "GET",
-      // Base da API só para ferramenta liberada no perfil de quem pergunta
-      // ($json = item que entrou no agente: "Montar contexto do agente").
-      url: `={{ ($json.allowedTools || []).includes('${t.name}') ? $env.B2C_FINANCE_API_URL : '${BLOQUEADA}' }}${t.http.path}`,
-      authentication: "genericCredentialType",
-      genericAuthType: "httpHeaderAuth",
-      ...(query.length ? { sendQuery: true, specifyQuery: "keypair", parametersQuery: { values: query } } : {}),
-      ...cabecalhos,
-      placeholderDefinitions: {
-        values: [
-          ...(t.http.pathParams ?? []).map((name) => ({ name, description: props[name]?.description ?? name, type: "string" })),
-          ...t.http.query.map((name) => ({
-            name,
-            description: props[name]?.description ?? name,
-            type: props[name]?.type === "integer" ? "number" : "string",
-          })),
-        ],
-      },
-      optimizeResponse: false,
-    },
-    name: t.name,
-    type: "@n8n/n8n-nodes-langchain.toolHttpRequest",
-    typeVersion: 1.1,
-    position: [1260 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180],
-    credentials: CRED_B2C,
-    notes: `GET ${t.http.path} · scope ${t.scope}`,
-    notesInFlow: true,
-  };
-}
+const cabecalhos = cabecalhosDe("whatsapp");
 
 // ---------------------------------------------------------------------------
 // Código dos nós (JavaScript do nó Code)
@@ -261,42 +198,7 @@ const resposta = (nome, texto, pos, nota) => ({
   notesInFlow: true,
 });
 
-const code = (nome, js, pos, nota) => ({
-  parameters: { jsCode: js },
-  name: nome,
-  type: "n8n-nodes-base.code",
-  typeVersion: 2,
-  position: pos,
-  notes: nota,
-  notesInFlow: true,
-});
-
-const se = (nome, expr, pos, nota) => ({
-  parameters: {
-    conditions: {
-      options: { caseSensitive: true, leftValue: "", typeValidation: "loose" },
-      conditions: [{ id: nome, leftValue: expr, rightValue: true, operator: { type: "boolean", operation: "true", singleValue: true } }],
-      combinator: "and",
-    },
-    options: {},
-  },
-  name: nome,
-  type: "n8n-nodes-base.if",
-  typeVersion: 2,
-  position: pos,
-  notes: nota,
-  notesInFlow: true,
-});
-
-const nota = (nome, conteudo, pos, largura, altura, cor) => ({
-  parameters: { content: conteudo, height: altura, width: largura, color: cor },
-  name: nome,
-  type: "n8n-nodes-base.stickyNote",
-  typeVersion: 1,
-  position: pos,
-});
-
-const ferramentas = catalogo.tools.map(ferramenta);
+const ferramentas = catalogo.tools.map((t, i) => ferramenta(t, i));
 // O agente usa as ferramentas do catálogo E a resolução de identidade.
 const scopesUsados = [...new Set([...catalogo.tools.map((t) => t.scope), "identities.resolve"])].sort();
 
@@ -519,27 +421,8 @@ const agente = {
 // ---------------------------------------------------------------------------
 
 const escrita = JSON.parse(readFileSync(join(RAIZ, "schemas/agent-write-tools.json"), "utf8"));
-// Prompt do agente com escrita: fonte única em docs/AI_AGENT_SYSTEM_PROMPT.md
-// (só o trecho entre os marcadores).
-const docPrompt = readFileSync(join(RAIZ, "..", "..", "docs/AI_AGENT_SYSTEM_PROMPT.md"), "utf8");
-const promptEscrita = (docPrompt.split("<!-- prompt:inicio -->")[1] ?? "").split("<!-- prompt:fim -->")[0].trim();
-if (!promptEscrita) throw new Error("docs/AI_AGENT_SYSTEM_PROMPT.md sem o trecho entre <!-- prompt:inicio --> e <!-- prompt:fim -->.");
-
-// Base de conhecimento (RAG): o MESMO pacote que a API serve e a ingestão indexa.
-const conhecimento = JSON.parse(readFileSync(join(RAIZ, "knowledge/b2c-finance-knowledge.json"), "utf8"));
-const CRED_QDRANT = { qdrantApi: { id: "CONFIGURAR_QDRANT", name: "Qdrant (conhecimento)" } };
-const colecao = { __rl: true, value: conhecimento.collection, mode: "id" };
-const embeddings = (nome, pos) => ({
-  // Dimensões FIXAS (as do pacote): indexação e consulta precisam do mesmo tamanho.
-  parameters: { model: conhecimento.embedding.model, options: { dimensions: conhecimento.embedding.dimensions } },
-  name: nome,
-  type: "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
-  typeVersion: 1.2,
-  position: pos,
-  credentials: CRED_IA,
-  notes: `Mesmo modelo na indexação e na consulta (${conhecimento.embedding.model}).`,
-  notesInFlow: true,
-});
+// Prompt do agente com escrita: docs/AI_AGENT_SYSTEM_PROMPT.md (base + escrita).
+const promptEscrita = montarPrompt("escrita");
 
 const NE = {
   ...N,
@@ -625,37 +508,14 @@ const FERRAMENTA_SCOPES = {
   ...Object.fromEntries(escrita.tools.map((t) => [t.name, [t.scope, "agent_actions.manage"]])),
 };
 
-const JS_PERMISSOES_ESCRITA = `// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
+const JS_PERMISSOES_ESCRITA = jsPermissoes(
+  NE.identificar,
+  FERRAMENTA_SCOPES,
+  `// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
 // nem da IA). O usuário é o do VÍNCULO cadastrado no B2C Finance.
 // Ferramenta liberada = a API devolveu TODOS os scopes dela em allowedScopes
-// (conta ∩ RBAC do usuário). Escrita exige o scope da operação + agent_actions.manage.
-const FERRAMENTA_SCOPES = ${JSON.stringify(FERRAMENTA_SCOPES, null, 2)};
-const mensagens = $('${NE.identificar}').all();
-return $input.all().map((item, i) => {
-  const msg = mensagens[i] ? mensagens[i].json : {};
-  const r = item.json || {};
-  if (r.success === true && r.data && r.data.user) {
-    const scopes = r.data.allowedScopes || [];
-    return {
-      json: {
-        ...msg,
-        authorized: true,
-        identityId: r.data.identityId,
-        userId: r.data.user.id,
-        userName: r.data.user.name,
-        roleLabel: r.data.user.roleLabel,
-        allowedScopes: scopes,
-        allowedTools: Object.keys(FERRAMENTA_SCOPES).filter((t) => FERRAMENTA_SCOPES[t].every((s) => scopes.includes(s))),
-        motivo: null,
-      },
-    };
-  }
-  const texto = JSON.stringify(r.error || r);
-  const motivo = texto.includes('identity_not_found') ? 'numero_nao_vinculado'
-    : texto.includes('agency_scope_not_supported') ? 'usuario_restrito_a_agencia'
-    : 'erro_tecnico';
-  return { json: { ...msg, authorized: false, identityId: null, allowedTools: [], motivo } };
-});`;
+// (conta ∩ RBAC do usuário). Escrita exige o scope da operação + agent_actions.manage.`
+);
 
 const JS_DETECTAR = `// ETAPA 6a — A mensagem é RESPOSTA a uma ação pendente? (determinístico, sem IA)
 //  · "SIM 4821" / "confirmo 4821"  → confirmar com o código
@@ -739,39 +599,8 @@ return $input.all().map((item, i) => {
   return { json: { to: ctx.from, phoneNumberId: ctx.phoneNumberId, body: texto } };
 });`;
 
-// HTTP de controle (fora das ferramentas): sempre com o vínculo e sem lançar
-// erro — a resposta de erro da API vira texto para o usuário.
-const apiDeControle = (nome, metodo, caminho, pos, nota, extra = {}) => ({
-  parameters: {
-    method: metodo,
-    url: `={{ $env.B2C_FINANCE_API_URL }}${caminho}`,
-    authentication: "genericCredentialType",
-    genericAuthType: "httpHeaderAuth",
-    sendHeaders: true,
-    headerParameters: {
-      parameters: [
-        { name: "X-B2C-Source", value: "whatsapp" },
-        { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
-        { name: "X-B2C-Identity", value: extra.identidade ?? "={{ $json.identityId }}" },
-        ...(extra.headers ?? []),
-      ],
-    },
-    ...(extra.jsonBody ? { sendBody: true, specifyBody: "json", jsonBody: extra.jsonBody } : {}),
-    options: { response: { response: { neverError: true } } },
-  },
-  name: nome,
-  type: "n8n-nodes-base.httpRequest",
-  typeVersion: 4.2,
-  position: pos,
-  credentials: CRED_B2C,
-  onError: "continueRegularOutput",
-  alwaysOutputData: true,
-  notes: nota,
-  notesInFlow: true,
-});
-
 const ferramentasEscrita = escrita.tools.map(ferramentaDeEscrita);
-const ferramentasLeitura = catalogo.tools.map((t, i) => ({ ...ferramenta(t, i), position: [1500 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180] }));
+const ferramentasLeitura = catalogo.tools.map((t, i) => ({ ...ferramenta(t, i, "whatsapp"), position: [1500 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180] }));
 const todasFerramentas = [...ferramentasLeitura, ...ferramentasEscrita];
 const scopesEscrita = [
   ...new Set([...catalogo.tools.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
@@ -858,24 +687,7 @@ const agenteEscrita = {
     { ...agente.nodes.find((n) => n.name === N.modelo), position: [1500, 460] },
     { ...agente.nodes.find((n) => n.name === N.memoria), position: [1680, 460] },
     ...todasFerramentas,
-    {
-      parameters: {
-        mode: "retrieve-as-tool",
-        toolDescription:
-          "Base de CONHECIMENTO do B2C Finance: conceitos, regras e procedimentos (o que é MRR/TCV, como se calcula o resultado, status com vigência, fechamento de mês, plano de contas, políticas, o que o agente faz). NUNCA use para número ou situação atual — saldo, MRR, clientes ativos, recebimentos, despesas, status de hoje e inadimplência vêm das ferramentas de consulta da API. Valores citados nos trechos são exemplos.",
-        qdrantCollection: colecao,
-        topK: 4,
-        includeDocumentMetadata: true,
-        options: {},
-      },
-      name: NE.conhecimento,
-      type: "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
-      typeVersion: 1.3,
-      position: [2200, 1400],
-      credentials: CRED_QDRANT,
-      notes: `RAG (READ): coleção ${conhecimento.collection}, indexada por knowledge-ingest.json. Só conceitos.`,
-      notesInFlow: true,
-    },
+    ferramentaConhecimento(NE.conhecimento, [2200, 1400]),
     embeddings(NE.embConhecimento, [2200, 1580]),
     code(NE.juntar, JS_JUNTAR, [2400, 400], "Resposta da IA + contexto (vínculo e mensagem) no mesmo item."),
     apiDeControle(

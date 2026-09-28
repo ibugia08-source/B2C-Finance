@@ -1,0 +1,338 @@
+{
+  "name": "B2C · Telegram · Teste de conexão",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Teste de conexão do Telegram\n\nExecute manualmente. Confere, **sem nenhuma escrita**: API (`/health`), conta de serviço e scopes (`/me`), o vínculo do seu Telegram (`TELEGRAM_TEST_USER_ID`), a coleção de conhecimento no Qdrant — e manda o resultado para o seu Telegram (o que prova o bot).\n\nEsperado: Telegram, B2C API, Service Account, Identity, Qdrant e Agent dependencies = OK.",
+        "height": 320,
+        "width": 420,
+        "color": 6
+      },
+      "name": "Nota: sobre este teste",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        -120
+      ]
+    },
+    {
+      "parameters": {},
+      "name": "Executar teste",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "notes": "Execução manual.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "telegram"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "API: /health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "GET /health",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/me",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "telegram"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "API: /me",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "GET /me",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "telegram"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: 'TELEGRAM', externalIdentifier: String($env.TELEGRAM_TEST_USER_ID || '') }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "API: resolver identidade (teste)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Seu Telegram User ID está vinculado?",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.QDRANT_URL }}/collections/b2c_finance_conhecimento",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "qdrantApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "name": "Qdrant: coleção de conhecimento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        200
+      ],
+      "credentials": {
+        "qdrantApi": {
+          "id": "CONFIGURAR_QDRANT",
+          "name": "Qdrant (conhecimento)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "Coleção existe e tem trechos?",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta o resultado de cada dependência numa mensagem. \"Telegram: OK\" é\n// provado pela própria mensagem chegar no seu Telegram.\nconst necessarios = [\"cash.read\",\"client_status.read\",\"clients.read\",\"dashboard.read\",\"expenses.read\",\"identities.resolve\",\"receivables.read\",\"reports.read\",\"routine.read\",\"upsells.read\"];\nconst ok = (nome) => { const j = $(nome).first().json || {}; return j.success === true ? j : null; };\nconst health = ok('API: /health');\nconst me = ok('API: /me');\nconst identidade = ok('API: resolver identidade (teste)');\nconst q = $('Qdrant: coleção de conhecimento').first().json || {};\nconst pontos = q.result && typeof q.result.points_count === 'number' ? q.result.points_count : null;\nconst scopes = (me && me.data && me.data.scopes) || [];\nconst faltando = necessarios.filter((s) => !scopes.includes(s));\nconst linha = (nome, bom, detalhe) => nome + ': ' + (bom ? 'OK' : 'FALHOU') + (detalhe ? ' — ' + detalhe : '');\nconst res = {\n  api: !!health,\n  conta: !!me && faltando.length === 0,\n  identidade: !!identidade,\n  qdrant: pontos !== null && pontos > 0,\n};\nconst tudo = res.api && res.conta && res.identidade && res.qdrant;\nconst esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst linhas = [\n  '<b>Teste de conexão — B2C Finance</b>',\n  'Telegram: OK',\n  linha('B2C API', res.api),\n  linha('Service Account', res.conta, me ? (faltando.length ? 'faltam scopes: ' + faltando.join(', ') : '') : 'token recusado'),\n  linha('Identity', res.identidade, res.identidade ? '' : 'confira TELEGRAM_TEST_USER_ID e o vínculo em Integrações → Canais'),\n  linha('Qdrant', res.qdrant, pontos === null ? 'coleção inacessível' : pontos === 0 ? 'coleção vazia — rode a indexação' : pontos + ' trechos'),\n  linha('Agent dependencies', tudo),\n];\nreturn [{ json: { ok: tudo, ...res, faltando, trechosNoQdrant: pontos, text: linhas.map((l, i) => (i === 0 ? l : esc(l))).join('\\n') } }];"
+      },
+      "name": "Consolidar resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        200
+      ],
+      "notes": "OK/FALHOU por dependência.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $env.TELEGRAM_TEST_USER_ID }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "name": "Telegram: enviar resultado",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURAR_TELEGRAM",
+          "name": "Telegram Bot"
+        }
+      },
+      "notes": "sendMessage em HTML (o texto já vem escapado e dividido).",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Executar teste": {
+      "main": [
+        [
+          {
+            "node": "API: /health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: /health": {
+      "main": [
+        [
+          {
+            "node": "API: /me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: /me": {
+      "main": [
+        [
+          {
+            "node": "API: resolver identidade (teste)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: resolver identidade (teste)": {
+      "main": [
+        [
+          {
+            "node": "Qdrant: coleção de conhecimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant: coleção de conhecimento": {
+      "main": [
+        [
+          {
+            "node": "Consolidar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar resultado": {
+      "main": [
+        [
+          {
+            "node": "Telegram: enviar resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "meta": {
+    "b2c": {
+      "workflow": "telegram-connection-test",
+      "channel": "TELEGRAM",
+      "version": 1,
+      "readOnly": true,
+      "requiredScopes": [
+        "cash.read",
+        "client_status.read",
+        "clients.read",
+        "dashboard.read",
+        "expenses.read",
+        "identities.resolve",
+        "receivables.read",
+        "reports.read",
+        "routine.read",
+        "upsells.read"
+      ],
+      "generatedBy": "integrations/n8n/scripts/build-telegram-workflows.mjs"
+    }
+  },
+  "tags": []
+}

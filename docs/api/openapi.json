@@ -51,7 +51,7 @@
     },
     {
       "name": "Integração",
-      "description": "Quem está falando: número de WhatsApp → usuário e delegação por identidade."
+      "description": "Quem está falando: Telegram User ID ou número de WhatsApp → usuário, e delegação por identidade."
     },
     {
       "name": "Agente",
@@ -3396,8 +3396,8 @@
         "tags": [
           "Integração"
         ],
-        "summary": "Identificar quem está falando (WhatsApp → usuário)",
-        "description": "Resolve o número pelo VÍNCULO cadastrado em Configurações → Integrações → WhatsApp e devolve o usuário, as permissões relevantes e os scopes que a integração pode usar em nome dele. Número não vinculado, vínculo desativado ou usuário inativo → 404. Usuário restrito a uma agência → 403 (ainda não suportado). É uma consulta (sem Idempotency-Key); POST para o telefone não ir para a URL.\n\n**Scope obrigatório:** `identities.resolve`.",
+        "summary": "Identificar quem está falando (Telegram/WhatsApp → usuário)",
+        "description": "Resolve o identificador (Telegram User ID ou telefone) pelo VÍNCULO cadastrado em Configurações → Integrações → Canais e devolve o usuário, as permissões relevantes e os scopes que a integração pode usar em nome dele. Não vinculado, vínculo desativado ou usuário inativo → 404 `identity_not_found`. Usuário restrito a uma agência → 403 (ainda não suportado). É uma consulta (sem Idempotency-Key); POST para o telefone não ir para a URL.\n\n**Scope obrigatório:** `identities.resolve`.",
         "security": [
           {
             "bearerAuth": [
@@ -3422,8 +3422,8 @@
                 "$ref": "#/components/schemas/IdentityResolveRequest"
               },
               "example": {
-                "channel": "WHATSAPP",
-                "externalIdentifier": "+5571999990000"
+                "channel": "TELEGRAM",
+                "externalIdentifier": "123456789"
               }
             }
           }
@@ -3463,8 +3463,9 @@
                 "example": {
                   "success": true,
                   "data": {
+                    "authorized": true,
                     "identityId": "cmuwa0001",
-                    "channel": "WHATSAPP",
+                    "channel": "TELEGRAM",
                     "user": {
                       "id": "cmuuser01",
                       "name": "Raiane",
@@ -4203,12 +4204,13 @@
         "name": "x-b2c-source",
         "in": "header",
         "required": false,
-        "description": "Origem da chamada para a trilha de atividades: `n8n` ou `whatsapp`. Sem o header (ou outro valor) = API.",
+        "description": "Origem da chamada para a trilha de atividades: `n8n`, `whatsapp` ou `telegram`. Sem o header (ou outro valor) = API.",
         "schema": {
           "type": "string",
           "enum": [
             "n8n",
             "whatsapp",
+            "telegram",
             "api"
           ]
         }
@@ -7156,14 +7158,19 @@
         "type": "object",
         "properties": {
           "channel": {
-            "const": "WHATSAPP"
+            "type": "string",
+            "description": "Canal da mensagem.",
+            "enum": [
+              "TELEGRAM",
+              "WHATSAPP"
+            ]
           },
           "externalIdentifier": {
             "type": "string",
-            "description": "Telefone como veio do WhatsApp. Com \"+\" o código do país é lido do número; sem ele, 10–11 dígitos = Brasil. A variante do nono dígito é aceita.",
-            "minLength": 8,
+            "description": "TELEGRAM: Telegram User ID (`message.from.id`, só dígitos) — o @username NÃO identifica. WHATSAPP: telefone como veio; com \"+\" o código do país é lido do número; sem ele, 10–11 dígitos = Brasil; a variante do nono dígito é aceita.",
+            "minLength": 1,
             "maxLength": 40,
-            "example": "+5571999990000"
+            "example": "123456789"
           }
         },
         "required": [
@@ -7171,17 +7178,24 @@
           "externalIdentifier"
         ],
         "additionalProperties": false,
-        "description": "Só o número. `userId` (ou qualquer outro campo) é recusado: quem decide o usuário é o vínculo cadastrado pelo administrador."
+        "description": "Só o canal e o identificador. `userId`/`ownerId` (ou qualquer outro campo) é recusado: quem decide o usuário é o vínculo cadastrado pelo administrador."
       },
       "IdentityResolution": {
         "type": "object",
         "properties": {
+          "authorized": {
+            "const": true
+          },
           "identityId": {
             "type": "string",
             "description": "Id do vínculo — mande em `X-B2C-Identity` nas chamadas seguintes."
           },
           "channel": {
-            "const": "WHATSAPP"
+            "type": "string",
+            "enum": [
+              "TELEGRAM",
+              "WHATSAPP"
+            ]
           },
           "user": {
             "type": "object",
@@ -7261,6 +7275,7 @@
           }
         },
         "required": [
+          "authorized",
           "identityId",
           "channel",
           "user",
@@ -7504,7 +7519,11 @@
             ]
           },
           "channel": {
-            "const": "WHATSAPP"
+            "type": "string",
+            "enum": [
+              "TELEGRAM",
+              "WHATSAPP"
+            ]
           },
           "targetId": {
             "type": [
@@ -7946,7 +7965,7 @@
       "scopes": [
         {
           "scope": "identities.resolve",
-          "description": "Identificar quem fala (WhatsApp → usuário) e agir com as permissões dele",
+          "description": "Identificar quem fala (Telegram/WhatsApp → usuário) e agir com as permissões dele",
           "write": false
         },
         {

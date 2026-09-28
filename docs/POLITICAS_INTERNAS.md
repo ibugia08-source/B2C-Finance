@@ -108,6 +108,6 @@ Cada pessoa tem um papel, com permissões padrão que o administrador pode ajust
 
 ## 11. Privacidade
 
-- **O WhatsApp só atende números vinculados** a um usuário ativo pelo administrador (Configurações → Integrações → WhatsApp).
+- **O agente só atende quem está vinculado** a um usuário ativo pelo administrador (Configurações → Integrações → Canais): no Telegram pelo Telegram User ID, no WhatsApp pelo número. No Telegram, só em conversa privada.
 - **Documentos (CNPJ/CPF) aparecem mascarados.** Não se repassam dados de um cliente a quem não perguntou por ele.
 - **Nenhuma mensagem mostra** token, chave, senha, id interno ou detalhe técnico de erro.

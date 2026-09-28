@@ -171,4 +171,4 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
 
 - **Agente com problema:** desative-o no n8n e ative o `b2c-finance-ai-agent-readonly.json` (só consulta).
 - **Integração comprometida:** revogue o token em Configurações → Integrações. O efeito é imediato e toda chamada passa a dar 401.
-- **Número indevido:** desvincule em Configurações → Integrações → WhatsApp. O corte é imediato.
+- **Número ou Telegram indevido:** desvincule em Configurações → Integrações → Canais. O corte é imediato.

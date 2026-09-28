@@ -1,6 +1,6 @@
 {
   "catalog": "b2c-finance-knowledge",
-  "version": "1.0.0+91a3dbccbb9d",
+  "version": "1.0.0+dd1d552090c7",
   "principle": "RAG = conhecimento e documentação. API = dados atuais e verdade operacional. Nenhum trecho desta base é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.",
   "collection": "b2c_finance_conhecimento",
   "embedding": {
@@ -13,11 +13,11 @@
     {
       "id": "agente",
       "path": "docs/AI_AGENT.md",
-      "titulo": "O Agente B2C Finance (WhatsApp)",
+      "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
       "categoria": "agente",
-      "atualizado_em": "2026-09-28",
-      "sha256": "866fec2cfa7289e28f30d67172c389d994040c592ea965203273150569e9de26",
-      "trechos": 7
+      "atualizado_em": "2026-09-29",
+      "sha256": "8eb02d5978928c9aa76221feeca41da9bcf97409b553ac8c0ee1317595a705df",
+      "trechos": 8
     },
     {
       "id": "metricas",
@@ -70,7 +70,7 @@
       "titulo": "Políticas e regras operacionais do B2C Finance",
       "categoria": "politicas",
       "atualizado_em": "2026-09-28",
-      "sha256": "a978108acae40c63ccde3875aef0ed72b510f86dc91aaa9ae3035be578471d6a",
+      "sha256": "27d81e38269d37168c541e8cb116d04ec986adb4a6a6503eb9bedfad4286c6df",
       "trechos": 12
     },
     {
@@ -79,99 +79,112 @@
       "titulo": "API B2C Finance V1",
       "categoria": "api",
       "atualizado_em": "2026-09-28",
-      "sha256": "07fa92045349011fa4e848f554c558e306cd36ab8242e58e2f4ecc35ac834cfd",
-      "trechos": 23
+      "sha256": "8bec39c68fc3684e090e57fe893efae30d92cd42f950ec0048f420722177c377",
+      "trechos": 24
     }
   ],
   "trechos": [
     {
       "id": "agente#001",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Introdução\n\nO agente é o assistente financeiro da agência no **WhatsApp**. Ele responde perguntas sobre clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios, e **prepara** ações de escrita que só acontecem com a confirmação de quem pediu.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Introdução\n\nO agente é o assistente financeiro da agência por mensagem. O canal principal é o **Telegram** (conversa privada com o bot); o **WhatsApp** também é suportado. Ele responde perguntas sobre clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios e, na versão com escrita, **prepara** ações que só acontecem com a confirmação de quem pediu.\n| Canal | Versão disponível |\n|---|---|\n| Telegram | Consulta (somente leitura). A escrita com confirmação chega numa próxima etapa. |\n| WhatsApp | Consulta e escrita com confirmação. |",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
         "secao": "Introdução",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#002",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: De onde vem cada resposta\n\nO agente usa **duas fontes, com papéis diferentes**:\n| Fonte | Para quê | Exemplos |\n|---|---|---|\n| **API do B2C Finance** (ferramentas de consulta) | **Dados atuais e verdade operacional.** É a única fonte de números, nomes, datas e situações. | Saldo e caixa, MRR do mês, clientes ativos hoje, recebimentos, despesas, status de um cliente, inadimplência, rotina do dia |\n| **Base de conhecimento** (documentação indexada) | **Conceitos, regras e procedimentos.** Nunca traz número atual. | O que é MRR e TCV, como se calcula o resultado, o que significa \"Vencido\" × \"Inadimplente\", por que um mês fechado recusa lançamento, o que é cada conta do plano de contas |\nUma pergunta pode precisar das duas. Em \"o MRR caiu?\", o número vem da API e a explicação do que entra no MRR vem da base de conhecimento. Se a base de conhecimento citar um valor, ele é só exemplo e nunca deve ser usado como dado.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: De onde vem cada resposta\n\nO agente usa **duas fontes, com papéis diferentes**:\n| Fonte | Para quê | Exemplos |\n|---|---|---|\n| **API do B2C Finance** (ferramentas de consulta) | **Dados atuais e verdade operacional.** É a única fonte de números, nomes, datas e situações. | Saldo e caixa, MRR do mês, clientes ativos hoje, recebimentos, despesas, status de um cliente, inadimplência, rotina do dia |\n| **Base de conhecimento** (documentação indexada) | **Conceitos, regras e procedimentos.** Nunca traz número atual. | O que é MRR e TCV, como se calcula o resultado, o que significa \"Vencido\" × \"Inadimplente\", por que um mês fechado recusa lançamento, o que é cada conta do plano de contas |\nUma pergunta pode precisar das duas. Em \"o MRR caiu?\", o número vem da API e a explicação do que entra no MRR vem da base de conhecimento. Se a base de conhecimento citar um valor, ele é só exemplo e nunca deve ser usado como dado.",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
         "secao": "De onde vem cada resposta",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#003",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Quem pode usar\n\n- **Só números de WhatsApp vinculados** a um usuário ativo, pelo administrador, em Configurações → Integrações → WhatsApp. Número não vinculado recebe uma resposta genérica, sem dado nenhum.\n- **O agente age com as permissões dessa pessoa** no B2C Finance. Quem não vê recebimentos no sistema também não vê pelo WhatsApp.\n- **Usuários restritos a uma agência** ainda não são atendidos pelo WhatsApp.\n- **O agente entende só mensagens de texto.**",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Quem pode usar\n\n- **Só pessoas vinculadas** a um usuário ativo pelo administrador, em Configurações → Integrações → Canais.\n  - **Telegram:** o vínculo é pelo **Telegram User ID** (um número). O @username não serve, porque pode ser trocado.\n  - **WhatsApp:** o vínculo é pelo número de telefone.\n- **Quem não está vinculado não recebe dado nenhum.** No Telegram, o bot mostra o próprio Telegram User ID da pessoa para ela passar ao administrador.\n- **No Telegram, só em conversa privada com o bot.** Em grupo, o bot responde apenas que atende no privado, sem consultar nada.\n- **O agente age com as permissões dessa pessoa** no B2C Finance. Quem não vê recebimentos no sistema também não vê pelo chat.\n- **Usuários restritos a uma agência** ainda não são atendidos pelo chat.\n- **O agente entende só mensagens de texto.**",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
         "secao": "Quem pode usar",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#004",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: O que ele faz\n\n**Consulta direto (READ):**\n- buscar cliente pelo nome ou documento;\n- detalhe e histórico de status do cliente;\n- indicadores do mês (dashboard);\n- recebimentos, despesas e caixa;\n- oportunidades de upsell;\n- rotina do dia;\n- relatórios do dia e do mês.\n**Prepara e pede confirmação (WRITE_CONFIRMATION):**\n- **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.\n- **Recebimentos:** registrar pagamento recebido.\n- **Despesas:** lançar, editar (em aberto), marcar como paga.\n- **Upsell:** cadastrar e atualizar oportunidade em aberto.\n- **Rotina:** concluir ação da rotina de hoje.\n**Nunca faz (BLOCKED):**\n- excluir cliente, recebimento, pagamento ou despesa;\n- reabrir competência;\n- alterar permissões ou gerenciar usuários;\n- alterar o plano de contas.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Quem pode usar › Comandos do Telegram\n\n| Comando | O que faz |\n|---|---|\n| `/start` | Diz se a pessoa está conectada. Se não estiver vinculada, mostra o Telegram User ID dela. |\n| `/help` | Exemplos de perguntas. |\n| `/status` | \"B2C Finance conectado\", com o nome e o perfil da pessoa. |",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
-        "secao": "O que ele faz",
+        "secao": "Quem pode usar › Comandos do Telegram",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#005",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Como funciona uma ação de escrita\n\n1. **A pessoa pede** (ex.: \"registra o pagamento da Face Love\").\n2. **O agente identifica o cliente e a cobrança pela API.** Se houver dúvida (dois clientes parecidos, duas cobranças em aberto), ele pergunta.\n3. **O B2C Finance monta uma prévia** com a situação atual:\n   ```\n   Encontrei:\n   *Face Love Distribuidora*\n   Recebimento em aberto: R$ 1.500,00\n   Competência: Setembro/2026\n   Data de pagamento: hoje\n   Deseja registrar?\n   Responda *SIM 4821* para confirmar ou *NÃO* para cancelar.\n   ```\n4. **A pessoa responde `SIM` seguido do código** da prévia. Um \"sim\" solto não confirma nada. `NÃO` cancela.\n5. **O B2C Finance confere** se a confirmação é daquela ação, da mesma pessoa, dentro da validade (10 minutos) e com os dados iguais aos da prévia.\n6. **Executa e responde com o resultado real** (ex.: \"✅ Pagamento registrado — Face Love (R$ 1.500,00)\"), ou explica por que não executou.\n**Cada pessoa tem uma ação aguardando confirmação por vez.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e o SIM, nada é executado e é preciso pedir de novo.\nToda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: O que ele faz\n\n**Consulta direto (READ):**\n- buscar cliente pelo nome ou documento;\n- detalhe e histórico de status do cliente;\n- indicadores do mês (dashboard);\n- recebimentos, despesas e caixa;\n- oportunidades de upsell;\n- rotina do dia;\n- relatórios do dia e do mês.\n**Prepara e pede confirmação (WRITE_CONFIRMATION), na versão com escrita:**\n- **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.\n- **Recebimentos:** registrar pagamento recebido.\n- **Despesas:** lançar, editar (em aberto), marcar como paga.\n- **Upsell:** cadastrar e atualizar oportunidade em aberto.\n- **Rotina:** concluir ação da rotina de hoje.\n**Nunca faz (BLOCKED):**\n- excluir cliente, recebimento, pagamento ou despesa;\n- reabrir competência;\n- alterar permissões ou gerenciar usuários;\n- alterar o plano de contas.",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
-        "secao": "Como funciona uma ação de escrita",
+        "secao": "O que ele faz",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#006",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Seu perfil não tem permissão para isso.\"\n- **Não encontrou:** o agente diz que não encontrou e pede outro nome ou parte do CNPJ. Ele não adivinha.\n- **Problema técnico:** \"Tive um problema técnico agora; tente de novo em instantes.\" O agente não mostra detalhes técnicos.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Como funciona uma ação de escrita\n\n1. **A pessoa pede** (ex.: \"registra o pagamento da Face Love\").\n2. **O agente identifica o cliente e a cobrança pela API.** Se houver dúvida (dois clientes parecidos, duas cobranças em aberto), ele pergunta.\n3. **O B2C Finance monta uma prévia** com a situação atual:\n   ```\n   Encontrei:\n   *Face Love Distribuidora*\n   Recebimento em aberto: R$ 1.500,00\n   Competência: Setembro/2026\n   Data de pagamento: hoje\n   Deseja registrar?\n   Responda *SIM 4821* para confirmar ou *NÃO* para cancelar.\n   ```\n4. **A pessoa responde `SIM` seguido do código** da prévia. Um \"sim\" solto não confirma nada. `NÃO` cancela.\n5. **O B2C Finance confere** se a confirmação é daquela ação, da mesma pessoa, dentro da validade (10 minutos) e com os dados iguais aos da prévia.\n6. **Executa e responde com o resultado real** (ex.: \"✅ Pagamento registrado — Face Love (R$ 1.500,00)\"), ou explica por que não executou.\n**Cada pessoa tem uma ação aguardando confirmação por vez.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e o SIM, nada é executado e é preciso pedir de novo.\nToda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou e o canal (Telegram ou WhatsApp).",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
-        "secao": "Respostas típicas",
+        "secao": "Como funciona uma ação de escrita",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
     {
       "id": "agente#007",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (WhatsApp)\nSeção: Limites conhecidos\n\n- **A confirmação não passa pela IA.** Se a pessoa perguntar logo depois \"registrou?\", o agente consulta a API para responder.\n- **Valores e situações sempre de novo:** o agente não guarda números de uma conversa para outra; consulta a API a cada pergunta.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Você não possui permissão para acessar essa informação.\"\n- **Não encontrou:** \"Não encontrei o registro solicitado.\" Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.\n- **Recusa de regra:** \"Não foi possível concluir: \" + o motivo dado pelo B2C Finance (ex.: \"essa cobrança já está quitada\").\n- **Problema técnico:** \"Não consegui concluir essa consulta agora. A tentativa foi registrada.\" O agente não mostra detalhes técnicos.\n- **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
       "metadata": {
         "docId": "agente",
-        "titulo": "O Agente B2C Finance (WhatsApp)",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
+        "categoria": "agente",
+        "secao": "Respostas típicas",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-29",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#008",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Limites conhecidos\n\n- **A confirmação não passa pela IA.** Se a pessoa perguntar logo depois \"registrou?\", o agente consulta a API para responder.\n- **Valores e situações sempre de novo:** o agente não guarda números de uma conversa para outra; consulta a API a cada pergunta.",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
         "categoria": "agente",
         "secao": "Limites conhecidos",
         "fonte": "docs/AI_AGENT.md",
-        "atualizado_em": "2026-09-28",
+        "atualizado_em": "2026-09-29",
         "tipo": "conhecimento"
       }
     },
@@ -905,7 +918,7 @@
     },
     {
       "id": "politicas#012",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 11. Privacidade\n\n- **O WhatsApp só atende números vinculados** a um usuário ativo pelo administrador (Configurações → Integrações → WhatsApp).\n- **Documentos (CNPJ/CPF) aparecem mascarados.** Não se repassam dados de um cliente a quem não perguntou por ele.\n- **Nenhuma mensagem mostra** token, chave, senha, id interno ou detalhe técnico de erro.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: Políticas e regras operacionais do B2C Finance\nSeção: 11. Privacidade\n\n- **O agente só atende quem está vinculado** a um usuário ativo pelo administrador (Configurações → Integrações → Canais): no Telegram pelo Telegram User ID, no WhatsApp pelo número. No Telegram, só em conversa privada.\n- **Documentos (CNPJ/CPF) aparecem mascarados.** Não se repassam dados de um cliente a quem não perguntou por ele.\n- **Nenhuma mensagem mostra** token, chave, senha, id interno ou detalhe técnico de erro.",
       "metadata": {
         "docId": "politicas",
         "titulo": "Políticas e regras operacionais do B2C Finance",
@@ -1191,7 +1204,7 @@
     },
     {
       "id": "api#022",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n**Resolver o número:** `POST /integrations/resolve-identity`, com o scope `identities.resolve` e o corpo `{ \"channel\": \"WHATSAPP\", \"externalIdentifier\": \"+5571999990000\" }`. Só o número: `userId` dá 400.\n- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → WhatsApp (tabela `MessagingIdentity`).\n- **O que devolve:**\n  - `identityId`;\n  - o usuário (id, nome, papel);\n  - as permissões relevantes;\n  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário.\n- **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.\n**Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:\n1. **Recarrega o vínculo** no workspace da integração e confere que ele e o usuário estão ativos.\n2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).\n   - Rota fora do que o usuário pode dá 403 `user_forbidden`.\n   - Nos relatórios, as seções que ele não vê entram em `omittedSections`.\n3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API.\n4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n**Resolver quem fala:** `POST /integrations/resolve-identity`, com o scope `identities.resolve`. O corpo é só o canal e o identificador:\n| Canal | `externalIdentifier` | Exemplo |\n|---|---|---|\n| `TELEGRAM` | Telegram User ID (`message.from.id`), só dígitos. O @username é recusado (400): ele muda e não identifica ninguém. | `{ \"channel\": \"TELEGRAM\", \"externalIdentifier\": \"123456789\" }` |\n| `WHATSAPP` | Telefone como veio (a variante do nono dígito é aceita). | `{ \"channel\": \"WHATSAPP\", \"externalIdentifier\": \"+5571999990000\" }` |\n`userId`, `ownerId` ou qualquer outro campo no corpo dá 400. Quem decide o usuário é o vínculo, nunca o chamador.\n- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → Canais (tabela `MessagingIdentity`, genérica por canal; `metadata` guarda só dados de exibição, como o @username).\n- **O que devolve:**\n  - `authorized: true` e `identityId`;\n  - o usuário (id, nome, papel);\n  - as permissões relevantes;\n  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário. Não existe scope por canal.\n- **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.\n- **Por que não devolve `ownerId`:** o dono já é o da integração (vem do token) e nunca é aceito de quem chama. Devolvê-lo só convidaria a reenviá-lo.\n**Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:",
       "metadata": {
         "docId": "api",
         "titulo": "API B2C Finance V1",
@@ -1204,6 +1217,19 @@
     },
     {
       "id": "api#023",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n1. **Recarrega o vínculo** no workspace da integração e confere que ele e o usuário estão ativos.\n2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).\n   - Rota fora do que o usuário pode dá 403 `user_forbidden`.\n   - Nos relatórios, as seções que ele não vê entram em `omittedSections`.\n3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API, com a origem do header `X-B2C-Source` (`telegram`, `whatsapp`, `n8n`).\n4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "4.1 Quem está falando: identidade e delegação",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-28",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#024",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.2 Ações do agente com confirmação\n\nO agente de WhatsApp não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`. O usuário responde \"SIM <código>\" e a integração confirma em `POST /agent/pending-actions/{id}/confirm`, com `Idempotency-Key: wa:<messageId>:<actionId>`.\nA execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).",
       "metadata": {
         "docId": "api",

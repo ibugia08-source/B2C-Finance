@@ -1,10 +1,10 @@
 import Link from "next/link";
 
 /** Abas de Configurações → Integrações. Links simples (a aba é a URL). */
-export function IntegracoesTabs({ ativa }: { ativa: "chaves" | "whatsapp" | "atividades" }) {
+export function IntegracoesTabs({ ativa }: { ativa: "chaves" | "canais" | "atividades" }) {
   const abas = [
     { key: "chaves", href: "/configuracoes/integracoes", label: "Chaves de API" },
-    { key: "whatsapp", href: "/configuracoes/integracoes/whatsapp", label: "WhatsApp" },
+    { key: "canais", href: "/configuracoes/integracoes/canais", label: "Canais (Telegram/WhatsApp)" },
     { key: "atividades", href: "/configuracoes/integracoes/atividades", label: "Atividades da IA/API" },
   ] as const;
   return (

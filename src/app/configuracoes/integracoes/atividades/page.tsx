@@ -21,7 +21,7 @@ import { IntegracoesTabs } from "../tabs";
  */
 export const dynamic = "force-dynamic";
 
-const SOURCES: ActivitySource[] = ["API", "N8N", "WHATSAPP", "WEB", "SYSTEM"];
+const SOURCES: ActivitySource[] = ["API", "N8N", "TELEGRAM", "WHATSAPP", "WEB", "SYSTEM"];
 const RESULTS: ActivityResult[] = ["SUCCESS", "ERROR", "DENIED", "REPLAYED"];
 const POR_PAGINA = 50;
 

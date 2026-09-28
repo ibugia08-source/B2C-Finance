@@ -2,6 +2,17 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-29 — Fase 16 · bloco 1: Telegram
+
+- **Novos:** `workflows/b2c-finance-telegram-agent-readonly.json` e `workflows/telegram-connection-test.json`, gerados por `scripts/build-telegram-workflows.mjs`. Os workflows do WhatsApp continuam; nenhum foi removido.
+- **Peças comuns** em `scripts/lib/pecas.mjs`. O agente somente leitura do WhatsApp continua byte a byte igual.
+- **Prompt** (`docs/AI_AGENT_SYSTEM_PROMPT.md`):
+  - dividido em `prompt-base` + `prompt-escrita` / `prompt-leitura`, sem canal fixo;
+  - mensagens de erro padronizadas;
+  - aviso quando a base de conhecimento está indisponível.
+- **Base de conhecimento:** o pacote mudou (AI_AGENT.md e API.md cobrem o Telegram). Rode `knowledge-ingest.json` de novo.
+- **Variável nova** `TELEGRAM_TEST_USER_ID`; **credencial nova** "Telegram Bot".
+
 ## 2026-09-28 (7) — auditoria final
 
 - `b2c-finance-ai-agent.json`: as 10 ferramentas de escrita passaram de `toolHttpRequest` para **`httpRequestTool`** (parâmetros do modelo por `$fromAI`, `neverError`).

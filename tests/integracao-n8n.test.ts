@@ -84,8 +84,9 @@ describe("workflows versionados", () => {
 
   it("existem o agente, os dois relatórios diários e o teste de conexão", () => {
     expect(arquivos.sort()).toEqual([
-      "b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json", "daily-evening-report.json", "daily-morning-report.json",
-      "knowledge-ingest.json", "sistema.teste-conexao.v1.json",
+      "b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json", "b2c-finance-telegram-agent-readonly.json",
+      "daily-evening-report.json", "daily-morning-report.json", "knowledge-ingest.json", "sistema.teste-conexao.v1.json",
+      "telegram-connection-test.json",
     ]);
   });
 
@@ -620,7 +621,8 @@ describe("agente com escrita controlada", () => {
 
   it("prompt: vem de docs/AI_AGENT_SYSTEM_PROMPT.md, com os 10 princípios, risco e bloqueadas", () => {
     const doc = readFileSync(join(process.cwd(), "docs/AI_AGENT_SYSTEM_PROMPT.md"), "utf8");
-    const prompt = doc.split("<!-- prompt:inicio -->")[1].split("<!-- prompt:fim -->")[0].trim();
+    const trecho = (m: string) => doc.split(`<!-- ${m}:inicio -->`)[1].split(`<!-- ${m}:fim -->`)[0].trim();
+    const prompt = `${trecho("prompt-base")}\n\n${trecho("prompt-escrita")}`;
     const sistema = no(N_AG).parameters.options.systemMessage as string;
     expect(sistema.startsWith("=" + prompt)).toBe(true);
     const PRINCIPIOS = [
@@ -758,5 +760,218 @@ describe("base de conhecimento (RAG = conhecimento; API = dados atuais)", () => 
     const itens = await new Function("$", `return (async () => { ${trechos} })();`)($);
     expect(itens).toHaveLength(pacote.trechos.length);
     expect(itens[0].json).toMatchObject({ text: pacote.trechos[0].text, docId: pacote.trechos[0].metadata.docId, versao: pacote.version });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Telegram (Fase 16 · bloco 1)
+// ---------------------------------------------------------------------------
+
+describe("Telegram: agente somente leitura e teste de conexão", () => {
+  const wf = ler("workflows/b2c-finance-telegram-agent-readonly.json");
+  const teste = ler("workflows/telegram-connection-test.json");
+  const pacote = ler("knowledge/b2c-finance-knowledge.json");
+  const no = (w: any, nome: string) => w.nodes.find((n: any) => n.name === nome);
+  const js = (nome: string) => no(wf, nome).parameters.jsCode as string;
+  const rodar = async (nome: string, itens: any[], extra: { $?: any; estatico?: any } = {}) => {
+    const estatico = extra.estatico ?? {};
+    const fn = new Function("$input", "$", "$getWorkflowStaticData", `return (async () => { ${js(nome)} })();`);
+    return (await fn({ all: () => itens.map((json) => ({ json })) }, extra.$ ?? (() => ({ all: () => [] })), () => estatico)) as any[];
+  };
+  const update = (over: any = {}, msg: any = {}) => ({
+    update_id: 1000 + Math.floor(Math.random() * 1e6),
+    message: { message_id: 7, chat: { id: 555, type: "private" }, from: { id: 123456789, is_bot: false, username: "joao_b2c", first_name: "João" }, text: "Quanto recebemos hoje?", ...msg },
+    ...over,
+  });
+
+  it("fluxo: gatilho → normalizar → dedupe → privado? → Telegram User ID → API → permissões → roteiro → agente → formatar → enviar", () => {
+    const prox = (n: string, saida = 0) => wf.connections[n].main[saida][0].node;
+    expect(no(wf, "Telegram: receber mensagem").type).toBe("n8n-nodes-base.telegramTrigger");
+    expect(no(wf, "Telegram: receber mensagem").parameters.updates).toEqual(["message"]);
+    expect(prox("Telegram: receber mensagem")).toBe("Normalizar update");
+    expect(prox("Normalizar update")).toBe("Deduplicar update (update_id)");
+    expect(prox("Deduplicar update (update_id)")).toBe("Chat privado?");
+    expect(prox("Chat privado?", 0)).toBe("Extrair Telegram User ID");
+    expect(prox("Chat privado?", 1)).toBe("Resposta: só no privado"); // grupo nunca chega na API
+    expect(prox("Extrair Telegram User ID")).toBe("API: resolver identidade");
+    expect(prox("API: resolver identidade")).toBe("Carregar permissões");
+    expect(prox("Carregar permissões")).toBe("Roteiro da mensagem");
+    expect(prox("Vai para o agente?", 0)).toBe("Montar contexto do agente");
+    expect(prox("Vai para o agente?", 1)).toBe("Formatar para o Telegram");
+    expect(prox("AI Agent B2C Finance (Telegram, somente leitura)")).toBe("Juntar resposta e contexto");
+    expect(prox("Formatar para o Telegram")).toBe("Telegram: enviar mensagem");
+    const envio = no(wf, "Telegram: enviar mensagem");
+    expect(envio.parameters).toMatchObject({ resource: "message", operation: "sendMessage", additionalFields: { parse_mode: "HTML", appendAttribution: false } });
+    expect(wf.active).toBe(false);
+    expect(teste.active).toBe(false);
+  });
+
+  it("identidade pela API, só com o Telegram User ID (nunca username, userId ou ownerId)", () => {
+    const r = no(wf, "API: resolver identidade");
+    expect(r.parameters.url).toBe("={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity");
+    expect(r.parameters.jsonBody).toBe("={{ JSON.stringify({ channel: 'TELEGRAM', externalIdentifier: $json.externalIdentifier }) }}");
+    expect(JSON.stringify(r.parameters)).not.toMatch(/username|userId|ownerId/);
+    const h = Object.fromEntries(r.parameters.headerParameters.parameters.map((x: any) => [x.name, x.value]));
+    expect(h["X-B2C-Source"]).toBe("telegram");
+  });
+
+  it("somente leitura: 11 ferramentas GET + conhecimento; nenhuma escrita, nenhum banco", () => {
+    const tipos = wf.nodes.map((n: any) => n.type);
+    expect(tipos).not.toContain("n8n-nodes-base.httpRequestTool");
+    const ferr = wf.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
+    expect(ferr.map((n: any) => n.name).sort()).toEqual(catalogo.tools.map((t: any) => t.name).sort());
+    for (const n of ferr) {
+      expect(n.parameters.method).toBe("GET");
+      const h = Object.fromEntries(n.parameters.parametersHeaders.values.map((x: any) => [x.name, x.value]));
+      expect(h["X-B2C-Source"]).toBe("telegram");
+      expect(h["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
+    }
+    const conh = no(wf, "consultar_conhecimento");
+    expect(conh.parameters).toMatchObject({ mode: "retrieve-as-tool" });
+    expect(conh.parameters.qdrantCollection.value).toBe(pacote.collection);
+    // HTTP fora das ferramentas: só a resolução de identidade.
+    for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest")) {
+      expect(n.parameters.url).toBe("={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity");
+    }
+    const texto = JSON.stringify(wf.nodes.filter((n: any) => n.type !== "n8n-nodes-base.stickyNote").map((n: any) => ({ ...n, notes: undefined, parameters: { ...n.parameters, options: { ...(n.parameters?.options ?? {}), systemMessage: undefined } } }))).toLowerCase();
+    for (const proibido of ["supabase", "prisma", "postgres", "database_url", "agent/pending-actions", "/payments", "status-changes"]) {
+      expect(texto, proibido).not.toContain(proibido);
+    }
+    expect(wf.meta.b2c).toMatchObject({ channel: "TELEGRAM", readOnly: true });
+  });
+
+  it("prompt: base (10 princípios) + modo somente leitura; canal Telegram no contexto", () => {
+    const doc = readFileSync(join(process.cwd(), "docs/AI_AGENT_SYSTEM_PROMPT.md"), "utf8");
+    const trecho = (m: string) => doc.split(`<!-- ${m}:inicio -->`)[1].split(`<!-- ${m}:fim -->`)[0].trim();
+    const sistema = no(wf, "AI Agent B2C Finance (Telegram, somente leitura)").parameters.options.systemMessage as string;
+    expect(sistema.startsWith(`=${trecho("prompt-base")}\n\n${trecho("prompt-leitura")}`)).toBe(true);
+    for (let i = 1; i <= 10; i++) expect(sistema).toContain(`${i}. **`);
+    expect(sistema).toContain("SOMENTE LEITURA");
+    expect(sistema).not.toContain("### Como propor uma escrita");
+    expect(sistema).toContain("Canal: Telegram (conversa privada)");
+  });
+
+  it("normalizar: Telegram User ID como identidade; comandos com @bot; mensagem sem texto", async () => {
+    const [a] = await rodar("Normalizar update", [update({}, { text: "/start@B2CFinanceBot" })]);
+    expect(a.json).toMatchObject({ chatType: "private", fromId: "123456789", username: "joao_b2c", comando: "/start", tipo: "text", messageId: "tg:555:7" });
+    const [b] = await rodar("Normalizar update", [update({}, { text: undefined, photo: [{}] })]);
+    expect(b.json).toMatchObject({ tipo: "outro", comando: null });
+    const [c] = await rodar("Normalizar update", [update({}, { from: { id: 99, is_bot: true } })]);
+    expect(c.json).toMatchObject({ fromId: null, isBot: true });
+    expect(await rodar("Normalizar update", [{ update_id: 1, edited_message: {} }])).toEqual([]);
+  });
+
+  it("deduplicação: o mesmo update_id passa uma vez só", async () => {
+    const estatico = {};
+    const m = { updateId: 42, text: "oi" };
+    expect(await rodar("Deduplicar update (update_id)", [m], { estatico })).toHaveLength(1);
+    expect(await rodar("Deduplicar update (update_id)", [m], { estatico })).toHaveLength(0);
+    expect(await rodar("Deduplicar update (update_id)", [{ updateId: 43 }], { estatico })).toHaveLength(1);
+    expect(await rodar("Deduplicar update (update_id)", [{ text: "sem id" }], { estatico })).toHaveLength(0);
+  });
+
+  it("fora do privado: grupo/supergrupo recebem orientação genérica; canal e bot, nada", async () => {
+    const privado = no(wf, "Chat privado?").parameters.conditions.conditions[0].leftValue as string;
+    expect(privado).toBe("={{ $json.chatType === 'private' && !!$json.fromId }}");
+    for (const tipo of ["group", "supergroup"]) {
+      const r = await rodar("Resposta: só no privado", [{ chatType: tipo, chatId: -100, fromId: "1" }]);
+      expect(r).toHaveLength(1);
+      expect(r[0].json.texto).toContain("conversa privada");
+      expect(r[0].json.texto).not.toMatch(/R\$|\d{3,}/);
+    }
+    expect(await rodar("Resposta: só no privado", [{ chatType: "channel", chatId: -100, fromId: null }])).toEqual([]);
+    expect(await rodar("Resposta: só no privado", [{ chatType: "group", chatId: -100, fromId: null }])).toEqual([]);
+  });
+
+  it("/start não vinculado mostra o próprio ID e nada financeiro; vinculado cumprimenta; /help sem escrita; /status sem scopes", async () => {
+    const base = { fromId: "123456789", chatId: 555, tipo: "text", text: "/start", comando: "/start" };
+    const [naoVinc] = await rodar("Roteiro da mensagem", [{ ...base, authorized: false, motivo: "numero_nao_vinculado" }]);
+    expect(naoVinc.json.rota).toBe("responder");
+    expect(naoVinc.json.texto).toContain("ainda não está vinculado");
+    expect(naoVinc.json.texto).toContain("*123456789*");
+    expect(naoVinc.json.texto).not.toMatch(/R\$|inadimpl|MRR/);
+    const [erro] = await rodar("Roteiro da mensagem", [{ ...base, text: "quanto recebemos?", comando: null, authorized: false, motivo: "erro_tecnico" }]);
+    expect(erro.json.texto).toContain("Não consegui verificar seu acesso");
+    const aut = { ...base, authorized: true, userName: "Raiane", roleLabel: "Financeiro", allowedScopes: ["receivables.read"] };
+    const [start] = await rodar("Roteiro da mensagem", [aut]);
+    expect(start.json.texto).toContain("Olá, *Raiane*");
+    expect(start.json.texto).toContain("Você está conectado ao B2C Finance");
+    const [help] = await rodar("Roteiro da mensagem", [{ ...aut, comando: "/help" }]);
+    for (const ex of ["Quanto recebemos hoje?", "Quem está inadimplente?", "Qual nosso MRR?", "Quais clientes renovam este mês?", "Qual nosso churn?"]) {
+      expect(help.json.texto).toContain(ex);
+    }
+    expect(help.json.texto).not.toMatch(/registr|cadastr|lanç|paga\b|SIM/i);
+    const [status] = await rodar("Roteiro da mensagem", [{ ...aut, comando: "/status" }]);
+    expect(status.json.texto).toContain("B2C Finance conectado");
+    expect(status.json.texto).toContain("Perfil: Financeiro");
+    expect(status.json.texto).not.toMatch(/scope|receivables\.read|identity/i);
+    const [pergunta] = await rodar("Roteiro da mensagem", [{ ...aut, comando: null, text: "Qual nosso MRR?" }]);
+    expect(pergunta.json.rota).toBe("agente");
+    const [foto] = await rodar("Roteiro da mensagem", [{ ...aut, comando: null, tipo: "outro", text: "" }]);
+    expect(foto.json.texto).toContain("só mensagens de texto");
+  });
+
+  it("formatação HTML: escapa TODO conteúdo dinâmico; negrito vira <b>; falha vira mensagem neutra", async () => {
+    const [r] = await rodar("Formatar para o Telegram", [{ chatId: 1, texto: "Olá, *<script>alert(1)</script> & Cia*\nValor: R$ 1.500,00 <b>x</b>" }]);
+    expect(r.json.text).toBe("Olá, <b>&lt;script&gt;alert(1)&lt;/script&gt; &amp; Cia</b>\nValor: R$ 1.500,00 &lt;b&gt;x&lt;/b&gt;");
+    const [ia] = await rodar("Formatar para o Telegram", [{ chatId: 1, output: "**MRR**: `R$ 45.200,00`\n| Cliente | Valor |\n|---|---|\n| A | 1 |" }]);
+    expect(ia.json.text).toContain("<b>MRR</b>: <code>R$ 45.200,00</code>");
+    expect(ia.json.text).toContain("Cliente · Valor");
+    const [falha] = await rodar("Formatar para o Telegram", [{ chatId: 1, output: null }]);
+    expect(falha.json.text).toBe("Não consegui concluir essa consulta agora. A tentativa foi registrada.");
+  });
+
+  it("limite do Telegram: divide por parágrafo em 'Parte i/n' (≤ 4096), no máximo 4 partes, sem cortar no meio da palavra", async () => {
+    const paragrafo = (i: number) => `Cliente ${i}: ` + "palavra ".repeat(60).trim();
+    const longo = Array.from({ length: 40 }, (_, i) => paragrafo(i)).join("\n\n");
+    const partes = await rodar("Formatar para o Telegram", [{ chatId: 9, output: longo }]);
+    expect(partes.length).toBeGreaterThan(1);
+    expect(partes.length).toBeLessThanOrEqual(4);
+    partes.forEach((p: any, i: number) => {
+      expect(p.json.chatId).toBe(9);
+      expect(p.json.text.length).toBeLessThanOrEqual(4096);
+      expect(p.json.text.startsWith(`<i>Parte ${i + 1}/${partes.length}</i>\n`)).toBe(true);
+    });
+    const todas = partes.map((p: any) => p.json.text).join("\n");
+    expect(todas).toContain("Cliente 0: palavra");
+    expect(todas).not.toMatch(/palavr\n|palav$/);
+    const muitoLongo = Array.from({ length: 200 }, (_, i) => paragrafo(i)).join("\n\n");
+    const cortado = await rodar("Formatar para o Telegram", [{ chatId: 9, output: muitoLongo }]);
+    expect(cortado).toHaveLength(4);
+    expect(cortado[3].json.text).toContain("peça um recorte menor");
+    // Uma linha só, gigante, sem espaço: ainda assim respeita o limite.
+    const linhaUnica = await rodar("Formatar para o Telegram", [{ chatId: 9, output: "x".repeat(9000) }]);
+    for (const p of linhaUnica) expect(p.json.text.length).toBeLessThanOrEqual(4096);
+  });
+
+  it("teste de conexão: só leituras; mensagem com OK/FALHOU por dependência", async () => {
+    const http = teste.nodes.filter((n: any) => n.type === "n8n-nodes-base.httpRequest");
+    for (const n of http) {
+      expect(n.parameters.method ?? "GET").toMatch(/GET|POST/);
+      if (n.parameters.method === "POST") expect(n.parameters.url).toContain("/integrations/resolve-identity");
+    }
+    expect(JSON.stringify(teste)).not.toMatch(/pending-actions|payments|status-changes/);
+    const consolidar = no(teste, "Consolidar resultado").parameters.jsCode as string;
+    const exec = (nos: Record<string, any>) =>
+      new Function("$", `return (async () => { ${consolidar} })();`)((nome: string) => ({ first: () => ({ json: nos[nome] }) }));
+    const scopes = ["clients.read", "client_status.read", "receivables.read", "expenses.read", "cash.read", "upsells.read", "dashboard.read", "routine.read", "reports.read", "identities.resolve"];
+    const tudoOk = await exec({
+      "API: /health": { success: true }, "API: /me": { success: true, data: { scopes } },
+      "API: resolver identidade (teste)": { success: true, data: { authorized: true } },
+      "Qdrant: coleção de conhecimento": { result: { points_count: 87 } },
+    });
+    expect(tudoOk[0].json.ok).toBe(true);
+    for (const l of ["Telegram: OK", "B2C API: OK", "Service Account: OK", "Identity: OK", "Qdrant: OK — 87 trechos", "Agent dependencies: OK"]) {
+      expect(tudoOk[0].json.text).toContain(l);
+    }
+    const semQdrant = await exec({
+      "API: /health": { success: true }, "API: /me": { success: true, data: { scopes: ["clients.read"] } },
+      "API: resolver identidade (teste)": { success: false, error: { code: "identity_not_found" } },
+      "Qdrant: coleção de conhecimento": { error: { message: "ECONNREFUSED" } },
+    });
+    expect(semQdrant[0].json.ok).toBe(false);
+    expect(semQdrant[0].json.text).toContain("Qdrant: FALHOU");
+    expect(semQdrant[0].json.text).toContain("Identity: FALHOU");
+    expect(semQdrant[0].json.text).toContain("faltam scopes");
   });
 });

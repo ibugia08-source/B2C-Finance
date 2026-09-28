@@ -4135,6 +4135,7 @@ enum ActivitySource {
   API
   N8N
   WHATSAPP
+  TELEGRAM
   SYSTEM
 }
 
@@ -4218,6 +4219,8 @@ model ApiIdempotencyKey {
 
 enum MessagingChannel {
   WHATSAPP
+  /// Telegram: identificador = Telegram User ID (numérico). Nunca o @username.
+  TELEGRAM
 }
 
 /// Vínculo de um identificador externo (telefone do WhatsApp) com um USUÁRIO
@@ -4232,12 +4235,16 @@ model MessagingIdentity {
   user               User             @relation("MessagingIdentities", fields: [userId], references: [id], onDelete: Cascade)
   channel            MessagingChannel
   /// WhatsApp: telefone só com dígitos, com país (E.164 sem "+"), ex.: 5571999990000.
+  /// Telegram: Telegram User ID (só dígitos), ex.: 123456789.
   externalIdentifier String
   isActive           Boolean          @default(true)
   createdById        String
   deactivatedAt      DateTime?        @db.Timestamptz(3)
   deactivatedById    String?
   lastResolvedAt     DateTime?        @db.Timestamptz(3)
+  /// Dados de exibição do canal (Telegram: username, nome). NUNCA usados
+  /// para identificar: a identidade é só channel + externalIdentifier.
+  metadata           Json?
   createdAt          DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
 

@@ -362,15 +362,23 @@ Além dessas verificações:
 
 ## 4.1 Quem está falando: identidade e delegação
 
-**Resolver o número:** `POST /integrations/resolve-identity`, com o scope `identities.resolve` e o corpo `{ "channel": "WHATSAPP", "externalIdentifier": "+5571999990000" }`. Só o número: `userId` dá 400.
+**Resolver quem fala:** `POST /integrations/resolve-identity`, com o scope `identities.resolve`. O corpo é só o canal e o identificador:
 
-- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → WhatsApp (tabela `MessagingIdentity`).
+| Canal | `externalIdentifier` | Exemplo |
+|---|---|---|
+| `TELEGRAM` | Telegram User ID (`message.from.id`), só dígitos. O @username é recusado (400): ele muda e não identifica ninguém. | `{ "channel": "TELEGRAM", "externalIdentifier": "123456789" }` |
+| `WHATSAPP` | Telefone como veio (a variante do nono dígito é aceita). | `{ "channel": "WHATSAPP", "externalIdentifier": "+5571999990000" }` |
+
+`userId`, `ownerId` ou qualquer outro campo no corpo dá 400. Quem decide o usuário é o vínculo, nunca o chamador.
+
+- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → Canais (tabela `MessagingIdentity`, genérica por canal; `metadata` guarda só dados de exibição, como o @username).
 - **O que devolve:**
-  - `identityId`;
+  - `authorized: true` e `identityId`;
   - o usuário (id, nome, papel);
   - as permissões relevantes;
-  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário.
+  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário. Não existe scope por canal.
 - **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.
+- **Por que não devolve `ownerId`:** o dono já é o da integração (vem do token) e nunca é aceito de quem chama. Devolvê-lo só convidaria a reenviá-lo.
 
 **Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:
 
@@ -378,7 +386,7 @@ Além dessas verificações:
 2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).
    - Rota fora do que o usuário pode dá 403 `user_forbidden`.
    - Nos relatórios, as seções que ele não vê entram em `omittedSections`.
-3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API.
+3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API, com a origem do header `X-B2C-Source` (`telegram`, `whatsapp`, `n8n`).
 4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.
 
 ## 4.2 Ações do agente com confirmação

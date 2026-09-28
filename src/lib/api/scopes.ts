@@ -88,7 +88,7 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
     scopes: [
       {
         id: "identities.resolve",
-        label: "Identificar quem fala (WhatsApp → usuário) e agir com as permissões dele",
+        label: "Identificar quem fala (Telegram/WhatsApp → usuário) e agir com as permissões dele",
       },
       {
         id: "knowledge.read",

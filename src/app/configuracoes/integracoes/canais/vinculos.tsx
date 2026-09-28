@@ -7,36 +7,37 @@ import { EmptyState } from "@/components/empty-state";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { formatInstantBR, formatInstantTimeBR } from "@/lib/format";
-import { desvincularWhatsAppAction, reativarWhatsAppAction } from "@/lib/actions/messaging-identities";
+import { desvincularCanalAction, reativarCanalAction } from "@/lib/actions/messaging-identities";
 
 export type VinculoRow = {
   id: string;
+  canal: string;
   usuario: string;
   email: string;
   papel: string;
   usuarioAtivo: boolean;
-  telefone: string;
+  identificador: string;
   ativo: boolean;
   criadoEm: string;
   desativadoEm: string | null;
   ultimoUso: string | null;
 };
 
-export function VinculosWhatsApp({ rows, gerencia }: { rows: VinculoRow[]; gerencia: boolean }) {
+export function VinculosCanais({ rows, gerencia }: { rows: VinculoRow[]; gerencia: boolean }) {
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, start] = useTransition();
 
   function desvincular(r: VinculoRow) {
     start(async () => {
       const ok = await confirmAction({
-        title: `Desvincular ${r.telefone}?`,
-        description: `Mensagens deste número deixam de ser atendidas na hora. O histórico fica guardado, e dá para reativar depois.`,
+        title: `Desvincular ${r.canal} ${r.identificador}?`,
+        description: `Mensagens deste ${r.canal} deixam de ser atendidas na hora. O histórico fica guardado, e dá para reativar depois.`,
         confirmLabel: "Desvincular",
         destructive: true,
       });
       if (!ok) return;
       setErro(null);
-      const res = await desvincularWhatsAppAction(r.id);
+      const res = await desvincularCanalAction(r.id);
       if (!res.ok) setErro(res.error);
     });
   }
@@ -44,7 +45,7 @@ export function VinculosWhatsApp({ rows, gerencia }: { rows: VinculoRow[]; geren
   function reativar(r: VinculoRow) {
     start(async () => {
       setErro(null);
-      const res = await reativarWhatsAppAction(r.id);
+      const res = await reativarCanalAction(r.id);
       if (!res.ok) setErro(res.error);
     });
   }
@@ -53,11 +54,11 @@ export function VinculosWhatsApp({ rows, gerencia }: { rows: VinculoRow[]; geren
     return (
       <EmptyState
         icon={MessageCircle}
-        title="Nenhum número vinculado"
+        title="Nenhum canal vinculado"
         description={
           gerencia
-            ? "Vincule o WhatsApp de cada pessoa da equipe para o agente saber quem está falando e o que ela pode ver."
-            : "O administrador ainda não vinculou números de WhatsApp."
+            ? "Vincule o Telegram (ou WhatsApp) de cada pessoa da equipe para o agente saber quem está falando e o que ela pode ver."
+            : "O administrador ainda não vinculou Telegram nem WhatsApp."
         }
       />
     );
@@ -76,7 +77,8 @@ export function VinculosWhatsApp({ rows, gerencia }: { rows: VinculoRow[]; geren
             <TableHeader>
               <TableRow>
                 <TableHead>Usuário</TableHead>
-                <TableHead>WhatsApp</TableHead>
+                <TableHead>Canal</TableHead>
+                <TableHead>Identificador</TableHead>
                 <TableHead>Situação</TableHead>
                 <TableHead>Vinculado em</TableHead>
                 <TableHead>Último uso</TableHead>
@@ -93,7 +95,8 @@ export function VinculosWhatsApp({ rows, gerencia }: { rows: VinculoRow[]; geren
                       {!r.usuarioAtivo && " · usuário inativo"}
                     </span>
                   </TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{r.telefone}</TableCell>
+                  <TableCell>{r.canal}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{r.identificador}</TableCell>
                   <TableCell>
                     <span
                       className={`rounded-full px-2 py-0.5 text-caption font-medium ${

@@ -80,7 +80,7 @@ O mesmo prompt também cobre formato de WhatsApp (curto, R$ 1.500,00, datas dd/m
 
 **Vínculo:**
 
-- O administrador vincula o número de cada pessoa ao usuário dela em **Configurações → Integrações → WhatsApp**.
+- O administrador vincula o número de cada pessoa ao usuário dela em **Configurações → Integrações → Canais**.
 - A tabela é `MessagingIdentity`: canal `WHATSAPP` + telefone normalizado → usuário.
 - Há **um** vínculo ativo por número em cada workspace, garantido por índice único parcial no banco.
 - Desvincular corta o atendimento **na hora**; a linha fica guardada para auditoria.

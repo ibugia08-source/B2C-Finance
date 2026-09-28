@@ -87,8 +87,8 @@ const PARAMETERS = {
     name: "x-b2c-source",
     in: "header",
     required: false,
-    description: "Origem da chamada para a trilha de atividades: `n8n` ou `whatsapp`. Sem o header (ou outro valor) = API.",
-    schema: str(undefined, { enum: ["n8n", "whatsapp", "api"] }),
+    description: "Origem da chamada para a trilha de atividades: `n8n`, `whatsapp` ou `telegram`. Sem o header (ou outro valor) = API.",
+    schema: str(undefined, { enum: ["n8n", "whatsapp", "telegram", "api"] }),
   },
   RequestId: {
     name: "x-request-id",
@@ -483,17 +483,18 @@ const SCHEMAS: Record<string, Obj> = {
   }),
   IdentityResolveRequest: obj(
     {
-      channel: { const: "WHATSAPP" },
-      externalIdentifier: str("Telefone como veio do WhatsApp. Com \"+\" o código do país é lido do número; sem ele, 10–11 dígitos = Brasil. A variante do nono dígito é aceita.", {
-        minLength: 8, maxLength: 40, example: "+5571999990000",
+      channel: str("Canal da mensagem.", { enum: ["TELEGRAM", "WHATSAPP"] }),
+      externalIdentifier: str("TELEGRAM: Telegram User ID (`message.from.id`, só dígitos) — o @username NÃO identifica. WHATSAPP: telefone como veio; com \"+\" o código do país é lido do número; sem ele, 10–11 dígitos = Brasil; a variante do nono dígito é aceita.", {
+        minLength: 1, maxLength: 40, example: "123456789",
       }),
     },
     ["channel", "externalIdentifier"],
-    { additionalProperties: false, description: "Só o número. `userId` (ou qualquer outro campo) é recusado: quem decide o usuário é o vínculo cadastrado pelo administrador." }
+    { additionalProperties: false, description: "Só o canal e o identificador. `userId`/`ownerId` (ou qualquer outro campo) é recusado: quem decide o usuário é o vínculo cadastrado pelo administrador." }
   ),
   IdentityResolution: obj({
+    authorized: { const: true },
     identityId: str("Id do vínculo — mande em `X-B2C-Identity` nas chamadas seguintes."),
-    channel: { const: "WHATSAPP" },
+    channel: str(undefined, { enum: ["TELEGRAM", "WHATSAPP"] }),
     user: obj({ id: str(), name: str(), role: str(), roleLabel: str() }),
     permissions: { ...arr(str()), description: "Permissões do RBAC do usuário que importam para a integração." },
     allowedScopes: { ...arr(str(undefined, { enum: API_SCOPES })), description: "Scopes da integração ∩ RBAC do usuário: o que ela pode fazer POR ele." },
@@ -537,7 +538,7 @@ const SCHEMAS: Record<string, Obj> = {
     tool: str(),
     risk: { const: "WRITE_CONFIRMATION" },
     status: str(undefined, { enum: ["PENDING", "EXECUTING", "EXECUTED", "FAILED", "CANCELLED", "EXPIRED", "SUPERSEDED"] }),
-    channel: { const: "WHATSAPP" },
+    channel: str(undefined, { enum: ["TELEGRAM", "WHATSAPP"] }),
     targetId: { type: ["string", "null"] },
     summary: obj({ label: { type: ["string", "null"] }, amount: { type: ["number", "null"] } }),
     preview: str("Prévia montada pela API a partir do estado atual."),
@@ -1021,20 +1022,20 @@ PATHS["/integrations/resolve-identity"] = {
   post: {
     operationId: "resolveIdentity",
     tags: ["Integração"],
-    summary: "Identificar quem está falando (WhatsApp → usuário)",
+    summary: "Identificar quem está falando (Telegram/WhatsApp → usuário)",
     description:
-      "Resolve o número pelo VÍNCULO cadastrado em Configurações → Integrações → WhatsApp e devolve o usuário, as permissões relevantes e os scopes que a integração pode usar em nome dele. Número não vinculado, vínculo desativado ou usuário inativo → 404. Usuário restrito a uma agência → 403 (ainda não suportado). É uma consulta (sem Idempotency-Key); POST para o telefone não ir para a URL.\n\n**Scope obrigatório:** `identities.resolve`.",
+      "Resolve o identificador (Telegram User ID ou telefone) pelo VÍNCULO cadastrado em Configurações → Integrações → Canais e devolve o usuário, as permissões relevantes e os scopes que a integração pode usar em nome dele. Não vinculado, vínculo desativado ou usuário inativo → 404 `identity_not_found`. Usuário restrito a uma agência → 403 (ainda não suportado). É uma consulta (sem Idempotency-Key); POST para o telefone não ir para a URL.\n\n**Scope obrigatório:** `identities.resolve`.",
     security: [{ bearerAuth: ["identities.resolve"] }],
     "x-required-scope": "identities.resolve",
     parameters: [refParam("RequestId"), refParam("Source")],
     requestBody: {
       required: true,
-      content: { "application/json": { schema: ref("IdentityResolveRequest"), example: { channel: "WHATSAPP", externalIdentifier: "+5571999990000" } } },
+      content: { "application/json": { schema: ref("IdentityResolveRequest"), example: { channel: "TELEGRAM", externalIdentifier: "123456789" } } },
     },
     responses: {
       "200": sucesso(ref("IdentityResolution"), {
         exemplo: {
-          identityId: "cmuwa0001", channel: "WHATSAPP",
+          authorized: true, identityId: "cmuwa0001", channel: "TELEGRAM",
           user: { id: "cmuuser01", name: "Raiane", role: "FINANCEIRO", roleLabel: "Financeiro" },
           permissions: ["clientes.visualizar", "recebimentos.visualizar"],
           allowedScopes: ["clients.read", "client_status.read", "receivables.read"],
@@ -1179,7 +1180,7 @@ export function buildOpenApiSpec(serverUrl = "https://b2-c-finance.vercel.app/ap
       { name: "Upsell", description: "Oportunidades de venda adicional." },
       { name: "Painéis", description: "Indicadores oficiais e rotina do dia." },
       { name: "Relatórios", description: "Resumo do dia e da competência; seções seguem os scopes." },
-      { name: "Integração", description: "Quem está falando: número de WhatsApp → usuário e delegação por identidade." },
+      { name: "Integração", description: "Quem está falando: Telegram User ID ou número de WhatsApp → usuário, e delegação por identidade." },
       { name: "Agente", description: "Escritas do agente com prévia e confirmação do usuário (PendingAction)." },
     ],
     security: [{ bearerAuth: [] }],

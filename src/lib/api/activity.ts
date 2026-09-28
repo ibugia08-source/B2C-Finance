@@ -61,6 +61,7 @@ export function origemDaChamada(req: Request): ActivitySource {
   const v = (req.headers.get("x-b2c-source") ?? "").trim().toLowerCase();
   if (v === "n8n") return "N8N";
   if (v === "whatsapp") return "WHATSAPP";
+  if (v === "telegram") return "TELEGRAM";
   return "API";
 }
 

@@ -1,14 +1,19 @@
 ---
 rag: true
-titulo: O Agente B2C Finance (WhatsApp)
+titulo: O Agente B2C Finance (Telegram e WhatsApp)
 categoria: agente
-atualizado_em: 2026-09-28
+atualizado_em: 2026-09-29
 dados_atuais: nao
 ---
 
 # O Agente B2C Finance
 
-O agente é o assistente financeiro da agência no **WhatsApp**. Ele responde perguntas sobre clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios, e **prepara** ações de escrita que só acontecem com a confirmação de quem pediu.
+O agente é o assistente financeiro da agência por mensagem. O canal principal é o **Telegram** (conversa privada com o bot); o **WhatsApp** também é suportado. Ele responde perguntas sobre clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios e, na versão com escrita, **prepara** ações que só acontecem com a confirmação de quem pediu.
+
+| Canal | Versão disponível |
+|---|---|
+| Telegram | Consulta (somente leitura). A escrita com confirmação chega numa próxima etapa. |
+| WhatsApp | Consulta e escrita com confirmação. |
 
 ## De onde vem cada resposta
 
@@ -23,10 +28,22 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 
 ## Quem pode usar
 
-- **Só números de WhatsApp vinculados** a um usuário ativo, pelo administrador, em Configurações → Integrações → WhatsApp. Número não vinculado recebe uma resposta genérica, sem dado nenhum.
-- **O agente age com as permissões dessa pessoa** no B2C Finance. Quem não vê recebimentos no sistema também não vê pelo WhatsApp.
-- **Usuários restritos a uma agência** ainda não são atendidos pelo WhatsApp.
+- **Só pessoas vinculadas** a um usuário ativo pelo administrador, em Configurações → Integrações → Canais.
+  - **Telegram:** o vínculo é pelo **Telegram User ID** (um número). O @username não serve, porque pode ser trocado.
+  - **WhatsApp:** o vínculo é pelo número de telefone.
+- **Quem não está vinculado não recebe dado nenhum.** No Telegram, o bot mostra o próprio Telegram User ID da pessoa para ela passar ao administrador.
+- **No Telegram, só em conversa privada com o bot.** Em grupo, o bot responde apenas que atende no privado, sem consultar nada.
+- **O agente age com as permissões dessa pessoa** no B2C Finance. Quem não vê recebimentos no sistema também não vê pelo chat.
+- **Usuários restritos a uma agência** ainda não são atendidos pelo chat.
 - **O agente entende só mensagens de texto.**
+
+### Comandos do Telegram
+
+| Comando | O que faz |
+|---|---|
+| `/start` | Diz se a pessoa está conectada. Se não estiver vinculada, mostra o Telegram User ID dela. |
+| `/help` | Exemplos de perguntas. |
+| `/status` | "B2C Finance conectado", com o nome e o perfil da pessoa. |
 
 ## O que ele faz
 
@@ -39,7 +56,7 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 - rotina do dia;
 - relatórios do dia e do mês.
 
-**Prepara e pede confirmação (WRITE_CONFIRMATION):**
+**Prepara e pede confirmação (WRITE_CONFIRMATION), na versão com escrita:**
 - **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.
 - **Recebimentos:** registrar pagamento recebido.
 - **Despesas:** lançar, editar (em aberto), marcar como paga.
@@ -74,13 +91,15 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 
 **Cada pessoa tem uma ação aguardando confirmação por vez.** Um pedido novo substitui o anterior. Se alguém alterar o registro no sistema entre a prévia e o SIM, nada é executado e é preciso pedir de novo.
 
-Toda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou.
+Toda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou e o canal (Telegram ou WhatsApp).
 
 ## Respostas típicas
 
-- **Sem permissão:** "Seu perfil não tem permissão para isso."
-- **Não encontrou:** o agente diz que não encontrou e pede outro nome ou parte do CNPJ. Ele não adivinha.
-- **Problema técnico:** "Tive um problema técnico agora; tente de novo em instantes." O agente não mostra detalhes técnicos.
+- **Sem permissão:** "Você não possui permissão para acessar essa informação."
+- **Não encontrou:** "Não encontrei o registro solicitado." Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.
+- **Recusa de regra:** "Não foi possível concluir: " + o motivo dado pelo B2C Finance (ex.: "essa cobrança já está quitada").
+- **Problema técnico:** "Não consegui concluir essa consulta agora. A tentativa foi registrada." O agente não mostra detalhes técnicos.
+- **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.
 - **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.
 
 ## Limites conhecidos

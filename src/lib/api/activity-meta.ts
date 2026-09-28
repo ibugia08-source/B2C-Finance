@@ -34,7 +34,7 @@ export type WriteOperationKey = keyof typeof API_WRITE_OPERATIONS;
 
 export const API_READ_ACTIONS: Record<string, string> = {
   me: "Conferiu a credencial",
-  "identities.resolve": "Identificou quem fala (WhatsApp)",
+  "identities.resolve": "Identificou quem fala (Telegram/WhatsApp)",
   "knowledge.documents": "Baixou a base de conhecimento (indexação)",
   "agent_actions.propose": "Agente propôs uma ação (aguarda confirmação)",
   "agent_actions.list": "Consultou ações pendentes do agente",
@@ -67,6 +67,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   API: "API",
   N8N: "n8n",
   WHATSAPP: "WhatsApp",
+  TELEGRAM: "Telegram",
   SYSTEM: "Sistema",
 };
 
