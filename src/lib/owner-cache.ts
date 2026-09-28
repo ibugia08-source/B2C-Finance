@@ -77,6 +77,24 @@ export function ownerCached<A extends unknown[], R>(
  * explícito do contexto, que é o que runWithOwner já fixou.
  */
 async function currentCacheScope(): Promise<CacheScope> {
+  // Principal declarado (API, webhook, job) decide ANTES do cookie: uma
+  // chamada da API com um cookie de navegador junto não pode ler — nem
+  // gravar — a entrada de cache da sessão do cookie. Conta de serviço tem
+  // entrada própria (a mesma consulta com scopes diferentes não se mistura).
+  const { getPrincipal } = await import("@/lib/auth/owner-scope");
+  const principal = getPrincipal();
+  if (principal) {
+    const base = scopeFromSession(null);
+    const ownerId = await resolveOwnerId();
+    if (principal.kind === "user") return { ...base, ownerId, userId: principal.user.id, role: principal.user.role };
+    const sa = principal.serviceAccount;
+    return {
+      ...base,
+      ownerId,
+      userId: sa ? `sa:${sa.id}` : `sys:${principal.name}`,
+      role: sa ? `scopes:${[...sa.scopes].sort().join(",")}` : "SYSTEM",
+    };
+  }
   try {
     const { cookies } = await import("next/headers");
     const { SESSION_COOKIE, verifySessionToken } = await import("@/lib/auth/session");

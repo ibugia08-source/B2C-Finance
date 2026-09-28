@@ -1,34 +1,19 @@
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/prisma";
 import { monthRange, parseMonthParam } from "@/lib/format";
-import {
-  getMonthDelinquencies,
-  getClientRiskLevels,
-  type MonthDelinquency,
-} from "@/lib/services/client-metrics";
+import { getClientRiskLevels } from "@/lib/services/client-metrics";
+import { inadimplenciaEfetiva, whereDeClientes } from "@/lib/services/client-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { requirePagePermission, can } from "@/lib/auth/viewer";
 import { ClientDialog } from "./client-dialog";
 import { ClientFilters } from "./filters";
-import { SEM_NICHO } from "@/lib/niches";
 import { renewalLedgerMonth } from "@/lib/services/renewal-schedule";
 import {
-  civilCompetenceKey, currentYearMonth, monthBounds as expectationMonthBounds, monthIndex,
-  parseCompetenceKey, type YearMonth,
+  civilCompetenceKey,
 } from "@/lib/renewal-expectation";
 
-/** "YYYY-MM" → esse mês; "1".."12" (link antigo) → próxima ocorrência. */
-function mesDaExpectativa(v: string): YearMonth | null {
-  const ym = parseCompetenceKey(v);
-  if (ym) return ym;
-  const m = Number(v);
-  if (!Number.isInteger(m) || m < 1 || m > 12) return null;
-  const hoje = currentYearMonth();
-  const candidato = { year: hoje.year, month: m };
-  return monthIndex(candidato) < monthIndex(hoje) ? { year: hoje.year + 1, month: m } : candidato;
-}
 import { listarNichos } from "@/lib/services/niches";
 import { KpiCard } from "@/components/metric-card";
 import { ClientsTable, type ClientRow } from "./clients-table";
@@ -98,81 +83,22 @@ async function ClientesPageInner({
       distinct: ["clientId"],
     }),
   ]);
+  // ---------- where (filtros que rodam no banco) ----------
+  // Fonte única com a API (lib/services/client-query). Perdidos saem da
+  // lista padrão; "perda=mes" = perdas registradas no mês.
+  const where = whereDeClientes(statusDaComp, {
+    status: searchParams.status,
+    somenteIds: searchParams.perda === "mes" ? perdasDoMes.map((p) => p.clientId) : undefined,
+    entradaEntre: searchParams.entrada === "mes" ? { start: mesStart, end: mesEnd } : undefined,
+    segmento: searchParams.segmento,
+    modalidade: searchParams.modalidade as "MRR" | "TCV" | undefined,
+    responsavel: searchParams.responsavel,
+    mesRenovacao: searchParams.mesRenovacao,
+    q: searchParams.q,
+    servico: searchParams.servico,
+  });
   const idsComStatus = (pred: (s: string) => boolean) =>
     [...statusDaComp].filter(([, s]) => pred(s)).map(([id]) => id);
-
-  // ---------- where (filtros que rodam no banco) ----------
-  const where: any = {};
-  // Perdidos saem da lista padrão (botão "Perda de cliente"); para revê-los,
-  // use o filtro de status "Perdido / Cancelado" ou o card "Perdidos no mês".
-  if (searchParams.perda === "mes") {
-    where.id = { in: perdasDoMes.map((p) => p.clientId) };
-  } else if (searchParams.status === "ativos") {
-    // Card "Clientes ativos": os que geram receita na competência.
-    where.id = { in: idsComStatus(isRevenueActiveStatus) };
-  } else if (searchParams.status) {
-    where.id = { in: idsComStatus((s) => s === searchParams.status) };
-  } else {
-    // Carteira da competência: quem tinha status nela, menos os perdidos.
-    where.id = { in: idsComStatus((s) => s !== "CHURNED") };
-  }
-  // Card "Novos clientes este mês": entrada no mês (startedAt; fallback createdAt).
-  if (searchParams.entrada === "mes") {
-    where.AND = [
-      ...(where.AND ?? []),
-      {
-        OR: [
-          { startedAt: { gte: mesStart, lt: mesEnd } },
-          { startedAt: null, createdAt: { gte: mesStart, lt: mesEnd } },
-        ],
-      },
-    ];
-  }
-  // Nicho: id do catálogo, ou o sentinela "sem nicho" (cadastro ainda sem
-  // nicho atribuído). Valor antigo por nome continua casando pelo texto.
-  if (searchParams.segmento === SEM_NICHO) where.nicheId = null;
-  else if (searchParams.segmento) {
-    where.OR = [{ nicheId: searchParams.segmento }, { segment: searchParams.segmento }];
-  }
-  if (searchParams.modalidade) where.modality = searchParams.modalidade;
-  if (searchParams.responsavel) where.salesOwner = searchParams.responsavel;
-  // Expectativa de renovação no mês "YYYY-MM". Link antigo com só o mês
-  // (1-12) vale a PRÓXIMA ocorrência daquele mês a partir de hoje.
-  if (searchParams.mesRenovacao) {
-    const alvo = mesDaExpectativa(searchParams.mesRenovacao);
-    if (alvo) {
-      const { start: rs, end: re } = expectationMonthBounds(alvo);
-      where.expectedRenewalAt = { gte: rs, lt: re };
-    }
-  }
-  if (searchParams.q) {
-    const q = searchParams.q.trim();
-    const like = { contains: q, mode: "insensitive" as const };
-    where.AND = [
-      ...(where.AND ?? []),
-      {
-        OR: [
-          { name: like },
-          { legalName: like },
-          { document: like },
-          { email: like },
-          { segment: like },
-          { city: like },
-          { salesOwner: like },
-          { opsOwner: like },
-          { tags: { has: q.toLowerCase() } },
-        ],
-      },
-    ];
-  }
-  if (searchParams.servico) {
-    where.contracts = {
-      some: {
-        status: "ACTIVE",
-        services: { some: { serviceId: searchParams.servico } },
-      },
-    };
-  }
 
   const page = Math.max(1, parseInt(searchParams.pagina ?? "1", 10) || 1);
   // Linhas por página: 20 (padrão), 40 ou 100 — escolhido no rodapé da lista.
@@ -190,18 +116,12 @@ async function ClientesPageInner({
   // ---------- índice leve de TODOS os clientes do filtro (ordenado) ----------
   // Usado para: (1) inadimplência do mês por cliente, (2) filtro Pago/Devendo,
   // (3) seleção "todos os filtrados". Campos mínimos → barato mesmo com muitos.
-  const [index, monthOverrides, segmentRows, ownerRows, ativos, novosMes, perdidosMes, renovacoesProx] =
+  const [index, segmentRows, ownerRows, ativos, novosMes, perdidosMes, renovacoesProx] =
     await Promise.all([
       prisma.client.findMany({
         where,
         orderBy: { name: searchParams.ordem === "za" ? "desc" : "asc" },
         select: { id: true },
-      }),
-      // Overrides manuais de inadimplência DA COMPETÊNCIA selecionada
-      // (histórico por mês em ClientMonthDelinquency).
-      prisma.clientMonthDelinquency.findMany({
-        where: { year: curYear, month: curMonth },
-        select: { clientId: true, status: true, setBy: true },
       }),
       listarNichos(),
       prisma.client.findMany({
@@ -229,33 +149,20 @@ async function ClientesPageInner({
       renewalLedgerMonth({ month: curMonth, year: curYear }).then((l) => l.rows.length),
     ]);
 
-  const autoDelinq = await getMonthDelinquencies(
+  // Inadimplência EFETIVA da competência: override manual do mês vence o
+  // auto (lib/services/client-query — mesma regra da API).
+  const delinquencies = await inadimplenciaEfetiva(
     index.map((c) => c.id),
     curMonth,
     curYear
   );
-
-  // Overrides manuais da competência (ClientMonthDelinquency → mapa por cliente).
-  const overrideByClient = new Map(
-    monthOverrides.map((o) => [o.clientId, { status: o.status, by: o.setBy }])
-  );
-
-  // Inadimplência EFETIVA da competência: override manual do mês vence o auto.
   type IndexRow = (typeof index)[number];
   function effectiveDelinquency(c: IndexRow): {
     value: DelinquencyValue | "SEM_COBRANCA";
     manual: boolean;
     by: string | null;
   } {
-    const ov = overrideByClient.get(c.id);
-    if (ov) {
-      return { value: ov.status as DelinquencyValue, manual: true, by: ov.by ?? null };
-    }
-    return {
-      value: (autoDelinq.get(c.id) ?? "SEM_COBRANCA") as MonthDelinquency,
-      manual: false,
-      by: null,
-    };
+    return delinquencies.get(c.id) ?? { value: "SEM_COBRANCA", manual: false, by: null };
   }
 
   // Filtro Pago/Devendo (em memória, pois depende do override + competência).

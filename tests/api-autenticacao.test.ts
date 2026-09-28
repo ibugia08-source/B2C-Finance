@@ -17,7 +17,8 @@ import type { Principal } from "@/lib/auth/owner-scope";
 
 vi.mock("next/cache", async (orig) => ({ ...(await orig<any>()), revalidatePath: () => {}, revalidateTag: () => {} }));
 
-import { authenticateApiToken, withApiAuth, apiJson, requireApiScope, LAST_USED_JANELA_MS } from "@/lib/api/auth";
+import { authenticateApiToken, requireApiScope, LAST_USED_JANELA_MS } from "@/lib/api/auth";
+import { defineEndpoint } from "@/lib/api/http";
 import { API_SCOPES, FORBIDDEN_SCOPES, parseApiScopes, scopePermite, PERMISSION_TO_SCOPE } from "@/lib/api/scopes";
 import { hashToken } from "@/lib/api/tokens";
 import {
@@ -83,11 +84,13 @@ describe("token", () => {
 
   it("GET protegido com token válido responde 200", async () => {
     const k = await novaChave(donoA, ["clients.read"]);
-    const GET = withApiAuth(null, async (_r, auth) => apiJson({ id: auth.serviceAccountId }));
-    const res = await GET(req(k.token, { "x-correlation-id": "corr-1" }), {});
+    const GET = defineEndpoint({ scope: null }, async ({ auth }) => ({ data: { id: auth.serviceAccountId } }));
+    const res = await GET(req(k.token, { "x-request-id": "corr-1" }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: k.id });
-    expect(res.headers.get("x-correlation-id")).toBe("corr-1");
+    const body = await res.json();
+    expect(body).toMatchObject({ success: true, data: { id: k.id }, meta: { requestId: "corr-1" } });
+    expect(typeof body.meta.generatedAt).toBe("string");
+    expect(res.headers.get("x-request-id")).toBe("corr-1");
   });
 
   it("token inválido: ausente, malformado, segredo errado e prefixo inexistente → 401", async () => {
@@ -106,17 +109,19 @@ describe("token", () => {
         expect(r.error.code).toBe("invalid_token");
       }
     }
-    const GET = withApiAuth(null, async () => apiJson({}));
-    const res = await GET(req("b2c_live_zzzzzzzz_" + "x".repeat(43)), {});
+    const GET = defineEndpoint({ scope: null }, async () => ({ data: {} }));
+    const res = await GET(req("b2c_live_zzzzzzzz_" + "x".repeat(43)));
     expect(res.status).toBe(401);
     expect(res.headers.get("www-authenticate")).toContain('error="invalid_token"');
   });
 
   it("cookie de sessão não autentica a API", async () => {
-    const GET = withApiAuth(null, async () => apiJson({}));
-    const res = await GET(req(undefined, { cookie: "b2c_session=qualquer.coisa" }), {});
+    const GET = defineEndpoint({ scope: null }, async () => ({ data: {} }));
+    const res = await GET(req(undefined, { cookie: "b2c_session=qualquer.coisa" }));
     expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("missing_token");
+    const body = await res.json();
+    expect(body).toMatchObject({ success: false, error: { code: "missing_token" } });
+    expect(typeof body.meta.requestId).toBe("string");
   });
 
   it("token revogado → 401 revoked_token, na hora", async () => {
@@ -211,11 +216,11 @@ describe("scope", () => {
   it("scope ausente → 403 insufficient_scope, sem executar o handler", async () => {
     const k = await novaChave(donoA, ["dashboard.read"]);
     let executou = false;
-    const GET = withApiAuth("clients.read", async () => {
+    const GET = defineEndpoint({ scope: "clients.read" }, async () => {
       executou = true;
-      return apiJson({});
+      return { data: {} };
     });
-    const res = await GET(req(k.token), {});
+    const res = await GET(req(k.token));
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toMatchObject({ code: "insufficient_scope", scope: "clients.read" });
@@ -277,11 +282,11 @@ describe("isolamento por dono", () => {
     const deA = await createMrrClient(donoA, { name: "Cliente só do A" });
     const deB = await createMrrClient(donoB, { name: "Cliente só do B" });
     const k = await novaChave(donoA, ["clients.read"]);
-    const GET = withApiAuth("clients.read", async () =>
-      apiJson({ ids: (await prisma.client.findMany({ select: { id: true } })).map((c) => c.id) })
-    );
-    const res = await GET(req(k.token), {});
-    const { ids } = await res.json();
+    const GET = defineEndpoint({ scope: "clients.read" }, async () => ({
+      data: { ids: (await prisma.client.findMany({ select: { id: true } })).map((c) => c.id) },
+    }));
+    const res = await GET(req(k.token));
+    const { ids } = (await res.json()).data;
     expect(ids).toContain(deA.id);
     expect(ids).not.toContain(deB.id);
   });

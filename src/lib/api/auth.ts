@@ -1,6 +1,5 @@
-import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
-import { runWithoutScope, runWithPrincipal, type Principal } from "@/lib/auth/owner-scope";
+import { runWithoutScope, type Principal } from "@/lib/auth/owner-scope";
 import type { DomainContext } from "@/lib/engines/domain";
 import { isApiScope } from "./scopes";
 import { HASH_FANTASMA, hashToken, hashesIguais, prefixoDoToken } from "./tokens";
@@ -37,7 +36,9 @@ export type ApiErrorCode =
   | "expired_token"
   | "inactive_owner"
   | "insufficient_scope"
+  | "validation_error"
   | "not_found"
+  | "rate_limited"
   | "internal_error";
 
 export class ApiError extends Error {
@@ -45,7 +46,9 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: ApiErrorCode,
     message: string,
-    readonly scope?: string
+    readonly scope?: string,
+    /** Detalhes seguros para o cliente (ex.: campos inválidos). Nunca stack. */
+    readonly details?: unknown
   ) {
     super(message);
   }
@@ -166,73 +169,4 @@ export function requireApiScope(auth: ApiAuth, scope: string): void {
 /** Contexto de domínio da chamada — o mesmo tipo que as Server Actions usam. */
 export function apiDomainContext(auth: ApiAuth, correlationId: string | null = null): DomainContext {
   return { ownerId: auth.ownerId, principal: auth.principal, correlationId };
-}
-
-// ---------------------------------------------------------------------------
-// Respostas
-// ---------------------------------------------------------------------------
-
-const SEM_CACHE = { "Cache-Control": "no-store" };
-
-export function apiJson(body: unknown, init: { status?: number; correlationId?: string } = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status: init.status ?? 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...SEM_CACHE,
-      ...(init.correlationId ? { "x-correlation-id": init.correlationId } : {}),
-    },
-  });
-}
-
-export function apiErrorResponse(err: ApiError, correlationId?: string): Response {
-  const res = apiJson(
-    { error: { code: err.code, message: err.message, ...(err.scope ? { scope: err.scope } : {}) } },
-    { status: err.status, correlationId }
-  );
-  // RFC 6750 §3: o cliente sabe se é credencial (401) ou escopo (403).
-  if (err.status === 401) {
-    res.headers.set(
-      "WWW-Authenticate",
-      err.code === "missing_token" ? 'Bearer realm="b2c-api"' : `Bearer realm="b2c-api", error="invalid_token"`
-    );
-  } else if (err.code === "insufficient_scope") {
-    res.headers.set("WWW-Authenticate", `Bearer realm="b2c-api", error="insufficient_scope", scope="${err.scope}"`);
-  }
-  return res;
-}
-
-// ---------------------------------------------------------------------------
-// Wrapper de rota
-// ---------------------------------------------------------------------------
-
-export type ApiHandler<C> = (
-  req: Request,
-  auth: ApiAuth,
-  extra: { correlationId: string; routeContext: C }
-) => Promise<Response>;
-
-/**
- * Rota da API: autentica, confere o scope (null = qualquer token válido,
- * só para rotas de identidade como /me) e roda o handler sob o dono e o
- * principal da conta. Erro inesperado vira 500 sem vazar detalhe.
- */
-export function withApiAuth<C = unknown>(scope: string | null, handler: ApiHandler<C>) {
-  return async (req: Request, routeContext: C): Promise<Response> => {
-    const correlationId = req.headers.get("x-correlation-id") || randomUUID();
-    try {
-      const res = await authenticateApiToken(req.headers.get("authorization"));
-      if (!res.ok) return apiErrorResponse(res.error, correlationId);
-      if (scope) requireApiScope(res.auth, scope);
-      const out = await runWithPrincipal(res.auth.ownerId, res.auth.principal, async () =>
-        await handler(req, res.auth, { correlationId, routeContext })
-      );
-      out.headers.set("x-correlation-id", correlationId);
-      return out;
-    } catch (e) {
-      if (e instanceof ApiError) return apiErrorResponse(e, correlationId);
-      console.error(`[api] ${correlationId}`, e);
-      return apiErrorResponse(new ApiError(500, "internal_error", "Erro interno."), correlationId);
-    }
-  };
 }

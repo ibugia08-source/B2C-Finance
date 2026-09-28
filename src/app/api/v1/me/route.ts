@@ -1,4 +1,4 @@
-import { apiJson, withApiAuth } from "@/lib/api/auth";
+import { defineEndpoint } from "@/lib/api/http";
 
 /**
  * GET /api/v1/me — quem é esta credencial. Qualquer token válido acessa (sem
@@ -6,17 +6,12 @@ import { apiJson, withApiAuth } from "@/lib/api/auth";
  */
 export const dynamic = "force-dynamic";
 
-export const GET = withApiAuth(null, async (_req, auth, { correlationId }) =>
-  apiJson(
-    {
-      data: {
-        type: "service_account",
-        id: auth.serviceAccountId,
-        name: auth.name,
-        tokenPrefix: auth.tokenPrefix,
-        scopes: auth.scopes,
-      },
-    },
-    { correlationId }
-  )
-);
+export const GET = defineEndpoint({ scope: null }, async ({ auth }) => ({
+  data: {
+    type: "service_account",
+    id: auth.serviceAccountId,
+    name: auth.name,
+    tokenPrefix: auth.tokenPrefix,
+    scopes: auth.scopes,
+  },
+}));

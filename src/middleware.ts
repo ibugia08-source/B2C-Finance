@@ -189,7 +189,11 @@ export async function middleware(req: NextRequest) {
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.ip || "unknown";
     if (isApiRateLimited(ip)) {
       return new NextResponse(
-        JSON.stringify({ error: { code: "rate_limited", message: "Muitas requisições. Aguarde um minuto." } }),
+        JSON.stringify({
+          success: false,
+          error: { code: "rate_limited", message: "Muitas requisições. Aguarde um minuto." },
+          meta: { requestId: correlationId },
+        }),
         { status: 429, headers: { "Retry-After": "60", "Content-Type": "application/json; charset=utf-8" } }
       );
     }
