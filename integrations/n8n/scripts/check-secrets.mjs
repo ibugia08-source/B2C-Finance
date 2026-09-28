@@ -22,7 +22,7 @@ export const PADROES = [
   { nome: "chave Anthropic", re: /sk-ant-[A-Za-z0-9_-]{20,}/ },
   { nome: "token da Meta", re: /EAA[A-Za-z0-9]{40,}/ },
   { nome: "Bearer literal", re: /Bearer\s+(?!YOUR_API_TOKEN|<)[A-Za-z0-9._~+/-]{20,}/ },
-  { nome: "id de credencial real", re: /"credentials"[\s\S]{0,120}?"id":\s*"(?!CONFIGURAR_NO_N8N")[^"]+"/ },
+  { nome: "id de credencial real", re: /"credentials"[\s\S]{0,120}?"id":\s*"(?!CONFIGURAR_[A-Z0-9_]+")[^"]+"/ },
 ];
 
 function arquivos(dir) {

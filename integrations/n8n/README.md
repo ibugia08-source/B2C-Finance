@@ -10,10 +10,11 @@ integrations/n8n/
 ├── ENV.example                       variáveis (sem segredo real)
 ├── CHANGELOG.md
 ├── workflows/
-│   ├── agente-whatsapp.consulta.v1.json   WhatsApp → AI Agent (11 ferramentas GET) → WhatsApp
+│   ├── b2c-finance-ai-agent-readonly.json WhatsApp → usuário/perfil → AI Agent (11 ferramentas GET) → WhatsApp
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
 ├── schemas/
 │   ├── agent-tools.json              catálogo das ferramentas do agente (fonte de verdade)
+│   ├── user-profiles.json            perfis → ferramentas liberadas por pessoa
 │   └── agent-tools.schema.json       JSON Schema do catálogo
 ├── examples/
 │   ├── system-prompt.md              instruções do agente (vão para o workflow)
@@ -22,6 +23,7 @@ integrations/n8n/
 └── scripts/
     ├── build-workflows.mjs           gera os workflows a partir do catálogo e do prompt
     ├── check-secrets.mjs             barra segredo versionado (roda no CI)
+    ├── validate-with-n8n.cjs         confere os nós contra uma instalação real do n8n
     ├── import.sh / export.sh         CLI do n8n (exportação normalizada)
 ```
 
@@ -48,7 +50,14 @@ integrations/n8n/
 - **n8n acessível por HTTPS público,** porque a Meta só entrega webhook em HTTPS.
 - **Variáveis de ambiente:** as de [`ENV.example`](./ENV.example), definidas no ambiente do n8n.
 
-> Os JSONs foram **gerados** por `scripts/build-workflows.mjs` e conferidos por teste contra a OpenAPI: só `GET`, scopes e parâmetros certos. Os nomes de parâmetro dos nós seguem o n8n 1.5x. Se a sua versão acusar algum parâmetro na importação, recrie o nó da ferramenta a partir de [`schemas/agent-tools.json`](./schemas/agent-tools.json), que é a fonte de verdade: rota, parâmetros e descrição de cada ferramenta.
+> Os JSONs são **gerados** por `scripts/build-workflows.mjs` e conferidos de três formas:
+> - **Contra a OpenAPI**, por teste: só `GET`, scopes e parâmetros certos.
+> - **Contra as definições reais dos nós do n8n 1.123:** tipo, versão, parâmetros e credenciais. O comando é `N8N_MODULES=<node_modules do n8n> npm run n8n:validate`.
+> - **Importando e executando num n8n real** (ver [`docs/N8N_READONLY_AGENT.md`](../../docs/N8N_READONLY_AGENT.md) §7).
+>
+> Se uma versão diferente do n8n acusar algum parâmetro, recrie o nó da ferramenta a partir de [`schemas/agent-tools.json`](./schemas/agent-tools.json).
+
+> **Guia completo do agente somente leitura** (fluxo nó a nó, regras do prompt, perfis, testes executados num n8n real): [`docs/N8N_READONLY_AGENT.md`](../../docs/N8N_READONLY_AGENT.md).
 
 ## 1. Como importar o workflow
 
@@ -56,11 +65,11 @@ integrations/n8n/
 
 1. No n8n, abra **Workflows → Import from File**.
 2. Importe `workflows/sistema.teste-conexao.v1.json`.
-3. Importe `workflows/agente-whatsapp.consulta.v1.json`.
+3. Importe `workflows/b2c-finance-ai-agent-readonly.json`.
 
 **Pela CLI:** rode `scripts/import.sh`, dentro do container do n8n ou com a CLI instalada.
 
-Os workflows chegam **desativados** e com as credenciais **por ligar**: os nós mostram um aviso até você escolher a credencial (§2 a §4). Nenhum JSON contém segredo; o id de credencial é o placeholder `CONFIGURAR_NO_N8N`.
+Os workflows chegam **desativados** e com as credenciais **por ligar**: os nós mostram um aviso até você escolher a credencial (§2 a §4). Nenhum JSON contém segredo; os ids de credencial são placeholders (`CONFIGURAR_B2C_FINANCE_API`, `CONFIGURAR_WHATSAPP_API`, `CONFIGURAR_OPENAI`).
 
 ## 2. Como configurar a API B2C
 
@@ -91,23 +100,23 @@ O token **nunca** vai em variável de ambiente, em nó, em expressão nem no Git
    | `WHATSAPP_WEBHOOK_SECRET` | O **App Secret** do app na Meta. Valida a assinatura (§8). |
    | `WHATSAPP_VERIFY_TOKEN` | Um texto longo aleatório que você inventa. |
    | `WHATSAPP_PHONE_NUMBER_ID` | O id do número na Meta. |
-   | `WHATSAPP_ALLOWED_NUMBERS` | Os números da equipe que podem consultar, em E.164 sem `+`, separados por vírgula. |
+   | `B2C_WHATSAPP_USERS` | O diretório de quem pode consultar: número em E.164 sem `+` → nome e perfil, em JSON numa linha. Perfis: `admin`, `financeiro`, `comercial`, `leitura` ([`schemas/user-profiles.json`](./schemas/user-profiles.json)). |
 
 3. **Configure o webhook no painel da Meta.** Em **WhatsApp → Configuration → Webhook**, preencha:
-   - **Callback URL:** a URL de produção do webhook `b2c-agente-whatsapp` do workflow, por exemplo `https://SEU-N8N/webhook/b2c-agente-whatsapp`.
-   - **Verify token:** o mesmo `WHATSAPP_VERIFY_TOKEN`. O nó "WhatsApp Verificação (GET)" responde o desafio.
+   - **Callback URL:** a URL de produção do webhook `b2c-finance-ai-agent` do workflow, por exemplo `https://SEU-N8N/webhook/b2c-finance-ai-agent`.
+   - **Verify token:** o mesmo `WHATSAPP_VERIFY_TOKEN`. O nó "Webhook WhatsApp (verificação GET)" responde o desafio.
    - **Assine o campo `messages`.**
 
-**Número fora da lista:** recebe só uma resposta genérica e **nenhum dado** ("não autorizado"). Enquanto a delegação por usuário não existir na API, **essa lista é quem decide quem pode consultar**. Mantenha-a curta e revise quando alguém sair da equipe.
+**Número fora do diretório:** recebe só uma resposta genérica e **nenhum dado** ("não autorizado"). Enquanto a delegação por usuário não existir na API, **esse diretório é quem decide quem pode consultar, e o quê**. O perfil limita as ferramentas: a restrição vai no prompt **e** trava a URL da ferramenta, então uma ferramenta fora do perfil nem chega à API. Mantenha o diretório curto e revise quando alguém sair da equipe.
 
-> Se usar outro provedor de WhatsApp (Evolution API, Z-API, Twilio), troque três nós: "WhatsApp Webhook", "Validar assinatura e extrair mensagem" (formato do payload e assinatura do provedor) e os dois "Responder…" (endpoint e corpo de envio). O agente e as ferramentas não mudam.
+> Se usar outro provedor de WhatsApp (Evolution API, Z-API, Twilio), troque três nós: "Validar assinatura (Meta)" (assinatura do provedor), "Normalizar payload" (formato da mensagem) e "Responder no WhatsApp" (endpoint e corpo de envio). O agente e as ferramentas não mudam.
 
 ## 4. Como configurar o modelo de IA
 
 1. **Crie a credencial.** Em **Credentials → New → OpenAI**, com o nome `OpenAI` e a chave da conta (`OPENAI_API_KEY`, que fica só na credencial).
 2. **Escolha o modelo.** O nó "Modelo de IA" vem com `gpt-4o-mini` e temperatura 0.2, porque respostas factuais pedem temperatura baixa. Qualquer modelo com **tool calling** serve.
 3. **Para usar outro provedor:** troque o nó por outro chat model do n8n (Anthropic, Azure OpenAI, Gemini) e ligue-o na entrada *Chat Model* do agente. As ferramentas e o prompt não mudam.
-4. **Instruções do agente.** O prompt está em [`examples/system-prompt.md`](./examples/system-prompt.md) e já vai dentro do nó "Agente B2C Finance". Para mudar as instruções, edite o `.md` e rode `npm run n8n:build`, ou edite no n8n e exporte (§6). Regras principais:
+4. **Instruções do agente.** O prompt está em [`examples/system-prompt.md`](./examples/system-prompt.md) e já vai dentro do nó "AI Agent B2C Finance (somente leitura)", junto com o contexto de quem pergunta: nome, perfil, ferramentas liberadas e a data de hoje. Para mudar as instruções, edite o `.md` e rode `npm run n8n:build`, ou edite no n8n e exporte (§6). Regras principais:
    - buscar o cliente antes de consultar e **perguntar** se houver mais de um resultado;
    - usar o status **da competência** para meses passados;
    - usar os totais que a API já calcula;
@@ -137,11 +146,13 @@ O catálogo usa JSON Schema, o mesmo formato de `parameters`/`input_schema` das 
 
 1. **Teste a conexão.** Abra "B2C · Sistema · Teste de conexão (v1)" e clique em **Execute workflow**. O último nó deve mostrar `ok: true`. Se aparecer `faltando: [...]`, marque esses scopes numa integração nova ou rotacione a atual (§7).
 2. **Teste as ferramentas isoladas.** No workflow do agente, abra uma ferramenta (por exemplo `buscar_clientes`) e use **Test step** com um valor. A resposta deve vir no formato `{ "success": true, … }`.
-3. **Teste a conversa ponta a ponta.** Com o workflow **desativado**, clique em **Test workflow** (o webhook de teste fica ouvindo) e mande uma mensagem de um número da lista. Por exemplo, "a Face Love está devendo este mês?".
+3. **Teste a conversa ponta a ponta.** Com o workflow **desativado**, clique em **Test workflow** (o webhook de teste fica ouvindo) e mande uma mensagem de um número do diretório. Por exemplo, "a Face Love está devendo este mês?".
    - O webhook de **teste** tem outra URL: `/webhook-test/…`. Use a de produção no painel da Meta só depois de ativar.
 4. **Teste a segurança.** Estes três casos **não** podem chegar ao agente:
    - payload com assinatura errada ou sem assinatura: descartado, sem resposta;
-   - número fora da lista: recebe só a resposta genérica;
+   - número fora do diretório: recebe só a resposta genérica;
+   - ferramenta fora do perfil: não chega à API, e o agente diz que o perfil não tem acesso;
+   - a mesma mensagem reenviada pela Meta (mesmo `messageId`): não gera segunda resposta;
    - pedido de escrita ("registra o pagamento da Face Love"): o agente explica que não pode.
 5. **Confira no B2C Finance.** Em **Configurações → Integrações → Atividades da IA/API**, cada consulta aparece com a origem **WhatsApp**. As ferramentas enviam `X-B2C-Source: whatsapp` e `x-request-id = n8n-<id da execução>`, que ligam a atividade à execução no n8n.
 
@@ -150,11 +161,11 @@ Se quiser testar sem o n8n, use o curl de [`examples/tool-calls.md`](./examples/
 ## 6. Como ativar (e manter)
 
 1. **Ative.** Com o teste ok, ative o workflow com o *toggle* **Active**. O webhook de produção passa a valer.
-2. **Aponte a Meta para produção.** No painel da Meta, use a URL de produção (`/webhook/b2c-agente-whatsapp`).
+2. **Aponte a Meta para produção.** No painel da Meta, use a URL de produção (`/webhook/b2c-finance-ai-agent`).
 3. **Execuções salvas:** o workflow salva só as execuções **com erro** (`saveDataSuccessExecution: none`). Assim, conversas com dados financeiros não se acumulam no banco do n8n.
 4. **Mudar o workflow segue o mesmo fluxo de código:**
    1. Edite no n8n.
-   2. Rode `scripts/export.sh <id> agente-whatsapp.consulta.v1.json`. O script remove ids e datas, desativa o workflow no JSON e roda o verificador de segredos.
+   2. Rode `scripts/export.sh <id> b2c-finance-ai-agent-readonly.json`. O script remove ids e datas, desativa o workflow no JSON e roda o verificador de segredos.
    3. Abra um PR. O CI roda `tests/integracao-n8n.test.ts`, que confere o workflow contra o catálogo e a OpenAPI, e o `check-secrets`.
    4. Registre a mudança no `CHANGELOG.md`.
    - Mudança **incompatível** da API gera `…v2.json`, que convive com a v1 até a troca.
@@ -183,7 +194,7 @@ A Meta assina cada POST com o **App Secret**:
 X-Hub-Signature-256: sha256=<hex de HMAC-SHA256(App Secret, corpo CRU da requisição)>
 ```
 
-O nó **"Validar assinatura e extrair mensagem"** faz a validação:
+O nó **"Validar assinatura (Meta)"** faz a validação:
 
 1. Lê o **corpo cru**. O webhook tem a opção **Raw Body** ligada, porque o JSON reserializado não bate byte a byte com o que a Meta assinou.
 2. Calcula o HMAC com `WHATSAPP_WEBHOOK_SECRET`.
@@ -225,6 +236,11 @@ O segredo `B2C_WEBHOOK_SECRET` vai ser gerado na tela de Integrações quando a 
 
 - **Integração só de leitura, com scopes mínimos:** mesmo que o agente "queira", a API recusa escrita (`403`).
 - **O dono dos dados vem da integração:** o agente não consegue pedir dados de outro workspace.
-- **Três travas antes do agente:** assinatura do webhook, lista de números autorizados e o prompt, que proíbe escrita e expor dados de quem não foi perguntado.
+- **Travas antes e em volta do agente:**
+  - assinatura do webhook;
+  - diretório de usuários;
+  - perfil (no prompt e na URL de cada ferramenta);
+  - descarte de mensagens repetidas;
+  - o prompt, que proíbe escrita, inventar dados ou ids e expor dados de quem não foi perguntado.
 - **Nenhum segredo no Git:** `npm run n8n:check` e o CI barram tokens (`b2c_live_…`, `sk-…`, `EAA…`, `Bearer …`) e ids reais de credencial.
 - **Rastreabilidade:** tudo o que o agente consulta aparece em **Atividades da IA/API**, com origem, ação e resultado.

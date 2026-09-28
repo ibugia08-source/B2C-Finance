@@ -1,0 +1,25 @@
+{
+  "catalog": "b2c-finance-agent-profiles",
+  "version": "1.0.0",
+  "description": "Perfis de quem conversa com o agente pelo WhatsApp e as ferramentas que cada perfil pode usar. O número de cada pessoa → perfil fica na variável B2C_WHATSAPP_USERS (ver ENV.example). Número fora dela não é atendido. A trava definitiva continua sendo a API: os scopes da integração limitam TODO o workflow; o perfil restringe ainda mais, por pessoa.",
+  "envVar": "B2C_WHATSAPP_USERS",
+  "envFormat": { "5571999990000": { "name": "Raiane", "profile": "financeiro" } },
+  "profiles": {
+    "admin": {
+      "label": "Administrador",
+      "tools": ["buscar_clientes", "consultar_cliente", "consultar_status_cliente", "consultar_dashboard", "consultar_recebimentos", "consultar_despesas", "consultar_caixa", "consultar_upsells", "consultar_rotina", "gerar_relatorio_diario", "gerar_relatorio_mensal"]
+    },
+    "financeiro": {
+      "label": "Financeiro",
+      "tools": ["buscar_clientes", "consultar_cliente", "consultar_status_cliente", "consultar_dashboard", "consultar_recebimentos", "consultar_despesas", "consultar_caixa", "consultar_rotina", "gerar_relatorio_diario", "gerar_relatorio_mensal"]
+    },
+    "comercial": {
+      "label": "Comercial",
+      "tools": ["buscar_clientes", "consultar_cliente", "consultar_status_cliente", "consultar_upsells", "consultar_rotina"]
+    },
+    "leitura": {
+      "label": "Leitura",
+      "tools": ["buscar_clientes", "consultar_cliente", "consultar_status_cliente", "consultar_dashboard"]
+    }
+  }
+}

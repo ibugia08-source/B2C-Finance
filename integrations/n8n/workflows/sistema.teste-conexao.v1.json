@@ -36,7 +36,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "CONFIGURAR_NO_N8N",
+          "id": "CONFIGURAR_B2C_FINANCE_API",
           "name": "B2C Finance API"
         }
       }
@@ -66,14 +66,14 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "CONFIGURAR_NO_N8N",
+          "id": "CONFIGURAR_B2C_FINANCE_API",
           "name": "B2C Finance API"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Confere se a integração tem os scopes que o agente de consulta usa.\nconst necessarios = [\"cash.read\",\"client_status.read\",\"clients.read\",\"dashboard.read\",\"expenses.read\",\"receivables.read\",\"reports.read\",\"routine.read\",\"upsells.read\"];\nconst me = $input.first().json;\nconst tem = (me.data && me.data.scopes) || [];\nconst faltando = necessarios.filter((s) => !tem.includes(s));\nreturn [{ json: { ok: faltando.length === 0, integracao: me.data && me.data.name, faltando, requestId: me.meta && me.meta.requestId } }];"
+        "jsCode": "// Confere se a integração tem os scopes que o agente de consulta usa.\nconst necessarios = [\"cash.read\",\"client_status.read\",\"clients.read\",\"dashboard.read\",\"expenses.read\",\"receivables.read\",\"reports.read\",\"routine.read\",\"upsells.read\"];\nconst me = $input.first().json;\nconst tem = (me.data && me.data.scopes) || [];\nconst faltando = necessarios.filter((s) => !tem.includes(s));\nconst excesso = tem.filter((s) => !necessarios.includes(s));\nreturn [{ json: { ok: faltando.length === 0, integracao: me.data && me.data.name, faltando, scopesAlemDoNecessario: excesso, requestId: me.meta && me.meta.requestId } }];"
       },
       "name": "Conferir scopes",
       "type": "n8n-nodes-base.code",
