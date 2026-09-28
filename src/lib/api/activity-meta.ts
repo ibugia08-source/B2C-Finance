@@ -24,6 +24,10 @@ export const API_WRITE_OPERATIONS = {
   "expenses.pay": { scope: "expenses.pay", label: "Despesa marcada como paga", entityType: "Transaction" },
   "upsells.create": { scope: "upsells.create", label: "Upsell cadastrado", entityType: "Upsell" },
   "client_status.change": { scope: "client_status.write", label: "Status do cliente alterado", entityType: "Client" },
+  "clients.update": { scope: "clients.update", label: "Cliente atualizado", entityType: "Client" },
+  "expenses.update": { scope: "expenses.update", label: "Despesa atualizada", entityType: "Transaction" },
+  "upsells.update": { scope: "upsells.update", label: "Upsell atualizado", entityType: "Upsell" },
+  "routine.complete": { scope: "routine.write", label: "Ação da rotina concluída", entityType: "RoutineAction" },
 } as const satisfies Record<string, WriteOperation>;
 
 export type WriteOperationKey = keyof typeof API_WRITE_OPERATIONS;
@@ -42,6 +46,7 @@ export const API_READ_ACTIONS: Record<string, string> = {
   "expenses.get": "Consultou despesa",
   "cash.summary": "Consultou o caixa",
   "upsells.list": "Consultou upsells",
+  "upsells.get": "Consultou upsell",
   "routine.daily": "Consultou a rotina do dia",
   "reports.daily": "Gerou relatório do dia",
   "reports.monthly": "Gerou relatório do mês",

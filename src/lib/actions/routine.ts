@@ -66,27 +66,11 @@ export async function setRoutineActionDone(
 ): Promise<ActionResult> {
   const viewer = await requirePermission("rotina.concluir_acao");
   try {
-    const key = String(itemKey ?? "").trim();
-    if (!key) return { ok: false, error: "Ação inválida." };
-
-    const routineDate = todayKey();
-    const existing = await prisma.routineItemState.findFirst({
-      where: { routineDate, itemType: "acao", itemKey: key, status: "done" },
-      select: { id: true },
-    });
-    if (done && !existing) {
-      await prisma.routineItemState.create({
-        data: {
-          routineDate,
-          itemType: "acao",
-          itemKey: key,
-          status: "done",
-          actorName: viewer.name,
-        },
-      });
-    } else if (!done && existing) {
-      await prisma.routineItemState.deleteMany({ where: { id: existing.id } });
-    }
+    // Regra em services/daily-routine (a mesma que a API usa).
+    const { concluirAcaoDaRotina } = await import("@/lib/services/daily-routine");
+    const { domainContextFor } = await import("@/lib/auth/domain-session");
+    const r = await concluirAcaoDaRotina(await domainContextFor(viewer), itemKey, done);
+    if (!r.ok) return r;
     revalidateAgency();
     return { ok: true };
   } catch (e: any) {

@@ -6,7 +6,7 @@
 
 **Base URL:** `https://b2-c-finance.vercel.app/api/v1`.
 
-Todas as rotas desta versão são **somente leitura** (`GET`). Nenhuma delas grava nada no banco. Em particular, a API **não** executa as rotinas que a interface roda ao abrir telas, como marcar cobranças vencidas ou gerar as mensalidades do mês.
+As rotas `GET` são **somente leitura** e não gravam nada no banco. Em particular, a API **não** executa as rotinas que a interface roda ao abrir telas, como marcar cobranças vencidas ou gerar as mensalidades do mês. As escritas são **controladas** (seção 4) e **nenhuma é destrutiva**.
 
 ## 1. Regras comuns
 
@@ -27,7 +27,7 @@ Todas as rotas desta versão são **somente leitura** (`GET`). Nenhuma delas gra
 - **Cache:** respostas com `Cache-Control: no-store`.
 - **Rate limit:** 120 requisições por minuto por IP. Acima disso, **429** `rate_limited`.
 - **Trilha de atividades:** toda chamada, exceto `/health`, é registrada para o dono do workspace (Configurações → Integrações → Atividades). Envie `X-B2C-Source: n8n` ou `whatsapp` para identificar a origem. Ver [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
-- **Escritas (próxima fase):** exigirão `Idempotency-Key`. A infraestrutura já está pronta; ver [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
+- **Escritas:** exigem `Idempotency-Key` (ver seção 4 e [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md)).
 
 ### Formato de sucesso
 
@@ -269,7 +269,88 @@ Serve para o agente descobrir de qual cliente o usuário está falando. Exemplo:
 - **Máscara do documento:** o CNPJ mostra filial e dígitos verificadores; o CPF mostra só os dígitos verificadores.
 - **Total:** `meta.total` diz quantos clientes casaram. Se houver vários, o agente deve perguntar ao usuário qual deles.
 
-## 4. Implementação
+## 4. Escritas controladas
+
+Toda escrita:
+
+- exige o **scope** próprio e o header **`Idempotency-Key`**;
+- roda no **dono da integração**:
+  - `ownerId` no corpo é recusado (400);
+  - id de outro dono dá 404;
+- chama a **mesma função de domínio da tela**;
+- grava o **AuditLog** (diferença campo a campo) e a linha em **Atividades da IA/API**;
+- devolve a **entidade resultante**;
+- **invalida o cache** das telas afetadas.
+
+Os corpos são validados com Zod em modo estrito: campo desconhecido dá 400. Os schemas e exemplos completos estão na OpenAPI (`/api/docs`).
+
+| Método e rota | Scope | Função de domínio | Resposta |
+|---|---|---|---|
+| `POST /clients` | `clients.create` | `salvarCliente` (duplicidade, MRR/TCV, contrato e cobranças) | 201, com o cliente (igual a `GET /clients/:id`) |
+| `PATCH /clients/:id` | `clients.update` | `salvarCliente` (sem mudar status) | 200, com o cliente |
+| `POST /clients/:id/status-changes` | `client_status.write` | `changeClientStatus` (linha do tempo) | 201, com `change` e `statusHistory` |
+| `POST /receivables/:id/payments` | `receivables.register_payment` | `registerPayment` (motor de Recebimentos) | 201, com `payment` e `receivable` |
+| `POST /expenses` | `expenses.create` | `salvarDespesa` | 201, com a despesa |
+| `PATCH /expenses/:id` | `expenses.update` | `salvarDespesa` | 200, com a despesa |
+| `POST /expenses/:id/pay` | `expenses.pay` | `setExpenseStatus` (motor) | 200, com `alreadyPaid` e `expense` |
+| `POST /upsells` | `upsells.create` | `salvarUpsell` | 201, com a oportunidade |
+| `PATCH /upsells/:id` | `upsells.update` | `salvarUpsell` | 200, com a oportunidade |
+| `POST /routine/actions/:id/complete` | `routine.write` | `concluirAcaoDaRotina` | 200, com a ação |
+
+`GET /upsells/:id` (`upsells.read`) também entrou, para ler o que foi escrito.
+
+**Fora da V1, de propósito:**
+
+- `DELETE` de qualquer coisa (clientes, cobranças, despesas, pagamentos);
+- reabrir competência;
+- gerir usuários e permissões;
+- decidir o funil do upsell (Vendido/Recusado lança ou cancela cobrança e pede a pergunta da tela);
+- despesa de cartão;
+- editar despesa paga ou a série de uma recorrência.
+
+**Status do cliente:**
+
+- **Nunca** muda por `PATCH /clients/:id`. O campo `status` no PATCH responde 400 e aponta para `POST /clients/:id/status-changes`.
+- O corpo da alteração é `{ "status": "INACTIVE", "effectiveFrom": "2026-10-01", "reason": "…" }`, e a mudança entra na linha do tempo:
+
+| Vigência | O que acontece |
+|---|---|
+| Hoje | Vale já. |
+| Futura | Fica programada; o status de hoje não muda. |
+| Mês passado | Exige `"allowRetroactive": true`, porque reescreve a carteira daquele mês. |
+| Competência fechada | 422 `competence_closed`. |
+
+**Pagamento:** antes do motor, a API confere:
+
+| Verificação | Regra | Se falhar |
+|---|---|---|
+| Dono | A cobrança pertence ao dono da integração. | 404 |
+| Estado | Cobrança quitada, removida ou renegociada não recebe. | 422 `invalid_state` |
+| Valor | Maior que zero, com no máximo 2 casas. Valor acima do saldo só com `"allowOverpayment": true` (o excedente vira crédito do cliente, como na tela). | 400 / 422 |
+| Data | `paidAt` não pode ser futura. O padrão é hoje. | 422 |
+| Competência | O mês do caixa (o do pagamento) não pode estar fechado. | 422 `competence_closed` |
+| Duplicidade | Já existe pagamento com o mesmo valor e a mesma data nesta cobrança. Para registrar mesmo assim, envie `"allowDuplicate": true`. | 409 `possible_duplicate` |
+
+Além dessas verificações:
+
+- O pagamento grava a identidade externa `api` + integração + Idempotency-Key, então a **trava única do banco** também impede o mesmo pedido de virar dois pagamentos.
+- O registro roda em **transação** no motor.
+
+**Upsell:**
+
+- **Campos:** `clientId`, `serviceId` ou `description`, `amount`, `responsibleId`, `expectedCloseDate`, `notes`, e `status` só do funil aberto (`OPPORTUNITY`, `NEGOTIATION`, `PAUSED`).
+- **`responsibleId`:** é o **colaborador** (o mesmo cadastro do responsável do cliente). O nome dele é gravado, e sem ele o responsável é herdado do cliente.
+- **Transação:** a oportunidade e os serviços dela são gravados na mesma transação.
+
+**Transações:**
+
+- Pagamento, pagar despesa e alteração de status já eram transacionais nos motores.
+- Despesa com recorrência passou a nascer numa transação (antes, uma falha no meio deixava a série pela metade).
+- O cadastro de cliente segue a regra da tela: cadastro primeiro, relação e onboarding depois, sem derrubar o cadastro se esses complementos falharem.
+
+**Códigos de erro das escritas:** `idempotency_key_required`, `idempotency_key_reused`, `idempotency_in_progress`, `duplicate`, `possible_duplicate`, `invalid_state`, `competence_closed`, `retroactive_requires_confirmation`, `unprocessable`.
+
+## 5. Implementação
 
 - **Onde está o código:**
   - Rotas: `src/app/api/v1/**/route.ts`. Cada rota é um `defineEndpoint({ scope, query, params }, handler)`, em `src/lib/api/http.ts`.
@@ -277,7 +358,8 @@ Serve para o agente descobrir de qual cliente o usuário está falando. Exemplo:
   - Filtros da carteira: foram extraídos da tela Clientes para `src/lib/services/client-query.ts`, e a tela passou a usá-los. A tela e a API usam as **mesmas** regras.
 - **Sem N+1:** listas montam um índice leve de ids e depois carregam status, inadimplência, alterações programadas e linhas da página **em lote**. O número de consultas é fixo, independente do tamanho da página.
 - **Cache por conta de serviço:** o cache (`ownerCached`) usa o principal da chamada antes do cookie. A conta de serviço tem entrada de cache própria, e uma chamada da API com cookie de navegador junto não lê a entrada da sessão.
-- **Testes:** `tests/api-v1-leitura.test.ts`, testes de integração que chamam os Route Handlers reais com token real e banco de testes. Cobrem:
+- **Escritas:** `src/lib/api/v1/*-write.ts`. Upsell e a conclusão de ação da rotina foram extraídos das actions para o domínio (`salvarUpsell`, `concluirAcaoDaRotina`), e as actions passaram a chamá-los.
+- **Testes:** `tests/api-v1-leitura.test.ts` e `tests/api-v1-escrita.test.ts`, testes de integração que chamam os Route Handlers reais com token real e banco de testes. Cobrem:
   - contrato e erros;
   - scope;
   - dono;

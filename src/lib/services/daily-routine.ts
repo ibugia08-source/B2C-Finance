@@ -5,7 +5,7 @@ import { resolvePeriod } from "@/lib/period";
 import { getCashSummary } from "@/lib/services/finance-metrics";
 import { getCollectionQueue } from "@/lib/services/collection-priority";
 import { getRenewalOutlook } from "@/lib/services/revenue-metrics";
-import { type DomainContext, domainCan, inDomain } from "@/lib/engines/domain";
+import { type DomainContext, domainCan, inDomain, domainActor, domainUser } from "@/lib/engines/domain";
 
 /**
  * ROTINA DIÁRIA — regra de domínio (extraída de app/rotina/page.tsx em
@@ -297,5 +297,44 @@ export async function montarRotinaDoDia(ctx: DomainContext) {
       ORDER,
       acoesPendentes,
     };
+  });
+}
+
+/** Dia da rotina: meia-noite local (a mesma chave que a tela sempre gravou). */
+function diaDaRotina(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Marca (ou desmarca) uma AÇÃO do checklist de hoje como concluída. Só mexe
+ * no estado do dia (RoutineItemState) — não altera cliente, cobrança nem
+ * despesa. Extraído de actions/routine.ts (28/09/2026) para a API usar a
+ * mesma regra. Idempotente: concluir o que já está concluído não duplica.
+ */
+export async function concluirAcaoDaRotina(
+  ctx: DomainContext,
+  itemKey: string,
+  done = true
+): Promise<{ ok: true; done: boolean; alreadyInState: boolean } | { ok: false; error: string }> {
+  if (!domainCan(ctx, "rotina.concluir_acao")) return { ok: false, error: "Você não tem permissão para esta ação." };
+  const key = String(itemKey ?? "").trim();
+  if (!key) return { ok: false, error: "Ação inválida." };
+  const ator = domainUser(ctx)?.name ?? domainActor(ctx).email;
+  return inDomain(ctx, async () => {
+    const routineDate = diaDaRotina();
+    const existing = await prisma.routineItemState.findFirst({
+      where: { routineDate, itemType: "acao", itemKey: key, status: "done" },
+      select: { id: true },
+    });
+    if (done && !existing) {
+      await prisma.routineItemState.create({
+        data: { routineDate, itemType: "acao", itemKey: key, status: "done", actorName: ator },
+      });
+    } else if (!done && existing) {
+      await prisma.routineItemState.deleteMany({ where: { id: existing.id } });
+    }
+    return { ok: true as const, done, alreadyInState: done ? !!existing : !existing };
   });
 }

@@ -53,10 +53,7 @@ curl -s "$B2C_API/me" -H "Authorization: Bearer $B2C_TOKEN"
   - As listas devolvem o status **da competência** que você pedir: o do último dia do mês, ou o de hoje no mês corrente.
   - Um cliente que ficou Inativo em outubro continua **Ativo em setembro**. As competências históricas são preservadas.
   - **Nunca** use o status de hoje para responder sobre um mês passado.
-- **Só leitura, por enquanto.**
-  - As escritas que virão exigirão o header `Idempotency-Key`, com um UUID novo por operação.
-  - Reenviar a mesma chamada com a mesma chave devolverá a mesma resposta, sem duplicar o efeito.
-  - **Já planeje o workflow gerando e guardando essa chave antes de chamar.**
+- **Escritas exigem `Idempotency-Key`** (receitas na seção 4.7). Reenviar a mesma chamada com a mesma chave devolve a mesma resposta, sem duplicar o efeito.
 - **Identifique a origem das chamadas.** Envie `X-B2C-Source: whatsapp` (agente) ou `X-B2C-Source: n8n` (automações). Cada chamada aparece para o administrador em **Configurações → Integrações → Atividades da IA/API**.
 - **Idempotency-Key nas escritas:** use um id estável do evento de origem, como o id da mensagem do WhatsApp (`Idempotency-Key: wa_message_3EB0C4…`). Assim, se o n8n reenviar a mesma mensagem, o pagamento não é registrado duas vezes: a resposta volta com `Idempotent-Replayed: true`. Detalhes em [`API_AUDIT_IDEMPOTENCY.md`](./API_AUDIT_IDEMPOTENCY.md).
 - **Parâmetro desconhecido dá `400`.** Um filtro digitado errado não é ignorado, então você nunca recebe a lista inteira achando que filtrou.
@@ -166,6 +163,60 @@ curl -s -G "$B2C_API/upsells" -H "Authorization: Bearer $B2C_TOKEN" \
   --data-urlencode "status=NEGOTIATION" --data-urlencode "responsible=Bianca"
 ```
 
+### 4.7 Escritas (sempre com Idempotency-Key)
+
+Use como chave um id **estável do evento de origem**, como o id da mensagem do WhatsApp. Se o n8n reenviar a mesma mensagem, a API devolve a resposta original (`Idempotent-Replayed: true`) e não executa de novo.
+
+```bash
+# Registrar pagamento (a cobrança vem de GET /receivables?clientId=…&status=open)
+curl -s -X POST "$B2C_API/receivables/$BILLING_ID/payments" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: wa_message_3EB0C4A1F2" -H "X-B2C-Source: whatsapp" \
+  -d '{ "amount": 1500, "paidAt": "2026-09-28", "method": "PIX" }'
+
+# Alterar status COM VIGÊNCIA (nunca por PATCH)
+curl -s -X POST "$B2C_API/clients/$CLIENT_ID/status-changes" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: wa_message_3EB0C4A1F3" \
+  -d '{ "status": "INACTIVE", "effectiveFrom": "2026-10-01", "reason": "Encerrou o contrato" }'
+
+# Cadastrar cliente
+curl -s -X POST "$B2C_API/clients" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: n8n-exec-4812-cliente" \
+  -d '{ "name": "Face Love Estética", "modality": "MRR", "monthlyValue": 1500, "paymentDay": 10, "contractMonths": 12, "startedAt": "2026-10-01" }'
+
+# Lançar e pagar despesa
+curl -s -X POST "$B2C_API/expenses" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: n8n-exec-4812-despesa" \
+  -d '{ "description": "Licença do CRM", "amount": 300, "dueDate": "2026-10-10", "category": "Ferramentas" }'
+curl -s -X POST "$B2C_API/expenses/$EXPENSE_ID/pay" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Idempotency-Key: n8n-exec-4813-pagar"
+
+# Nova oportunidade de upsell
+curl -s -X POST "$B2C_API/upsells" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: wa_message_3EB0C4A1F4" \
+  -d '{ "clientId": "'$CLIENT_ID'", "description": "Gestão de tráfego pago", "amount": 900 }'
+
+# Concluir ação da rotina (a chave vem de GET /routine/daily; codifique ":" como %3A)
+curl -s -X POST "$B2C_API/routine/actions/despesas-vencidas/complete" \
+  -H "Authorization: Bearer $B2C_TOKEN" -H "Idempotency-Key: rotina-2026-09-28-despesas"
+```
+
+**Antes de escrever, o agente deve:**
+
+- **Confirmar com o usuário**, sempre, o que vai fazer: cliente, valor e data. A API valida muito, mas não sabe a intenção.
+- **Tratar cada resposta de erro:**
+
+| Resposta | O que fazer |
+|---|---|
+| 409 `possible_duplicate` | Mostrar o pagamento que já existe. Só reenviar com `"allowDuplicate": true` se o usuário confirmar que é outro. |
+| 422 `retroactive_requires_confirmation` | Explicar que a mudança reescreve um mês passado. Reenviar com `"allowRetroactive": true` só com confirmação. |
+| 422 `unprocessable` (valor acima do saldo) | Perguntar se o excedente deve virar crédito (`"allowOverpayment": true`). |
+| 422 `idempotency_key_reused` | A mesma chave foi usada com outros dados. Isso é bug no workflow: gere uma chave por pedido. |
+
 ## 5. Paginação
 
 As listas aceitam `page` (a partir de 1) e `pageSize` (padrão 50, máximo 200). Percorra até `meta.pagination.totalPages`:
@@ -213,7 +264,7 @@ curl -s -G "$B2C_API/clients" -H "Authorization: Bearer $B2C_TOKEN" --data-urlen
 - **Busca antes de agir:** sempre `/search` → confirmação do usuário quando houver mais de um resultado → `id`.
 - **Competência explícita:** para perguntas sobre um mês, passe `competence`. Sem ela, a API usa a competência **atual**.
 - **Não expor além do necessário:** a busca e as listas trazem o documento mascarado. Só peça o detalhe (`/clients/:id`) quando precisar do dado completo, e não repita o documento inteiro em canais abertos.
-- **Scopes mínimos:** um agente só de consulta não precisa de nenhum scope de escrita (`*.create`, `*.update`, `*.pay`, `register_payment`).
+- **Scopes mínimos:** um agente só de consulta não precisa de nenhum scope de escrita (`*.create`, `*.update`, `*.write`, `*.pay`, `register_payment`).
 - **Token:**
   - Guarde-o só no cofre de credenciais.
   - Rotacione a chave ao trocar de responsável pelo workflow.

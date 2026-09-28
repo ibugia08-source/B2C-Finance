@@ -115,7 +115,10 @@ export async function salvarDespesa(ctx: DomainContext, input: ExpenseInput): Pr
       } else {
         // ===== Criação (+ materialização da recorrência) =====
         const interval = intervalOf(parsed.recurrence, parsed.recurrenceInterval);
-        const first = await prisma.transaction.create({
+        // A despesa e as ocorrências da recorrência nascem JUNTAS (transação):
+        // antes, uma falha no meio deixava a série pela metade.
+        return await prisma.$transaction(async (tx) => {
+        const first = await tx.transaction.create({
           data: { ...base, belongsTo: "empresa" },
         });
 
@@ -134,15 +137,17 @@ export async function salvarDespesa(ctx: DomainContext, input: ExpenseInput): Pr
               recurrenceGroupId: first.id,
             });
           }
-          await prisma.transaction.update({
+          await tx.transaction.update({
             where: { id: first.id },
             data: { recurrenceGroupId: first.id },
           });
           if (occurrences.length > 0) {
-            await prisma.transaction.createMany({ data: occurrences });
+            await tx.transaction.createMany({ data: occurrences });
           }
         }
+        return { ok: true as const, id: first.id };
+        });
       }
-    return { ok: true };
+    return { ok: true, id: parsed.id };
   });
 }

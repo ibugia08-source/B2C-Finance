@@ -3,6 +3,8 @@ import { ApiError } from "@/lib/api/auth";
 import { dataSchema, defineEndpoint, metaDePaginacao, paginacao } from "@/lib/api/http";
 import { competenciaAtual, intervaloDaCompetencia, intervaloDeDias } from "@/lib/api/v1/common";
 import { EXPENSE_STATUSES, listarDespesasApi } from "@/lib/api/v1/expenses";
+import { ExpenseCreateBody, criarDespesaApi } from "@/lib/api/v1/expenses-write";
+import { revalidateFinance } from "@/lib/revalidate";
 
 /**
  * GET /api/v1/expenses — despesas pela data do lançamento (padrão: mês atual).
@@ -40,3 +42,13 @@ export const GET = defineEndpoint({ action: "expenses.list", scope: "expenses.re
     },
   };
 });
+
+/** POST /api/v1/expenses — lança despesa (nasce pendente; pagar é /pay). */
+export const POST = defineEndpoint(
+  { action: "expenses.create", scope: "expenses.create", write: { operation: "expenses.create" }, body: ExpenseCreateBody },
+  async ({ ctx, body }) => {
+    const d = await criarDespesaApi(ctx, body);
+    revalidateFinance();
+    return { status: 201, data: d, audit: { entityType: "Transaction", entityId: d.id, label: d.description, amount: d.amount } };
+  }
+);

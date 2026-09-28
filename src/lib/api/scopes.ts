@@ -78,6 +78,7 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
     scopes: [
       { id: "dashboard.read", label: "Ler indicadores do dashboard" },
       { id: "routine.read", label: "Ler a rotina do dia" },
+      { id: "routine.write", label: "Concluir ações da rotina do dia", write: true },
       { id: "reports.read", label: "Executar relatórios" },
     ],
   },
@@ -162,6 +163,7 @@ export const PERMISSION_TO_SCOPE: Readonly<Record<string, string>> = {
   "dashboard.visualizar": "dashboard.read",
   "dashboard.ver_financeiro": "dashboard.read",
   "rotina.visualizar": "routine.read",
+  "rotina.concluir_acao": "routine.write",
   "relatorios.visualizar": "reports.read",
 };
 

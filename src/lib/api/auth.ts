@@ -43,6 +43,11 @@ export type ApiErrorCode =
   | "idempotency_key_reused"
   | "idempotency_in_progress"
   | "unprocessable"
+  | "duplicate"
+  | "possible_duplicate"
+  | "invalid_state"
+  | "competence_closed"
+  | "retroactive_requires_confirmation"
   | "internal_error";
 
 export class ApiError extends Error {

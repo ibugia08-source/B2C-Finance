@@ -161,3 +161,148 @@ export async function excluirUpsell(
     return { ok: true, clientId: existing.clientId };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Cadastro / edição da oportunidade (extraído de actions/upsells.ts
+// saveUpsell em 28/09/2026, sem mudança de regra — a API usa a mesma função)
+// ---------------------------------------------------------------------------
+
+export const UpsellInputSchema = z.object({
+  id: z.string().optional(),
+  clientId: z.string().min(1, "Selecione o cliente."),
+  serviceId: z.string().nullable(),
+  offerId: z.string().nullable(),
+  title: z.string().trim().nullable(),
+  value: z.number().nonnegative(),
+  responsible: z.string().trim().nullable(),
+  status: z.nativeEnum(UpsellStatus).default("OPPORTUNITY"),
+  expectedCloseAt: z.date().nullable(),
+  notes: z.string().trim().nullable(),
+  /** Serviços da oportunidade, cada um com seu valor. */
+  services: z
+    .array(z.object({ serviceId: z.string().min(1), unitPrice: z.number().nonnegative() }))
+    .default([]),
+});
+export type UpsellInput = z.input<typeof UpsellInputSchema>;
+
+/**
+ * Cria (sem `id`) ou edita a oportunidade. Decidir o funil (WON/LOST, ou
+ * sair de WON) exige `upsell.marcar_vendido` — pelo principal do contexto.
+ * A oportunidade e os serviços dela são gravados na MESMA transação.
+ */
+export async function salvarUpsell(
+  ctx: DomainContext,
+  input: UpsellInput
+): Promise<DomainResult> {
+  const parsed = UpsellInputSchema.parse(input);
+  const { domainCan } = await import("@/lib/engines/domain");
+  return inDomain(ctx, async () => {
+    const services = parsed.services;
+    const servicesSum = services.reduce((s, it) => s + it.unitPrice, 0);
+    const podeDecidir = domainCan(ctx, "upsell.marcar_vendido");
+
+    const anterior = parsed.id
+      ? await prisma.upsell.findFirst({ where: { id: parsed.id } })
+      : null;
+    if (parsed.id && !anterior) return { ok: false, error: "Oportunidade não encontrada." };
+
+    // Decidir o funil (vendido/recusado) exige a permissão própria — o
+    // formulário de edição não pode contornar o gate do quadro, senão uma
+    // venda entra sem a pergunta de lançamento e nunca vira cobrança
+    // (auditoria 2026-08-13).
+    if (anterior?.status === "WON" && parsed.status !== "WON" && !podeDecidir)
+      return {
+        ok: false,
+        error: "Desfazer uma venda é decisão do funil — exige a permissão \"Marcar como vendido\".",
+      };
+    if ((parsed.status === "WON" || parsed.status === "LOST") && anterior?.status !== parsed.status && !podeDecidir)
+      return {
+        ok: false,
+        error:
+          "Marcar como vendido/recusado é decisão do funil — mova o card no quadro (exige a permissão \"Marcar como vendido\").",
+      };
+
+    // Valor da oportunidade: informado, ou a soma dos serviços associados.
+    const value = parsed.value > 0 ? parsed.value : servicesSum;
+    if (!(value > 0)) return { ok: false, error: "Informe o valor da oportunidade (ou dos serviços)." };
+
+    // Cliente precisa pertencer ao dono atual (findFirst é escopado).
+    const owned = await prisma.client.findFirst({
+      where: { id: parsed.clientId },
+      select: { id: true, salesOwner: true },
+    });
+    if (!owned) return { ok: false, error: "Cliente não encontrado." };
+
+    // Serviços precisam existir no catálogo do dono.
+    const idsServicos = [...new Set([...services.map((s) => s.serviceId), ...(parsed.serviceId ? [parsed.serviceId] : [])])];
+    if (idsServicos.length > 0) {
+      const found = await prisma.service.count({ where: { id: { in: idsServicos } } });
+      if (found !== idsServicos.length) return { ok: false, error: "Serviço não encontrado no catálogo." };
+    }
+
+    const data = {
+      clientId: parsed.clientId,
+      // serviceId legado continua aceito (compatibilidade); a associação
+      // principal agora é a lista services (N:N com valor).
+      serviceId: parsed.serviceId ?? services[0]?.serviceId ?? null,
+      offerId: parsed.offerId,
+      title: parsed.title,
+      value,
+      // Sem responsável informado → herda o responsável do cliente.
+      responsible: parsed.responsible ?? owned.salesOwner,
+      status: parsed.status,
+      expectedCloseAt: parsed.expectedCloseAt,
+      notes: parsed.notes,
+      closedAt: parsed.status === "WON" || parsed.status === "LOST" ? new Date() : null,
+    };
+
+    let aviso: string | undefined;
+    let billingId = anterior?.billingId ?? null;
+    if (anterior) {
+      if (anterior.status === "WON" && parsed.status !== "WON") {
+        const r = await desfazerCobrancaDoUpsell(anterior.billingId, domainActor(ctx).email);
+        billingId = r.billingId;
+        aviso = r.warning;
+      } else if (anterior.status === "WON" && anterior.billingId && n(anterior.value) !== value) {
+        // Venda com valor corrigido: a cobrança ainda sem pagamento acompanha.
+        const b = await prisma.billing.findFirst({
+          where: { id: anterior.billingId },
+          select: { id: true, status: true, paidTotal: true },
+        });
+        if (b && b.status !== "CANCELED" && n(b.paidTotal) === 0) {
+          await prisma.billing.update({ where: { id: b.id }, data: { amount: value } });
+        } else if (b && n(b.paidTotal) > 0) {
+          aviso = "A cobrança do upsell já tem pagamento — o valor dela não foi alterado.";
+        }
+      }
+    }
+
+    const id = await prisma.$transaction(async (tx) => {
+      let upsellId: string;
+      if (anterior) {
+        await tx.upsell.update({
+          where: { id: anterior.id },
+          data: {
+            ...data,
+            billingId,
+            // Preserva a data de fechamento original se já estava fechada.
+            closedAt:
+              parsed.status === "WON" || parsed.status === "LOST" ? anterior.closedAt ?? new Date() : null,
+          },
+        });
+        upsellId = anterior.id;
+      } else {
+        upsellId = (await tx.upsell.create({ data, select: { id: true } })).id;
+      }
+      // Sincroniza os serviços da oportunidade (replace simples).
+      await tx.upsellService.deleteMany({ where: { upsellId } });
+      if (services.length > 0) {
+        await tx.upsellService.createMany({
+          data: services.map((s) => ({ upsellId, serviceId: s.serviceId, unitPrice: s.unitPrice })),
+        });
+      }
+      return upsellId;
+    });
+    return { ok: true, id, ...(aviso ? { warning: aviso } : {}) };
+  });
+}

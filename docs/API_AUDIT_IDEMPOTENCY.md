@@ -1,6 +1,6 @@
 # API — trilha de atividades e Idempotency-Key
 
-> Implementado em 28/09/2026, antes das rotas de escrita. Contrato público em [`API.md`](./API.md); segurança do token em [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md).
+> Implementado em 28/09/2026, antes das rotas de escrita, que hoje o usam (ver [`API.md`](./API.md) §4). Contrato público em [`API.md`](./API.md); segurança do token em [`API_AUTHENTICATION.md`](./API_AUTHENTICATION.md).
 
 ## 1. Duas trilhas, dois propósitos
 
@@ -92,6 +92,10 @@ Reaproveitar o `AuditLog` para as chamadas foi descartado. A trava append-only d
 | `expenses.pay` | `expenses.pay` | Despesa marcada como paga |
 | `upsells.create` | `upsells.create` | Upsell cadastrado |
 | `client_status.change` | `client_status.write` | Status do cliente alterado |
+| `clients.update` | `clients.update` | Cliente atualizado |
+| `expenses.update` | `expenses.update` | Despesa atualizada |
+| `upsells.update` | `upsells.update` | Upsell atualizado |
+| `routine.complete` | `routine.write` | Ação da rotina concluída |
 
 Uma rota de escrita é declarada assim:
 

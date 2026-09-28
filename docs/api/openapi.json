@@ -3,8 +3,8 @@
   "info": {
     "title": "B2C Finance API",
     "version": "1.0.0",
-    "summary": "API V1 de leitura do B2C Finance (contas de serviço com scopes).",
-    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, reports.read.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas (futuras) e Idempotency-Key\nEsta versão é somente leitura; a infraestrutura das escritas já está pronta. Toda escrita exigirá o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
+    "summary": "API V1 do B2C Finance: leitura e escritas controladas (contas de serviço com scopes).",
+    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, routine.write, reports.read.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas e Idempotency-Key\nA V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por `POST /clients/{id}/status-changes`, com data de vigência. Toda escrita exige o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
   },
   "servers": [
     {
@@ -598,6 +598,122 @@
             "$ref": "#/components/responses/InternalError"
           }
         }
+      },
+      "post": {
+        "operationId": "createClient",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Cadastrar cliente",
+        "description": "Mesma regra do formulário: duplicidade, modalidade MRR/TCV, contrato e cobranças, expectativa de renovação.\n\n**Scope obrigatório:** `clients.create`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "clients.create"
+            ]
+          }
+        ],
+        "x-required-scope": "clients.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientCreate"
+              },
+              "example": {
+                "name": "Face Love Estética",
+                "legalName": "Face Love Clínica Ltda",
+                "modality": "MRR",
+                "monthlyValue": 1500,
+                "paymentDay": 10,
+                "contractMonths": 12,
+                "startedAt": "2026-10-01"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ClientDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
       }
     },
     "/clients/{id}": {
@@ -676,6 +792,121 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateClient",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Atualizar cadastro do cliente",
+        "description": "\n\n**Scope obrigatório:** `clients.update`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "clients.update"
+            ]
+          }
+        ],
+        "x-required-scope": "clients.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPatch"
+              },
+              "example": {
+                "phone": "+55 71 99999-0000",
+                "city": "Salvador",
+                "state": "BA"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ClientDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1263,6 +1494,120 @@
             "$ref": "#/components/responses/InternalError"
           }
         }
+      },
+      "post": {
+        "operationId": "createExpense",
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Lançar despesa",
+        "description": "Nasce pendente (pagar é `POST /expenses/{id}/pay`). Cartão de crédito fica fora da V1.\n\n**Scope obrigatório:** `expenses.create`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "expenses.create"
+            ]
+          }
+        ],
+        "x-required-scope": "expenses.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseCreate"
+              },
+              "example": {
+                "description": "Licença do CRM",
+                "amount": 300,
+                "dueDate": "2026-10-10",
+                "category": "Ferramentas",
+                "type": "TOOL"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ExpenseDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
       }
     },
     "/expenses/{id}": {
@@ -1378,6 +1723,120 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateExpense",
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Atualizar despesa pendente",
+        "description": "\n\n**Scope obrigatório:** `expenses.update`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "expenses.update"
+            ]
+          }
+        ],
+        "x-required-scope": "expenses.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpensePatch"
+              },
+              "example": {
+                "amount": 350,
+                "dueDate": "2026-10-15"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ExpenseDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1592,6 +2051,120 @@
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUpsell",
+        "tags": [
+          "Upsell"
+        ],
+        "summary": "Cadastrar oportunidade",
+        "description": "\n\n**Scope obrigatório:** `upsells.create`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "upsells.create"
+            ]
+          }
+        ],
+        "x-required-scope": "upsells.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellCreate"
+              },
+              "example": {
+                "clientId": "cmu1a2b3c0001xyz",
+                "description": "Gestão de tráfego pago",
+                "amount": 900,
+                "responsibleId": "cmuemp0001",
+                "expectedCloseDate": "2026-10-31"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Upsell"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -2049,6 +2622,684 @@
           }
         }
       }
+    },
+    "/clients/{id}/status-changes": {
+      "post": {
+        "operationId": "changeClientStatus",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Alterar status com vigência",
+        "description": "Novo status A PARTIR DE `effectiveFrom`, na linha do tempo — nunca uma troca global. Hoje: vale já. Futura: fica programada (o status de hoje não muda). Mês passado: exige `allowRetroactive: true`. Competência fechada: 422.\n\n**Scope obrigatório:** `client_status.write`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "client_status.write"
+            ]
+          }
+        ],
+        "x-required-scope": "client_status.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusChange"
+              },
+              "example": {
+                "status": "INACTIVE",
+                "effectiveFrom": "2026-10-01",
+                "reason": "Encerrou o contrato"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StatusChangeResult"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/receivables/{id}/payments": {
+      "post": {
+        "operationId": "registerPayment",
+        "tags": [
+          "Recebimentos"
+        ],
+        "summary": "Registrar pagamento",
+        "description": "Motor de Recebimentos. Valida: cobrança do dono (404), estado (quitada/removida/renegociada → 422), valor (acima do saldo só com `allowOverpayment`), data (não futura), competência do caixa (fechada → 422) e duplicidade (pagamento igual → 409, salvo `allowDuplicate`).\n\n**Scope obrigatório:** `receivables.register_payment`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "receivables.register_payment"
+            ]
+          }
+        ],
+        "x-required-scope": "receivables.register_payment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentCreate"
+              },
+              "example": {
+                "amount": 1500,
+                "paidAt": "2026-09-28",
+                "method": "PIX"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaymentResult"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/expenses/{id}/pay": {
+      "post": {
+        "operationId": "payExpense",
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Marcar despesa como paga",
+        "description": "Motor de despesas (guarda de período, auditoria). Já paga → 200 com `alreadyPaid: true`. Corpo vazio (`{}`).\n\n**Scope obrigatório:** `expenses.pay`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "expenses.pay"
+            ]
+          }
+        ],
+        "x-required-scope": "expenses.pay",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "alreadyPaid": {
+                          "type": "boolean"
+                        },
+                        "expense": {
+                          "$ref": "#/components/schemas/ExpenseDetail"
+                        }
+                      },
+                      "required": [
+                        "alreadyPaid",
+                        "expense"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/upsells/{id}": {
+      "get": {
+        "operationId": "getUpsell",
+        "tags": [
+          "Upsell"
+        ],
+        "summary": "Oportunidade",
+        "description": "\n\n**Scope obrigatório:** `upsells.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "upsells.read"
+            ]
+          }
+        ],
+        "x-required-scope": "upsells.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Upsell"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateUpsell",
+        "tags": [
+          "Upsell"
+        ],
+        "summary": "Atualizar oportunidade em aberto",
+        "description": "\n\n**Scope obrigatório:** `upsells.update`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "upsells.update"
+            ]
+          }
+        ],
+        "x-required-scope": "upsells.update",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsellPatch"
+              },
+              "example": {
+                "amount": 1200,
+                "status": "NEGOTIATION"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Upsell"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/routine/actions/{id}/complete": {
+      "post": {
+        "operationId": "completeRoutineAction",
+        "tags": [
+          "Painéis"
+        ],
+        "summary": "Concluir ação da rotina de hoje",
+        "description": "`id` = a chave da ação em `GET /routine/daily` (codificada na URL, ex.: `cobrar%3Acm…`). Só muda o estado do dia.\n\n**Scope obrigatório:** `routine.write`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "routine.write"
+            ]
+          }
+        ],
+        "x-required-scope": "routine.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Chave da ação.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9:_.%-]{1,200}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/RoutineActionResult"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2104,6 +3355,17 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,64}$"
         }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Obrigatória em toda escrita. A mesma integração + a mesma chave executa UMA vez; a repetição devolve a resposta original (header `Idempotent-Replayed: true`). Use um id estável do evento de origem (ex.: id da mensagem do WhatsApp).",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,255}$"
+        },
+        "example": "wa_message_3EB0C4A1F2"
       },
       "Source": {
         "name": "x-b2c-source",
@@ -2218,7 +3480,12 @@
                   "idempotency_key_required",
                   "idempotency_key_reused",
                   "idempotency_in_progress",
-                  "unprocessable"
+                  "unprocessable",
+                  "duplicate",
+                  "possible_duplicate",
+                  "invalid_state",
+                  "competence_closed",
+                  "retroactive_requires_confirmation"
                 ]
               },
               "message": {
@@ -3260,6 +4527,12 @@
               "null"
             ],
             "description": "Cobrança lançada ao vender."
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -3274,7 +4547,8 @@
           "createdAt",
           "offer",
           "services",
-          "billingId"
+          "billingId",
+          "notes"
         ]
       },
       "Metric": {
@@ -4058,6 +5332,848 @@
           "score"
         ]
       },
+      "ClientCreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "CNPJ/CPF."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "email"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nicheId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nicho do catálogo."
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "UF (2 letras).",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "legalRepresentative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responsibleId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Colaborador responsável (Employee)."
+          },
+          "operationsOwner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paymentDay": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Dia do pagamento MRR (1–31).",
+            "minimum": 1,
+            "maximum": 31
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modality": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "MRR exige monthlyValue e paymentDay; TCV exige totalContractValue, contractMonths e startedAt.",
+            "enum": [
+              "MRR",
+              "TCV",
+              null
+            ]
+          },
+          "monthlyValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "totalContractValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "contractMonths": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 120
+          },
+          "contractIndefinite": {
+            "type": "boolean",
+            "description": "Prazo Indeterminado (só MRR)."
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Entrada do cliente.",
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "initialStatus": {
+            "type": "string",
+            "description": "Status a partir de hoje (padrão ACTIVE).",
+            "enum": [
+              "ACTIVE",
+              "LEAD",
+              "PROSPECT"
+            ],
+            "default": "ACTIVE"
+          },
+          "allowDuplicate": {
+            "type": "boolean",
+            "description": "Cadastrar mesmo com nome/documento igual a outro cliente."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "ClientPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Os mesmos campos do cadastro, todos opcionais. **Sem `status`**: status muda só por `POST /clients/{id}/status-changes`.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nicheId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "legalRepresentative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "responsibleId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationsOwner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paymentDay": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modality": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MRR",
+              "TCV",
+              null
+            ]
+          },
+          "monthlyValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "totalContractValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "contractMonths": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "contractIndefinite": {
+            "type": "boolean"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StatusChange": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "LEAD",
+              "PROSPECT",
+              "ACTIVE",
+              "INACTIVE",
+              "PAUSED",
+              "RENEWAL",
+              "DELINQUENT",
+              "CHURNED"
+            ]
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "description": "Primeiro dia em que o novo status vale. Futura = programada; mês passado = retroativa.",
+            "format": "date"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "renewalCompetence": {
+            "type": "string",
+            "description": "Perda: competência da renovação frustrada (AAAA-MM)."
+          },
+          "allowRetroactive": {
+            "type": "boolean",
+            "description": "Obrigatório (true) para vigência em mês que já passou — reescreve a carteira daquele mês."
+          }
+        },
+        "required": [
+          "status",
+          "effectiveFrom"
+        ],
+        "additionalProperties": false
+      },
+      "StatusChangeResult": {
+        "type": "object",
+        "properties": {
+          "change": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string"
+              },
+              "effectiveFrom": {
+                "type": "string",
+                "description": "Data de calendário (AAAA-MM-DD).",
+                "format": "date"
+              },
+              "scheduled": {
+                "type": "boolean",
+                "description": "Vigência futura: registrada sem mudar o status de hoje."
+              },
+              "currentStatusChanged": {
+                "type": "boolean"
+              },
+              "warning": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "effectiveFrom",
+              "scheduled",
+              "currentStatusChanged"
+            ]
+          },
+          "statusHistory": {
+            "$ref": "#/components/schemas/StatusHistory"
+          }
+        },
+        "required": [
+          "change",
+          "statusHistory"
+        ]
+      },
+      "PaymentCreate": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "Valor pago (> 0, até 2 casas). Acima do saldo só com allowOverpayment."
+          },
+          "paidAt": {
+            "type": "string",
+            "description": "Dia do pagamento (padrão: hoje). Não pode ser futuro; o mês do caixa não pode estar fechado.",
+            "format": "date"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "PIX",
+              "TRANSFER",
+              "BOLETO",
+              "CARD",
+              "CASH",
+              "OTHER"
+            ],
+            "default": "PIX"
+          },
+          "accountId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Conta bancária do dono."
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "allowOverpayment": {
+            "type": "boolean",
+            "description": "Aceitar valor acima do saldo (o excedente vira crédito do cliente)."
+          },
+          "allowDuplicate": {
+            "type": "boolean",
+            "description": "Aceitar mesmo havendo pagamento igual (valor e data) nesta cobrança."
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "additionalProperties": false
+      },
+      "PaymentResult": {
+        "type": "object",
+        "properties": {
+          "payment": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "paidAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "method": {
+                "type": "string"
+              },
+              "fullyPaid": {
+                "type": "boolean"
+              },
+              "paidLate": {
+                "type": "boolean"
+              },
+              "paidInDifferentMonth": {
+                "type": "boolean"
+              },
+              "creditGenerated": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "creditApplied": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "creditRemaining": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "id",
+              "amount",
+              "paidAt",
+              "method",
+              "fullyPaid",
+              "paidLate",
+              "paidInDifferentMonth",
+              "creditGenerated",
+              "creditApplied",
+              "creditRemaining"
+            ]
+          },
+          "receivable": {
+            "$ref": "#/components/schemas/ReceivableDetail"
+          }
+        },
+        "required": [
+          "payment",
+          "receivable"
+        ]
+      },
+      "ExpenseCreate": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "Vencimento (define o mês da despesa).",
+            "format": "date"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "description": "Nome da categoria (alternativa a categoryId)."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "FIXED",
+              "VARIABLE",
+              "TAX",
+              "PAYROLL",
+              "TOOL",
+              "ADS",
+              "LOAN",
+              "OTHER"
+            ],
+            "default": "OTHER"
+          },
+          "recurrence": {
+            "type": "string",
+            "description": "Recorrência: cria as ocorrências dos próximos 12 meses.",
+            "enum": [
+              "NONE",
+              "MONTHLY",
+              "QUARTERLY",
+              "SEMIANNUAL",
+              "ANNUAL",
+              "CUSTOM"
+            ],
+            "default": "NONE"
+          },
+          "recurrenceInterval": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Meses entre ocorrências (CUSTOM).",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "description",
+          "amount",
+          "dueDate"
+        ],
+        "additionalProperties": false
+      },
+      "ExpensePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Só despesa pendente; só esta ocorrência. **Sem `status`**: para pagar, `POST /expenses/{id}/pay`.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "categoryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "FIXED",
+              "VARIABLE",
+              "TAX",
+              "PAYROLL",
+              "TOOL",
+              "ADS",
+              "LOAN",
+              "OTHER"
+            ]
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ExpenseDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Expense"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "installment": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "number": {
+                    "type": "integer"
+                  },
+                  "total": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "number",
+                  "total"
+                ]
+              }
+            },
+            "required": [
+              "notes",
+              "installment"
+            ]
+          }
+        ]
+      },
+      "UpsellCreate": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "serviceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Serviço do catálogo (ou use description)."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Descrição curta (ou use serviceId)."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor potencial."
+          },
+          "responsibleId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Colaborador responsável (Employee). Sem ele, herda o do cliente."
+          },
+          "expectedCloseDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Só o funil aberto — vender/recusar é decisão da tela.",
+            "enum": [
+              "OPPORTUNITY",
+              "NEGOTIATION",
+              "PAUSED"
+            ],
+            "default": "OPPORTUNITY"
+          }
+        },
+        "required": [
+          "clientId",
+          "amount"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "serviceId"
+            ]
+          },
+          {
+            "required": [
+              "description"
+            ]
+          }
+        ]
+      },
+      "UpsellPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Só oportunidade em aberto (não WON/LOST).",
+        "properties": {
+          "serviceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "responsibleId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expectedCloseDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPPORTUNITY",
+              "NEGOTIATION",
+              "PAUSED"
+            ]
+          }
+        }
+      },
+      "RoutineActionResult": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "alta",
+              "media",
+              "baixa"
+            ]
+          },
+          "done": {
+            "const": true
+          },
+          "alreadyDone": {
+            "type": "boolean",
+            "description": "Já estava concluída (nada mudou)."
+          }
+        },
+        "required": [
+          "key",
+          "text",
+          "priority",
+          "done",
+          "alreadyDone"
+        ]
+      },
       "ServiceAccountMe": {
         "type": "object",
         "properties": {
@@ -4097,6 +6213,7 @@
                 "upsells.update",
                 "dashboard.read",
                 "routine.read",
+                "routine.write",
                 "reports.read"
               ]
             }
@@ -4219,6 +6336,46 @@
               "error": {
                 "code": "rate_limited",
                 "message": "Muitas requisições. Aguarde um minuto."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflito: `idempotency_in_progress` (a 1ª chamada com a chave ainda roda), `duplicate` (cliente com mesmo nome/documento — reenvie com `allowDuplicate`) ou `possible_duplicate` (pagamento igual já registrado — reenvie com `allowDuplicate`).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "possible_duplicate",
+                "message": "Já existe um pagamento de 1500.00 em 2026-09-28 nesta cobrança. Se for mesmo outro pagamento, envie \"allowDuplicate\": true."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "Recusado pela regra de negócio: `unprocessable`, `invalid_state` (ex.: cobrança quitada/removida, despesa paga), `competence_closed`, `retroactive_requires_confirmation` ou `idempotency_key_reused` (mesma chave, outros dados). Recusas de regra ficam guardadas na chave: repetir devolve a mesma recusa.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "competence_closed",
+                "message": "O caixa de 08/2026 está fechado."
               },
               "meta": {
                 "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
@@ -4367,6 +6524,11 @@
           "scope": "routine.read",
           "description": "Ler a rotina do dia",
           "write": false
+        },
+        {
+          "scope": "routine.write",
+          "description": "Concluir ações da rotina do dia",
+          "write": true
         },
         {
           "scope": "reports.read",

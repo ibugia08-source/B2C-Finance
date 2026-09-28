@@ -112,6 +112,8 @@ export type EndpointArgs<Q, P> = {
   query: Q;
   params: P;
   requestId: string;
+  /** Escritas: a Idempotency-Key desta chamada (null em leituras). */
+  idempotencyKey: string | null;
 };
 
 export type EndpointResult = {
@@ -222,10 +224,14 @@ export function defineEndpoint<
       let corpo: unknown = undefined;
       if (opts.body) {
         let cru: unknown;
-        try {
-          cru = await req.json();
-        } catch {
-          throw new ApiError(400, "validation_error", "Corpo da requisição não é JSON válido.");
+        const texto = await req.text();
+        if (!texto.trim()) cru = {}; // POST sem corpo (ex.: /expenses/:id/pay) = objeto vazio
+        else {
+          try {
+            cru = JSON.parse(texto);
+          } catch {
+            throw new ApiError(400, "validation_error", "Corpo da requisição não é JSON válido.");
+          }
         }
         const b = opts.body.safeParse(cru);
         if (!b.success) throw erroDeValidacao("body", b.error);
@@ -268,7 +274,7 @@ export function defineEndpoint<
       const ctx = apiDomainContext(auth, requestId);
       const a = auth;
       const out = await runWithPrincipal(auth.ownerId, auth.principal, async () =>
-        await handler({ req, auth: a, ctx, query: q.data, params: p.data, body: corpo as z.output<B>, requestId })
+        await handler({ req, auth: a, ctx, query: q.data, params: p.data, body: corpo as z.output<B>, requestId, idempotencyKey: chave })
       );
       const status = out.status ?? 200;
       const sucesso = corpoDeSucesso(out.data, requestId, {

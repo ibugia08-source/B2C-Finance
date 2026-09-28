@@ -2,6 +2,8 @@ import { z } from "zod";
 import { competenciaSchema, defineEndpoint, metaDePaginacao, paginacao } from "@/lib/api/http";
 import { CLIENT_STATUSES, competenciaAtual } from "@/lib/api/v1/common";
 import { listarClientesApi } from "@/lib/api/v1/clients";
+import { ClientCreateBody, criarClienteApi } from "@/lib/api/v1/clients-write";
+import { revalidateAgency } from "@/lib/revalidate";
 
 /**
  * GET /api/v1/clients — carteira da competência (status pela linha do tempo).
@@ -31,3 +33,16 @@ export const GET = defineEndpoint({ action: "clients.list", scope: "clients.read
     meta: { ...metaDePaginacao(query.page, query.pageSize, r.total), statusReference: r.statusReference },
   };
 });
+
+/**
+ * POST /api/v1/clients — cadastra (mesma regra do formulário: duplicidade,
+ * modalidade, contrato e cobranças). Status inicial vale a partir de hoje.
+ */
+export const POST = defineEndpoint(
+  { action: "clients.create", scope: "clients.create", write: { operation: "clients.create" }, body: ClientCreateBody },
+  async ({ ctx, body }) => {
+    const c = await criarClienteApi(ctx, body);
+    revalidateAgency({ clientId: c.id });
+    return { status: 201, data: c, audit: { entityType: "Client", entityId: c.id, label: c.name } };
+  }
+);

@@ -65,6 +65,15 @@ const PARAMETERS = {
     "2026-09"
   ),
   Id: { name: "id", in: "path", required: true, description: "Id do registro.", schema: str(undefined, { pattern: "^[A-Za-z0-9_-]{1,64}$" }) },
+  IdempotencyKey: {
+    name: "Idempotency-Key",
+    in: "header",
+    required: true,
+    description:
+      "Obrigatória em toda escrita. A mesma integração + a mesma chave executa UMA vez; a repetição devolve a resposta original (header `Idempotent-Replayed: true`). Use um id estável do evento de origem (ex.: id da mensagem do WhatsApp).",
+    schema: str(undefined, { pattern: "^[A-Za-z0-9._:-]{1,255}$" }),
+    example: "wa_message_3EB0C4A1F2",
+  },
   Source: {
     name: "x-b2c-source",
     in: "header",
@@ -108,6 +117,7 @@ const SCHEMAS: Record<string, Obj> = {
               "missing_token", "invalid_token", "revoked_token", "expired_token", "inactive_owner",
               "insufficient_scope", "validation_error", "not_found", "rate_limited", "internal_error",
               "idempotency_key_required", "idempotency_key_reused", "idempotency_in_progress", "unprocessable",
+              "duplicate", "possible_duplicate", "invalid_state", "competence_closed", "retroactive_requires_confirmation",
             ],
           }),
           message: str("Mensagem em português para humanos."),
@@ -230,6 +240,7 @@ const SCHEMAS: Record<string, Obj> = {
     createdAt: str(undefined, { format: "date-time" }), offer: nuloRef("Ref"),
     services: arr(obj({ id: str(), name: str(), unitPrice: nulo(dinheiro()) })),
     billingId: nulo(str("Cobrança lançada ao vender.")),
+    notes: nulo(str()),
   }),
   Metric: obj({
     value: nulo(num("null = não calculável (ex.: denominador zero).")),
@@ -307,6 +318,144 @@ const SCHEMAS: Record<string, Obj> = {
     modality: nulo(str()),
     score: int("Relevância 0–100.", { minimum: 0, maximum: 100 }),
   }),
+  ClientCreate: obj(
+    {
+      name: str(undefined, { minLength: 1, maxLength: 200 }),
+      legalName: nulo(str()), document: nulo(str("CNPJ/CPF.")), email: nulo(str(undefined, { format: "email" })),
+      phone: nulo(str()), nicheId: nulo(str("Nicho do catálogo.")), city: nulo(str()),
+      state: nulo(str("UF (2 letras).", { minLength: 2, maxLength: 2 })), address: nulo(str()),
+      legalRepresentative: nulo(str()), origin: nulo(str()),
+      responsibleId: nulo(str("Colaborador responsável (Employee).")), operationsOwner: nulo(str()),
+      paymentDay: nulo(int("Dia do pagamento MRR (1–31).", { minimum: 1, maximum: 31 })),
+      tags: arr(str()),
+      modality: nulo(str("MRR exige monthlyValue e paymentDay; TCV exige totalContractValue, contractMonths e startedAt.", { enum: ["MRR", "TCV", null] })),
+      monthlyValue: nulo(dinheiro()), totalContractValue: nulo(dinheiro()),
+      contractMonths: nulo(int(undefined, { minimum: 1, maximum: 120 })),
+      contractIndefinite: bool("Prazo Indeterminado (só MRR)."),
+      startedAt: nulo(data("Entrada do cliente.")), notes: nulo(str()),
+      initialStatus: str("Status a partir de hoje (padrão ACTIVE).", { enum: ["ACTIVE", "LEAD", "PROSPECT"], default: "ACTIVE" }),
+      allowDuplicate: bool("Cadastrar mesmo com nome/documento igual a outro cliente."),
+    },
+    ["name"],
+    { additionalProperties: false }
+  ),
+  ClientPatch: {
+    type: "object",
+    additionalProperties: false,
+    minProperties: 1,
+    description: "Os mesmos campos do cadastro, todos opcionais. **Sem `status`**: status muda só por `POST /clients/{id}/status-changes`.",
+    properties: {
+      name: str(undefined, { minLength: 1, maxLength: 200 }), legalName: nulo(str()), document: nulo(str()),
+      email: nulo(str()), phone: nulo(str()), nicheId: nulo(str()), city: nulo(str()), state: nulo(str()),
+      address: nulo(str()), legalRepresentative: nulo(str()), origin: nulo(str()), responsibleId: nulo(str()),
+      operationsOwner: nulo(str()), paymentDay: nulo(int()), tags: arr(str()),
+      modality: nulo(str(undefined, { enum: ["MRR", "TCV", null] })), monthlyValue: nulo(dinheiro()),
+      totalContractValue: nulo(dinheiro()), contractMonths: nulo(int()), contractIndefinite: bool(),
+      startedAt: nulo(data()), notes: nulo(str()),
+    },
+  },
+  StatusChange: obj(
+    {
+      status: str(undefined, { enum: [...CLIENT_STATUSES] }),
+      effectiveFrom: data("Primeiro dia em que o novo status vale. Futura = programada; mês passado = retroativa."),
+      reason: str(undefined, { maxLength: 500 }),
+      renewalCompetence: str("Perda: competência da renovação frustrada (AAAA-MM)."),
+      allowRetroactive: bool("Obrigatório (true) para vigência em mês que já passou — reescreve a carteira daquele mês."),
+    },
+    ["status", "effectiveFrom"],
+    { additionalProperties: false }
+  ),
+  StatusChangeResult: obj({
+    change: obj(
+      {
+        status: str(), effectiveFrom: data(),
+        scheduled: bool("Vigência futura: registrada sem mudar o status de hoje."),
+        currentStatusChanged: bool(), warning: str(),
+      },
+      ["status", "effectiveFrom", "scheduled", "currentStatusChanged"]
+    ),
+    statusHistory: ref("StatusHistory"),
+  }),
+  PaymentCreate: obj(
+    {
+      amount: dinheiro("Valor pago (> 0, até 2 casas). Acima do saldo só com allowOverpayment."),
+      paidAt: data("Dia do pagamento (padrão: hoje). Não pode ser futuro; o mês do caixa não pode estar fechado."),
+      method: str(undefined, { enum: ["PIX", "TRANSFER", "BOLETO", "CARD", "CASH", "OTHER"], default: "PIX" }),
+      accountId: nulo(str("Conta bancária do dono.")),
+      notes: nulo(str()),
+      allowOverpayment: bool("Aceitar valor acima do saldo (o excedente vira crédito do cliente)."),
+      allowDuplicate: bool("Aceitar mesmo havendo pagamento igual (valor e data) nesta cobrança."),
+    },
+    ["amount"],
+    { additionalProperties: false }
+  ),
+  PaymentResult: obj({
+    payment: obj({
+      id: str(), amount: dinheiro(), paidAt: str(undefined, { format: "date-time" }), method: str(),
+      fullyPaid: bool(), paidLate: bool(), paidInDifferentMonth: bool(),
+      creditGenerated: dinheiro(), creditApplied: dinheiro(), creditRemaining: dinheiro(),
+    }),
+    receivable: ref("ReceivableDetail"),
+  }),
+  ExpenseCreate: obj(
+    {
+      description: str(undefined, { minLength: 1, maxLength: 200 }),
+      amount: dinheiro(), dueDate: data("Vencimento (define o mês da despesa)."),
+      categoryId: nulo(str()), category: str("Nome da categoria (alternativa a categoryId)."),
+      type: str(undefined, { enum: ["FIXED", "VARIABLE", "TAX", "PAYROLL", "TOOL", "ADS", "LOAN", "OTHER"], default: "OTHER" }),
+      recurrence: str("Recorrência: cria as ocorrências dos próximos 12 meses.", {
+        enum: ["NONE", "MONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL", "CUSTOM"], default: "NONE",
+      }),
+      recurrenceInterval: nulo(int("Meses entre ocorrências (CUSTOM).", { minimum: 1, maximum: 24 })),
+      notes: nulo(str()),
+    },
+    ["description", "amount", "dueDate"],
+    { additionalProperties: false }
+  ),
+  ExpensePatch: {
+    type: "object",
+    additionalProperties: false,
+    minProperties: 1,
+    description: "Só despesa pendente; só esta ocorrência. **Sem `status`**: para pagar, `POST /expenses/{id}/pay`.",
+    properties: {
+      description: str(), amount: dinheiro(), dueDate: data(), categoryId: nulo(str()), category: str(),
+      type: str(undefined, { enum: ["FIXED", "VARIABLE", "TAX", "PAYROLL", "TOOL", "ADS", "LOAN", "OTHER"] }),
+      notes: nulo(str()),
+    },
+  },
+  ExpenseDetail: { allOf: [ref("Expense"), obj({ notes: nulo(str()), installment: nulo(obj({ number: int(), total: nulo(int()) })) })] },
+  UpsellCreate: {
+    ...obj(
+      {
+        clientId: str(),
+        serviceId: nulo(str("Serviço do catálogo (ou use description).")),
+        description: nulo(str("Descrição curta (ou use serviceId).")),
+        amount: dinheiro("Valor potencial."),
+        responsibleId: nulo(str("Colaborador responsável (Employee). Sem ele, herda o do cliente.")),
+        expectedCloseDate: nulo(data()),
+        notes: nulo(str()),
+        status: str("Só o funil aberto — vender/recusar é decisão da tela.", { enum: ["OPPORTUNITY", "NEGOTIATION", "PAUSED"], default: "OPPORTUNITY" }),
+      },
+      ["clientId", "amount"],
+      { additionalProperties: false }
+    ),
+    anyOf: [{ required: ["serviceId"] }, { required: ["description"] }],
+  },
+  UpsellPatch: {
+    type: "object",
+    additionalProperties: false,
+    minProperties: 1,
+    description: "Só oportunidade em aberto (não WON/LOST).",
+    properties: {
+      serviceId: nulo(str()), description: nulo(str()), amount: dinheiro(), responsibleId: nulo(str()),
+      expectedCloseDate: nulo(data()), notes: nulo(str()),
+      status: str(undefined, { enum: ["OPPORTUNITY", "NEGOTIATION", "PAUSED"] }),
+    },
+  },
+  RoutineActionResult: obj({
+    key: str(), text: str(), priority: str(undefined, { enum: ["alta", "media", "baixa"] }),
+    done: { const: true }, alreadyDone: bool("Já estava concluída (nada mudou)."),
+  }),
   ServiceAccountMe: obj({
     type: { const: "service_account" }, id: str(), name: str(),
     tokenPrefix: str("Parte pública do token.", { example: "b2c_live_k3j9x2ma" }),
@@ -357,6 +506,26 @@ const RESPONSES = {
     description: "120 requisições por minuto por IP.",
     headers: { "Retry-After": { schema: int(), description: "Segundos." } },
     content: { "application/json": { schema: ref("Error"), example: exemploErro("rate_limited", "Muitas requisições. Aguarde um minuto.") } },
+  },
+  Conflict: {
+    description:
+      "Conflito: `idempotency_in_progress` (a 1ª chamada com a chave ainda roda), `duplicate` (cliente com mesmo nome/documento — reenvie com `allowDuplicate`) ou `possible_duplicate` (pagamento igual já registrado — reenvie com `allowDuplicate`).",
+    content: {
+      "application/json": {
+        schema: ref("Error"),
+        example: exemploErro("possible_duplicate", "Já existe um pagamento de 1500.00 em 2026-09-28 nesta cobrança. Se for mesmo outro pagamento, envie \"allowDuplicate\": true."),
+      },
+    },
+  },
+  Unprocessable: {
+    description:
+      "Recusado pela regra de negócio: `unprocessable`, `invalid_state` (ex.: cobrança quitada/removida, despesa paga), `competence_closed`, `retroactive_requires_confirmation` ou `idempotency_key_reused` (mesma chave, outros dados). Recusas de regra ficam guardadas na chave: repetir devolve a mesma recusa.",
+    content: {
+      "application/json": {
+        schema: ref("Error"),
+        example: exemploErro("competence_closed", "O caixa de 08/2026 está fechado."),
+      },
+    },
   },
   InternalError: {
     description: "Erro inesperado. Nunca traz stack nem mensagem interna — informe o requestId.",
@@ -421,6 +590,54 @@ function op(o: {
         "401": refResp("Unauthorized"),
         ...(o.scope ? { "403": refResp("Forbidden") } : {}),
         ...(o.notFound ? { "404": refResp("NotFound") } : {}),
+        "429": refResp("RateLimited"),
+        "500": refResp("InternalError"),
+      },
+    },
+  };
+}
+
+function writeOp(o: {
+  method: "post" | "patch";
+  id: string;
+  tag: string;
+  summary: string;
+  description?: string;
+  scope: string;
+  params?: Obj[];
+  body: { schema: Obj; example: unknown };
+  ok: Obj;
+  okStatus?: "200" | "201";
+}) {
+  return {
+    [o.method]: {
+      operationId: o.id,
+      tags: [o.tag],
+      summary: o.summary,
+      description:
+        (o.description ?? "") +
+        `\n\n**Scope obrigatório:** \`${o.scope}\`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.`,
+      security: [{ bearerAuth: [o.scope] }],
+      "x-required-scope": o.scope,
+      parameters: [refParam("IdempotencyKey"), refParam("RequestId"), refParam("Source"), ...(o.params ?? [])],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: o.body.schema, example: o.body.example } },
+      },
+      responses: {
+        [o.okStatus ?? "201"]: {
+          ...o.ok,
+          headers: {
+            ...(o.ok.headers as Obj),
+            "Idempotent-Replayed": { schema: str(undefined, { enum: ["true", "false"] }), description: "true = repetição devolvida da 1ª execução." },
+          },
+        },
+        "400": refResp("BadRequest"),
+        "401": refResp("Unauthorized"),
+        "403": refResp("Forbidden"),
+        "404": refResp("NotFound"),
+        "409": refResp("Conflict"),
+        "422": refResp("Unprocessable"),
         "429": refResp("RateLimited"),
         "500": refResp("InternalError"),
       },
@@ -608,6 +825,105 @@ const PATHS: Record<string, Obj> = {
   }),
 };
 
+// ---------------------------------------------------------------------------
+// Escritas (28/09/2026)
+// ---------------------------------------------------------------------------
+
+const ID = [refParam("Id")];
+Object.assign(
+  PATHS["/clients"],
+  writeOp({
+    method: "post", id: "createClient", tag: "Clientes", summary: "Cadastrar cliente", scope: "clients.create",
+    description: "Mesma regra do formulário: duplicidade, modalidade MRR/TCV, contrato e cobranças, expectativa de renovação.",
+    body: {
+      schema: ref("ClientCreate"),
+      example: { name: "Face Love Estética", legalName: "Face Love Clínica Ltda", modality: "MRR", monthlyValue: 1500, paymentDay: 10, contractMonths: 12, startedAt: "2026-10-01" },
+    },
+    ok: sucesso(ref("ClientDetail")),
+  })
+);
+Object.assign(
+  PATHS["/clients/{id}"],
+  writeOp({
+    method: "patch", id: "updateClient", tag: "Clientes", summary: "Atualizar cadastro do cliente", scope: "clients.update",
+    params: ID, okStatus: "200",
+    body: { schema: ref("ClientPatch"), example: { phone: "+55 71 99999-0000", city: "Salvador", state: "BA" } },
+    ok: sucesso(ref("ClientDetail")),
+  })
+);
+PATHS["/clients/{id}/status-changes"] = writeOp({
+  method: "post", id: "changeClientStatus", tag: "Clientes", summary: "Alterar status com vigência", scope: "client_status.write",
+  description:
+    "Novo status A PARTIR DE `effectiveFrom`, na linha do tempo — nunca uma troca global. Hoje: vale já. Futura: fica programada (o status de hoje não muda). Mês passado: exige `allowRetroactive: true`. Competência fechada: 422.",
+  params: ID,
+  body: { schema: ref("StatusChange"), example: { status: "INACTIVE", effectiveFrom: "2026-10-01", reason: "Encerrou o contrato" } },
+  ok: sucesso(ref("StatusChangeResult")),
+});
+PATHS["/receivables/{id}/payments"] = writeOp({
+  method: "post", id: "registerPayment", tag: "Recebimentos", summary: "Registrar pagamento", scope: "receivables.register_payment",
+  description:
+    "Motor de Recebimentos. Valida: cobrança do dono (404), estado (quitada/removida/renegociada → 422), valor (acima do saldo só com `allowOverpayment`), data (não futura), competência do caixa (fechada → 422) e duplicidade (pagamento igual → 409, salvo `allowDuplicate`).",
+  params: ID,
+  body: { schema: ref("PaymentCreate"), example: { amount: 1500, paidAt: "2026-09-28", method: "PIX" } },
+  ok: sucesso(ref("PaymentResult")),
+});
+Object.assign(
+  PATHS["/expenses"],
+  writeOp({
+    method: "post", id: "createExpense", tag: "Despesas", summary: "Lançar despesa", scope: "expenses.create",
+    description: "Nasce pendente (pagar é `POST /expenses/{id}/pay`). Cartão de crédito fica fora da V1.",
+    body: { schema: ref("ExpenseCreate"), example: { description: "Licença do CRM", amount: 300, dueDate: "2026-10-10", category: "Ferramentas", type: "TOOL" } },
+    ok: sucesso(ref("ExpenseDetail")),
+  })
+);
+Object.assign(
+  PATHS["/expenses/{id}"],
+  writeOp({
+    method: "patch", id: "updateExpense", tag: "Despesas", summary: "Atualizar despesa pendente", scope: "expenses.update",
+    params: ID, okStatus: "200",
+    body: { schema: ref("ExpensePatch"), example: { amount: 350, dueDate: "2026-10-15" } },
+    ok: sucesso(ref("ExpenseDetail")),
+  })
+);
+PATHS["/expenses/{id}/pay"] = writeOp({
+  method: "post", id: "payExpense", tag: "Despesas", summary: "Marcar despesa como paga", scope: "expenses.pay",
+  description: "Motor de despesas (guarda de período, auditoria). Já paga → 200 com `alreadyPaid: true`. Corpo vazio (`{}`).",
+  params: ID, okStatus: "200",
+  body: { schema: { type: "object", additionalProperties: false }, example: {} },
+  ok: sucesso(obj({ alreadyPaid: bool(), expense: ref("ExpenseDetail") })),
+});
+Object.assign(
+  PATHS["/upsells"],
+  writeOp({
+    method: "post", id: "createUpsell", tag: "Upsell", summary: "Cadastrar oportunidade", scope: "upsells.create",
+    body: {
+      schema: ref("UpsellCreate"),
+      example: { clientId: "cmu1a2b3c0001xyz", description: "Gestão de tráfego pago", amount: 900, responsibleId: "cmuemp0001", expectedCloseDate: "2026-10-31" },
+    },
+    ok: sucesso(ref("Upsell")),
+  })
+);
+PATHS["/upsells/{id}"] = {
+  ...op({
+    id: "getUpsell", tag: "Upsell", summary: "Oportunidade", scope: "upsells.read", notFound: true, params: ID,
+    ok: sucesso(ref("Upsell")),
+  }),
+  ...writeOp({
+    method: "patch", id: "updateUpsell", tag: "Upsell", summary: "Atualizar oportunidade em aberto", scope: "upsells.update",
+    params: ID, okStatus: "200",
+    body: { schema: ref("UpsellPatch"), example: { amount: 1200, status: "NEGOTIATION" } },
+    ok: sucesso(ref("Upsell")),
+  }),
+};
+PATHS["/routine/actions/{id}/complete"] = writeOp({
+  method: "post", id: "completeRoutineAction", tag: "Painéis", summary: "Concluir ação da rotina de hoje", scope: "routine.write",
+  description: "`id` = a chave da ação em `GET /routine/daily` (codificada na URL, ex.: `cobrar%3Acm…`). Só muda o estado do dia.",
+  params: [{ name: "id", in: "path", required: true, description: "Chave da ação.", schema: str(undefined, { pattern: "^[A-Za-z0-9:_.%-]{1,200}$" }) }],
+  okStatus: "200",
+  body: { schema: { type: "object", additionalProperties: false }, example: {} },
+  ok: sucesso(ref("RoutineActionResult")),
+});
+
 const DESCRICAO = `API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).
 
 ## Versionamento
@@ -623,8 +939,8 @@ Toda rota exige um scope (\`x-required-scope\`). Sem ele: 403 \`insufficient_sco
 ## Status temporal e competências
 O status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.
 
-## Escritas (futuras) e Idempotency-Key
-Esta versão é somente leitura; a infraestrutura das escritas já está pronta. Toda escrita exigirá o header **\`Idempotency-Key\`** (1–255 caracteres \`A-Z a-z 0-9 . _ : -\`; ex.: o id da mensagem do WhatsApp, \`wa_message_3EB0C4…\`):
+## Escritas e Idempotency-Key
+A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por \`POST /clients/{id}/status-changes\`, com data de vigência. Toda escrita exige o header **\`Idempotency-Key\`** (1–255 caracteres \`A-Z a-z 0-9 . _ : -\`; ex.: o id da mensagem do WhatsApp, \`wa_message_3EB0C4…\`):
 - a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header \`Idempotent-Replayed: true\` e \`meta.idempotency.replayed = true\`;
 - repetir enquanto a primeira ainda roda → 409 \`idempotency_in_progress\`; mesma chave com outros dados → 422 \`idempotency_key_reused\`; escrita sem a chave → 400 \`idempotency_key_required\`;
 - guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.
@@ -641,7 +957,7 @@ export function buildOpenApiSpec(serverUrl = "https://b2-c-finance.vercel.app/ap
     info: {
       title: "B2C Finance API",
       version: API_VERSION,
-      summary: "API V1 de leitura do B2C Finance (contas de serviço com scopes).",
+      summary: "API V1 do B2C Finance: leitura e escritas controladas (contas de serviço com scopes).",
       description: DESCRICAO,
     },
     servers: [{ url: serverUrl, description: "API v1" }],

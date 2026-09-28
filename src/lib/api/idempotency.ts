@@ -61,22 +61,31 @@ export async function reservarChave(p: {
   const agora = p.agora ?? new Date();
   return runWithoutScope(async () => {
     for (let tentativa = 0; tentativa < 2; tentativa++) {
-      try {
-        const nova = await prisma.apiIdempotencyKey.create({
-          data: {
-            ownerId: p.auth.ownerId,
-            serviceAccountId: p.auth.serviceAccountId,
-            key: p.key,
-            operation: p.operation,
-            requestHash: p.requestHash,
-            requestId: p.requestId,
-            expiresAt: new Date(agora.getTime() + TTL_IDEMPOTENCIA_MS),
-          },
-          select: { id: true },
-        });
-        return { tipo: "nova" as const, id: nova.id };
-      } catch (e) {
-        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") throw e;
+      // Lê antes de criar: a repetição (caso comum) não passa por um erro de
+      // chave única — que o Prisma registraria no log a cada replay. A trava
+      // única continua sendo quem decide a corrida entre duas chamadas.
+      const existente = await prisma.apiIdempotencyKey.findUnique({
+        where: { serviceAccountId_key: { serviceAccountId: p.auth.serviceAccountId, key: p.key } },
+        select: { id: true },
+      });
+      if (!existente) {
+        try {
+          const nova = await prisma.apiIdempotencyKey.create({
+            data: {
+              ownerId: p.auth.ownerId,
+              serviceAccountId: p.auth.serviceAccountId,
+              key: p.key,
+              operation: p.operation,
+              requestHash: p.requestHash,
+              requestId: p.requestId,
+              expiresAt: new Date(agora.getTime() + TTL_IDEMPOTENCIA_MS),
+            },
+            select: { id: true },
+          });
+          return { tipo: "nova" as const, id: nova.id };
+        } catch (e) {
+          if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") throw e;
+        }
       }
       const atual = await prisma.apiIdempotencyKey.findUnique({
         where: { serviceAccountId_key: { serviceAccountId: p.auth.serviceAccountId, key: p.key } },
