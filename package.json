@@ -31,7 +31,9 @@
     "audit:aa": "node scripts/auditoria-aa.mjs --ci",
     "seed:relatorios": "tsx scripts/semear-relatorios-estresse.ts",
     "verificar:pdfs": "node scripts/verificar-pdfs.mjs",
-    "docs": "node scripts/docs/gerar.mjs"
+    "docs": "node scripts/docs/gerar.mjs",
+    "openapi:export": "tsx scripts/openapi-export.ts",
+    "openapi:lint": "npm run openapi:export && npx --yes @redocly/cli@1 lint docs/api/openapi.json --config docs/api/redocly.yaml"
   },
   "prisma": {
     "seed": "tsx prisma/seed-dev.ts"

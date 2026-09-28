@@ -1,0 +1,4320 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "B2C Finance API",
+    "version": "1.0.0",
+    "summary": "API V1 de leitura do B2C Finance (contas de serviço com scopes).",
+    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, reports.read.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas (futuras)\nEsta versão é somente leitura. As operações de escrita que virão exigirão o header **`Idempotency-Key`** (UUID por operação): repetir a mesma chamada com a mesma chave devolve a mesma resposta sem duplicar o efeito (pagamento duas vezes, por exemplo).\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
+  },
+  "servers": [
+    {
+      "url": "https://b2-c-finance.vercel.app/api/v1",
+      "description": "API v1"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Sistema",
+      "description": "Saúde da API e identidade da credencial."
+    },
+    {
+      "name": "Busca",
+      "description": "Desambiguação de clientes pelo nome — o primeiro passo do agente."
+    },
+    {
+      "name": "Clientes",
+      "description": "Carteira com status temporal (vigência) e histórico de status."
+    },
+    {
+      "name": "Recebimentos",
+      "description": "Cobranças e pagamentos, com status derivado sem escrita."
+    },
+    {
+      "name": "Despesas",
+      "description": "Contas a pagar da agência."
+    },
+    {
+      "name": "Caixa",
+      "description": "Disponível, compromissos e projeção."
+    },
+    {
+      "name": "Upsell",
+      "description": "Oportunidades de venda adicional."
+    },
+    {
+      "name": "Painéis",
+      "description": "Indicadores oficiais e rotina do dia."
+    },
+    {
+      "name": "Relatórios",
+      "description": "Resumo do dia e da competência; seções seguem os scopes."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "tags": [
+          "Sistema"
+        ],
+        "summary": "Saúde da API e da credencial",
+        "description": "\n\n**Scope:** nenhum (qualquer token válido).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scope": null,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "const": "ok"
+                        },
+                        "apiVersion": {
+                          "const": "v1"
+                        },
+                        "database": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "apiVersion",
+                        "database"
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "status": "ok",
+                    "apiVersion": "v1",
+                    "database": "ok"
+                  },
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "tags": [
+          "Sistema"
+        ],
+        "summary": "Quem é esta credencial",
+        "description": "Teste de conexão do n8n. Não devolve dado de negócio.\n\n**Scope:** nenhum (qualquer token válido).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scope": null,
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ServiceAccountMe"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "type": "service_account",
+                    "id": "cmu9sa0001",
+                    "name": "B2C Finance AI Agent",
+                    "tokenPrefix": "b2c_live_k3j9x2ma",
+                    "scopes": [
+                      "clients.read",
+                      "receivables.read"
+                    ]
+                  },
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "operationId": "getDashboardSummary",
+        "tags": [
+          "Painéis"
+        ],
+        "summary": "Indicadores oficiais do mês",
+        "description": "Mesmo motor de métricas do Dashboard. Competência passada = números daquela competência.\n\n**Scope obrigatório:** `dashboard.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "dashboard.read"
+            ]
+          }
+        ],
+        "x-required-scope": "dashboard.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Competence"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DashboardSummary"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "competence": "2026-09",
+                    "partial": true,
+                    "metrics": {
+                      "mrr_oficial": {
+                        "value": 45200,
+                        "name": "MRR oficial",
+                        "unit": "currency"
+                      },
+                      "clientes_ativos": {
+                        "value": 38,
+                        "name": "Clientes ativos",
+                        "unit": "count"
+                      }
+                    }
+                  },
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/clients": {
+      "get": {
+        "operationId": "listClients",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Carteira da competência",
+        "description": "Status de cada cliente **na competência** (vigência pelo histórico). Só entra quem tinha status naquela competência. Sem `status`: todos menos `CHURNED`. Documento mascarado. Ordem: nome.\n\n**Scope obrigatório:** `clients.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "clients.read"
+            ]
+          }
+        ],
+        "x-required-scope": "clients.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Competence"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Texto em nome, razão social, documento, e-mail, nicho, cidade ou responsáveis.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "example": "face love"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "`revenue_active` = Ativo, Renovação ou Inadimplente; `all` = qualquer status.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LEAD",
+                "PROSPECT",
+                "ACTIVE",
+                "INACTIVE",
+                "PAUSED",
+                "RENEWAL",
+                "DELINQUENT",
+                "CHURNED",
+                "revenue_active",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "modality",
+            "in": "query",
+            "required": false,
+            "description": "Modalidade.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MRR",
+                "TCV"
+              ]
+            }
+          },
+          {
+            "name": "responsible",
+            "in": "query",
+            "required": false,
+            "description": "Responsável comercial (nome, sem diferenciar maiúsculas).",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "delinquency",
+            "in": "query",
+            "required": false,
+            "description": "Inadimplência NA COMPETÊNCIA (ajuste manual vence o cálculo).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "paid",
+                "owing",
+                "no_billing"
+              ]
+            }
+          },
+          {
+            "name": "renewalMonth",
+            "in": "query",
+            "required": false,
+            "description": "Expectativa de renovação no mês AAAA-MM.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "example": "2026-12"
+          },
+          {
+            "name": "segment",
+            "in": "query",
+            "required": false,
+            "description": "Nicho (nome ou id).",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ClientListItem"
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ListMeta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "statusReference": {
+                              "type": "object",
+                              "properties": {
+                                "competence": {
+                                  "type": "string"
+                                },
+                                "date": {
+                                  "type": "string",
+                                  "description": "Dia cujo status foi usado (fim do mês, ou hoje no mês corrente).",
+                                  "format": "date"
+                                }
+                              },
+                              "required": [
+                                "competence",
+                                "date"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "statusReference"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": "cmu1a2b3c0001xyz",
+                      "name": "Face Love Estética",
+                      "legalName": "Face Love Clínica Ltda",
+                      "document": "**.***.***/0001-90",
+                      "status": {
+                        "code": "ACTIVE",
+                        "label": "Ativo"
+                      },
+                      "modality": "MRR",
+                      "segment": "Estética",
+                      "responsible": "Raiane",
+                      "paymentDay": 10,
+                      "monthlyValue": 1500,
+                      "totalContractValue": null,
+                      "contractTerm": "12 meses",
+                      "expectedRenewalDate": "2027-01-10",
+                      "startedAt": "2026-01-10",
+                      "delinquency": {
+                        "status": "owing",
+                        "manual": false
+                      },
+                      "scheduledStatusChange": null
+                    }
+                  ],
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z",
+                    "pagination": {
+                      "page": 1,
+                      "pageSize": 50,
+                      "total": 1,
+                      "totalPages": 1
+                    },
+                    "statusReference": {
+                      "competence": "2026-09",
+                      "date": "2026-09-28"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/clients/{id}": {
+      "get": {
+        "operationId": "getClient",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Detalhe do cliente",
+        "description": "Documento completo. `status.current` = hoje; com `competence`, também `status.atCompetence`.\n\n**Scope obrigatório:** `clients.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "clients.read"
+            ]
+          }
+        ],
+        "x-required-scope": "clients.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/Competence"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ClientDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/clients/{id}/status-history": {
+      "get": {
+        "operationId": "getClientStatusHistory",
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Histórico de status com vigência",
+        "description": "Intervalos `effectiveFrom`–`effectiveTo` (inclusivos). Mudar o status em outubro não reescreve setembro.\n\n**Scope obrigatório:** `client_status.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "client_status.read"
+            ]
+          }
+        ],
+        "x-required-scope": "client_status.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/StatusHistory"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "clientId": "cmu1a2b3c0001xyz",
+                    "today": "2026-10-05",
+                    "currentStatus": {
+                      "code": "INACTIVE",
+                      "label": "Inativo"
+                    },
+                    "intervals": [
+                      {
+                        "id": "h1",
+                        "status": {
+                          "code": "ACTIVE",
+                          "label": "Ativo"
+                        },
+                        "effectiveFrom": "2026-01-10",
+                        "effectiveTo": "2026-09-30",
+                        "reason": null,
+                        "origin": "UI",
+                        "needsReview": false,
+                        "recordedAt": "2026-01-10T12:00:00.000Z"
+                      },
+                      {
+                        "id": "h2",
+                        "status": {
+                          "code": "INACTIVE",
+                          "label": "Inativo"
+                        },
+                        "effectiveFrom": "2026-10-01",
+                        "effectiveTo": null,
+                        "reason": "Encerrou contrato",
+                        "origin": "UI",
+                        "needsReview": false,
+                        "recordedAt": "2026-10-01T14:00:00.000Z"
+                      }
+                    ],
+                    "scheduled": []
+                  },
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/receivables": {
+      "get": {
+        "operationId": "listReceivables",
+        "tags": [
+          "Recebimentos"
+        ],
+        "summary": "Cobranças",
+        "description": "Janela: `dateFrom`+`dateTo` (vencimento, inclusivo, máx. 400 dias) OU `competence` (padrão: atual). Status derivado na hora — a leitura não grava nada. Removidas só quando pedidas. `meta.totals` soma o filtro inteiro.\n\n**Scope obrigatório:** `receivables.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "receivables.read"
+            ]
+          }
+        ],
+        "x-required-scope": "receivables.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Competence"
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Vencimento a partir de (junto com dateTo).",
+            "schema": {
+              "type": "string",
+              "description": "Data de calendário (AAAA-MM-DD).",
+              "format": "date"
+            },
+            "example": "2026-09-01"
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Vencimento até (inclusivo).",
+            "schema": {
+              "type": "string",
+              "description": "Data de calendário (AAAA-MM-DD).",
+              "format": "date"
+            },
+            "example": "2026-09-30"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status derivado.",
+            "schema": {
+              "type": "string",
+              "description": "Um ou mais, separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED; atalho `open` = UPCOMING, OVERDUE, DELINQUENT, PARTIAL."
+            },
+            "example": "open"
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "Só deste cliente.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Receivable"
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ListMeta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "window": {
+                              "type": "object"
+                            },
+                            "totals": {
+                              "type": "object",
+                              "properties": {
+                                "amount": {
+                                  "type": "number",
+                                  "description": "Valor em reais, 2 casas."
+                                },
+                                "paidAmount": {
+                                  "type": "number",
+                                  "description": "Valor em reais, 2 casas."
+                                },
+                                "openAmount": {
+                                  "type": "number",
+                                  "description": "Valor em reais, 2 casas."
+                                }
+                              },
+                              "required": [
+                                "amount",
+                                "paidAmount",
+                                "openAmount"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "window",
+                            "totals"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "id": "cmubill0001",
+                      "client": {
+                        "id": "cmu1a2b3c0001xyz",
+                        "name": "Face Love Estética"
+                      },
+                      "description": "Mensalidade 09/2026",
+                      "competence": "2026-09",
+                      "amount": 1500,
+                      "paidAmount": 0,
+                      "openAmount": 1500,
+                      "dueDate": "2026-09-10",
+                      "paidAt": null,
+                      "status": {
+                        "code": "OVERDUE",
+                        "label": "Vencido"
+                      },
+                      "daysLate": 18,
+                      "kind": "MRR",
+                      "revenueType": "MRR",
+                      "installmentNumber": null,
+                      "collectionStatus": "NOT_CONTACTED"
+                    }
+                  ],
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z",
+                    "pagination": {
+                      "page": 1,
+                      "pageSize": 50,
+                      "total": 1,
+                      "totalPages": 1
+                    },
+                    "window": {
+                      "competence": "2026-09"
+                    },
+                    "totals": {
+                      "amount": 1500,
+                      "paidAmount": 0,
+                      "openAmount": 1500
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/receivables/{id}": {
+      "get": {
+        "operationId": "getReceivable",
+        "tags": [
+          "Recebimentos"
+        ],
+        "summary": "Cobrança e pagamentos",
+        "description": "\n\n**Scope obrigatório:** `receivables.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "receivables.read"
+            ]
+          }
+        ],
+        "x-required-scope": "receivables.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ReceivableDetail"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "operationId": "listExpenses",
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Despesas",
+        "description": "Período pela data do lançamento (padrão: mês atual). `vencida` = pendente com vencimento antes de hoje.\n\n**Scope obrigatório:** `expenses.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "expenses.read"
+            ]
+          }
+        ],
+        "x-required-scope": "expenses.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pendente",
+                "pago",
+                "cancelado",
+                "vencida"
+              ]
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "description": "Lançamento a partir de (junto com dateTo).",
+            "schema": {
+              "type": "string",
+              "description": "Data de calendário (AAAA-MM-DD).",
+              "format": "date"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "description": "Lançamento até (inclusivo).",
+            "schema": {
+              "type": "string",
+              "description": "Data de calendário (AAAA-MM-DD).",
+              "format": "date"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "description": "Categoria (id ou nome).",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Expense"
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ListMeta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "window": {
+                              "type": "object"
+                            },
+                            "totalAmount": {
+                              "type": "number",
+                              "description": "Valor em reais, 2 casas."
+                            }
+                          },
+                          "required": [
+                            "totalAmount"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/expenses/{id}": {
+      "get": {
+        "operationId": "getExpense",
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Despesa",
+        "description": "\n\n**Scope obrigatório:** `expenses.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "expenses.read"
+            ]
+          }
+        ],
+        "x-required-scope": "expenses.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Expense"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "notes": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "installment": {
+                              "type": [
+                                "object",
+                                "null"
+                              ],
+                              "properties": {
+                                "number": {
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "type": [
+                                    "integer",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "number",
+                                "total"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "notes",
+                            "installment"
+                          ]
+                        }
+                      ]
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/cash/summary": {
+      "get": {
+        "operationId": "getCashSummary",
+        "tags": [
+          "Caixa"
+        ],
+        "summary": "Disponível, compromissos e projeção",
+        "description": "\n\n**Scope obrigatório:** `cash.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "cash.read"
+            ]
+          }
+        ],
+        "x-required-scope": "cash.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CashSummary"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/upsells": {
+      "get": {
+        "operationId": "listUpsells",
+        "tags": [
+          "Upsell"
+        ],
+        "summary": "Oportunidades de upsell",
+        "description": "O responsável é gravado como NOME (texto) — por isso o filtro é `responsible`, não um id.\n\n**Scope obrigatório:** `upsells.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "upsells.read"
+            ]
+          }
+        ],
+        "x-required-scope": "upsells.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Status.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "OPPORTUNITY",
+                "NEGOTIATION",
+                "WON",
+                "LOST",
+                "PAUSED"
+              ]
+            }
+          },
+          {
+            "name": "clientId",
+            "in": "query",
+            "required": false,
+            "description": "Cliente.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "responsible",
+            "in": "query",
+            "required": false,
+            "description": "Nome do responsável.",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Upsell"
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ListMeta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalValue": {
+                              "type": "number",
+                              "description": "Valor em reais, 2 casas."
+                            }
+                          },
+                          "required": [
+                            "totalValue"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/routine/daily": {
+      "get": {
+        "operationId": "getDailyRoutine",
+        "tags": [
+          "Painéis"
+        ],
+        "summary": "Rotina do dia",
+        "description": "Mesmo montador da tela Rotina. Seções de áreas sem scope (receivables.read, expenses.read, cash.read, clients.read, upsells.read) vêm vazias.\n\n**Scope obrigatório:** `routine.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "routine.read"
+            ]
+          }
+        ],
+        "x-required-scope": "routine.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DailyRoutine"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/reports/daily": {
+      "get": {
+        "operationId": "getDailyReport",
+        "tags": [
+          "Relatórios"
+        ],
+        "summary": "Relatório do dia",
+        "description": "Seções sem o scope da área saem de `data` e entram em `meta.omittedSections`.\n\n**Scope obrigatório:** `reports.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "reports.read"
+            ]
+          }
+        ],
+        "x-required-scope": "reports.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Dia (padrão: hoje, fuso America/Bahia).",
+            "schema": {
+              "type": "string",
+              "description": "Data de calendário (AAAA-MM-DD).",
+              "format": "date"
+            },
+            "example": "2026-09-28"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/DailyReport"
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Meta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "omittedSections": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "omittedSections"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/reports/monthly": {
+      "get": {
+        "operationId": "getMonthlyReport",
+        "tags": [
+          "Relatórios"
+        ],
+        "summary": "Relatório da competência",
+        "description": "Fechamento, indicadores, carteira por status NA competência, recebimentos e despesas. Competências passadas mostram o que valia nelas.\n\n**Scope obrigatório:** `reports.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "reports.read"
+            ]
+          }
+        ],
+        "x-required-scope": "reports.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Competence"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MonthlyReport"
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Meta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "omittedSections": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "omittedSections"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "search",
+        "tags": [
+          "Busca"
+        ],
+        "summary": "Desambiguar clientes pelo nome",
+        "description": "Ignora acento, caixa e espaço (`facelove estetica` acha “Face Love Estética”). Resultado mínimo para escolher; documento mascarado.\n\n**Scope obrigatório:** `clients.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "clients.read"
+            ]
+          }
+        ],
+        "x-required-scope": "clients.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Texto buscado.",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100
+            },
+            "example": "face love"
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Tipo de resultado.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "client"
+              ],
+              "default": "client"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Máximo de resultados.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SearchResult"
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Meta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "query": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string"
+                            },
+                            "total": {
+                              "type": "integer",
+                              "description": "Quantos casaram (antes do limit)."
+                            }
+                          },
+                          "required": [
+                            "query",
+                            "type",
+                            "total"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "type": "client",
+                      "id": "cmu1a2b3c0001xyz",
+                      "name": "Face Love Estética",
+                      "legalName": "Face Love Clínica Ltda",
+                      "document": "**.***.***/0001-90",
+                      "status": {
+                        "code": "ACTIVE",
+                        "label": "Ativo"
+                      },
+                      "modality": "MRR",
+                      "score": 90
+                    }
+                  ],
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z",
+                    "query": "face love",
+                    "type": "client",
+                    "total": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "b2c_live_<prefixo>_<segredo>",
+        "description": "Token de conta de serviço (Configurações → Integrações). Mostrado uma única vez. Os scopes da conta limitam cada rota."
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "description": "Página (a partir de 1).",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "PageSize": {
+        "name": "pageSize",
+        "in": "query",
+        "required": false,
+        "description": "Itens por página (máx. 200).",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "Competence": {
+        "name": "competence",
+        "in": "query",
+        "required": false,
+        "description": "Competência AAAA-MM. Padrão: a competência atual (fuso America/Bahia).",
+        "schema": {
+          "type": "string",
+          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+        },
+        "example": "2026-09"
+      },
+      "Id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Id do registro.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        }
+      },
+      "RequestId": {
+        "name": "x-request-id",
+        "in": "header",
+        "required": false,
+        "description": "Id da chamada (ex.: execução do n8n). Reaproveitado em `meta.requestId`; senão é gerado.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,100}$"
+        }
+      }
+    },
+    "schemas": {
+      "Meta": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "description": "Id da chamada; também no header `x-request-id`."
+          },
+          "generatedAt": {
+            "type": "string",
+            "description": "Instante da resposta (ISO 8601, UTC).",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "requestId",
+          "generatedAt"
+        ],
+        "additionalProperties": true
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total de itens no filtro inteiro."
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ]
+      },
+      "ListMeta": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Meta"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "pagination": {
+                "$ref": "#/components/schemas/Pagination"
+              }
+            },
+            "required": [
+              "pagination"
+            ]
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Código estável — trate por ele, não pela mensagem.",
+                "enum": [
+                  "missing_token",
+                  "invalid_token",
+                  "revoked_token",
+                  "expired_token",
+                  "inactive_owner",
+                  "insufficient_scope",
+                  "validation_error",
+                  "not_found",
+                  "rate_limited",
+                  "internal_error"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "description": "Mensagem em português para humanos."
+              },
+              "scope": {
+                "type": "string",
+                "description": "Só em `insufficient_scope`: o scope que falta."
+              },
+              "details": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "message"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "requestId"
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "error",
+          "meta"
+        ]
+      },
+      "ClientStatus": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Status (vigência pelo histórico — nunca o cadastro).",
+            "enum": [
+              "LEAD",
+              "PROSPECT",
+              "ACTIVE",
+              "INACTIVE",
+              "PAUSED",
+              "RENEWAL",
+              "DELINQUENT",
+              "CHURNED"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "example": "Ativo"
+          }
+        },
+        "required": [
+          "code",
+          "label"
+        ]
+      },
+      "Ref": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "ScheduledStatusChange": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ClientStatus"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "description": "Início da vigência.",
+            "format": "date"
+          }
+        },
+        "required": [
+          "status",
+          "effectiveFrom"
+        ]
+      },
+      "ClientListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Documento MASCARADO (CNPJ: filial e dígitos; CPF: só dígitos).",
+            "example": "**.***.***/0001-90"
+          },
+          "status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClientStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Status NA COMPETÊNCIA pedida."
+          },
+          "modality": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MRR",
+              "TCV",
+              null
+            ]
+          },
+          "segment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nicho."
+          },
+          "responsible": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Responsável comercial (nome)."
+          },
+          "paymentDay": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "monthlyValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Mensalidade (MRR)."
+          },
+          "totalContractValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor total do contrato (TCV)."
+          },
+          "contractTerm": {
+            "type": "string",
+            "description": "\"12 meses\", \"Indeterminado\" ou \"—\"."
+          },
+          "expectedRenewalDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "delinquency": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "paid",
+                  "owing",
+                  "no_billing"
+                ]
+              },
+              "manual": {
+                "type": "boolean",
+                "description": "Ajuste manual da competência."
+              }
+            },
+            "required": [
+              "status",
+              "manual"
+            ]
+          },
+          "scheduledStatusChange": {
+            "$ref": "#/components/schemas/ScheduledStatusChange"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "legalName",
+          "document",
+          "status",
+          "modality",
+          "segment",
+          "responsible",
+          "paymentDay",
+          "monthlyValue",
+          "totalContractValue",
+          "contractTerm",
+          "expectedRenewalDate",
+          "startedAt",
+          "delinquency",
+          "scheduledStatusChange"
+        ]
+      },
+      "ClientDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Documento COMPLETO."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "segment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modality": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MRR",
+              "TCV",
+              null
+            ]
+          },
+          "responsible": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationsOwner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paymentDay": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "monthlyValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "totalContractValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Valor em reais, 2 casas."
+          },
+          "contractTerm": {
+            "type": "string"
+          },
+          "contractMonths": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "contractIndefinite": {
+            "type": "boolean"
+          },
+          "expectedRenewalDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "churnedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "object",
+            "properties": {
+              "current": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ClientStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Status de hoje."
+              },
+              "atCompetence": {
+                "type": "object",
+                "properties": {
+                  "competence": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/ClientStatus"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "competence",
+                  "status"
+                ]
+              },
+              "scheduledChange": {
+                "$ref": "#/components/schemas/ScheduledStatusChange"
+              }
+            },
+            "required": [
+              "current",
+              "scheduledChange"
+            ]
+          },
+          "financial": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "activeContracts": {
+                "type": "integer"
+              },
+              "openAmount": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "overdueAmount": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "totalRevenue": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "nextDueDate": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Data de calendário (AAAA-MM-DD).",
+                "format": "date"
+              },
+              "situation": {
+                "type": "string",
+                "enum": [
+                  "EM_DIA",
+                  "INADIMPLENTE",
+                  "SEM_COBRANCA"
+                ]
+              },
+              "activeServices": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "activeContracts",
+              "openAmount",
+              "overdueAmount",
+              "totalRevenue",
+              "nextDueDate",
+              "situation",
+              "activeServices"
+            ]
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "role",
+                "email",
+                "phone",
+                "isPrimary"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "legalName",
+          "document",
+          "email",
+          "phone",
+          "segment",
+          "city",
+          "state",
+          "tags",
+          "modality",
+          "responsible",
+          "operationsOwner",
+          "paymentDay",
+          "monthlyValue",
+          "totalContractValue",
+          "contractTerm",
+          "contractMonths",
+          "contractIndefinite",
+          "expectedRenewalDate",
+          "startedAt",
+          "churnedAt",
+          "createdAt",
+          "status",
+          "financial",
+          "contacts"
+        ]
+      },
+      "StatusInterval": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ClientStatus"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "description": "Primeiro dia da vigência (inclusivo).",
+            "format": "date"
+          },
+          "effectiveTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Último dia da vigência (inclusivo); null = vigente sem fim.",
+            "format": "date"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin": {
+            "type": "string",
+            "description": "De onde veio a mudança (UI, IMPORT, JOB, API, BACKFILL…)."
+          },
+          "needsReview": {
+            "type": "boolean",
+            "description": "Intervalo reconstruído sem evidência — precisa de conferência humana."
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "effectiveFrom",
+          "effectiveTo",
+          "reason",
+          "origin",
+          "needsReview",
+          "recordedAt"
+        ]
+      },
+      "StatusHistory": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "today": {
+            "type": "string",
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "currentStatus": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClientStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "intervals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusInterval"
+            }
+          },
+          "scheduled": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusInterval"
+            },
+            "description": "Alterações com vigência futura."
+          }
+        },
+        "required": [
+          "clientId",
+          "today",
+          "currentStatus",
+          "intervals",
+          "scheduled"
+        ]
+      },
+      "Receivable": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "client": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "description": {
+            "type": "string"
+          },
+          "competence": {
+            "type": "string",
+            "example": "2026-09"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "paidAmount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "openAmount": {
+            "type": "number",
+            "description": "0 para removidas e renegociadas."
+          },
+          "dueDate": {
+            "type": "string",
+            "description": "Vencimento.",
+            "format": "date"
+          },
+          "paidAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Derivado na hora (mesma regra da tela).",
+                "enum": [
+                  "UPCOMING",
+                  "PAID",
+                  "PAID_LATE",
+                  "PAID_OTHER_MONTH",
+                  "OVERDUE",
+                  "DELINQUENT",
+                  "PARTIAL",
+                  "REMOVED",
+                  "RENEGOTIATED"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "label"
+            ]
+          },
+          "daysLate": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "description": "MRR, TCV, SETUP, ONE_TIME, UPSELL, RENEGOTIATION…"
+          },
+          "revenueType": {
+            "type": "string"
+          },
+          "installmentNumber": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "collectionStatus": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "client",
+          "description",
+          "competence",
+          "amount",
+          "paidAmount",
+          "openAmount",
+          "dueDate",
+          "paidAt",
+          "status",
+          "daysLate",
+          "kind",
+          "revenueType",
+          "installmentNumber",
+          "collectionStatus"
+        ]
+      },
+      "ReceivableDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Receivable"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "notes": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "payments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "number",
+                      "description": "Valor em reais, 2 casas."
+                    },
+                    "paidAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "method": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "amount",
+                    "paidAt",
+                    "method",
+                    "status"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "notes",
+              "payments"
+            ]
+          }
+        ]
+      },
+      "Expense": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "date": {
+            "type": "string",
+            "description": "Data do lançamento (define o mês).",
+            "format": "date"
+          },
+          "dueDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vencimento.",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status com `vencida` derivada.",
+            "enum": [
+              "pendente",
+              "pago",
+              "cancelado",
+              "devendo",
+              "reembolsado",
+              "vencida"
+            ]
+          },
+          "rawStatus": {
+            "type": "string",
+            "description": "Status gravado."
+          },
+          "category": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "FIXED, VARIABLE, PAYROLL, TAX, TOOL, ADS, LOAN, CARD, OTHER."
+          },
+          "recurrence": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recurring": {
+            "type": "boolean"
+          },
+          "paymentMethod": {
+            "type": "string"
+          },
+          "client": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "amount",
+          "date",
+          "dueDate",
+          "status",
+          "rawStatus",
+          "category",
+          "type",
+          "recurrence",
+          "recurring",
+          "paymentMethod",
+          "client",
+          "account",
+          "createdAt"
+        ]
+      },
+      "Upsell": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client": {
+            "$ref": "#/components/schemas/Ref"
+          },
+          "value": {
+            "type": "number",
+            "description": "Valor potencial."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPPORTUNITY",
+              "NEGOTIATION",
+              "WON",
+              "LOST",
+              "PAUSED"
+            ]
+          },
+          "responsible": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Nome (texto livre)."
+          },
+          "expectedCloseDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "closedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "offer": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Ref"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Valor em reais, 2 casas."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "unitPrice"
+              ]
+            }
+          },
+          "billingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Cobrança lançada ao vender."
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "client",
+          "value",
+          "status",
+          "responsible",
+          "expectedCloseDate",
+          "closedAt",
+          "createdAt",
+          "offer",
+          "services",
+          "billingId"
+        ]
+      },
+      "Metric": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "null = não calculável (ex.: denominador zero)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "currency",
+              "percent",
+              "count"
+            ]
+          }
+        },
+        "required": [
+          "value",
+          "name",
+          "unit"
+        ]
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "properties": {
+          "competence": {
+            "type": "string"
+          },
+          "partial": {
+            "type": "boolean",
+            "description": "Mês em curso (números parciais)."
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "description": "faturamento_total, mrr_oficial, tcv_faturado, tcv_vendido, receita_extra_reconhecida, faturamento_esperado, recebido_competencia, em_aberto, vencido, resultado_mes, margem_gerencial, percentual_recorrencia, percentual_realizacao, clientes_ativos, novos_clientes, churn_quantidade, churn_valor, churn_rate, ticket_medio, custo_por_cliente, percentual_folha."
+          }
+        },
+        "required": [
+          "competence",
+          "partial",
+          "metrics"
+        ]
+      },
+      "CashSummary": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "accountsBalance": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "commitments": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "commitmentWindowDays": {
+            "type": "integer"
+          },
+          "available": {
+            "type": "number",
+            "description": "Valor em reais, 2 casas."
+          },
+          "breakdown": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "number",
+                  "description": "Valor em reais, 2 casas."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "account",
+                    "commitment"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "value",
+                "type"
+              ]
+            }
+          },
+          "next30Days": {
+            "type": "object",
+            "properties": {
+              "inflows": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "outflows": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projectedBalance": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "inflows",
+              "outflows",
+              "projectedBalance"
+            ]
+          },
+          "projection": {
+            "type": "object",
+            "properties": {
+              "horizonDays": {
+                "type": "integer"
+              },
+              "startingBalance": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "receivable": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "overdueReceivableNotIncluded": {
+                "type": "number",
+                "description": "A receber vencido — informado, fora da projeção."
+              },
+              "payable": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "financedLiabilities": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projectedBalance": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "horizonDays",
+              "startingBalance",
+              "receivable",
+              "overdueReceivableNotIncluded",
+              "payable",
+              "financedLiabilities",
+              "projectedBalance"
+            ]
+          },
+          "month": {
+            "type": "object",
+            "properties": {
+              "competence": {
+                "type": "string"
+              },
+              "inflows": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "outflows": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "realizedBalance": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "expectedBalance": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projection30": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projection60": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projection90": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "competence",
+              "inflows",
+              "outflows",
+              "realizedBalance",
+              "expectedBalance",
+              "projection30",
+              "projection60",
+              "projection90"
+            ]
+          }
+        },
+        "required": [
+          "date",
+          "accountsBalance",
+          "commitments",
+          "commitmentWindowDays",
+          "available",
+          "breakdown",
+          "next30Days",
+          "projection",
+          "month"
+        ]
+      },
+      "DailyRoutine": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "priority": {
+                  "type": "string",
+                  "enum": [
+                    "alta",
+                    "media",
+                    "baixa"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                },
+                "done": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "key",
+                "priority",
+                "text",
+                "done"
+              ]
+            }
+          },
+          "pendingActions": {
+            "type": "integer"
+          },
+          "collections": {
+            "type": "object",
+            "properties": {
+              "overdue": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "overdueTotal": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "dueSoon": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "dueSoonTotal": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "overdue",
+              "overdueTotal",
+              "dueSoon",
+              "dueSoonTotal"
+            ]
+          },
+          "payments": {
+            "type": "object",
+            "properties": {
+              "overdue": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "overdueTotal": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "dueSoon": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "dueSoonTotal": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "overdue",
+              "overdueTotal",
+              "dueSoon",
+              "dueSoonTotal"
+            ]
+          },
+          "renewals": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "month": {
+                "type": "string"
+              },
+              "pendingCount": {
+                "type": "integer"
+              },
+              "pendingExpectedValue": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "month",
+              "pendingCount",
+              "pendingExpectedValue"
+            ]
+          },
+          "cash": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "available": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "projection30": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              }
+            },
+            "required": [
+              "available",
+              "projection30"
+            ]
+          },
+          "openUpsells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "client": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Valor em reais, 2 casas."
+                },
+                "responsible": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "client",
+                "value",
+                "responsible"
+              ]
+            }
+          }
+        },
+        "required": [
+          "date",
+          "actions",
+          "pendingActions",
+          "collections",
+          "payments",
+          "renewals",
+          "cash",
+          "openUpsells"
+        ]
+      },
+      "DailyReport": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "Data de calendário (AAAA-MM-DD).",
+            "format": "date"
+          },
+          "receivables": {
+            "type": "object",
+            "properties": {
+              "dueToday": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "openAmount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Receivable"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "amount",
+                  "openAmount",
+                  "items"
+                ]
+              },
+              "received": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "amount",
+                  "items"
+                ]
+              }
+            },
+            "required": [
+              "dueToday",
+              "received"
+            ]
+          },
+          "expenses": {
+            "type": "object",
+            "properties": {
+              "dueToday": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "integer"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "paidAmount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Expense"
+                    }
+                  }
+                },
+                "required": [
+                  "count",
+                  "amount",
+                  "paidAmount",
+                  "items"
+                ]
+              }
+            },
+            "required": [
+              "dueToday"
+            ]
+          },
+          "clients": {
+            "type": "object",
+            "properties": {
+              "statusChanges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "client": {
+                      "$ref": "#/components/schemas/Ref"
+                    },
+                    "status": {
+                      "$ref": "#/components/schemas/ClientStatus"
+                    },
+                    "reason": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "client",
+                    "status",
+                    "reason"
+                  ]
+                }
+              },
+              "newClients": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "modality": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "modality"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "statusChanges",
+              "newClients"
+            ]
+          }
+        },
+        "required": [
+          "date"
+        ]
+      },
+      "MonthlyReport": {
+        "type": "object",
+        "properties": {
+          "competence": {
+            "type": "string"
+          },
+          "closing": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "description": "Estado do fechamento da competência."
+              },
+              "label": {
+                "type": "string"
+              },
+              "closedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "closedBy": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reopenedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "state",
+              "label",
+              "closedAt",
+              "closedBy",
+              "reopenedAt"
+            ]
+          },
+          "indicators": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Metric"
+            }
+          },
+          "portfolio": {
+            "type": "object",
+            "properties": {
+              "byStatus": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "$ref": "#/components/schemas/ClientStatus"
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "count"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "byStatus"
+            ]
+          },
+          "receivables": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "totals": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "paidAmount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  },
+                  "openAmount": {
+                    "type": "number",
+                    "description": "Valor em reais, 2 casas."
+                  }
+                },
+                "required": [
+                  "amount",
+                  "paidAmount",
+                  "openAmount"
+                ]
+              },
+              "byStatus": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "count",
+              "totals",
+              "byStatus"
+            ]
+          },
+          "expenses": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "number",
+                "description": "Valor em reais, 2 casas."
+              },
+              "byStatus": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "total",
+              "byStatus"
+            ]
+          }
+        },
+        "required": [
+          "competence",
+          "closing"
+        ]
+      },
+      "SearchResult": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "client"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "legalName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "document": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Mascarado."
+          },
+          "status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ClientStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Status de hoje."
+          },
+          "modality": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "score": {
+            "type": "integer",
+            "description": "Relevância 0–100.",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name",
+          "legalName",
+          "document",
+          "status",
+          "modality",
+          "score"
+        ]
+      },
+      "ServiceAccountMe": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "const": "service_account"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tokenPrefix": {
+            "type": "string",
+            "description": "Parte pública do token.",
+            "example": "b2c_live_k3j9x2ma"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "clients.read",
+                "clients.create",
+                "clients.update",
+                "client_status.read",
+                "client_status.write",
+                "receivables.read",
+                "receivables.register_payment",
+                "expenses.read",
+                "expenses.create",
+                "expenses.update",
+                "expenses.pay",
+                "cash.read",
+                "upsells.read",
+                "upsells.create",
+                "upsells.update",
+                "dashboard.read",
+                "routine.read",
+                "reports.read"
+              ]
+            }
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name",
+          "tokenPrefix",
+          "scopes"
+        ]
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Credencial ausente ou inválida (missing_token, invalid_token, revoked_token, expired_token, inactive_owner).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "invalid_token",
+                "message": "Token inválido."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "A conta de serviço não tem o scope da rota.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "insufficient_scope",
+                "message": "Esta integração não tem o scope “clients.read”.",
+                "scope": "clients.read"
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Parâmetro inválido ou DESCONHECIDO (filtro digitado errado não é ignorado).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "validation_error",
+                "message": "Parâmetros de consulta inválidos.",
+                "details": [
+                  {
+                    "field": "competence",
+                    "message": "Use o formato AAAA-MM (ex.: 2026-09)."
+                  }
+                ]
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Não existe PARA ESTE DONO (id de outro workspace também responde 404).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "not_found",
+                "message": "Cliente não encontrado."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "120 requisições por minuto por IP.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Segundos."
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "rate_limited",
+                "message": "Muitas requisições. Aguarde um minuto."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Erro inesperado. Nunca traz stack nem mensagem interna — informe o requestId.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "success": false,
+              "error": {
+                "code": "internal_error",
+                "message": "Erro interno. Informe o requestId ao suporte."
+              },
+              "meta": {
+                "requestId": "3f1c2a9e-5b7d-4c1e-9a0f-2d6e8b4c7a10"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-scopes": [
+    {
+      "group": "Clientes",
+      "scopes": [
+        {
+          "scope": "clients.read",
+          "description": "Ler clientes",
+          "write": false
+        },
+        {
+          "scope": "clients.create",
+          "description": "Cadastrar clientes",
+          "write": true
+        },
+        {
+          "scope": "clients.update",
+          "description": "Editar clientes",
+          "write": true
+        }
+      ]
+    },
+    {
+      "group": "Status do cliente",
+      "scopes": [
+        {
+          "scope": "client_status.read",
+          "description": "Ler status e histórico com vigência",
+          "write": false
+        },
+        {
+          "scope": "client_status.write",
+          "description": "Alterar, programar e cancelar status",
+          "write": true
+        }
+      ]
+    },
+    {
+      "group": "Recebimentos",
+      "scopes": [
+        {
+          "scope": "receivables.read",
+          "description": "Ler cobranças e recebimentos",
+          "write": false
+        },
+        {
+          "scope": "receivables.register_payment",
+          "description": "Registrar pagamento",
+          "write": true
+        }
+      ]
+    },
+    {
+      "group": "Despesas",
+      "scopes": [
+        {
+          "scope": "expenses.read",
+          "description": "Ler despesas",
+          "write": false
+        },
+        {
+          "scope": "expenses.create",
+          "description": "Lançar despesas",
+          "write": true
+        },
+        {
+          "scope": "expenses.update",
+          "description": "Editar despesas",
+          "write": true
+        },
+        {
+          "scope": "expenses.pay",
+          "description": "Marcar despesa como paga",
+          "write": true
+        }
+      ]
+    },
+    {
+      "group": "Caixa",
+      "scopes": [
+        {
+          "scope": "cash.read",
+          "description": "Ler caixa e saldos",
+          "write": false
+        }
+      ]
+    },
+    {
+      "group": "Upsell",
+      "scopes": [
+        {
+          "scope": "upsells.read",
+          "description": "Ler oportunidades",
+          "write": false
+        },
+        {
+          "scope": "upsells.create",
+          "description": "Cadastrar oportunidades",
+          "write": true
+        },
+        {
+          "scope": "upsells.update",
+          "description": "Atualizar oportunidades",
+          "write": true
+        }
+      ]
+    },
+    {
+      "group": "Painéis e relatórios",
+      "scopes": [
+        {
+          "scope": "dashboard.read",
+          "description": "Ler indicadores do dashboard",
+          "write": false
+        },
+        {
+          "scope": "routine.read",
+          "description": "Ler a rotina do dia",
+          "write": false
+        },
+        {
+          "scope": "reports.read",
+          "description": "Executar relatórios",
+          "write": false
+        }
+      ]
+    }
+  ],
+  "x-forbidden-scopes": [
+    "users.manage",
+    "permissions.manage",
+    "clients.delete",
+    "receivables.delete",
+    "competences.reopen"
+  ]
+}

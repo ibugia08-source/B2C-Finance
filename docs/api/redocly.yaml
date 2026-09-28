@@ -1,0 +1,17 @@
+# Validação da especificação (npm run openapi:lint). Regras "recommended"
+# do Redocly; nada relaxado sem motivo escrito aqui.
+extends:
+  - recommended
+rules:
+  # Os endpoints são públicos por design e o servidor de produção é o único.
+  no-server-example.com: error
+  operation-4xx-response: error
+  info-license: off   # API proprietária, sem licença pública.
+  # Avisos que viram ERRO: exemplo que não bate com o schema ensina o
+  # integrador errado; tag sem descrição é seção muda na documentação.
+  no-invalid-media-type-examples: error
+  tag-description: error
+  operation-operationId-unique: error
+  operation-parameters-unique: error
+  path-parameters-defined: error
+  no-unused-components: error

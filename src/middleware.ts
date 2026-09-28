@@ -180,6 +180,13 @@ export async function middleware(req: NextRequest) {
     return seguir();
   }
 
+  // Documentação da API (especificação OpenAPI e Swagger UI): pública — é
+  // o contrato, sem dado nem segredo. As chamadas feitas pelo "Try it out"
+  // vão para /api/v1 e passam pela autenticação por token normalmente.
+  if (pathname === "/api/openapi.json" || pathname === "/api/docs" || pathname === "/api/docs/init.js") {
+    return seguir();
+  }
+
   // API oficial /api/v1 (28/09/2026): máquina não tem sessão. Quem
   // autentica é o token Bearer da conta de serviço, conferido NA ROTA (em
   // Node, com banco — o Edge não acessa o Prisma). O cookie é ignorado lá:
