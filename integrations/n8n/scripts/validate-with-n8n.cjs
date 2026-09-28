@@ -80,11 +80,15 @@ function validar(arquivo, tipos) {
   const wf = JSON.parse(fs.readFileSync(arquivo, "utf8"));
   const problemas = [];
   for (const n of wf.nodes) {
-    const versoes = tipos.get(n.type);
+    // Nó usado como ferramenta ("…Tool"): o n8n gera a variante a partir do
+    // nó base marcado com usableAsTool, acrescentando `toolDescription`.
+    const comoFerramenta = !tipos.get(n.type) && n.type.endsWith("Tool") ? n.type.slice(0, -4) : null;
+    const versoes = tipos.get(comoFerramenta ?? n.type);
     if (!versoes) { problemas.push(`${n.name}: tipo desconhecido ${n.type}`); continue; }
     const desc = versoes[String(n.typeVersion)];
     if (!desc) { problemas.push(`${n.name}: typeVersion ${n.typeVersion} não suportada (${Object.keys(versoes).join(", ")})`); continue; }
-    const nomes = new Set((desc.properties ?? []).map((p) => p.name));
+    if (comoFerramenta && !desc.usableAsTool) { problemas.push(`${n.name}: ${comoFerramenta}@${n.typeVersion} não pode ser usado como ferramenta`); continue; }
+    const nomes = new Set([...(desc.properties ?? []).map((p) => p.name), ...(comoFerramenta ? ["toolDescription", "descriptionType"] : [])]);
     for (const k of Object.keys(n.parameters ?? {})) {
       if (!nomes.has(k)) problemas.push(`${n.name}: parâmetro "${k}" não existe em ${n.type}@${n.typeVersion}`);
     }
@@ -94,7 +98,7 @@ function validar(arquivo, tipos) {
       if (c === "httpHeaderAuth") continue;
       // HTTP Request com credencial PRÉ-DEFINIDA: vale a do nodeCredentialType,
       // se o tipo existe e sabe se autenticar sozinho (propriedade `authenticate`).
-      if (n.type === "n8n-nodes-base.httpRequest" && n.parameters?.authentication === "predefinedCredentialType") {
+      if (/^n8n-nodes-base\.httpRequest(Tool)?$/.test(n.type) && n.parameters?.authentication === "predefinedCredentialType") {
         if (n.parameters.nodeCredentialType !== c) problemas.push(`${n.name}: credencial "${c}" ≠ nodeCredentialType "${n.parameters.nodeCredentialType}"`);
         else if (!credencialAutentica(c)) problemas.push(`${n.name}: credencial "${c}" não existe ou não tem "authenticate" (não serve para HTTP Request)`);
         continue;
@@ -107,7 +111,9 @@ function validar(arquivo, tipos) {
 
 const pasta = path.join(__dirname, "..", "workflows");
 const arquivos = fs.readdirSync(pasta).filter((f) => f.endsWith(".json")).map((f) => path.join(pasta, f));
-const usados = new Set(arquivos.flatMap((a) => JSON.parse(fs.readFileSync(a, "utf8")).nodes.map((n) => n.type)));
+const usados = new Set(
+  arquivos.flatMap((a) => JSON.parse(fs.readFileSync(a, "utf8")).nodes.flatMap((n) => [n.type, n.type.replace(/Tool$/, "")]))
+);
 const tipos = carregar(usados);
 const versaoN8n = require(path.join(MOD, "n8n", "package.json")).version;
 let total = 0;

@@ -206,13 +206,24 @@ async function chargePaga(eventId: string, d: Record<string, any>) {
  * Entregador do canal `webhook` para o worker do Outbox: leva o pedido de
  * emissão ao provedor, assinado do MESMO jeito que exigimos na entrada.
  */
-export async function entregarNoGateway(evento: {
-  id: string;
-  eventType: string;
-  sourceType: string;
-  sourceId: string;
-  payload: unknown;
-}): Promise<void> {
+/**
+ * Tempo máximo de uma entrega. Sem ele, um destino que aceita a conexão e
+ * não responde prende a entrega até o limite do processo — e o lote inteiro
+ * do worker junto. Estourou = "não entregou": o worker reagenda com recuo
+ * (auditoria final, 28/09/2026).
+ */
+export const TIMEOUT_DA_ENTREGA_MS = 15_000;
+
+export async function entregarNoGateway(
+  evento: {
+    id: string;
+    eventType: string;
+    sourceType: string;
+    sourceId: string;
+    payload: unknown;
+  },
+  opts: { timeoutMs?: number } = {}
+): Promise<void> {
   const url = urlDoGateway();
   const segredo = segredoDoGateway();
   if (!url || !segredo)
@@ -232,6 +243,7 @@ export async function entregarNoGateway(evento: {
       "x-b2c-event-id": evento.id,
     },
     body: corpo,
+    signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_DA_ENTREGA_MS),
   });
   if (!resposta.ok) throw new Error(`O gateway respondeu ${resposta.status}.`);
 }

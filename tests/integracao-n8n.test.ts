@@ -231,6 +231,42 @@ describe("workflows versionados", () => {
   });
 });
 
+describe("auditoria dos workflows (todos)", () => {
+  const arquivos = readdirSync(join(RAIZ, "workflows")).filter((f) => f.endsWith(".json"));
+  const NOMES_PADRAO = new Set([
+    "HTTP Request", "Code", "If", "Switch", "Webhook", "AI Agent", "Merge", "Set", "Edit Fields", "Schedule Trigger",
+    "Sticky Note", "OpenAI Chat Model", "Window Buffer Memory", "Simple Memory", "Qdrant Vector Store", "Embeddings OpenAI",
+    "Default Data Loader", "Recursive Character Text Splitter", "Respond to Webhook", "Basic LLM Chain", "Manual Trigger",
+  ]);
+
+  it("nenhum nó com nome padrão do n8n (todos nomeados pelo que fazem)", () => {
+    for (const f of arquivos) {
+      for (const n of ler(`workflows/${f}`).nodes) {
+        expect(NOMES_PADRAO.has(String(n.name).replace(/\d+$/, "")), `${f}: ${n.name}`).toBe(false);
+      }
+    }
+  });
+
+  it("toda variável $env usada nos workflows está documentada em ENV.example", () => {
+    const env = readFileSync(join(RAIZ, "ENV.example"), "utf8");
+    const documentadas = new Set([...env.matchAll(/^([A-Z0-9_]+)=/gm)].map((m) => m[1]));
+    for (const f of arquivos) {
+      const usadas = new Set([...readFileSync(join(RAIZ, "workflows", f), "utf8").matchAll(/\$env\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+      for (const v of usadas) expect(documentadas.has(v), `${f}: $env.${v} sem documentação`).toBe(true);
+    }
+  });
+
+  it("todos chegam desativados, sem id e com credenciais só por placeholder", () => {
+    for (const f of arquivos) {
+      const wf = ler(`workflows/${f}`);
+      expect(wf.active, f).toBe(false);
+      for (const n of wf.nodes) {
+        for (const c of Object.values<any>(n.credentials ?? {})) expect(c.id, `${f}: ${n.name}`).toMatch(/^CONFIGURAR_[A-Z0-9_]+$/);
+      }
+    }
+  });
+});
+
 describe("sem segredo versionado", () => {
   it("check-secrets não acha nada; ENV.example só tem placeholders das variáveis pedidas", async () => {
     const { verificar } = await import("../integrations/n8n/scripts/check-secrets.mjs");
@@ -428,27 +464,42 @@ describe("agente com escrita controlada", () => {
   });
 
   it("ferramentas de escrita só PROPÕEM: POST /agent/pending-actions com a operação fixa, travadas pelo perfil", () => {
-    const ferr = wf.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
-    expect(ferr).toHaveLength(21);
+    const leitura = wf.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
+    const escritaNos = wf.nodes.filter((n: any) => n.type === "n8n-nodes-base.httpRequestTool");
+    expect(leitura).toHaveLength(11);
+    expect(escritaNos).toHaveLength(10);
+    for (const n of leitura) expect(n.parameters.method, n.name).toBe("GET");
     for (const t of cat.tools) {
       const n = no(t.name);
+      expect(n.type).toBe("n8n-nodes-base.httpRequestTool");
       expect(n.parameters.method).toBe("POST");
       expect(n.parameters.url).toBe(
         `={{ ($json.allowedTools || []).includes('${t.name}') ? $env.B2C_FINANCE_API_URL : 'https://ferramenta-nao-liberada-para-este-perfil.invalid' }}/agent/pending-actions`
       );
-      const corpo = JSON.parse(n.parameters.jsonBody.replace('"{targetId}"', '"X"').replace("{input}", "{}"));
-      expect(corpo.operation).toBe(t.operation);
-      expect(Object.keys(corpo).sort()).toEqual(t.target ? ["input", "operation", "targetId"] : ["input", "operation"]);
-      const h = Object.fromEntries(n.parameters.parametersHeaders.values.map((x: any) => [x.name, x.value]));
+      // Corpo: operação fixa; o modelo preenche só targetId e input.
+      const corpo = n.parameters.jsonBody as string;
+      expect(corpo.startsWith(`={{ JSON.stringify({ operation: '${t.operation}'`)).toBe(true);
+      const doModelo = [...corpo.matchAll(/\$fromAI\('([a-zA-Z]+)'/g)].map((m) => m[1]);
+      expect(doModelo).toEqual([...(t.target ? ["targetId"] : []), ...(Object.keys(t.input).length ? ["input"] : [])]);
+      expect(corpo).not.toMatch(/userId|ownerId|\$fromAI\('operation'/);
+      const h = Object.fromEntries(n.parameters.headerParameters.parameters.map((x: any) => [x.name, x.value]));
       expect(h["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
       expect(h["X-B2C-Message-Id"]).toBe("={{ $json.messageId }}");
       expect(h["X-B2C-Source"]).toBe("whatsapp");
+      // O erro da API (código + mensagem) chega ao modelo.
+      expect(n.parameters.options.response.response.neverError).toBe(true);
+      expect(n.credentials.httpHeaderAuth).toEqual({ id: "CONFIGURAR_B2C_FINANCE_API", name: "B2C Finance API" });
       expect(wf.connections[t.name].ai_tool[0][0].node).toBe(N_AG);
     }
-    // Nenhuma ferramenta chama rota de escrita direto nem tem "confirm".
-    for (const n of ferr) {
-      expect(String(n.parameters.url)).not.toContain("confirm");
-      if (n.parameters.method !== "GET") expect(String(n.parameters.url)).toMatch(/\/agent\/pending-actions$/);
+    for (const n of [...leitura, ...escritaNos]) expect(String(n.parameters.url)).not.toContain("confirm");
+  });
+
+  it("$fromAI: as expressões das ferramentas de escrita são JavaScript válido", () => {
+    for (const t of cat.tools) {
+      const expr = (no(t.name).parameters.jsonBody as string).replace(/^=\{\{/, "").replace(/\}\}$/, "");
+      const valores: Record<string, unknown> = { targetId: "cm1", input: { amount: 10 } };
+      const corpo = JSON.parse(new Function("$fromAI", `return ${expr};`)((k: string) => valores[k]));
+      expect(corpo.operation).toBe(t.operation);
     }
   });
 
@@ -458,10 +509,11 @@ describe("agente com escrita controlada", () => {
       .map((n: any) => ({ ...n, notes: undefined, parameters: { ...n.parameters, options: { ...(n.parameters?.options ?? {}), systemMessage: undefined } } }));
     const texto = JSON.stringify(executavel).toLowerCase();
     for (const proibido of ["supabase", "prisma", "postgres", "mysql", "mongodb", "redis", "database_url"]) expect(texto, proibido).not.toContain(proibido);
-    for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest")) {
+    for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest" || x.type === "n8n-nodes-base.httpRequestTool")) {
       const url = String(n.parameters.url);
       expect(
         url === "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity" ||
+          url.endsWith("/agent/pending-actions") ||
           url.startsWith("={{ $env.B2C_FINANCE_API_URL }}/agent/pending-actions") ||
           url.includes("WHATSAPP_API_URL"),
         url

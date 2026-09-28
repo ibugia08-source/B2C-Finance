@@ -558,13 +558,33 @@ const NE = {
   proposta: "API: ação proposta nesta mensagem",
 };
 
+// Texto seguro dentro de '...' numa expressão do n8n.
+const aspas = (t) => t.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+
+/**
+ * Ferramenta de escrita = nó HTTP Request usado como ferramenta
+ * (n8n-nodes-base.httpRequestTool, parâmetros do modelo por $fromAI).
+ *
+ * Por que não o toolHttpRequest das consultas: ele descarta o corpo da
+ * resposta de ERRO e entrega ao modelo só "Request failed with status code
+ * 422". Numa proposta recusada o usuário precisa ouvir o PORQUÊ ("essa
+ * cobrança já está quitada", "falta o valor", "seu perfil não pode"), que
+ * vem em error.code/error.message da API. Com `neverError`, o JSON de erro
+ * chega inteiro ao modelo (auditoria final, 28/09/2026).
+ */
 function ferramentaDeEscrita(t, i) {
   const campos = Object.entries(t.input)
     .map(([k, v]) => `${k} (${v.type}${t.required.includes(k) ? ", obrigatório" : ""}): ${v.description}`)
     .join("; ");
   const semInput = Object.keys(t.input).length === 0;
   // Operação FIXA no corpo: a ferramenta não escolhe outra operação.
-  const corpo = `{"operation":"${t.operation}"${t.target ? ',"targetId":"{targetId}"' : ""},"input":${semInput ? "{}" : "{input}"}}`;
+  const partes = [`operation: '${t.operation}'`];
+  if (t.target) partes.push(`targetId: $fromAI('targetId', '${aspas(t.target.description)}', 'string')`);
+  partes.push(
+    semInput
+      ? "input: {}"
+      : `input: $fromAI('input', '${aspas(`Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`)}', 'json')`
+  );
   return {
     parameters: {
       toolDescription: `${t.description} Risco: WRITE_CONFIRMATION — não executa nada; a API monta a prévia e o usuário confirma.`,
@@ -573,30 +593,25 @@ function ferramentaDeEscrita(t, i) {
       authentication: "genericCredentialType",
       genericAuthType: "httpHeaderAuth",
       sendHeaders: true,
-      specifyHeaders: "keypair",
-      parametersHeaders: {
-        values: [
-          ...cabecalhos.parametersHeaders.values,
+      headerParameters: {
+        parameters: [
+          { name: "X-B2C-Source", value: "whatsapp" },
+          { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+          // Delegação: a API recorta pelo RBAC de quem está falando.
+          { name: "X-B2C-Identity", value: "={{ $json.identityId }}" },
           // A ação fica ligada à mensagem que a pediu (o workflow a acha depois da IA).
-          { name: "X-B2C-Message-Id", valueProvider: "fieldValue", value: "={{ $json.messageId }}" },
+          { name: "X-B2C-Message-Id", value: "={{ $json.messageId }}" },
         ],
       },
       sendBody: true,
       specifyBody: "json",
-      jsonBody: corpo,
-      placeholderDefinitions: {
-        values: [
-          ...(t.target ? [{ name: "targetId", description: t.target.description, type: "string" }] : []),
-          ...(semInput
-            ? []
-            : [{ name: "input", description: `Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`, type: "json" }]),
-        ],
-      },
-      optimizeResponse: false,
+      jsonBody: `={{ JSON.stringify({ ${partes.join(", ")} }) }}`,
+      // Erro da API (4xx) volta como JSON para o modelo explicar ao usuário.
+      options: { response: { response: { neverError: true } } },
     },
     name: t.name,
-    type: "@n8n/n8n-nodes-langchain.toolHttpRequest",
-    typeVersion: 1.1,
+    type: "n8n-nodes-base.httpRequestTool",
+    typeVersion: 4.2,
     position: [1500 + (i % 5) * 170, 1000 + Math.floor(i / 5) * 180],
     credentials: CRED_B2C,
     notes: `POST /agent/pending-actions · ${t.operation} · scope ${t.scope} + agent_actions.manage · WRITE_CONFIRMATION`,

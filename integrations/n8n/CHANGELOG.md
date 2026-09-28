@@ -2,6 +2,15 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-28 (7) — auditoria final
+
+- `b2c-finance-ai-agent.json`: as 10 ferramentas de escrita passaram de `toolHttpRequest` para **`httpRequestTool`** (parâmetros do modelo por `$fromAI`, `neverError`).
+  - Motivo: o `toolHttpRequest` entregava ao modelo só "Request failed with status code 422", sem `error.code`/`error.message` da API.
+  - Agora a recusa ("Esta cobrança já está quitada.", o campo inválido) chega ao modelo, que pode explicar ao usuário.
+  - As ferramentas de consulta continuam como estavam; o prompt mapeia o status HTTP delas.
+- `scripts/validate-with-n8n.cjs`: agora valida nós "…Tool" (usableAsTool) e HTTP Request com credencial pré-definida.
+- Testes novos: nenhum nó com nome padrão, toda `$env` documentada, todos desativados e só com credenciais placeholder.
+
 ## 2026-09-28 (6)
 
 - **Base de conhecimento (RAG):**
