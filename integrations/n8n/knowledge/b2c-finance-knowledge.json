@@ -1,6 +1,6 @@
 {
   "catalog": "b2c-finance-knowledge",
-  "version": "1.0.0+f6113fe4e141",
+  "version": "1.0.0+b7120bd0425a",
   "principle": "RAG = conhecimento e documentação. API = dados atuais e verdade operacional. Nenhum trecho desta base é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.",
   "collection": "b2c_finance_conhecimento",
   "embedding": {
@@ -16,7 +16,7 @@
       "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
       "categoria": "agente",
       "atualizado_em": "2026-09-29",
-      "sha256": "b6d4d2a798d8d3eb91f3031e46f3fcb7ee46acfa9b45ee6d994934627cf99f59",
+      "sha256": "83fc93d2810fd82dd575f88cb12a877817d1b7f65c7a30098d6edf10b8a9edf8",
       "trechos": 10
     },
     {
@@ -79,7 +79,7 @@
       "titulo": "API B2C Finance V1",
       "categoria": "api",
       "atualizado_em": "2026-09-29",
-      "sha256": "76d16e46fd08d231d5d9c2dbe0d65350a25ddd350f3e84b59cdfccab6215fa3a",
+      "sha256": "12d58f4ebbbde2c25fecff9633a9c173a2a9ec6790800d63b90461a483d82de6",
       "trechos": 24
     }
   ],
@@ -190,7 +190,7 @@
     },
     {
       "id": "agente#009",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Você não possui permissão para acessar essa informação.\"\n- **Não encontrou:** \"Não encontrei o registro solicitado.\" Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.\n- **Recusa de regra:** \"Não foi possível concluir: \" + o motivo dado pelo B2C Finance (ex.: \"essa cobrança já está quitada\").\n- **Problema técnico:** \"Não consegui concluir essa consulta agora. A tentativa foi registrada.\" O agente não mostra detalhes técnicos.\n- **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Você não possui permissão para acessar essa informação.\"\n- **Não encontrou:** \"Não encontrei o registro solicitado.\" Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.\n- **Recusa de regra:** \"Não foi possível concluir: \" + o motivo dado pelo B2C Finance (ex.: \"essa cobrança já está quitada\").\n- **Problema técnico:** \"Não consegui concluir essa consulta agora. A tentativa foi registrada.\" O agente não mostra detalhes técnicos.\n- **B2C Finance fora do ar:** \"Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos.\" O agente nunca troca o dado atual por um texto da base de conhecimento.\n- **Mensagens demais em pouco tempo:** \"Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo.\" É uma proteção contra flood e laços de automação.\n- **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
       "metadata": {
         "docId": "agente",
         "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
@@ -1256,7 +1256,7 @@
     },
     {
       "id": "api#024",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.2 Ações do agente com confirmação\n\nO agente (Telegram ou WhatsApp) não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`, no canal do vínculo.\n| Canal | Como o usuário confirma | Corpo de `POST /agent/pending-actions/{id}/confirm` | `Idempotency-Key` |\n|---|---|---|---|\n| Telegram | Toque em **Confirmar** (botão com `confirm:<actionId>`) | `{ \"messageId\": \"<update_id>\", \"via\": \"button\" }` | `telegram:<update_id>:<actionId>` |\n| WhatsApp | \"SIM <código>\" | `{ \"messageId\": \"<id da mensagem>\", \"confirmationCode\": \"4821\" }` | `wa:<messageId>:<actionId>` |\n- `GET /agent/pending-actions/{id}` mostra a ação só ao usuário dela (outro usuário, vínculo ou workspace: 404); vencida aparece como `EXPIRED`. O Telegram consulta antes de confirmar ou cancelar pelo botão.\n- A confirmação por botão só vale para ação do canal TELEGRAM. O mesmo update repetido é replay; outro toque numa ação já decidida dá 409 `action_not_pending` e nunca executa de novo.\n- No Telegram, a resposta da proposta não traz o código.\nA execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.2 Ações do agente com confirmação\n\nO agente (Telegram ou WhatsApp) não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`, no canal do vínculo.\n| Canal | Como o usuário confirma | Corpo de `POST /agent/pending-actions/{id}/confirm` | `Idempotency-Key` |\n|---|---|---|---|\n| Telegram | Toque em **Confirmar** (botão com `confirm:<actionId>`) | `{ \"messageId\": \"<update_id>\", \"via\": \"button\" }` | `telegram:<update_id>:<actionId>` |\n| WhatsApp | \"SIM <código>\" | `{ \"messageId\": \"<id da mensagem>\", \"confirmationCode\": \"4821\" }` | `wa:<messageId>:<actionId>` |\n- `GET /agent/pending-actions/{id}` mostra a ação só ao usuário dela (outro usuário, vínculo ou workspace: 404); vencida aparece como `EXPIRED`. O Telegram consulta antes de confirmar ou cancelar pelo botão.\n- A confirmação por botão só vale para ação do canal TELEGRAM. O mesmo update repetido é replay; outro toque numa ação já decidida dá 409 `action_not_pending` e nunca executa de novo.\n- No Telegram, a resposta da proposta não traz o código.\n- **Limite por usuário do vínculo:** 20 propostas e 30 confirmações/cancelamentos por minuto. Acima disso, 429 `rate_limited` com `Retry-After: 60`. Soma-se ao limite por IP (120/min) do middleware.\n- **`meta.onBehalfOf.identityId`:** toda resposta de sucesso com `X-B2C-Identity` diz em nome de qual vínculo a API respondeu. Quem monta algo por pessoa, como o relatório do Telegram, deve conferir isso antes de entregar.\nA execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).",
       "metadata": {
         "docId": "api",
         "titulo": "API B2C Finance V1",

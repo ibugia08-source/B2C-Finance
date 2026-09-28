@@ -44,6 +44,10 @@ const T = {
   juntar: "Juntar resposta e contexto",
   formatar: "Formatar para o Telegram",
   enviar: "Telegram: enviar mensagem",
+  limite: "Limitar mensagens por pessoa",
+  dentroDoLimite: "Dentro do limite?",
+  falhaApi: "Falha da API?",
+  registrar: "Registrar falha da API",
 };
 
 // ---------------------------------------------------------------------------
@@ -110,6 +114,31 @@ return $input.all().flatMap((item) => {
   return [{ json: { chatId: m.chatId, texto: 'Por segurança, eu só atendo em conversa privada. Fale comigo no privado.' } }];
 });`;
 
+export const JS_LIMITE = `// ETAPA 2b — Anti-flood por pessoa (Telegram User ID), antes de qualquer
+// chamada à API ou à IA: no máximo TELEGRAM_MAX_UPDATES_POR_MINUTO (padrão 20)
+// mensagens/toques por minuto. Passou: um aviso (uma vez) e o resto é
+// descartado até a janela andar. Corta laço de automação e flood no agente.
+const MAX = Number($env.TELEGRAM_MAX_UPDATES_POR_MINUTO) || 20;
+const JANELA = 60000;
+const agora = Date.now();
+const st = $getWorkflowStaticData('global');
+st.telegramRitmo = st.telegramRitmo || {};
+for (const k of Object.keys(st.telegramRitmo)) {
+  st.telegramRitmo[k] = st.telegramRitmo[k].filter((t) => agora - t < JANELA);
+  if (!st.telegramRitmo[k].length) delete st.telegramRitmo[k];
+}
+const saida = [];
+for (const item of $input.all()) {
+  const quem = String(item.json.fromId);
+  const lista = (st.telegramRitmo[quem] = st.telegramRitmo[quem] || []);
+  lista.push(agora);
+  if (lista.length <= MAX) { saida.push({ json: { ...item.json, limitado: false } }); continue; }
+  if (lista.length === MAX + 1) {
+    saida.push({ json: { chatId: item.json.chatId, limitado: true, texto: 'Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo.' } });
+  }
+}
+return saida;`;
+
 export const JS_EXTRAIR = `// ETAPA 3 — Telegram User ID de quem escreveu (message.from.id). É ele — e
 // nunca o @username — que a API usa para achar o vínculo.
 return $input.all().filter((item) => !!item.json.fromId).map((item) => ({ json: { ...item.json, externalIdentifier: item.json.fromId } }));`;
@@ -149,7 +178,9 @@ return $input.all().map((item) => {
     if (m.motivo === 'usuario_restrito_a_agencia') {
       return responder('Seu acesso é restrito a uma agência, e o atendimento pelo Telegram ainda não cobre esse caso. Use o B2C Finance.');
     }
-    return responder('Não consegui verificar seu acesso agora. Tente de novo em instantes.');
+    // API fora do ar (ou erro dela): nada de IA/RAG inventando dado atual; a
+    // execução é marcada como erro no n8n (registro) depois do aviso.
+    return { json: { ...m, rota: 'responder', falhaApi: true, texto: 'Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos.' } };
   }
   if (m.comando === '/start') {
     return responder('Olá, *' + m.userName + '*.\\n\\nVocê está conectado ao B2C Finance.\\n\\n' + AJUDA);
@@ -195,39 +226,55 @@ const html = (s) => esc(s)
  *    API, do usuário ou da IA vira tag;
  *  · depois, só negrito (entre um ou dois asteriscos) → <b> e `código` → <code>;
  *  · limite do Telegram: 4096 caracteres por mensagem. Quebra por parágrafo,
- *    depois por linha; no máximo 4 partes ("Parte 1/3"), e avisa quando corta;
+ *    depois por linha, depois no espaço (medindo DEPOIS do escape, sem partir
+ *    emoji); ordem preservada, nada repetido; no agente, no máximo 4 partes
+ *    ("Parte 1/3") com aviso; nos relatórios, até 10 (sem truncar na prática);
  *  · sem texto (erro do modelo/ferramenta) → mensagem neutra, sem detalhe técnico.
  */
-export const JS_FORMATAR = `// ETAPA 8 — Formatar para o Telegram (HTML seguro + divisão em partes).
+export const jsFormatar = (maxPartes = 4) => `// ETAPA 8 — Formatar para o Telegram (HTML seguro + divisão em partes).
 const LIMITE = 3500;           // margem sob os 4096 do Telegram (o escape aumenta o texto)
-const MAX_PARTES = 4;
+const MAX_PARTES = ${maxPartes};
 const FALHA = 'Não consegui concluir essa consulta agora. A tentativa foi registrada.';
 ${JS_HTML}
 // Tabela markdown não existe no Telegram: vira linhas "a · b · c".
 const semTabela = (t) => t
   .replace(/^\\s*\\|.*\\|\\s*$/gm, (l) => l.replace(/\\s*\\|\\s*/g, ' · ').replace(/^ · | · $/g, ''))
   .replace(/^\\s*[-·:\\s]+$/gm, '');
+// Maior prefixo que, DEPOIS do escape, cabe no limite; nunca parte um emoji
+// (par substituto) ao meio; prefere cortar num espaço.
+function prefixo(linha) {
+  let n = Math.min(linha.length, LIMITE);
+  while (n > 1 && html(linha.slice(0, n)).length > LIMITE) n = Math.floor(n * 0.8);
+  const c = linha.charCodeAt(n - 1);
+  if (c >= 0xd800 && c <= 0xdbff) n -= 1;
+  const espaco = linha.lastIndexOf(' ', n);
+  return espaco > n / 2 ? espaco : n;
+}
+// Pedaços com o separador ORIGINAL antes deles: parágrafo ("\\n\\n"),
+// linha ("\\n") ou continuação da mesma linha (" "). A ordem é preservada e
+// nada se repete: cada caractere do texto vai para exatamente uma parte.
 function partir(texto) {
+  const pedacos = [];
+  texto.split(/\\n{2,}/).forEach((bloco, bi) => {
+    const sepBloco = bi === 0 ? '' : '\\n\\n';
+    if (html(bloco).length <= LIMITE) { pedacos.push({ sep: sepBloco, t: bloco }); return; }
+    bloco.split('\\n').forEach((linha0, li) => {
+      let linha = linha0;
+      let sep = li === 0 ? sepBloco : '\\n';
+      while (html(linha).length > LIMITE) {
+        const corte = prefixo(linha);
+        pedacos.push({ sep, t: linha.slice(0, corte) });
+        linha = linha.slice(corte).trimStart();
+        sep = ' ';
+      }
+      pedacos.push({ sep, t: linha });
+    });
+  });
   const partes = [];
   let atual = '';
-  const blocos = texto.split(/\\n{2,}/);
-  const pedacos = [];
-  for (const b of blocos) {
-    if (html(b).length <= LIMITE) { pedacos.push(b); continue; }
-    // parágrafo enorme: por linha; linha enorme: por tamanho, no último espaço
-    for (let linha of b.split('\\n')) {
-      while (html(linha).length > LIMITE) {
-        let corte = linha.lastIndexOf(' ', LIMITE / 2);
-        if (corte < 1) corte = Math.floor(LIMITE / 2);
-        pedacos.push(linha.slice(0, corte));
-        linha = linha.slice(corte).trimStart();
-      }
-      pedacos.push(linha);
-    }
-  }
   for (const p of pedacos) {
-    const junto = atual ? atual + '\\n\\n' + p : p;
-    if (html(junto).length > LIMITE && atual) { partes.push(atual); atual = p; } else atual = junto;
+    const junto = atual ? atual + p.sep + p.t : p.t;
+    if (atual && html(junto).length > LIMITE) { partes.push(atual); atual = p.t; } else atual = junto;
   }
   if (atual.trim()) partes.push(atual);
   return partes;
@@ -242,9 +289,12 @@ return $input.all().flatMap((item) => {
     partes[MAX_PARTES - 1] += '\\n\\n(Resposta longa — peça um recorte menor para ver o resto.)';
   }
   return partes.map((p, i) => ({
-    json: { chatId: j.chatId, text: (partes.length > 1 ? '<i>Parte ' + (i + 1) + '/' + partes.length + '</i>\\n' : '') + html(p) },
+    json: { chatId: j.chatId, falhaApi: j.falhaApi === true, text: (partes.length > 1 ? '<i>Parte ' + (i + 1) + '/' + partes.length + '</i>\\n' : '') + html(p) },
   }));
 });`;
+
+/** Agente: até 4 partes (resposta de chat longa demais pede recorte). */
+export const JS_FORMATAR = jsFormatar(4);
 
 // ---------------------------------------------------------------------------
 // Nós do Telegram
@@ -260,6 +310,21 @@ const gatilhoTelegram = (nome, webhookId, pos, updates = ["message"]) => ({
   credentials: CRED_TELEGRAM,
   notes:
     "Registra o webhook no Telegram ao ativar, com secret_token: update sem o header X-Telegram-Bot-Api-Secret-Token certo é recusado (403). Um gatilho por bot.",
+  notesInFlow: true,
+});
+
+/**
+ * API fora do ar: a pessoa já recebeu o aviso; este nó marca a EXECUÇÃO como
+ * erro — ela fica salva no n8n (saveDataErrorExecution) e dispara o Error
+ * Workflow, se houver. Sem token nem dado da conversa na mensagem.
+ */
+const registrarFalha = (nome, pos) => ({
+  parameters: { errorMessage: "API B2C Finance indisponível ao atender o Telegram (a pessoa recebeu o aviso; nenhum dado foi inventado)." },
+  name: nome,
+  type: "n8n-nodes-base.stopAndError",
+  typeVersion: 1,
+  position: pos,
+  notes: "Registro da falha: execução com erro no n8n.",
   notesInFlow: true,
 });
 
@@ -321,6 +386,8 @@ const agenteLeitura = {
     code(T.dedupe, JS_DEDUPE, [400, 300], "Mesmo update_id não é processado duas vezes."),
     se(T.privado, "={{ $json.chatType === 'private' && !!$json.fromId }}", [600, 300], "Só conversa privada, com pessoa (não bot)."),
     code(T.foraDoPrivado, JS_FORA_DO_PRIVADO, [800, 520], "Grupo: orientação genérica. Canal/bot: nada."),
+    code(T.limite, JS_LIMITE, [700, 120], "Anti-flood por Telegram User ID (antes da API e da IA)."),
+    se(T.dentroDoLimite, "={{ $json.limitado !== true }}", [800, 120], "Passou do limite → um aviso, sem API/IA."),
     code(T.extrair, JS_EXTRAIR, [800, 300], "message.from.id — a identidade oficial."),
     apiDeControle(T.resolver, "POST", "/integrations/resolve-identity", [1000, 300], "Telegram User ID → usuário vinculado (API).", {
       fonte: "telegram",
@@ -357,12 +424,18 @@ const agenteLeitura = {
     code(T.juntar, JS_JUNTAR, [2240, 240], "Resposta da IA + chat de destino."),
     code(T.formatar, JS_FORMATAR, [2460, 320], "HTML seguro + partes (limite do Telegram)."),
     enviarTelegram(T.enviar, [2680, 320]),
+    se(T.falhaApi, "={{ $node['Formatar para o Telegram'].json.falhaApi === true }}", [2900, 320], "O aviso era de API fora do ar?"),
+    registrarFalha(T.registrar, [3120, 320]),
   ],
   connections: {
     [T.gatilho]: { main: [[{ node: T.normalizar, type: "main", index: 0 }]] },
     [T.normalizar]: { main: [[{ node: T.dedupe, type: "main", index: 0 }]] },
     [T.dedupe]: { main: [[{ node: T.privado, type: "main", index: 0 }]] },
-    [T.privado]: { main: [[{ node: T.extrair, type: "main", index: 0 }], [{ node: T.foraDoPrivado, type: "main", index: 0 }]] },
+    [T.privado]: { main: [[{ node: T.limite, type: "main", index: 0 }], [{ node: T.foraDoPrivado, type: "main", index: 0 }]] },
+    [T.limite]: { main: [[{ node: T.dentroDoLimite, type: "main", index: 0 }]] },
+    [T.dentroDoLimite]: { main: [[{ node: T.extrair, type: "main", index: 0 }], [{ node: T.formatar, type: "main", index: 0 }]] },
+    [T.enviar]: { main: [[{ node: T.falhaApi, type: "main", index: 0 }]] },
+    [T.falhaApi]: { main: [[{ node: T.registrar, type: "main", index: 0 }]] },
     [T.foraDoPrivado]: { main: [[{ node: T.formatar, type: "main", index: 0 }]] },
     [T.extrair]: { main: [[{ node: T.resolver, type: "main", index: 0 }]] },
     [T.resolver]: { main: [[{ node: T.permissoes, type: "main", index: 0 }]] },
@@ -542,7 +615,9 @@ return $input.all().map((item) => {
     if (m.motivo === 'usuario_restrito_a_agencia') {
       return responder('Seu acesso é restrito a uma agência, e o atendimento pelo Telegram ainda não cobre esse caso. Use o B2C Finance.');
     }
-    return responder('Não consegui verificar seu acesso agora. Tente de novo em instantes.');
+    // API fora do ar (ou erro dela): nada de IA/RAG inventando dado atual; a
+    // execução é marcada como erro no n8n (registro) depois do aviso.
+    return { json: { ...m, rota: 'responder', falhaApi: true, texto: 'Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos.' } };
   }
   const escreve = (m.allowedTools || []).some((t) => ESCRITA.includes(t));
   if (m.comando === '/start') {
@@ -592,7 +667,7 @@ return $input.all().map((item) => {
   const m = item.json;
   const base = { callbackQueryId: m.callbackQueryId, chatId: m.chatId, callbackMessageId: m.callbackMessageId, updateId: m.updateId, identityId: m.identityId };
   if (!m.authorized) {
-    return { json: { ...base, valido: false, toast: m.motivo === 'numero_nao_vinculado' ? 'Seu Telegram não está vinculado ao B2C Finance.' : 'Não consegui verificar seu acesso agora.', editar: false } };
+    return { json: { ...base, valido: false, toast: m.motivo === 'numero_nao_vinculado' ? 'Seu Telegram não está vinculado ao B2C Finance.' : 'Não consegui acessar o B2C Finance agora. Tente em alguns minutos.', editar: false } };
   }
   const f = String(m.callbackData || '').match(FORMATO);
   if (!f) return { json: { ...base, valido: false, toast: 'Botão inválido ou antigo.', editar: false } };
@@ -780,7 +855,10 @@ const ligacoes = [
   conecta(W.gatilho, W.normalizar),
   conecta(W.normalizar, W.dedupe),
   conecta(W.dedupe, W.privado),
-  conecta(W.privado, W.extrair),
+  conecta(W.privado, W.limite),
+  conecta(W.limite, W.dentroDoLimite),
+  conecta(W.dentroDoLimite, W.extrair, 0),
+  conecta(W.dentroDoLimite, W.formatar, 1),
   conecta(W.privado, W.foraDoPrivado, 1),
   conecta(W.foraDoPrivado, W.formatar),
   conecta(W.extrair, W.resolver),
@@ -817,6 +895,8 @@ const ligacoes = [
   conecta(W.temPrevia, W.enviarPrevia, 0),
   conecta(W.temPrevia, W.formatar, 1),
   conecta(W.formatar, W.enviar),
+  conecta(W.enviar, W.falhaApi),
+  conecta(W.falhaApi, W.registrar, 0),
 ];
 const conexoesMain = {};
 for (const l of ligacoes) {
@@ -863,6 +943,8 @@ const agenteEscrita = {
     code(W.dedupe, JS_DEDUPE, [400, 300], "Mesmo update_id não é processado duas vezes."),
     se(W.privado, "={{ $json.chatType === 'private' && !!$json.fromId }}", [600, 300], "Só conversa privada, com pessoa (não bot)."),
     code(W.foraDoPrivado, JS_FORA_DO_PRIVADO, [800, 520], "Grupo: orientação genérica. Canal/bot: nada."),
+    code(W.limite, JS_LIMITE, [700, 120], "Anti-flood por Telegram User ID (antes da API e da IA)."),
+    se(W.dentroDoLimite, "={{ $json.limitado !== true }}", [800, 120], "Passou do limite → um aviso, sem API/IA."),
     code(W.extrair, JS_EXTRAIR, [800, 300], "from.id — a identidade oficial (de quem escreveu ou tocou)."),
     apiDeControle(W.resolver, "POST", "/integrations/resolve-identity", [1000, 300], "Telegram User ID → usuário vinculado (API).", {
       fonte: "telegram",
@@ -928,6 +1010,8 @@ const agenteEscrita = {
     enviarPrevia(W.enviarPrevia, [3100, 160]),
     code(W.formatar, JS_FORMATAR, [3100, 460], "HTML seguro + partes (limite do Telegram)."),
     enviarTelegram(W.enviar, [3320, 460]),
+    se(W.falhaApi, "={{ $node['Formatar para o Telegram'].json.falhaApi === true }}", [3540, 460], "O aviso era de API fora do ar?"),
+    registrarFalha(W.registrar, [3760, 460]),
   ],
   connections: {
     ...conexoesMain,

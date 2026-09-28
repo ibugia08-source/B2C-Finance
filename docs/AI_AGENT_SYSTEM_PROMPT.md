@@ -56,7 +56,8 @@ Use estas frases (adapte só o necessário, sem detalhes técnicos):
 - **422** e demais recusas de regra (`invalid_state`, `unprocessable`, `validation_error` nas escritas): "Não foi possível concluir: " + a `error.message` da API (ex.: "Não foi possível concluir: essa cobrança já está quitada.").
 - **400** numa consulta: parâmetro inválido — corrija (mês AAAA-MM, data AAAA-MM-DD) e tente UMA vez.
 - **429**: peça para tentar em um minuto.
-- **500**, falha de rede ou qualquer outro erro: "Não consegui concluir essa consulta agora. A tentativa foi registrada."
+- **API fora do ar** (falha de conexão, timeout, 502, 503, 504): "Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos." Nunca troque o dado atual pela base de conhecimento nem por memória da conversa.
+- **500** ou qualquer outro erro: "Não consegui concluir essa consulta agora. A tentativa foi registrada."
 - As ferramentas de escrita (quando houver) devolvem o JSON de erro da API (`error.code` e `error.message`); as de consulta mostram só o status HTTP.
 
 ## Privacidade

@@ -129,6 +129,16 @@ export const ehOperacaoBloqueada = (op: string): op is OperacaoBloqueada => op i
 
 /** Validade padrão de uma ação pendente (minutos). B2C_PENDING_ACTION_TTL_MINUTES ajusta (1 a 60). */
 export const TTL_PADRAO_MINUTOS = 10;
+/**
+ * Limite por usuário (por minuto) nas rotas do agente: propor e decidir.
+ * Folgado para o uso normal (uma pessoa não confirma 30 ações por minuto),
+ * curto o bastante para cortar laço de automação ou abuso.
+ */
+export const LIMITE_POR_USUARIO = {
+  propor: { max: 20, janelaSegundos: 60 },
+  decidir: { max: 30, janelaSegundos: 60 },
+} as const;
+
 /** Códigos errados antes de a ação ser cancelada. */
 export const MAX_TENTATIVAS_DE_CODIGO = 5;
 

@@ -111,23 +111,11 @@ Todos chegam **desativados**. O **Telegram só aceita um webhook por bot**: ativ
 - `identities.resolve`;
 - `knowledge.read`, se a mesma integração for usada na indexação.
 
-## 10. Instalação (quando for para a instância real)
+## 10. Instalação
 
-1. **BotFather:** `/newbot` → guarde o token **só** na credencial "Telegram Bot" do n8n.
-2. **Credenciais no n8n:**
-   - "Telegram Bot" (Telegram API: access token; base URL padrão);
-   - "B2C Finance API";
-   - "OpenAI";
-   - "Qdrant (conhecimento)".
-3. **Variáveis:** as de `integrations/n8n/ENV.example`, incluindo `TELEGRAM_TEST_USER_ID`.
-4. **Base de conhecimento:** rode `knowledge-ingest.json` (a versão do pacote mudou nesta fase).
-5. **Vínculo:** vincule o seu Telegram em Integrações → Canais.
-6. **Teste de conexão:** importe e execute `telegram-connection-test.json`. Tudo deve voltar OK no seu Telegram.
-7. **Agente:** importe `b2c-finance-telegram-agent.json` (ou o somente leitura), teste manualmente e só então ative. A ativação registra o webhook no Telegram (mensagens e botões).
-8. **Scopes de escrita** na integração, para o agente com escrita: `agent_actions.manage`, `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`. O teste de conexão mostra a linha "Ações com confirmação".
-9. **Relatórios:** marque quem recebe em Integrações → Canais → **Envios**, importe os dois `telegram-daily-*-report.json`, rode "Executar agora (teste)" e só então ative.
+O passo a passo de implantação (bot, credenciais, ordem, testes, ativação e rollback) está em [`docs/TELEGRAM_INTEGRATION.md`](TELEGRAM_INTEGRATION.md).
 
-## 12. Agente com escrita e botões (bloco 2)
+## 11. Agente com escrita e botões (bloco 2)
 
 ```
 Mensagem → … → AI Agent (consulta + ferramentas que só PROPÕEM)
@@ -146,7 +134,7 @@ Toque no botão (callback_query) → deduplicar → privado? → resolve-identit
 - **Cliente ambíguo:** lista numerada (o agente pergunta qual). Botões por cliente ficaram de fora: a lista funciona igual nos dois canais e não põe ids de cliente em botões.
 - **Trilha:** proposta, confirmação e a escrita ficam em Atividades da IA/API com origem **Telegram**, o usuário como ator, a ação, o rótulo (cliente), o valor e o resultado. Nenhum segredo.
 
-## 13. Relatórios diários e preferências de envio
+## 12. Relatórios diários e preferências de envio
 
 - **Quem recebe:** só quem tiver **Relatório da manhã** / **Relatório da noite** marcado em Integrações → Canais → **Envios** (preferência no próprio vínculo; padrão desligado) **e** puder ver relatórios no B2C Finance (quem não pode não entra, mesmo marcado). O workflow pergunta à API: `GET /integrations/recipients?channel=TELEGRAM&purpose=morning_report`.
 - **Um relatório por pessoa, com o RBAC dela:** as consultas usam `X-B2C-Identity` = vínculo da pessoa. Quem não vê o caixa não recebe o caixa.
@@ -155,23 +143,38 @@ Toque no botão (callback_query) → deduplicar → privado? → resolve-identit
 - **Sem dado inventado:** a mesma consolidação e a mesma validação dos relatórios do WhatsApp (a IA só reorganiza; R$ que não está nos dados → vai a mensagem padrão).
 - **Fuso:** a data vem da API (`today`, America/Bahia). O cron roda no fuso do workflow (Settings → Timezone).
 
-## 14. Avisos proativos (preparados, não ligados)
+## 13. Avisos proativos (preparados, não ligados)
 
 - **Catálogo** (`src/lib/messaging/notifications.ts`): recebimento registrado, cobrança vencida, renovação chegando, despesa perto do vencimento.
 - **Preferência:** no mesmo diálogo **Envios**, por vínculo; padrão nenhum.
 - **Destinatários:** o mesmo `GET /integrations/recipients` (`purpose=receivable.overdue` etc.).
 - **Falta o entregador:** os eventos de negócio já vão para o Outbox (canal `integracao`) e ficam pendentes. Ligar o envio exige um workflow de avisos e regras anti-spam (agrupamento, horário). Nada é enviado hoje.
 
-## 11. Testes
+## 14. Hardening (bloco 3)
+
+- **Anti-flood:** nó "Limitar mensagens por pessoa", logo depois do filtro de chat privado e antes da API e da IA.
+  - No máximo `TELEGRAM_MAX_UPDATES_POR_MINUTO` (padrão 20) por Telegram User ID; o excedente recebe um aviso uma vez e o resto é descartado.
+  - É melhor esforço: o static data não é atômico, então uma rajada simultânea pode passar. Flood contínuo e laço são cortados.
+- **Limite na API:** por usuário do vínculo, 20 propostas e 30 confirmações/cancelamentos por minuto (429 + `Retry-After: 60`). A contagem usa a própria trilha de atividades, então vale entre instâncias. O limite por IP (120/min) continua.
+- **API fora do ar:** "Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos." Depois do aviso, o nó "Registrar falha da API" marca a execução como erro no n8n.
+- **Formatação:** o texto é dividido medindo o tamanho **depois** do escape, sem partir emoji e preservando os separadores originais. Relatório vai em até 10 partes, sem truncar; o agente, em até 4, com aviso.
+- **Referência a nós:** em parâmetro de nó HTTP, use `$node['Nó'].json`, nunca `$('Nó')`. No n8n 1.123, `$('Nó')` não resolve dentro de loop e o valor sai vazio. O teste `tests/telegram-hardening-n8n.test.ts` barra.
+- **Resposta delegada:** a API devolve `meta.onBehalfOf.identityId`. O relatório só é entregue se toda consulta respondeu em nome da pessoa.
+
+## 15. Testes
 
 | Arquivo | Cobre |
 |---|---|
 | `tests/api-identidade-telegram.test.ts` | Canal TELEGRAM, Telegram User ID, username recusado (regra, API e banco), metadata, duplicidade, usuário inativo, outro workspace, compatibilidade do WhatsApp, delegação/RBAC e ação pendente nascendo no canal TELEGRAM |
 | `tests/integracao-n8n.test.ts` ("Telegram") | Fluxo, identidade só pelo ID, somente leitura, prompt, normalização, `update_id`, privado × grupo × canal, `/start` `/help` `/status`, escape HTML, divisão em partes, teste de conexão |
 | `tests/api-telegram-escrita.test.ts` (bloco 2) | Confirmação por botão: válida, inválida, de outro usuário, vencida, repetida (replay e novo toque), cancelada; Idempotency-Key `telegram:`; pagamento, cadastro, status futuro, despesa, upsell, rotina; operação bloqueada; permissão (sem `cash.read`); trilha com origem Telegram; destinatários por preferência |
+| `tests/api-telegram-seguranca.test.ts` (bloco 3) | Callback de outra pessoa e de outro workspace, id inexistente e adulterado; dois toques simultâneos, o mesmo update repetido, dois pagamentos simultâneos (uma escrita); limite por usuário (429); matriz de perfis; trilha sem segredo |
+| `tests/telegram-hardening-n8n.test.ts` (bloco 3) | Escape (&, < >, emoji, acento, R$), relatório longo (ordem, sem repetir, sem truncar), conteúdo hostil, anti-flood, API fora do ar, privado × grupo × canal, identidade por from.id, credenciais placeholder, nenhuma referência `$('…')` em nó HTTP |
 | `tests/telegram-escrita-n8n.test.ts` (bloco 2) | Workflow com escrita (ferramentas, botões, callback, prompt), lógica dos nós com entradas simuladas, relatórios (destinatários, RBAC por pessoa, mesma consolidação) |
 
-**E2E no n8n 1.123.82** (Bot API do Telegram simulada, API e Qdrant locais, IA simulada): 17 cenários, todos com o resultado esperado.
+**E2E final (bloco 3), no n8n 1.123.82** com a API em build de produção, Qdrant local com chave, Bot API do Telegram e IA simulados (IA roteirizada). Os 20 cenários do bloco 3 deram o resultado esperado, mais: importação sem credenciais, teste de conexão, dois toques simultâneos e anti-flood.
+
+**E2E do bloco 1** (mesmo ambiente): 17 cenários, todos com o resultado esperado.
 
 | Grupo | Cenários |
 |---|---|

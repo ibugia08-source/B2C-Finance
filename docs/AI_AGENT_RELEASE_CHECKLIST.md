@@ -160,17 +160,35 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
 
 ### 3.3b Telegram (canal principal)
 
-- [ ] Bot no @BotFather; token **só** na credencial "Telegram Bot" do n8n.
-- [ ] Importar `telegram-connection-test.json`, definir `TELEGRAM_TEST_USER_ID` e executar: tudo OK, e "Ações com confirmação: OK" se for usar escrita.
-- [ ] Importar **um** agente de Telegram (um bot aceita um só webhook): `b2c-finance-telegram-agent.json` (com escrita) ou `b2c-finance-telegram-agent-readonly.json`.
-- [ ] Teste manual **antes de ativar**, no privado com o bot:
-  1. `/start`, `/help`, `/status`;
-  2. "Quanto recebemos hoje?";
-  3. pagamento de uma cobrança de teste → prévia com botões → **Cancelar** (nada gravado) → pedir de novo → **Confirmar** → tocar Confirmar de novo ("Essa ação já foi processada.");
-  4. "Deixe <cliente de teste> inativo a partir do mês que vem" → confira que o mês atual continua Ativo;
-  5. "Exclua <cliente>" → recusa, sem prévia.
-- [ ] Conferir em Atividades: origem **Telegram**, `agent_actions.*` e a escrita com o nome da pessoa como ator.
-- [ ] Ativar o agente. Relatórios: importar `telegram-daily-*-report.json`, "Executar agora (teste)", ativar.
+Passo a passo e ordem de implantação: [`docs/TELEGRAM_INTEGRATION.md`](TELEGRAM_INTEGRATION.md). Um bot aceita um só webhook: nunca deixe o somente leitura e o com escrita ativos ao mesmo tempo no mesmo bot.
+
+- [ ] Bot criado no BotFather
+- [ ] Token armazenado somente no n8n (credencial "Telegram Bot")
+- [ ] Credential Telegram configurada e testada (Test → getMe)
+- [ ] Service Account B2C criada
+- [ ] Scopes revisados (leitura + `identities.resolve` + `knowledge.read`; escrita só para o agente com escrita)
+- [ ] API B2C acessível
+- [ ] `/health` funcionando
+- [ ] `/me` funcionando
+- [ ] Telegram User ID descoberto
+- [ ] Telegram User ID vinculado ao usuário B2C (Integrações → Canais)
+- [ ] Qdrant configurado
+- [ ] Knowledge indexado (`gravados` = `trechosNoPacote`)
+- [ ] Connection test passou
+- [ ] readonly importado
+- [ ] readonly testado
+- [ ] readonly ativado
+- [ ] Destinatários marcados em Canais → Envios
+- [ ] morning report testado
+- [ ] evening report testado
+- [ ] write agent importado
+- [ ] write agent testado
+- [ ] confirmação testada
+- [ ] cancelamento testado
+- [ ] idempotência testada (Confirmar de novo → "Essa ação já foi processada.")
+- [ ] ação bloqueada testada
+- [ ] write agent ativado (readonly desativado antes)
+- [ ] readonly mantido como fallback (importado e desativado)
 
 ### 3.4 Meta (WhatsApp Cloud API — opcional)
 
@@ -184,6 +202,7 @@ Todos os testes rodam em `npm run test`, contra o banco de testes, nunca contra 
 
 ## 4. Voltar atrás
 
+- **Rollback completo do Telegram:** [`docs/TELEGRAM_INTEGRATION.md`](TELEGRAM_INTEGRATION.md) §9.
 - **Agente com problema:** desative-o no n8n e ative o somente leitura do mesmo canal (`b2c-finance-telegram-agent-readonly.json` ou `b2c-finance-ai-agent-readonly.json`).
 - **Integração comprometida:** revogue o token em Configurações → Integrações. O efeito é imediato e toda chamada passa a dar 401.
 - **Número ou Telegram indevido:** desvincule em Configurações → Integrações → Canais. O corte é imediato.

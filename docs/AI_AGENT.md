@@ -114,6 +114,8 @@ Toda ação fica registrada em **Configurações → Integrações → Atividade
 - **Não encontrou:** "Não encontrei o registro solicitado." Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.
 - **Recusa de regra:** "Não foi possível concluir: " + o motivo dado pelo B2C Finance (ex.: "essa cobrança já está quitada").
 - **Problema técnico:** "Não consegui concluir essa consulta agora. A tentativa foi registrada." O agente não mostra detalhes técnicos.
+- **B2C Finance fora do ar:** "Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos." O agente nunca troca o dado atual por um texto da base de conhecimento.
+- **Mensagens demais em pouco tempo:** "Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo." É uma proteção contra flood e laços de automação.
 - **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.
 - **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.
 

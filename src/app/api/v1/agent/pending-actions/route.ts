@@ -1,4 +1,5 @@
 import { defineEndpoint } from "@/lib/api/http";
+import { LIMITE_POR_USUARIO } from "@/lib/api/agent/catalog";
 import { ListaQuery, PropostaBody, listarAcoes, proporAcao, serializarAcao } from "@/lib/api/agent/pending-actions";
 
 /**
@@ -15,7 +16,7 @@ import { ListaQuery, PropostaBody, listarAcoes, proporAcao, serializarAcao } fro
 export const dynamic = "force-dynamic";
 
 export const POST = defineEndpoint(
-  { action: "agent_actions.propose", scope: "agent_actions.manage", body: PropostaBody },
+  { action: "agent_actions.propose", scope: "agent_actions.manage", body: PropostaBody, limitePorUsuario: LIMITE_POR_USUARIO.propor },
   async ({ req, auth, ctx, body }) => {
     const origem = req.headers.get("x-b2c-message-id")?.trim().slice(0, 200) || null;
     const a = await proporAcao({ auth, ctx, body, sourceMessageId: origem });

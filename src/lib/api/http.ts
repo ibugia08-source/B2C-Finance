@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { z, type ZodTypeAny } from "zod";
-import { runWithPrincipal } from "@/lib/auth/owner-scope";
+import { runWithPrincipal, runWithoutScope } from "@/lib/auth/owner-scope";
+import { prisma } from "@/lib/prisma";
 import type { DomainContext } from "@/lib/engines/domain";
 import { DomainNotFoundError } from "@/lib/engines/domain";
 import { ApiError, apiDomainContext, authenticateApiToken, requireApiScope, type ApiAuth } from "./auth";
@@ -80,6 +81,7 @@ function cabecalhosDeErro(err: ApiError): Record<string, string> {
   if (err.code === "insufficient_scope") {
     return { "WWW-Authenticate": `Bearer realm="b2c-api", error="insufficient_scope", scope="${err.scope}"` };
   }
+  if (err.status === 429) return { "Retry-After": "60" };
   return {};
 }
 
@@ -159,7 +161,26 @@ export type EndpointOptions<Q, P, B> = {
   write?: { operation: WriteOperationKey };
   /** false = não registra na trilha (só /health, chamado por monitor). */
   audit?: boolean;
+  /**
+   * Limite POR USUÁRIO do vínculo (X-B2C-Identity) nesta ação, na janela.
+   * Conta na própria trilha (ApiActivity) — vale entre instâncias, sem
+   * infraestrutura nova. Complementa o limite por IP do middleware.
+   */
+  limitePorUsuario?: { max: number; janelaSegundos: number };
 };
+
+/** Quantas chamadas desta ação o usuário fez na janela (tentativas recusadas não contam). */
+async function chamadasRecentes(ownerId: string, userId: string, action: string, janelaSegundos: number): Promise<number> {
+  return runWithoutScope(async () =>
+    await prisma.apiActivity.count({
+      where: {
+        ownerId, actorUserId: userId, action,
+        result: { not: "DENIED" },
+        createdAt: { gte: new Date(Date.now() - janelaSegundos * 1000) },
+      },
+    })
+  );
+}
 
 export function defineEndpoint<
   Q extends ZodTypeAny = z.ZodObject<{}>,
@@ -236,6 +257,12 @@ export function defineEndpoint<
           throw new ApiError(403, "user_forbidden", `${auth.delegacao.userName} não tem permissão para isto no B2C Finance.`, opts.scope);
         }
         requireApiScope(auth, opts.scope);
+      }
+      if (opts.limitePorUsuario && auth.delegacao) {
+        const { max, janelaSegundos } = opts.limitePorUsuario;
+        if ((await chamadasRecentes(auth.ownerId, auth.delegacao.userId, action, janelaSegundos)) >= max) {
+          throw new ApiError(429, "rate_limited", "Muitas ações em pouco tempo. Aguarde um minuto e tente de novo.");
+        }
       }
 
       // Parâmetros desconhecidos são recusados (schemas `.strict()`): um
@@ -346,7 +373,7 @@ export function defineEndpoint<
       if (auth) {
         await trilha({
           ownerId: auth.ownerId, serviceAccountId: auth.serviceAccountId,
-          result: err.status === 401 || err.status === 403 || err.code === "identity_not_found" ? "DENIED" : "ERROR",
+          result: err.status === 401 || err.status === 403 || err.status === 429 || err.code === "identity_not_found" ? "DENIED" : "ERROR",
           httpStatus: err.status, errorCode: err.code,
         });
       }

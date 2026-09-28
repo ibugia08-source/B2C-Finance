@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CRED_TELEGRAM } from "./lib/pecas.mjs";
-import { JS_FORMATAR } from "./build-telegram-workflows.mjs";
+import { jsFormatar } from "./build-telegram-workflows.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CRED_B2C = { httpHeaderAuth: { id: "CONFIGURAR_B2C_FINANCE_API", name: "B2C Finance API" } };
@@ -651,7 +651,7 @@ function workflowTelegram({ nome, arquivo, periodo, finalidade, agenda, gets, co
     modelo([xC + 220, 500]),
     code("Validar mensagem", JS_VALIDAR, [xC + 460, 300], "R$ desconhecido ou falha da IA → mensagem padrão."),
     code(TG.envio, JS_ENVIO_TG(gets), [xC + 680, 300], "Só entrega se a API respondeu em nome desta pessoa."),
-    code(TG.formatar, JS_FORMATAR, [xC + 900, 300], "HTML seguro + partes (limite do Telegram)."),
+    code(TG.formatar, jsFormatar(10), [xC + 900, 300], "HTML seguro + partes (limite do Telegram; relatório não é truncado)."),
     {
       parameters: {
         resource: "message",

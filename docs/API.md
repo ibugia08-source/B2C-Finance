@@ -407,6 +407,8 @@ O agente (Telegram ou WhatsApp) não escreve direto. Ele propõe em `POST /agent
 - `GET /agent/pending-actions/{id}` mostra a ação só ao usuário dela (outro usuário, vínculo ou workspace: 404); vencida aparece como `EXPIRED`. O Telegram consulta antes de confirmar ou cancelar pelo botão.
 - A confirmação por botão só vale para ação do canal TELEGRAM. O mesmo update repetido é replay; outro toque numa ação já decidida dá 409 `action_not_pending` e nunca executa de novo.
 - No Telegram, a resposta da proposta não traz o código.
+- **Limite por usuário do vínculo:** 20 propostas e 30 confirmações/cancelamentos por minuto. Acima disso, 429 `rate_limited` com `Retry-After: 60`. Soma-se ao limite por IP (120/min) do middleware.
+- **`meta.onBehalfOf.identityId`:** toda resposta de sucesso com `X-B2C-Identity` diz em nome de qual vínculo a API respondeu. Quem monta algo por pessoa, como o relatório do Telegram, deve conferir isso antes de entregar.
 
 A execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).
 

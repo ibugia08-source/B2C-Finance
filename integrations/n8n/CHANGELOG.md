@@ -2,6 +2,17 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-29 — Fase 16 · bloco 3: hardening e preparação da implantação
+
+- **Agentes do Telegram:**
+  - anti-flood por Telegram User ID antes da API e da IA (`TELEGRAM_MAX_UPDATES_POR_MINUTO`, padrão 20);
+  - API fora do ar → mensagem padronizada, sem IA, e a execução marcada como erro ("Registrar falha da API").
+- **Formatador:** mede o tamanho depois do escape, não parte emoji, preserva separadores e a ordem. Relatórios vão em até 10 partes, sem truncar.
+- **Workflows do WhatsApp:** inalterados (só o prompt compartilhado ganhou a regra de API fora do ar).
+- **`check-secrets.mjs`:** agora também barra token de bot do Telegram, chave de API (Qdrant), CRON_SECRET, senha e JWT, e varre `docs/` e `.env*.example`.
+- **`ENV.example`:** `B2C_FINANCE_API_TOKEN=YOUR_API_TOKEN`; `TELEGRAM_BOT_TOKEN` e `QDRANT_API_KEY` só como referência comentada (os valores ficam nas credenciais).
+- **Guia de implantação:** `docs/TELEGRAM_INTEGRATION.md`.
+
 ## 2026-09-29 — Fase 16 · bloco 2: Telegram com escrita e relatórios
 
 - **Novos** (todos desativados):

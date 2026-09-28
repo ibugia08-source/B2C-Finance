@@ -277,7 +277,9 @@ describe("sem segredo versionado", () => {
     for (const v of ["B2C_FINANCE_API_URL", "B2C_FINANCE_API_TOKEN", "WHATSAPP_API_URL", "WHATSAPP_API_TOKEN", "OPENAI_API_KEY"]) {
       expect(env).toMatch(new RegExp(`^${v}=`, "m"));
     }
-    expect(env).toMatch(/^B2C_FINANCE_API_TOKEN=b2c_live_XXXXXXXX_COLE/m);
+    expect(env).toMatch(/^B2C_FINANCE_API_TOKEN=YOUR_API_TOKEN$/m);
+    expect(env).toMatch(/^# TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN$/m);
+    expect(env).toMatch(/^# QDRANT_API_KEY=YOUR_QDRANT_API_KEY$/m);
   });
 });
 
@@ -792,7 +794,8 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     expect(prox("Telegram: receber mensagem")).toBe("Normalizar update");
     expect(prox("Normalizar update")).toBe("Deduplicar update (update_id)");
     expect(prox("Deduplicar update (update_id)")).toBe("Chat privado?");
-    expect(prox("Chat privado?", 0)).toBe("Extrair Telegram User ID");
+    expect(prox("Chat privado?", 0)).toBe("Limitar mensagens por pessoa"); // anti-flood antes da API
+    expect(prox("Dentro do limite?", 0)).toBe("Extrair Telegram User ID");
     expect(prox("Chat privado?", 1)).toBe("Resposta: só no privado"); // grupo nunca chega na API
     expect(prox("Extrair Telegram User ID")).toBe("API: resolver identidade");
     expect(prox("API: resolver identidade")).toBe("Carregar permissões");
@@ -892,7 +895,7 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     expect(naoVinc.json.texto).toContain("*123456789*");
     expect(naoVinc.json.texto).not.toMatch(/R\$|inadimpl|MRR/);
     const [erro] = await rodar("Roteiro da mensagem", [{ ...base, text: "quanto recebemos?", comando: null, authorized: false, motivo: "erro_tecnico" }]);
-    expect(erro.json.texto).toContain("Não consegui verificar seu acesso");
+    expect(erro.json.texto).toContain("Não consegui acessar os dados do B2C Finance neste momento");
     const aut = { ...base, authorized: true, userName: "Raiane", roleLabel: "Financeiro", allowedScopes: ["receivables.read"] };
     const [start] = await rodar("Roteiro da mensagem", [aut]);
     expect(start.json.texto).toContain("Olá, *Raiane*");

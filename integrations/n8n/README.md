@@ -2,7 +2,7 @@
 
 Integração do B2C Finance com o n8n: o **agente** (Telegram, canal principal; WhatsApp, opcional) e os relatórios diários. Tudo fica versionado neste repositório, junto com a API que ela consome.
 
-> **Telegram é o canal principal** (Fase 16): `b2c-finance-telegram-agent.json` (consulta + escrita com botões Confirmar/Cancelar) ou `b2c-finance-telegram-agent-readonly.json`, `telegram-connection-test.json` e os relatórios `telegram-daily-*-report.json`. Guia: [`docs/TELEGRAM.md`](../../docs/TELEGRAM.md).
+> **Telegram é o canal principal** (Fase 16): `b2c-finance-telegram-agent.json` (consulta + escrita com botões Confirmar/Cancelar) ou `b2c-finance-telegram-agent-readonly.json`, `telegram-connection-test.json` e os relatórios `telegram-daily-*-report.json`. Implantação passo a passo: [`docs/TELEGRAM_INTEGRATION.md`](../../docs/TELEGRAM_INTEGRATION.md). Referência técnica: [`docs/TELEGRAM.md`](../../docs/TELEGRAM.md).
 >
 > **Agentes do WhatsApp (canal opcional, mantido):**
 > - `b2c-finance-ai-agent.json` consulta e **propõe escritas com confirmação**. Nada é gravado sem o usuário responder `SIM <código>`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](../../docs/N8N_AGENT_WRITE_ACTIONS.md).

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineEndpoint } from "@/lib/api/http";
+import { LIMITE_POR_USUARIO } from "@/lib/api/agent/catalog";
 import { ConfirmacaoBody, confirmarAcao, mensagemDoResultado, serializarAcao } from "@/lib/api/agent/pending-actions";
 
 /**
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 const Params = z.object({ id: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Id inválido.") });
 
 export const POST = defineEndpoint(
-  { action: "agent_actions.confirm", scope: "agent_actions.manage", params: Params, body: ConfirmacaoBody },
+  { action: "agent_actions.confirm", scope: "agent_actions.manage", params: Params, body: ConfirmacaoBody, limitePorUsuario: LIMITE_POR_USUARIO.decidir },
   async ({ req, auth, ctx, params, body, requestId }) => {
     const r = await confirmarAcao({
       req, auth, ctx, id: params.id, body, requestId,
