@@ -122,6 +122,7 @@ const OWNED_MODELS = new Set<string>([
   "ApiIdempotencyKey",
   // Número de WhatsApp → usuário (28/09/2026).
   "MessagingIdentity",
+  "PendingAction",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

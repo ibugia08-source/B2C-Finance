@@ -2,6 +2,17 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-28 (5)
+
+- **Novo** `workflows/b2c-finance-ai-agent.json`: agente com escrita controlada. O somente leitura fica intacto.
+  - **Classificação:** READ executa; WRITE_CONFIRMATION gera prévia e pede confirmação; BLOCKED nunca.
+  - **10 ferramentas de escrita** (`schemas/agent-write-tools.json`) que só **propõem** (`POST /agent/pending-actions`, operação fixa no corpo).
+  - **"SIM <código>" / "NÃO"** são tratados antes da IA: ação pendente do usuário → `/confirm` ou `/cancel`, com `Idempotency-Key = wa:<mensagem>:<ação>`. "sim" sem código não confirma.
+  - **Depois da IA**, se houve proposta nesta mensagem, o WhatsApp recebe a prévia montada pela API.
+  - **Webhook próprio:** `/webhook/b2c-finance-ai-agent-v2`.
+- **Scopes novos na integração:** `agent_actions.manage` e os de escrita. O teste de conexão mostra `faltandoParaEscrita`.
+- `examples/system-prompt-write.md`: prompt do agente com escrita.
+
 ## 2026-09-28 (4)
 
 - **Identidade pela API:** o agente não usa mais o diretório `B2C_WHATSAPP_USERS` nem `schemas/user-profiles.json` (removidos). A sequência passou a ser:

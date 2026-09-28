@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
  * Gera os workflows a partir das fontes versionadas:
- *   schemas/agent-tools.json    → uma ferramenta HTTP (GET) por item do catálogo
+ *   schemas/agent-tools.json        → uma ferramenta HTTP (GET) por item do catálogo
+ *   schemas/agent-write-tools.json  → ferramentas que PROPÕEM escrita (agente com escrita)
  *   examples/system-prompt.md   → instruções do agente
  *
  *   node integrations/n8n/scripts/build-workflows.mjs    (npm run n8n:build)
  *
  * Saída:
- *   workflows/b2c-finance-ai-agent-readonly.json  agente de consulta (WhatsApp)
+ *   workflows/b2c-finance-ai-agent-readonly.json  agente de consulta (WhatsApp) — referência/backup
+ *   workflows/b2c-finance-ai-agent.json           agente com escrita controlada (prévia + SIM <código>)
  *   workflows/sistema.teste-conexao.v1.json       teste de conexão e scopes
  *
  * Depois de importar e ajustar no n8n, exporte de volta (scripts/export.sh);
@@ -502,6 +504,394 @@ const agente = {
 };
 
 // ---------------------------------------------------------------------------
+// Agente COM ESCRITA CONTROLADA (b2c-finance-ai-agent.json)
+//
+// Mesma entrada e segurança do agente somente leitura, mais:
+//  · ferramentas de escrita que só PROPÕEM (POST /agent/pending-actions);
+//  · antes da IA, a resposta "SIM <código>" / "NÃO" do usuário é tratada de
+//    forma DETERMINÍSTICA: acha a ação pendente dele na API e confirma (ou
+//    cancela) com Idempotency-Key = mensagem + ação. A IA não confirma nada.
+//  · depois da IA, se ela propôs uma ação nesta mensagem, a resposta é a
+//    PRÉVIA montada pela API (com o código), não o texto da IA.
+// ---------------------------------------------------------------------------
+
+const escrita = JSON.parse(readFileSync(join(RAIZ, "schemas/agent-write-tools.json"), "utf8"));
+const promptEscrita = readFileSync(join(RAIZ, "examples/system-prompt-write.md"), "utf8").trim();
+
+const NE = {
+  ...N,
+  agente: "AI Agent B2C Finance",
+  detectar: "Detectar confirmação",
+  ehResposta: "Resposta a uma ação pendente?",
+  pendenteAtual: "API: ação pendente atual",
+  decidir: "Decidir confirmação",
+  proximo: "Próximo passo",
+  apiConfirmar: "API: confirmar ação",
+  apiCancelar: "API: cancelar ação",
+  respostaAcao: "Resposta da ação",
+  juntar: "Juntar resposta e contexto",
+  proposta: "API: ação proposta nesta mensagem",
+};
+
+function ferramentaDeEscrita(t, i) {
+  const campos = Object.entries(t.input)
+    .map(([k, v]) => `${k} (${v.type}${t.required.includes(k) ? ", obrigatório" : ""}): ${v.description}`)
+    .join("; ");
+  const semInput = Object.keys(t.input).length === 0;
+  // Operação FIXA no corpo: a ferramenta não escolhe outra operação.
+  const corpo = `{"operation":"${t.operation}"${t.target ? ',"targetId":"{targetId}"' : ""},"input":${semInput ? "{}" : "{input}"}}`;
+  return {
+    parameters: {
+      toolDescription: `${t.description} Risco: WRITE_CONFIRMATION — não executa nada; a API monta a prévia e o usuário confirma.`,
+      method: "POST",
+      url: `={{ ($json.allowedTools || []).includes('${t.name}') ? $env.B2C_FINANCE_API_URL : '${BLOQUEADA}' }}/agent/pending-actions`,
+      authentication: "genericCredentialType",
+      genericAuthType: "httpHeaderAuth",
+      sendHeaders: true,
+      specifyHeaders: "keypair",
+      parametersHeaders: {
+        values: [
+          ...cabecalhos.parametersHeaders.values,
+          // A ação fica ligada à mensagem que a pediu (o workflow a acha depois da IA).
+          { name: "X-B2C-Message-Id", valueProvider: "fieldValue", value: "={{ $json.messageId }}" },
+        ],
+      },
+      sendBody: true,
+      specifyBody: "json",
+      jsonBody: corpo,
+      placeholderDefinitions: {
+        values: [
+          ...(t.target ? [{ name: "targetId", description: t.target.description, type: "string" }] : []),
+          ...(semInput
+            ? []
+            : [{ name: "input", description: `Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`, type: "json" }]),
+        ],
+      },
+      optimizeResponse: false,
+    },
+    name: t.name,
+    type: "@n8n/n8n-nodes-langchain.toolHttpRequest",
+    typeVersion: 1.1,
+    position: [1500 + (i % 5) * 170, 1000 + Math.floor(i / 5) * 180],
+    credentials: CRED_B2C,
+    notes: `POST /agent/pending-actions · ${t.operation} · scope ${t.scope} + agent_actions.manage · WRITE_CONFIRMATION`,
+    notesInFlow: true,
+  };
+}
+
+// Ferramenta → scopes exigidos (TODOS). Escrita = scope da operação + agent_actions.manage.
+const FERRAMENTA_SCOPES = {
+  ...Object.fromEntries(catalogo.tools.map((t) => [t.name, [t.scope]])),
+  ...Object.fromEntries(escrita.tools.map((t) => [t.name, [t.scope, "agent_actions.manage"]])),
+};
+
+const JS_PERMISSOES_ESCRITA = `// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
+// nem da IA). O usuário é o do VÍNCULO cadastrado no B2C Finance.
+// Ferramenta liberada = a API devolveu TODOS os scopes dela em allowedScopes
+// (conta ∩ RBAC do usuário). Escrita exige o scope da operação + agent_actions.manage.
+const FERRAMENTA_SCOPES = ${JSON.stringify(FERRAMENTA_SCOPES, null, 2)};
+const mensagens = $('${NE.identificar}').all();
+return $input.all().map((item, i) => {
+  const msg = mensagens[i] ? mensagens[i].json : {};
+  const r = item.json || {};
+  if (r.success === true && r.data && r.data.user) {
+    const scopes = r.data.allowedScopes || [];
+    return {
+      json: {
+        ...msg,
+        authorized: true,
+        identityId: r.data.identityId,
+        userId: r.data.user.id,
+        userName: r.data.user.name,
+        roleLabel: r.data.user.roleLabel,
+        allowedScopes: scopes,
+        allowedTools: Object.keys(FERRAMENTA_SCOPES).filter((t) => FERRAMENTA_SCOPES[t].every((s) => scopes.includes(s))),
+        motivo: null,
+      },
+    };
+  }
+  const texto = JSON.stringify(r.error || r);
+  const motivo = texto.includes('identity_not_found') ? 'numero_nao_vinculado'
+    : texto.includes('agency_scope_not_supported') ? 'usuario_restrito_a_agencia'
+    : 'erro_tecnico';
+  return { json: { ...msg, authorized: false, identityId: null, allowedTools: [], motivo } };
+});`;
+
+const JS_DETECTAR = `// ETAPA 6a — A mensagem é RESPOSTA a uma ação pendente? (determinístico, sem IA)
+//  · "SIM 4821" / "confirmo 4821"  → confirmar com o código
+//  · "NÃO" / "cancelar" (com ou sem código) → cancelar
+//  · "sim" / "pode" sem código     → NÃO confirma: pede o código
+//  · qualquer outra coisa          → segue para o agente
+const CONFIRMA = /^\\s*(?:sim|s|confirmo|confirmar|confirma|ok|pode)\\s*[,.:;!-]?\\s*(\\d{4})\\s*[.!]*\\s*$/i;
+const CANCELA = /^\\s*(?:n[aã]o|cancela|cancelar|cancelo)\\s*[,.:;!-]?\\s*(\\d{4})?\\s*[.!]*\\s*$/i;
+const SO_SIM = /^\\s*(?:sim|s|confirmo|confirmar|confirma|ok|pode|pode sim|isso)\\s*[.!]*\\s*$/i;
+return $input.all().map((item) => {
+  const t = String(item.json.text || '');
+  let intencao = 'outro';
+  let codigo = null;
+  const c = t.match(CONFIRMA);
+  if (c) { intencao = 'confirmar'; codigo = c[1]; }
+  else if (CANCELA.test(t)) intencao = 'cancelar';
+  else if (SO_SIM.test(t)) intencao = 'sim_sem_codigo';
+  return { json: { ...item.json, intencao, codigo } };
+});`;
+
+const JS_DECIDIR = `// ETAPA 6b — Liga a resposta do usuário à ação PENDENTE dele (lida na API).
+// Uma pendente por usuário: é essa que o código tem de confirmar — a API
+// confere código, usuário, vínculo, validade e estado antes de executar.
+// Idempotency-Key = mensagem do WhatsApp + id da ação.
+const mensagens = $('${NE.detectar}').all();
+const responder = (m, body) => ({ json: { ...m, proximo: 'responder', to: m.from, phoneNumberId: m.phoneNumberId, body } });
+return $input.all().map((item, i) => {
+  const m = mensagens[i] ? mensagens[i].json : {};
+  const r = item.json || {};
+  if (r.success !== true) return responder(m, 'Não consegui verificar a ação pendente agora. Tente de novo em instantes.');
+  const acao = Array.isArray(r.data) ? r.data[0] : null;
+  if (!acao) {
+    if (m.intencao === 'confirmar') {
+      return responder(m, 'Não encontrei nenhuma ação aguardando confirmação — ela pode ter expirado ou já ter sido feita. Peça de novo, se ainda quiser.');
+    }
+    return { json: { ...m, proximo: 'agente' } }; // "sim"/"não" soltos sem pendente: conversa normal
+  }
+  if (m.intencao === 'cancelar') return { json: { ...m, proximo: 'cancelar', actionId: acao.actionId } };
+  if (m.intencao === 'sim_sem_codigo') {
+    return responder(m, 'Para confirmar, responda *SIM* seguido do código de 4 dígitos.\\n\\n' + (acao.message || acao.preview));
+  }
+  const chave = 'wa:' + String(m.messageId).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 200) + ':' + acao.actionId;
+  return { json: { ...m, proximo: 'confirmar', actionId: acao.actionId, idempotencyKey: chave } };
+});`;
+
+const JS_RESPOSTA_ACAO = `// ETAPA 7a — Resposta da confirmação/cancelamento: o texto vem da API
+// (resultado real da execução), nunca da IA.
+const ref = $('${NE.decidir}');
+return $input.all().map((item, i) => {
+  const m = (ref.itemMatching ? ref.itemMatching(i) : ref.all()[i]).json;
+  const r = item.json || {};
+  const body = r.success === true && r.data && r.data.message
+    ? r.data.message
+    : (r.error && r.error.message) || 'Não consegui concluir agora. Confira no B2C Finance antes de pedir de novo.';
+  return { json: { to: m.from, phoneNumberId: m.phoneNumberId, body } };
+});`;
+
+const JS_JUNTAR = `// ETAPA 7 — A saída do agente traz só o texto; o vínculo (identityId) e a
+// mensagem (messageId) vêm do contexto, pelo índice do item.
+const ctxs = $('${N.contexto}').all();
+return $input.all().map((item, i) => ({
+  json: { ...((ctxs[i] || ctxs[0] || {}).json || {}), output: item.json.output ?? null },
+}));`;
+
+const JS_INTERPRETAR_ESCRITA = `// ETAPA 7 — Resposta do agente para o WhatsApp.
+// Se a IA PROPÔS uma ação nesta mensagem, a resposta é a PRÉVIA montada pela
+// API (estado atual + código) — nunca a paráfrase da IA.
+// Sem texto (erro do modelo/ferramenta) → mensagem neutra, sem detalhe técnico.
+const LIMITE = 3900;
+const juntos = $('${NE.juntar}').all();
+return $input.all().map((item, i) => {
+  const ctx = (juntos[i] || juntos[0]).json;
+  const r = item.json || {};
+  const proposta = r.success === true && Array.isArray(r.data) ? r.data.find((a) => a.status === 'PENDING') : null;
+  if (proposta && proposta.message) return { json: { to: ctx.from, phoneNumberId: ctx.phoneNumberId, body: proposta.message, actionId: proposta.actionId } };
+  let texto = String(ctx.output || '').trim();
+  if (!texto) texto = 'Tive um problema técnico agora. Tente de novo em instantes.';
+  texto = texto.replace(/^\\s*\\|.*\\|\\s*$/gm, (linha) => linha.replace(/\\s*\\|\\s*/g, ' · ').replace(/^ · | · $/g, ''));
+  texto = texto.replace(/^\\s*[-·:\\s]+$/gm, '');
+  if (texto.length > LIMITE) texto = texto.slice(0, LIMITE - 60).trimEnd() + '\\n\\n(Resposta resumida — peça o detalhe que quiser.)';
+  return { json: { to: ctx.from, phoneNumberId: ctx.phoneNumberId, body: texto } };
+});`;
+
+// HTTP de controle (fora das ferramentas): sempre com o vínculo e sem lançar
+// erro — a resposta de erro da API vira texto para o usuário.
+const apiDeControle = (nome, metodo, caminho, pos, nota, extra = {}) => ({
+  parameters: {
+    method: metodo,
+    url: `={{ $env.B2C_FINANCE_API_URL }}${caminho}`,
+    authentication: "genericCredentialType",
+    genericAuthType: "httpHeaderAuth",
+    sendHeaders: true,
+    headerParameters: {
+      parameters: [
+        { name: "X-B2C-Source", value: "whatsapp" },
+        { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+        { name: "X-B2C-Identity", value: extra.identidade ?? "={{ $json.identityId }}" },
+        ...(extra.headers ?? []),
+      ],
+    },
+    ...(extra.jsonBody ? { sendBody: true, specifyBody: "json", jsonBody: extra.jsonBody } : {}),
+    options: { response: { response: { neverError: true } } },
+  },
+  name: nome,
+  type: "n8n-nodes-base.httpRequest",
+  typeVersion: 4.2,
+  position: pos,
+  credentials: CRED_B2C,
+  onError: "continueRegularOutput",
+  alwaysOutputData: true,
+  notes: nota,
+  notesInFlow: true,
+});
+
+const ferramentasEscrita = escrita.tools.map(ferramentaDeEscrita);
+const ferramentasLeitura = catalogo.tools.map((t, i) => ({ ...ferramenta(t, i), position: [1500 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180] }));
+const todasFerramentas = [...ferramentasLeitura, ...ferramentasEscrita];
+const scopesEscrita = [
+  ...new Set([...catalogo.tools.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
+].sort();
+
+const naoAutorizado = agente.nodes.find((n) => n.name === N.naoAutorizado);
+const soTexto = agente.nodes.find((n) => n.name === N.soTexto);
+const verificacaoNos = agente.nodes.filter((n) => [N.verificacao, N.desafio, N.responderDesafio, N.webhook, N.assinatura, N.normalizar, N.identificar, N.resolver].includes(n.name));
+
+const agenteEscrita = {
+  name: "B2C Finance · AI Agent (consulta + escrita com confirmação)",
+  nodes: [
+    nota(
+      "Nota: sobre este workflow",
+      `## B2C Finance · AI Agent (consulta + escrita com confirmação)\n\nConsulta a API e PROPÕE escritas. Nada é gravado sem o usuário responder **SIM <código>**.\n\n- **READ** executa direto · **WRITE_CONFIRMATION** gera prévia e pede confirmação · **BLOCKED** nunca (excluir, reabrir competência, permissões, usuários, plano de contas).\n- **Nunca** acessa banco, Supabase ou Prisma — só a API (\`$env.B2C_FINANCE_API_URL\`).\n- Tokens só nas **credenciais** — nada no workflow.\n- **Não ative** antes do teste (docs/N8N_AGENT_WRITE_ACTIONS.md).\n\nO agente somente leitura continua em b2c-finance-ai-agent-readonly.json (referência/backup).\n\nFonte: integrations/n8n (gerado por scripts/build-workflows.mjs).`,
+      [-460, -40], 420, 440, 7
+    ),
+    nota(
+      "Nota: entrada e segurança",
+      `### 1–4 · Entrada, segurança e identidade\nAssinatura HMAC da Meta; payload normalizado; repetidas descartadas. A **API** resolve o número pelo vínculo (Configurações → Integrações → WhatsApp). Sem vínculo = resposta genérica.`,
+      [-20, 180], 1060, 330, 5
+    ),
+    nota(
+      "Nota: confirmação",
+      `### 6 · Confirmação (sem IA)\n"SIM 4821" → acha a ação PENDENTE do usuário na API → \`POST /agent/pending-actions/{id}/confirm\` com **Idempotency-Key = wa:<mensagem>:<ação>**. A API confere código, usuário, vínculo, validade e se o estado ainda é o da prévia, e executa o payload GUARDADO pela rota de escrita oficial (RBAC do usuário).\n"sim" sem código não confirma. "NÃO" cancela.`,
+      [1220, -300], 1100, 300, 4
+    ),
+    nota(
+      "Nota: agente e ferramentas",
+      `### 6–7 · Agente\nLeitura: GET na API. Escrita: todas as ferramentas fazem \`POST /agent/pending-actions\` com a operação FIXA — só propõem. Depois da IA, se houve proposta nesta mensagem, o WhatsApp recebe a **prévia da API** (com o código), não a paráfrase da IA.`,
+      [1460, 180], 1100, 1200, 6
+    ),
+    ...verificacaoNos,
+    code(N.permissoes, JS_PERMISSOES_ESCRITA, [1060, 300], "Ferramentas = scopes que a API liberou para o usuário."),
+    se(N.autorizado, "={{ $json.authorized }}", [1240, 300], "Número não vinculado → resposta genérica."),
+    se(N.texto, "={{ $json.tipo === 'text' && $json.text.length > 0 }}", [1420, 240], "Áudio, imagem etc. → pede texto."),
+    code(NE.detectar, JS_DETECTAR, [1600, 240], "SIM <código> / NÃO / sim sem código / outra mensagem."),
+    se(NE.ehResposta, "={{ $json.intencao !== 'outro' }}", [1780, 240], "Resposta a uma ação → confirmação sem IA."),
+    apiDeControle(NE.pendenteAtual, "GET", "/agent/pending-actions?status=PENDING&limit=1", [1960, 0], "A ação que aguarda confirmação deste usuário."),
+    code(NE.decidir, JS_DECIDIR, [2140, 0], "Liga a resposta à ação pendente; monta a Idempotency-Key."),
+    {
+      parameters: {
+        mode: "expression",
+        numberOutputs: 4,
+        output: "={{ ['confirmar', 'cancelar', 'responder', 'agente'].indexOf($json.proximo) }}",
+      },
+      name: NE.proximo,
+      type: "n8n-nodes-base.switch",
+      typeVersion: 3,
+      position: [2320, 0],
+      notes: "0 confirmar · 1 cancelar · 2 responder · 3 agente",
+      notesInFlow: true,
+    },
+    apiDeControle(NE.apiConfirmar, "POST", "/agent/pending-actions/{{ $json.actionId }}/confirm", [2540, -160], "Executa a ação guardada (RBAC, idempotência, trilha).", {
+      headers: [{ name: "Idempotency-Key", value: "={{ $json.idempotencyKey }}" }],
+      jsonBody: "={{ JSON.stringify({ messageId: $json.messageId, confirmationCode: $json.codigo }) }}",
+    }),
+    apiDeControle(NE.apiCancelar, "POST", "/agent/pending-actions/{{ $json.actionId }}/cancel", [2540, 0], "Cancela: nada é executado.", {
+      jsonBody: "={{ JSON.stringify({ messageId: $json.messageId }) }}",
+    }),
+    code(NE.respostaAcao, JS_RESPOSTA_ACAO, [2760, -80], "Texto do resultado real (da API)."),
+    code(N.contexto, JS_CONTEXTO, [1960, 400], "Sessão, data de hoje e ferramentas do usuário."),
+    {
+      parameters: {
+        promptType: "define",
+        text: "={{ $json.text }}",
+        options: {
+          systemMessage:
+            "=" +
+            promptEscrita +
+            "\n\n## Contexto desta conversa\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
+          maxIterations: 10,
+          returnIntermediateSteps: false,
+        },
+      },
+      name: NE.agente,
+      type: "@n8n/n8n-nodes-langchain.agent",
+      typeVersion: 1.7,
+      position: [2180, 400],
+      onError: "continueRegularOutput",
+      notes: "Consulta (GET) e PROPÕE escritas. Não confirma nada.",
+      notesInFlow: true,
+    },
+    { ...agente.nodes.find((n) => n.name === N.modelo), position: [1500, 460] },
+    { ...agente.nodes.find((n) => n.name === N.memoria), position: [1680, 460] },
+    ...todasFerramentas,
+    code(NE.juntar, JS_JUNTAR, [2400, 400], "Resposta da IA + contexto (vínculo e mensagem) no mesmo item."),
+    apiDeControle(
+      NE.proposta, "GET", "/agent/pending-actions?sourceMessageId={{ encodeURIComponent($json.messageId) }}&limit=1",
+      [2620, 400], "A ação que a IA propôs nesta mensagem (prévia da API)."
+    ),
+    code(N.interpretar, JS_INTERPRETAR_ESCRITA, [2840, 400], "Prévia da API quando houve proposta; senão o texto do agente."),
+    { ...naoAutorizado, position: [1420, 640] },
+    { ...soTexto, position: [1600, 640] },
+    { ...agente.nodes.find((n) => n.name === N.responder), position: [2980, 300] },
+  ],
+  connections: {
+    [N.webhook]: { main: [[{ node: N.assinatura, type: "main", index: 0 }]] },
+    [N.assinatura]: { main: [[{ node: N.normalizar, type: "main", index: 0 }]] },
+    [N.normalizar]: { main: [[{ node: N.identificar, type: "main", index: 0 }]] },
+    [N.identificar]: { main: [[{ node: N.resolver, type: "main", index: 0 }]] },
+    [N.resolver]: { main: [[{ node: N.permissoes, type: "main", index: 0 }]] },
+    [N.permissoes]: { main: [[{ node: N.autorizado, type: "main", index: 0 }]] },
+    [N.autorizado]: { main: [[{ node: N.texto, type: "main", index: 0 }], [{ node: N.naoAutorizado, type: "main", index: 0 }]] },
+    [N.texto]: { main: [[{ node: NE.detectar, type: "main", index: 0 }], [{ node: N.soTexto, type: "main", index: 0 }]] },
+    [NE.detectar]: { main: [[{ node: NE.ehResposta, type: "main", index: 0 }]] },
+    [NE.ehResposta]: { main: [[{ node: NE.pendenteAtual, type: "main", index: 0 }], [{ node: N.contexto, type: "main", index: 0 }]] },
+    [NE.pendenteAtual]: { main: [[{ node: NE.decidir, type: "main", index: 0 }]] },
+    [NE.decidir]: { main: [[{ node: NE.proximo, type: "main", index: 0 }]] },
+    [NE.proximo]: {
+      main: [
+        [{ node: NE.apiConfirmar, type: "main", index: 0 }],
+        [{ node: NE.apiCancelar, type: "main", index: 0 }],
+        [{ node: N.responder, type: "main", index: 0 }],
+        [{ node: N.contexto, type: "main", index: 0 }],
+      ],
+    },
+    [NE.apiConfirmar]: { main: [[{ node: NE.respostaAcao, type: "main", index: 0 }]] },
+    [NE.apiCancelar]: { main: [[{ node: NE.respostaAcao, type: "main", index: 0 }]] },
+    [NE.respostaAcao]: { main: [[{ node: N.responder, type: "main", index: 0 }]] },
+    [N.contexto]: { main: [[{ node: NE.agente, type: "main", index: 0 }]] },
+    [NE.agente]: { main: [[{ node: NE.juntar, type: "main", index: 0 }]] },
+    [NE.juntar]: { main: [[{ node: NE.proposta, type: "main", index: 0 }]] },
+    [NE.proposta]: { main: [[{ node: N.interpretar, type: "main", index: 0 }]] },
+    [N.interpretar]: { main: [[{ node: N.responder, type: "main", index: 0 }]] },
+    [N.naoAutorizado]: { main: [[{ node: N.responder, type: "main", index: 0 }]] },
+    [N.soTexto]: { main: [[{ node: N.responder, type: "main", index: 0 }]] },
+    [N.modelo]: { ai_languageModel: [[{ node: NE.agente, type: "ai_languageModel", index: 0 }]] },
+    [N.memoria]: { ai_memory: [[{ node: NE.agente, type: "ai_memory", index: 0 }]] },
+    ...Object.fromEntries(todasFerramentas.map((f) => [f.name, { ai_tool: [[{ node: NE.agente, type: "ai_tool", index: 0 }]] }])),
+    [N.verificacao]: { main: [[{ node: N.desafio, type: "main", index: 0 }]] },
+    [N.desafio]: { main: [[{ node: N.responderDesafio, type: "main", index: 0 }]] },
+  },
+  settings: { executionOrder: "v1", saveDataSuccessExecution: "none", saveDataErrorExecution: "all", saveManualExecutions: true },
+  pinData: {},
+  active: false,
+  meta: {
+    b2c: {
+      workflow: "b2c-finance-ai-agent",
+      version: 1,
+      catalogVersion: catalogo.version,
+      writeCatalogVersion: escrita.version,
+      apiVersion: catalogo.apiVersion,
+      readOnly: false,
+      writeMode: "confirmation",
+      requiredScopes: scopesEscrita,
+      generatedBy: "integrations/n8n/scripts/build-workflows.mjs",
+    },
+  },
+  tags: [],
+};
+// O nó de webhook do agente com escrita tem caminho próprio (os dois podem
+// coexistir no n8n; só um deve estar ligado ao número da Meta).
+agenteEscrita.nodes = agenteEscrita.nodes.map((n) =>
+  n.name === N.webhook ? { ...n, parameters: { ...n.parameters, path: "b2c-finance-ai-agent-v2" }, webhookId: "b2c-finance-ai-agent-v2" }
+  : n.name === N.verificacao ? { ...n, parameters: { ...n.parameters, path: "b2c-finance-ai-agent-v2" }, webhookId: "b2c-finance-ai-agent-v2-verificacao" }
+  : n
+);
+
+// ---------------------------------------------------------------------------
 // Teste de conexão (manual): /health, /me e os scopes que o agente precisa
 // ---------------------------------------------------------------------------
 
@@ -531,11 +921,14 @@ const teste = {
       parameters: {
         jsCode: `// Confere se a integração tem os scopes que o agente de consulta usa.
 const necessarios = ${JSON.stringify(scopesUsados)};
+// Agente com escrita (b2c-finance-ai-agent): além dos de consulta.
+const paraEscrita = ${JSON.stringify(scopesEscrita)};
 const me = $input.first().json;
 const tem = (me.data && me.data.scopes) || [];
 const faltando = necessarios.filter((s) => !tem.includes(s));
-const excesso = tem.filter((s) => !necessarios.includes(s));
-return [{ json: { ok: faltando.length === 0, integracao: me.data && me.data.name, faltando, scopesAlemDoNecessario: excesso, requestId: me.meta && me.meta.requestId } }];`,
+const faltandoParaEscrita = paraEscrita.filter((s) => !tem.includes(s));
+const excesso = tem.filter((s) => !paraEscrita.includes(s));
+return [{ json: { ok: faltando.length === 0, okParaEscrita: faltandoParaEscrita.length === 0, integracao: me.data && me.data.name, faltando, faltandoParaEscrita, scopesAlemDoNecessario: excesso, requestId: me.meta && me.meta.requestId } }];`,
       },
       name: "Conferir scopes",
       type: "n8n-nodes-base.code",
@@ -557,5 +950,6 @@ return [{ json: { ok: faltando.length === 0, integracao: me.data && me.data.name
 
 const gravar = (arquivo, wf) => writeFileSync(join(RAIZ, "workflows", arquivo), JSON.stringify(wf, null, 2) + "\n");
 gravar("b2c-finance-ai-agent-readonly.json", agente);
+gravar("b2c-finance-ai-agent.json", agenteEscrita);
 gravar("sistema.teste-conexao.v1.json", teste);
-console.log(`Workflows gerados (${ferramentas.length} ferramentas; scopes: ${scopesUsados.join(", ")}).`);
+console.log(`Workflows gerados (somente leitura: ${ferramentas.length} ferramentas; com escrita: ${todasFerramentas.length} ferramentas, scopes: ${scopesEscrita.join(", ")}).`);

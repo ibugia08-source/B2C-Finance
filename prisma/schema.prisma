@@ -184,6 +184,7 @@ model User {
 
   // Números de WhatsApp (e outros canais) vinculados a este usuário.
   messagingIdentities MessagingIdentity[] @relation("MessagingIdentities")
+  pendingActions      PendingAction[]     @relation("PendingActions")
 
   // ===== Recorte de dados (03 §1.1) =====
   // DECIDIDO 19.11 (31/08): só DOIS recortes existem — a carteira inteira do
@@ -4242,4 +4243,60 @@ model MessagingIdentity {
 
   @@index([ownerId, channel, externalIdentifier])
   @@index([userId])
+}
+
+/// Ação de ESCRITA proposta pelo agente (WhatsApp) e ainda não executada
+/// (28/09/2026 — docs/N8N_AGENT_WRITE_ACTIONS.md). O agente monta o pedido,
+/// a API gera o preview a partir do estado atual e guarda AQUI a operação e o
+/// payload exatos. Só a confirmação do próprio usuário (código desta ação)
+/// executa — e executa o que está guardado, nunca o que vier na confirmação.
+model PendingAction {
+  id                    String              @id @default(cuid())
+  ownerId               String
+  userId                String
+  user                  User                @relation("PendingActions", fields: [userId], references: [id], onDelete: Cascade)
+  /// Vínculo (MessagingIdentity) que propôs — a confirmação tem de vir dele.
+  identityId            String
+  serviceAccountId      String
+  channel               MessagingChannel
+  /// Operação da API (payments.register, clients.create…).
+  operation             String
+  /// Entidade alvo (cobrança, cliente, despesa…) quando a operação tem uma.
+  targetId              String?
+  /// Corpo exato que será enviado à rota de escrita na confirmação.
+  payload               Json
+  /// Texto do preview mostrado ao usuário (sem o código).
+  preview               String
+  /// Resumo para a trilha e a resposta final (rótulo, valor).
+  summary               Json?
+  /// Hash do estado lido no preview: mudou até a confirmação = não executa.
+  stateFingerprint      String
+  /// Código curto que o usuário responde ("SIM 4821").
+  confirmationCode      String
+  failedAttempts        Int                 @default(0)
+  status                PendingActionStatus @default(PENDING)
+  sourceMessageId       String?
+  confirmationMessageId String?
+  idempotencyKey        String?
+  result                Json?
+  errorCode             String?
+  expiresAt             DateTime            @db.Timestamptz(3)
+  decidedAt             DateTime?           @db.Timestamptz(3)
+  executedAt            DateTime?           @db.Timestamptz(3)
+  createdAt             DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime            @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, userId, channel, status])
+  @@index([ownerId, sourceMessageId])
+  @@index([createdAt])
+}
+
+enum PendingActionStatus {
+  PENDING
+  EXECUTING
+  EXECUTED
+  FAILED
+  CANCELLED
+  EXPIRED
+  SUPERSEDED
 }

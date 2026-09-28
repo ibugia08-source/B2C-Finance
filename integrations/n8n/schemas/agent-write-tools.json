@@ -1,0 +1,190 @@
+{
+  "catalog": "b2c-finance-agent-write-tools",
+  "version": "1.0.0",
+  "apiVersion": "v1",
+  "description": "Ferramentas de ESCRITA do AI Agent (workflow b2c-finance-ai-agent). Nenhuma escreve direto: todas chamam POST /agent/pending-actions, que valida o pedido, monta a prévia a partir do estado atual e guarda a ação pendente. Só a resposta \"SIM <código>\" do próprio usuário executa — pela rota de escrita oficial, com o RBAC dele. A classificação de risco espelha src/lib/api/agent/catalog.ts (o teste confere).",
+  "riskLevels": {
+    "READ": "Consulta: o agente executa direto (schemas/agent-tools.json).",
+    "WRITE_CONFIRMATION": "Escrita: o agente só propõe; a API gera a prévia e pede confirmação ao usuário.",
+    "BLOCKED": "Nunca pelo agente. A API recusa (403 operation_blocked)."
+  },
+  "blocked": [
+    { "operation": "clients.delete", "label": "excluir cliente" },
+    { "operation": "receivables.delete", "label": "excluir recebimento" },
+    { "operation": "payments.delete", "label": "excluir pagamento" },
+    { "operation": "expenses.delete", "label": "excluir despesa" },
+    { "operation": "competences.reopen", "label": "reabrir competência" },
+    { "operation": "permissions.manage", "label": "alterar permissões" },
+    { "operation": "users.manage", "label": "gerenciar usuário" },
+    { "operation": "chart_of_accounts.manage", "label": "alterar plano de contas" }
+  ],
+  "tools": [
+    {
+      "name": "cadastrar_cliente",
+      "operation": "clients.create",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "clients.create",
+      "target": null,
+      "description": "PROPÕE o cadastro de um cliente novo (não grava: gera a prévia que o usuário confirma). Antes, use buscar_clientes para ver se ele já existe. Só preencha o que o usuário disse.",
+      "input": {
+        "name": { "type": "string", "description": "Nome do cliente (obrigatório)." },
+        "legalName": { "type": "string", "description": "Razão social." },
+        "document": { "type": "string", "description": "CNPJ ou CPF." },
+        "email": { "type": "string", "description": "E-mail." },
+        "phone": { "type": "string", "description": "Telefone." },
+        "city": { "type": "string", "description": "Cidade." },
+        "state": { "type": "string", "description": "UF com 2 letras (ex.: BA)." },
+        "modality": { "type": "string", "description": "MRR (recorrente) ou TCV (projeto)." },
+        "monthlyValue": { "type": "number", "description": "Valor mensal (MRR), em reais." },
+        "totalContractValue": { "type": "number", "description": "Valor total do contrato (TCV), em reais." },
+        "contractMonths": { "type": "integer", "description": "Prazo em meses." },
+        "contractIndefinite": { "type": "boolean", "description": "true = prazo indeterminado (só MRR)." },
+        "paymentDay": { "type": "integer", "description": "Dia do mês do pagamento (1–31)." },
+        "startedAt": { "type": "string", "description": "Início do contrato, AAAA-MM-DD." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": ["name"]
+    },
+    {
+      "name": "editar_cliente",
+      "operation": "clients.update",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "clients.update",
+      "target": { "type": "client", "description": "Id do cliente (de buscar_clientes)." },
+      "description": "PROPÕE alterar dados cadastrais de um cliente (nunca o status — para isso use alterar_status_cliente). Envie SÓ os campos que mudam.",
+      "input": {
+        "name": { "type": "string", "description": "Nome." },
+        "legalName": { "type": "string", "description": "Razão social." },
+        "document": { "type": "string", "description": "CNPJ ou CPF." },
+        "email": { "type": "string", "description": "E-mail." },
+        "phone": { "type": "string", "description": "Telefone." },
+        "city": { "type": "string", "description": "Cidade." },
+        "state": { "type": "string", "description": "UF com 2 letras." },
+        "monthlyValue": { "type": "number", "description": "Valor mensal, em reais." },
+        "totalContractValue": { "type": "number", "description": "Valor total do contrato, em reais." },
+        "contractMonths": { "type": "integer", "description": "Prazo em meses." },
+        "paymentDay": { "type": "integer", "description": "Dia do mês do pagamento (1–31)." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": []
+    },
+    {
+      "name": "alterar_status_cliente",
+      "operation": "client_status.change",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "client_status.write",
+      "target": { "type": "client", "description": "Id do cliente (de buscar_clientes)." },
+      "description": "PROPÕE mudar o status do cliente A PARTIR de uma data (vigência). Hoje vale já; data futura fica programada; mês que já passou só com allowRetroactive, se o usuário pedir explicitamente.",
+      "input": {
+        "status": { "type": "string", "description": "ACTIVE, INACTIVE, PAUSED, RENEWAL, DELINQUENT, CHURNED, LEAD ou PROSPECT." },
+        "effectiveFrom": { "type": "string", "description": "Data de início da vigência, AAAA-MM-DD." },
+        "reason": { "type": "string", "description": "Motivo informado pelo usuário." },
+        "allowRetroactive": { "type": "boolean", "description": "true só se o usuário pediu data num mês que já passou." }
+      },
+      "required": ["status", "effectiveFrom"]
+    },
+    {
+      "name": "registrar_pagamento",
+      "operation": "payments.register",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "receivables.register_payment",
+      "target": { "type": "receivable", "description": "Id da COBRANÇA em aberto (de consultar_recebimentos com clientId e status open)." },
+      "description": "PROPÕE registrar um pagamento recebido numa cobrança em aberto. Antes: buscar_clientes → consultar_recebimentos (clientId, status open) para achar a cobrança; se houver mais de uma, pergunte qual.",
+      "input": {
+        "amount": { "type": "number", "description": "Valor pago, em reais." },
+        "paidAt": { "type": "string", "description": "Data do pagamento, AAAA-MM-DD (padrão: hoje; nunca futura)." },
+        "method": { "type": "string", "description": "PIX, TRANSFER, BOLETO, CARD, CASH ou OTHER (padrão: PIX)." },
+        "notes": { "type": "string", "description": "Observação." }
+      },
+      "required": ["amount"]
+    },
+    {
+      "name": "criar_despesa",
+      "operation": "expenses.create",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "expenses.create",
+      "target": null,
+      "description": "PROPÕE lançar uma despesa a pagar (nasce pendente; pagar é marcar_despesa_paga).",
+      "input": {
+        "description": { "type": "string", "description": "Descrição (obrigatório)." },
+        "amount": { "type": "number", "description": "Valor, em reais (obrigatório)." },
+        "dueDate": { "type": "string", "description": "Vencimento, AAAA-MM-DD (obrigatório)." },
+        "category": { "type": "string", "description": "Nome da categoria, se o usuário disse." },
+        "type": { "type": "string", "description": "FIXED, VARIABLE, TAX, PAYROLL, TOOL, ADS, LOAN ou OTHER." },
+        "recurrence": { "type": "string", "description": "NONE (padrão), MONTHLY, QUARTERLY, SEMIANNUAL ou ANNUAL." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": ["description", "amount", "dueDate"]
+    },
+    {
+      "name": "editar_despesa",
+      "operation": "expenses.update",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "expenses.update",
+      "target": { "type": "expense", "description": "Id da despesa em aberto (de consultar_despesas)." },
+      "description": "PROPÕE alterar uma despesa EM ABERTO (só esta ocorrência). Envie só os campos que mudam.",
+      "input": {
+        "description": { "type": "string", "description": "Descrição." },
+        "amount": { "type": "number", "description": "Valor, em reais." },
+        "dueDate": { "type": "string", "description": "Vencimento, AAAA-MM-DD." },
+        "category": { "type": "string", "description": "Nome da categoria." },
+        "type": { "type": "string", "description": "FIXED, VARIABLE, TAX, PAYROLL, TOOL, ADS, LOAN ou OTHER." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": []
+    },
+    {
+      "name": "marcar_despesa_paga",
+      "operation": "expenses.pay",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "expenses.pay",
+      "target": { "type": "expense", "description": "Id da despesa (de consultar_despesas)." },
+      "description": "PROPÕE marcar uma despesa como paga (hoje). Envie input vazio {}.",
+      "input": {},
+      "required": []
+    },
+    {
+      "name": "criar_upsell",
+      "operation": "upsells.create",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "upsells.create",
+      "target": null,
+      "description": "PROPÕE cadastrar uma oportunidade de upsell para um cliente (funil aberto). clientId vem de buscar_clientes.",
+      "input": {
+        "clientId": { "type": "string", "description": "Id do cliente (de buscar_clientes) — obrigatório." },
+        "description": { "type": "string", "description": "O que está sendo oferecido (obrigatório se não houver serviceId)." },
+        "amount": { "type": "number", "description": "Valor, em reais (obrigatório)." },
+        "expectedCloseDate": { "type": "string", "description": "Previsão de fechamento, AAAA-MM-DD." },
+        "status": { "type": "string", "description": "OPPORTUNITY (padrão), NEGOTIATION ou PAUSED." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": ["clientId", "amount"]
+    },
+    {
+      "name": "atualizar_upsell",
+      "operation": "upsells.update",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "upsells.update",
+      "target": { "type": "upsell", "description": "Id da oportunidade (de consultar_upsells)." },
+      "description": "PROPÕE atualizar uma oportunidade EM ABERTO (valor, etapa, previsão, observações). Não marca como vendida nem recusada — isso é na tela.",
+      "input": {
+        "description": { "type": "string", "description": "Descrição." },
+        "amount": { "type": "number", "description": "Valor, em reais." },
+        "expectedCloseDate": { "type": "string", "description": "Previsão de fechamento, AAAA-MM-DD." },
+        "status": { "type": "string", "description": "OPPORTUNITY, NEGOTIATION ou PAUSED." },
+        "notes": { "type": "string", "description": "Observações." }
+      },
+      "required": []
+    },
+    {
+      "name": "concluir_acao_rotina",
+      "operation": "routine.complete",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "routine.write",
+      "target": { "type": "routine_action", "description": "Chave da ação (campo key em consultar_rotina, ex.: cobrar:cm…)." },
+      "description": "PROPÕE marcar uma ação da rotina de HOJE como concluída. Envie input vazio {}.",
+      "input": {},
+      "required": []
+    }
+  ]
+}

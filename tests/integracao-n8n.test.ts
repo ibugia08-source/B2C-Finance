@@ -3,6 +3,8 @@ import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { buildOpenApiSpec } from "@/lib/api/openapi";
 import { API_SCOPES } from "@/lib/api/scopes";
+import { OPERACOES_BLOQUEADAS, OPERACOES_DE_ESCRITA, chaveDaConfirmacao } from "@/lib/api/agent/catalog";
+import { CORPO_DA_OPERACAO } from "@/lib/api/agent/preview";
 
 /**
  * INTEGRAÇÃO n8n (28/09/2026) — o que está versionado em integrations/n8n
@@ -82,7 +84,8 @@ describe("workflows versionados", () => {
 
   it("existem o agente, os dois relatórios diários e o teste de conexão", () => {
     expect(arquivos.sort()).toEqual([
-      "b2c-finance-ai-agent-readonly.json", "daily-evening-report.json", "daily-morning-report.json", "sistema.teste-conexao.v1.json",
+      "b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json", "daily-evening-report.json", "daily-morning-report.json",
+      "sistema.teste-conexao.v1.json",
     ]);
   });
 
@@ -374,5 +377,202 @@ describe("relatórios diários", () => {
     const ok2 = await rodarCode(js(RELATORIOS.manha.arquivo, "Preparar data e destinatários"), { env: { B2C_REPORT_RECIPIENTS: "+55 71 99999-0000, 5571988880000" } });
     expect(ok2[0].json.destinatarios).toEqual(["5571999990000", "5571988880000"]);
     expect(ok2[0].json.hoje).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Agente com escrita controlada (b2c-finance-ai-agent.json)
+// ---------------------------------------------------------------------------
+
+describe("agente com escrita controlada", () => {
+  const ESCRITA = "workflows/b2c-finance-ai-agent.json";
+  const N_AG = "AI Agent B2C Finance";
+  const cat = ler("schemas/agent-write-tools.json");
+  const wf = ler(ESCRITA);
+  const no = (nome: string) => wf.nodes.find((n: any) => n.name === nome);
+  const js = (nome: string) => no(nome).parameters.jsCode as string;
+
+  /** Chaves aceitas pelo corpo da rota (desembrulha .refine). */
+  const chavesDoCorpo = (z: any): string[] => {
+    let s = z;
+    while (s?._def?.schema) s = s._def.schema;
+    return Object.keys(s.shape ?? {});
+  };
+
+  it("o readonly continua intacto como referência (mesmas ferramentas, só leitura)", () => {
+    const ro = ler("workflows/b2c-finance-ai-agent-readonly.json");
+    expect(ro.meta.b2c.readOnly).toBe(true);
+    const ferr = ro.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
+    expect(ferr.every((n: any) => n.parameters.method === "GET")).toBe(true);
+    expect(ferr).toHaveLength(11);
+  });
+
+  it("catálogo de escrita = classificação da API (operação, scope, alvo, bloqueadas)", () => {
+    expect(cat.tools.map((t: any) => t.name).sort()).toEqual(Object.values(OPERACOES_DE_ESCRITA).map((o) => o.tool).sort());
+    for (const t of cat.tools) {
+      const op = (OPERACOES_DE_ESCRITA as any)[t.operation];
+      expect(op, t.name).toBeTruthy();
+      expect(t.name).toBe(op.tool);
+      expect(t.scope).toBe(op.scope);
+      expect(t.risk).toBe("WRITE_CONFIRMATION");
+      expect(!!t.target, t.name).toBe(op.target !== null);
+      // Campos que a ferramenta oferece existem no corpo da rota de escrita.
+      const aceitos = chavesDoCorpo((CORPO_DA_OPERACAO as any)[t.operation]);
+      for (const k of Object.keys(t.input)) expect(aceitos, `${t.name}.${k}`).toContain(k);
+      for (const r of t.required) expect(Object.keys(t.input)).toContain(r);
+      expect(Object.keys(t.input)).not.toContain("userId");
+      expect(Object.keys(t.input)).not.toContain("ownerId");
+    }
+    expect(cat.blocked.map((b: any) => b.operation)).toEqual(Object.keys(OPERACOES_BLOQUEADAS));
+    expect(cat.blocked.map((b: any) => b.label)).toEqual(Object.values(OPERACOES_BLOQUEADAS));
+  });
+
+  it("ferramentas de escrita só PROPÕEM: POST /agent/pending-actions com a operação fixa, travadas pelo perfil", () => {
+    const ferr = wf.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
+    expect(ferr).toHaveLength(21);
+    for (const t of cat.tools) {
+      const n = no(t.name);
+      expect(n.parameters.method).toBe("POST");
+      expect(n.parameters.url).toBe(
+        `={{ ($json.allowedTools || []).includes('${t.name}') ? $env.B2C_FINANCE_API_URL : 'https://ferramenta-nao-liberada-para-este-perfil.invalid' }}/agent/pending-actions`
+      );
+      const corpo = JSON.parse(n.parameters.jsonBody.replace('"{targetId}"', '"X"').replace("{input}", "{}"));
+      expect(corpo.operation).toBe(t.operation);
+      expect(Object.keys(corpo).sort()).toEqual(t.target ? ["input", "operation", "targetId"] : ["input", "operation"]);
+      const h = Object.fromEntries(n.parameters.parametersHeaders.values.map((x: any) => [x.name, x.value]));
+      expect(h["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
+      expect(h["X-B2C-Message-Id"]).toBe("={{ $json.messageId }}");
+      expect(h["X-B2C-Source"]).toBe("whatsapp");
+      expect(wf.connections[t.name].ai_tool[0][0].node).toBe(N_AG);
+    }
+    // Nenhuma ferramenta chama rota de escrita direto nem tem "confirm".
+    for (const n of ferr) {
+      expect(String(n.parameters.url)).not.toContain("confirm");
+      if (n.parameters.method !== "GET") expect(String(n.parameters.url)).toMatch(/\/agent\/pending-actions$/);
+    }
+  });
+
+  it("nunca acessa banco: só API do B2C (identidade e ações do agente) e WhatsApp", () => {
+    const executavel = wf.nodes
+      .filter((n: any) => n.type !== "n8n-nodes-base.stickyNote")
+      .map((n: any) => ({ ...n, notes: undefined, parameters: { ...n.parameters, options: { ...(n.parameters?.options ?? {}), systemMessage: undefined } } }));
+    const texto = JSON.stringify(executavel).toLowerCase();
+    for (const proibido of ["supabase", "prisma", "postgres", "mysql", "mongodb", "redis", "database_url"]) expect(texto, proibido).not.toContain(proibido);
+    for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest")) {
+      const url = String(n.parameters.url);
+      expect(
+        url === "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity" ||
+          url.startsWith("={{ $env.B2C_FINANCE_API_URL }}/agent/pending-actions") ||
+          url.includes("WHATSAPP_API_URL"),
+        url
+      ).toBe(true);
+    }
+    expect(wf.active).toBe(false);
+    expect(wf.meta.b2c).toMatchObject({ workflow: "b2c-finance-ai-agent", readOnly: false, writeMode: "confirmation" });
+    expect(wf.meta.b2c.requiredScopes).toEqual(expect.arrayContaining(["agent_actions.manage", "identities.resolve", "receivables.register_payment"]));
+  });
+
+  it("fluxo: a resposta SIM/NÃO é tratada ANTES da IA; a IA não tem ferramenta de confirmação", () => {
+    const prox = (n: string, saida = 0) => wf.connections[n].main[saida][0].node;
+    expect(prox("Mensagem de texto?")).toBe("Detectar confirmação");
+    expect(prox("Detectar confirmação")).toBe("Resposta a uma ação pendente?");
+    expect(prox("Resposta a uma ação pendente?", 0)).toBe("API: ação pendente atual");
+    expect(prox("Resposta a uma ação pendente?", 1)).toBe("Montar contexto do agente");
+    expect(prox("API: ação pendente atual")).toBe("Decidir confirmação");
+    expect(prox("Decidir confirmação")).toBe("Próximo passo");
+    expect([0, 1, 2, 3].map((i) => prox("Próximo passo", i))).toEqual([
+      "API: confirmar ação", "API: cancelar ação", "Responder no WhatsApp", "Montar contexto do agente",
+    ]);
+    expect(no("Próximo passo").parameters.output).toContain("['confirmar', 'cancelar', 'responder', 'agente']");
+    expect(prox("API: confirmar ação")).toBe("Resposta da ação");
+    expect(prox(N_AG)).toBe("Juntar resposta e contexto");
+    expect(prox("Juntar resposta e contexto")).toBe("API: ação proposta nesta mensagem");
+    expect(no("API: ação proposta nesta mensagem").parameters.url).toBe(
+      "={{ $env.B2C_FINANCE_API_URL }}/agent/pending-actions?sourceMessageId={{ encodeURIComponent($json.messageId) }}&limit=1"
+    );
+    expect(prox("API: ação proposta nesta mensagem")).toBe("Interpretar resposta do agente");
+    expect(prox("Interpretar resposta do agente")).toBe("Responder no WhatsApp");
+    // Confirmação: Idempotency-Key calculada (mensagem + ação) e SEM corpo de ação.
+    const conf = no("API: confirmar ação");
+    expect(conf.parameters.url).toBe("={{ $env.B2C_FINANCE_API_URL }}/agent/pending-actions/{{ $json.actionId }}/confirm");
+    const hs = Object.fromEntries(conf.parameters.headerParameters.parameters.map((h: any) => [h.name, h.value]));
+    expect(hs["Idempotency-Key"]).toBe("={{ $json.idempotencyKey }}");
+    expect(hs["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
+    expect(conf.parameters.jsonBody).toBe("={{ JSON.stringify({ messageId: $json.messageId, confirmationCode: $json.codigo }) }}");
+    expect(conf.parameters.options.response.response.neverError).toBe(true);
+  });
+
+  it("detecção: só 'SIM <código>' confirma; 'sim' solto nunca", async () => {
+    const detectar = async (text: string) =>
+      (await new Function("$input", `return (async () => { ${js("Detectar confirmação")} })();`)({ all: () => [{ json: { text } }] }))[0].json;
+    expect(await detectar("SIM 4821")).toMatchObject({ intencao: "confirmar", codigo: "4821" });
+    expect(await detectar("  confirmo, 0042! ")).toMatchObject({ intencao: "confirmar", codigo: "0042" });
+    expect(await detectar("sim")).toMatchObject({ intencao: "sim_sem_codigo", codigo: null });
+    expect(await detectar("Pode")).toMatchObject({ intencao: "sim_sem_codigo" });
+    expect(await detectar("não")).toMatchObject({ intencao: "cancelar" });
+    expect(await detectar("NAO 4821")).toMatchObject({ intencao: "cancelar" });
+    expect(await detectar("sim, registra o pagamento da Face Love")).toMatchObject({ intencao: "outro" });
+    expect(await detectar("4821")).toMatchObject({ intencao: "outro" });
+    expect(await detectar("SIM 48")).toMatchObject({ intencao: "outro" });
+  });
+
+  it("decisão: liga ao id da ação pendente e monta a Idempotency-Key igual à da API", async () => {
+    const decidir = async (m: any, resposta: any) => {
+      const $ = () => ({ all: () => [{ json: m }] });
+      return (await new Function("$", "$input", `return (async () => { ${js("Decidir confirmação")} })();`)($, { all: () => [{ json: resposta }] }))[0].json;
+    };
+    const m = { messageId: "wamid.HBgM==", from: "5571999990000", phoneNumberId: "P", identityId: "i1" };
+    const pendente = { success: true, data: [{ actionId: "cmpa01", message: "Encontrei:\n...\nResponda *SIM 4821*" }] };
+    const c = await decidir({ ...m, intencao: "confirmar", codigo: "4821" }, pendente);
+    expect(c).toMatchObject({ proximo: "confirmar", actionId: "cmpa01", codigo: "4821" });
+    expect(c.idempotencyKey).toBe(chaveDaConfirmacao("wamid.HBgM==", "cmpa01"));
+    expect(await decidir({ ...m, intencao: "cancelar" }, pendente)).toMatchObject({ proximo: "cancelar", actionId: "cmpa01" });
+    const semCodigo = await decidir({ ...m, intencao: "sim_sem_codigo" }, pendente);
+    expect(semCodigo).toMatchObject({ proximo: "responder", to: "5571999990000" });
+    expect(semCodigo.body).toContain("código de 4 dígitos");
+    const nada = { success: true, data: [] };
+    expect((await decidir({ ...m, intencao: "confirmar", codigo: "4821" }, nada)).body).toContain("Não encontrei nenhuma ação");
+    expect(await decidir({ ...m, intencao: "sim_sem_codigo" }, nada)).toMatchObject({ proximo: "agente" });
+    expect((await decidir({ ...m, intencao: "confirmar", codigo: "1" }, { success: false })).proximo).toBe("responder");
+  });
+
+  it("resposta: prévia da API quando houve proposta (não a paráfrase da IA); resultado da execução vem da API", async () => {
+    const ctx = { from: "5571999990000", phoneNumberId: "P" };
+    const juntos = { ...ctx, output: "Registrei R$ 9.999,00!" };
+    const $ = () => ({ all: () => [{ json: juntos }] });
+    const rodar = async (nome: string, resposta: any) =>
+      (await new Function("$", "$input", `return (async () => { ${js(nome)} })();`)($, { all: () => [{ json: resposta }] }))[0].json;
+    const comProposta = await rodar("Interpretar resposta do agente", { success: true, data: [{ status: "PENDING", actionId: "a1", message: "Encontrei:\nR$ 1.500,00\nResponda *SIM 4821*" }] });
+    expect(comProposta.body).toBe("Encontrei:\nR$ 1.500,00\nResponda *SIM 4821*");
+    const semProposta = await rodar("Interpretar resposta do agente", { success: true, data: [] });
+    expect(semProposta.body).toBe("Registrei R$ 9.999,00!");
+
+    const $d = () => ({ itemMatching: () => ({ json: ctx }), all: () => [{ json: ctx }] });
+    const res = async (r: any) => (await new Function("$", "$input", `return (async () => { ${js("Resposta da ação")} })();`)($d, { all: () => [{ json: r }] }))[0].json;
+    expect((await res({ success: true, data: { message: "✅ Pagamento registrado — Face Love." } })).body).toBe("✅ Pagamento registrado — Face Love.");
+    expect((await res({ success: false, error: { code: "action_expired", message: "O prazo para confirmar esta ação acabou." } })).body).toContain("prazo");
+  });
+
+  it("permissões: escrita exige o scope da operação E agent_actions.manage", async () => {
+    const codigo = js("Carregar permissões");
+    const $ = () => ({ all: () => [{ json: { from: "5571999990000" } }] });
+    const rodar = async (allowedScopes: string[]) =>
+      (await new Function("$", "$input", `return (async () => { ${codigo} })();`)($, {
+        all: () => [{ json: { success: true, data: { identityId: "i", user: { id: "u", name: "R", roleLabel: "F" }, allowedScopes } } }],
+      }))[0].json.allowedTools as string[];
+    expect(await rodar(["receivables.read", "receivables.register_payment"])).not.toContain("registrar_pagamento");
+    const ok = await rodar(["receivables.read", "receivables.register_payment", "agent_actions.manage", "clients.read"]);
+    expect(ok).toEqual(expect.arrayContaining(["registrar_pagamento", "consultar_recebimentos", "buscar_clientes"]));
+    expect(ok).not.toContain("cadastrar_cliente");
+  });
+
+  it("prompt: classificação de risco, bloqueadas, nunca confirmar, não conceder permissão", () => {
+    const prompt = readFileSync(join(RAIZ, "examples/system-prompt-write.md"), "utf8").trim();
+    expect((no(N_AG).parameters.options.systemMessage as string).startsWith("=" + prompt)).toBe(true);
+    for (const trecho of [
+      "READ", "WRITE_CONFIRMATION", "BLOCKED", "Não invente IDs", "buscar_clientes", "Alpha",
+      "não existe ferramenta de confirmação", "Nunca envie userId", ...Object.values(OPERACOES_BLOQUEADAS),
+    ]) expect(prompt, trecho).toContain(trecho);
+    expect(prompt).not.toContain("SOMENTE LEITURA");
   });
 });

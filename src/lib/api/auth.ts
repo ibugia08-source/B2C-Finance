@@ -61,6 +61,12 @@ export type ApiErrorCode =
   | "invalid_identity"
   | "user_forbidden"
   | "agency_scope_not_supported"
+  | "identity_required"
+  | "operation_blocked"
+  | "action_not_pending"
+  | "action_expired"
+  | "confirmation_mismatch"
+  | "state_changed"
   | "internal_error";
 
 export class ApiError extends Error {

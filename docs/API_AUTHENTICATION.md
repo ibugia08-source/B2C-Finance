@@ -127,11 +127,12 @@ O catálogo fica em `src/lib/api/scopes.ts`. O formato é `recurso.acao`, em ing
 | `routine.read` | Rotina do dia | `rotina.visualizar` |
 | `reports.read` | Relatórios. Cada relatório também exige os scopes das permissões dele. | `relatorios.visualizar` |
 | `identities.resolve` | Resolver número de WhatsApp → usuário (`POST /integrations/resolve-identity`) e agir em nome dele (`X-B2C-Identity`, com os scopes recortados pelo RBAC do usuário) | — (da integração, não delegável) |
+| `agent_actions.manage` | Propor ações do agente e executá-las após o `SIM <código>` do usuário (`/agent/pending-actions`). Sozinho não escreve nada: a execução exige o scope da operação. | — (delegado só a quem tem algum scope de escrita) |
 
 **Regras:**
 
 - **Não existe curinga**, nem quando quem cria a conta é ADMIN.
-- **Nunca concedíveis** (`FORBIDDEN_SCOPES`, fora do catálogo): `users.manage`, `permissions.manage`, `clients.delete`, `receivables.delete`, `competences.reopen`.
+- **Nunca concedíveis** (`FORBIDDEN_SCOPES`, fora do catálogo): `users.manage`, `permissions.manage`, `clients.delete`, `receivables.delete`, `competences.reopen`, `payments.delete`, `expenses.delete`, `chart_of_accounts.manage`.
 - **Pedido com qualquer scope desconhecido ou proibido é recusado por inteiro.** Um pedido "meio aceito" deixaria a integração com menos poder do que quem a criou acha que deu.
 
 Por enquanto, a única rota é `/me`. Os endpoints de negócio chegam na fase F2 do plano, e cada um declara o seu scope em `withApiAuth("<scope>", handler)`.

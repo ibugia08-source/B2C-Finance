@@ -373,6 +373,12 @@ Além dessas verificações:
 3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API.
 4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.
 
+## 4.2 Ações do agente com confirmação
+
+O agente de WhatsApp não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`. O usuário responde "SIM <código>" e a integração confirma em `POST /agent/pending-actions/{id}/confirm`, com `Idempotency-Key: wa:<messageId>:<actionId>`.
+
+A execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).
+
 ## 5. Implementação
 
 - **Onde está o código:**

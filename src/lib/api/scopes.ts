@@ -90,6 +90,11 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
         id: "identities.resolve",
         label: "Identificar quem fala (WhatsApp → usuário) e agir com as permissões dele",
       },
+      {
+        id: "agent_actions.manage",
+        label: "Propor ações do agente e executá-las após a confirmação do usuário",
+        write: true,
+      },
     ],
   },
 ];
@@ -110,6 +115,9 @@ export const FORBIDDEN_SCOPES = new Set<string>([
   "clients.delete",
   "receivables.delete",
   "competences.reopen",
+  "payments.delete",
+  "expenses.delete",
+  "chart_of_accounts.manage",
 ]);
 
 export function isApiScope(s: string): boolean {
@@ -209,6 +217,10 @@ export const SCOPE_REQUIRES_PERMISSIONS: Readonly<Record<string, readonly string
   "routine.read": ["rotina.visualizar"],
   "routine.write": ["rotina.concluir_acao"],
   "reports.read": ["relatorios.visualizar"],
+  // Propor/confirmar não escreve nada sozinho: a ação confirmada passa pela
+  // rota de escrita, que exige o scope DELA (e o RBAC da pessoa). Por isso
+  // não pede permissão própria — só existe para a conta optar por escrita.
+  "agent_actions.manage": [],
 };
 
 /**
@@ -219,8 +231,14 @@ export function scopesDoUsuario(
   scopesDaConta: readonly string[],
   pode: (permission: string) => boolean
 ): string[] {
-  return scopesDaConta.filter((s) => {
+  const efetivos = scopesDaConta.filter((s) => {
     const exige = SCOPE_REQUIRES_PERMISSIONS[s];
     return !!exige && exige.every(pode);
   });
+  // Propor ações só faz sentido para quem pode escrever ALGO: sem nenhum
+  // scope de escrita delegado, o agente segue somente leitura para ele.
+  const escreve = efetivos.some((s) => s !== "agent_actions.manage" && ESCRITA.has(s));
+  return escreve ? efetivos : efetivos.filter((s) => s !== "agent_actions.manage");
 }
+
+const ESCRITA = new Set(API_SCOPE_GROUPS.flatMap((g) => g.scopes.filter((s) => s.write).map((s) => s.id)));

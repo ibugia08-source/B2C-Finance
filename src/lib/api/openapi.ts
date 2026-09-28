@@ -1,4 +1,5 @@
-import { API_SCOPE_GROUPS, API_SCOPES } from "./scopes";
+import { API_SCOPE_GROUPS, API_SCOPES, FORBIDDEN_SCOPES } from "./scopes";
+import { OPERACOES_DE_ESCRITA } from "./agent/catalog";
 import { PAGE_SIZE_MAX, PAGE_SIZE_PADRAO } from "./http";
 import { CLIENT_STATUSES } from "./v1/common";
 import { RECEIVABLE_STATUSES } from "./v1/receivables";
@@ -498,6 +499,42 @@ const SCHEMAS: Record<string, Obj> = {
     allowedScopes: { ...arr(str(undefined, { enum: API_SCOPES })), description: "Scopes da integração ∩ RBAC do usuário: o que ela pode fazer POR ele." },
     delegation: obj({ header: { const: "X-B2C-Identity" }, value: str() }),
   }),
+  PendingActionProposal: obj(
+    {
+      operation: str("Operação da API ou nome da ferramenta do agente. Bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) → 403 `operation_blocked`.", {
+        enum: [...Object.keys(OPERACOES_DE_ESCRITA), ...Object.values(OPERACOES_DE_ESCRITA).map((o) => o.tool)],
+      }),
+      targetId: str("Id da entidade alvo (cobrança, cliente, despesa, oportunidade ou chave da ação da rotina). Omitir em operações de criação."),
+      input: { type: "object", description: "O MESMO corpo da rota de escrita da operação (ex.: `POST /receivables/{id}/payments`)." },
+    },
+    ["operation"],
+    { additionalProperties: false }
+  ),
+  PendingActionConfirm: obj(
+    {
+      messageId: str("Id da mensagem do WhatsApp em que o usuário confirmou."),
+      confirmationCode: str("Código de 4 dígitos que o usuário digitou.", { pattern: "^\\d{4}$" }),
+    },
+    ["messageId", "confirmationCode"],
+    { additionalProperties: false, description: "Não há corpo da ação: executa-se o payload guardado no preview." }
+  ),
+  PendingAction: obj({
+    actionId: str(),
+    operation: str(),
+    tool: str(),
+    risk: { const: "WRITE_CONFIRMATION" },
+    status: str(undefined, { enum: ["PENDING", "EXECUTING", "EXECUTED", "FAILED", "CANCELLED", "EXPIRED", "SUPERSEDED"] }),
+    channel: { const: "WHATSAPP" },
+    targetId: { type: ["string", "null"] },
+    summary: obj({ label: { type: ["string", "null"] }, amount: { type: ["number", "null"] } }),
+    preview: str("Prévia montada pela API a partir do estado atual."),
+    confirmationCode: str("Só enquanto PENDING."),
+    message: str("Texto pronto para o WhatsApp (prévia + como confirmar; ou o resultado)."),
+    expiresAt: str(undefined, { format: "date-time" }),
+    createdAt: str(undefined, { format: "date-time" }),
+    result: { type: ["object", "null"] },
+    errorCode: { type: ["string", "null"] },
+  }, ["actionId", "operation", "risk", "status", "preview", "expiresAt"]),
   ServiceAccountMe: obj({
     type: { const: "service_account" }, id: str(), name: str(),
     tokenPrefix: str("Parte pública do token.", { example: "b2c_live_k3j9x2ma" }),
@@ -1001,6 +1038,73 @@ PATHS["/integrations/resolve-identity"] = {
   },
 };
 
+const P_ACAO = [{ name: "id", in: "path", required: true, description: "Id da ação pendente.", schema: str(undefined, { pattern: "^[A-Za-z0-9_-]{1,64}$" }) }];
+const EX_ACAO = {
+  actionId: "cmupa0001", operation: "payments.register", tool: "registrar_pagamento", risk: "WRITE_CONFIRMATION",
+  status: "PENDING", channel: "WHATSAPP", targetId: "cmubil0001", summary: { label: "Face Love Distribuidora", amount: 1500 },
+  preview: "Encontrei:\n\n*Face Love Distribuidora*\nRecebimento em aberto: R$ 1.500,00\nCompetência: Setembro/2026\nData de pagamento: hoje (28/09/2026)\n\nDeseja registrar?",
+  confirmationCode: "4821",
+  expiresAt: "2026-09-28T13:10:00.000Z", createdAt: "2026-09-28T13:00:00.000Z", result: null, errorCode: null,
+};
+const acaoOp = (o: { method: "get" | "post"; id: string; summary: string; description: string; params?: Obj[]; body?: { schema: Obj; example: unknown }; ok: Obj; okStatus?: string; idem?: boolean }) => ({
+  [o.method]: {
+    operationId: o.id,
+    tags: ["Agente"],
+    summary: o.summary,
+    description: o.description + "\n\n**Scope obrigatório:** `agent_actions.manage` + **X-B2C-Identity** (a ação é sempre de um usuário).",
+    security: [{ bearerAuth: ["agent_actions.manage"] }],
+    "x-required-scope": "agent_actions.manage",
+    parameters: [
+      ...(o.idem ? [{ ...PARAMETERS.IdempotencyKey, description: "`wa:<messageId>:<actionId>` — a mensagem do WhatsApp que confirmou + o id da ação (caracteres fora de `A-Za-z0-9._-` no messageId viram `_`).", example: "wa:wamid.HBgM_3EB0:cmupa0001" }] : []),
+      refParam("RequestId"), refParam("Source"), { ...PARAMETERS.Identity, required: true }, ...(o.params ?? []),
+    ],
+    ...(o.body ? { requestBody: { required: true, content: { "application/json": { schema: o.body.schema, example: o.body.example } } } } : {}),
+    responses: {
+      [o.okStatus ?? "200"]: o.ok,
+      "400": refResp("BadRequest"),
+      "401": refResp("Unauthorized"),
+      "403": refResp("Forbidden"),
+      "404": refResp("NotFound"),
+      "409": refResp("Conflict"),
+      "422": refResp("Unprocessable"),
+      "429": refResp("RateLimited"),
+      "500": refResp("InternalError"),
+    },
+  },
+});
+PATHS["/agent/pending-actions"] = {
+  ...acaoOp({
+    method: "post", id: "proposeAgentAction", okStatus: "201", summary: "Propor ação de escrita (gera prévia, não executa)",
+    description: "O agente propõe; a API valida `input` com o schema da rota de escrita, lê o estado atual, monta a prévia e guarda a ação (válida por 10 min; `B2C_PENDING_ACTION_TTL_MINUTES`). Uma pendente por usuário: a nova substitui a anterior. Nada é gravado no negócio. Header opcional `X-B2C-Message-Id` = mensagem de origem.",
+    body: { schema: ref("PendingActionProposal"), example: { operation: "payments.register", targetId: "cmubil0001", input: { amount: 1500 } } },
+    ok: sucesso(ref("PendingAction"), { exemplo: EX_ACAO }),
+  }),
+  ...acaoOp({
+    method: "get", id: "listAgentActions", summary: "Ações do usuário do vínculo",
+    description: "Filtros: `status`, `sourceMessageId` (a ação proposta a partir de uma mensagem), `limit` (1–20).",
+    params: [
+      { name: "status", in: "query", required: false, schema: str(undefined, { enum: ["PENDING", "EXECUTING", "EXECUTED", "FAILED", "CANCELLED", "EXPIRED", "SUPERSEDED"] }) },
+      { name: "sourceMessageId", in: "query", required: false, schema: str() },
+      { name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 20, default: 5 } },
+    ],
+    ok: sucesso(arr(ref("PendingAction"))),
+  }),
+};
+PATHS["/agent/pending-actions/{id}/confirm"] = acaoOp({
+  method: "post", id: "confirmAgentAction", idem: true, summary: "Confirmar e executar a ação",
+  description: "Confere usuário, vínculo, código (5 tentativas), validade e se o estado ainda é o da prévia (senão 409 `state_changed`). Executa o payload GUARDADO pela rota de escrita oficial, com a mesma Idempotency-Key. 200 = despachada (`data.status` EXECUTED ou FAILED, `data.message` pronta para o WhatsApp); repetir a mesma confirmação devolve o mesmo resultado. Erros: 410 `action_expired`, 409 `action_not_pending`, 422 `confirmation_mismatch`.",
+  params: P_ACAO,
+  body: { schema: ref("PendingActionConfirm"), example: { messageId: "wamid.HBgM_3EB0", confirmationCode: "4821" } },
+  ok: sucesso(ref("PendingAction")),
+});
+PATHS["/agent/pending-actions/{id}/cancel"] = acaoOp({
+  method: "post", id: "cancelAgentAction", summary: "Cancelar a ação (nada é executado)",
+  description: "O usuário respondeu NÃO.",
+  params: P_ACAO,
+  body: { schema: obj({ messageId: str() }, [], { additionalProperties: false }), example: { messageId: "wamid.HBgM_3EB1" } },
+  ok: sucesso(ref("PendingAction")),
+});
+
 const DESCRICAO = `API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).
 
 ## Versionamento
@@ -1024,6 +1128,9 @@ A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigênci
 
 ## Quem está falando (delegação)
 Para agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em \`POST /integrations/resolve-identity\` e manda o \`identityId\` em \`X-B2C-Identity\`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.
+
+## Ações do agente com confirmação
+O agente de WhatsApp não escreve direto: propõe em \`POST /agent/pending-actions\` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário responde "SIM <código>" e a integração confirma em \`POST /agent/pending-actions/{id}/confirm\` com \`Idempotency-Key: wa:<messageId>:<actionId>\`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.
 
 ## Trilha de atividades
 Toda chamada (exceto \`/health\`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (\`X-B2C-Source\`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.
@@ -1052,6 +1159,7 @@ export function buildOpenApiSpec(serverUrl = "https://b2-c-finance.vercel.app/ap
       { name: "Painéis", description: "Indicadores oficiais e rotina do dia." },
       { name: "Relatórios", description: "Resumo do dia e da competência; seções seguem os scopes." },
       { name: "Integração", description: "Quem está falando: número de WhatsApp → usuário e delegação por identidade." },
+      { name: "Agente", description: "Escritas do agente com prévia e confirmação do usuário (PendingAction)." },
     ],
     security: [{ bearerAuth: [] }],
     paths: PATHS,
@@ -1073,6 +1181,6 @@ export function buildOpenApiSpec(serverUrl = "https://b2-c-finance.vercel.app/ap
       group: g.label,
       scopes: g.scopes.map((s) => ({ scope: s.id, description: s.label, write: !!s.write })),
     })),
-    "x-forbidden-scopes": ["users.manage", "permissions.manage", "clients.delete", "receivables.delete", "competences.reopen"],
+    "x-forbidden-scopes": [...FORBIDDEN_SCOPES],
   };
 }

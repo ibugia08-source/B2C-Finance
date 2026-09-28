@@ -108,7 +108,12 @@ export async function aplicarRetencaoDaApi(agora: Date = new Date()) {
       where: { kind: "WRITE", createdAt: { lt: new Date(agora.getTime() - RETENCAO_DIAS.WRITE * dia) } },
     });
     const chaves = await prisma.apiIdempotencyKey.deleteMany({ where: { expiresAt: { lt: agora } } });
-    return { leituras: leituras.count, escritas: escritas.count, chavesDeIdempotencia: chaves.count };
+    // Ações do agente: a execução já está na trilha (WRITE) e no AuditLog;
+    // a proposta guardada vive o mesmo que uma escrita.
+    const acoes = await prisma.pendingAction.deleteMany({
+      where: { createdAt: { lt: new Date(agora.getTime() - RETENCAO_DIAS.WRITE * dia) } },
+    });
+    return { leituras: leituras.count, escritas: escritas.count, chavesDeIdempotencia: chaves.count, acoesDoAgente: acoes.count };
   });
 }
 

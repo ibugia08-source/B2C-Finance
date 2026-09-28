@@ -2,7 +2,9 @@
 
 Integração do B2C Finance com o n8n, principalmente para o **agente de WhatsApp**. Tudo fica versionado neste repositório, junto com a API que ela consome.
 
-> **Esta versão (v1) é somente leitura.** O agente consulta clientes, recebimentos, despesas, caixa, upsell, rotina e relatórios. Ele **não** registra pagamento, não cadastra e não altera status. Os workflows de escrita entram numa próxima versão, com confirmação do usuário.
+> **Dois agentes:**
+> - `b2c-finance-ai-agent.json` consulta e **propõe escritas com confirmação**. Nada é gravado sem o usuário responder `SIM <código>`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](../../docs/N8N_AGENT_WRITE_ACTIONS.md).
+> - `b2c-finance-ai-agent-readonly.json` é o somente leitura, mantido como referência e alternativa de volta.
 
 ```
 integrations/n8n/
@@ -10,15 +12,18 @@ integrations/n8n/
 ├── ENV.example                       variáveis (sem segredo real)
 ├── CHANGELOG.md
 ├── workflows/
+│   ├── b2c-finance-ai-agent.json          WhatsApp → identidade → SIM/NÃO (sem IA) ou AI Agent (11 GET + 10 que propõem) → WhatsApp
 │   ├── b2c-finance-ai-agent-readonly.json WhatsApp → identidade (API) → AI Agent (11 ferramentas GET) → WhatsApp
 │   ├── daily-morning-report.json          relatório da manhã por WhatsApp (cron)
 │   ├── daily-evening-report.json          relatório da noite por WhatsApp (cron)
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
 ├── schemas/
-│   ├── agent-tools.json              catálogo das ferramentas do agente (fonte de verdade)
+│   ├── agent-tools.json              catálogo das ferramentas de consulta (fonte de verdade)
+│   ├── agent-write-tools.json        ferramentas que propõem escrita + classificação de risco
 │   └── agent-tools.schema.json       JSON Schema do catálogo
 ├── examples/
-│   ├── system-prompt.md              instruções do agente (vão para o workflow)
+│   ├── system-prompt.md              instruções do agente somente leitura
+│   ├── system-prompt-write.md        instruções do agente com escrita (risco, prévia, bloqueadas)
 │   ├── tool-calls.md                 conversa de exemplo, chamadas e respostas
 │   └── whatsapp-webhook-payload.json payload de exemplo da Meta
 └── scripts/

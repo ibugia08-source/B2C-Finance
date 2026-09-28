@@ -108,6 +108,7 @@ export async function destroyOwner(owner: TestOwner) {
     await prisma.employee.deleteMany({ where: { ownerId: owner.id } });
     await prisma.client.deleteMany({ where: { ownerId: owner.id } });
     await prisma.niche.deleteMany({ where: { ownerId: owner.id } });
+    await prisma.pendingAction.deleteMany({ where: { ownerId: owner.id } });
     await prisma.apiActivity.deleteMany({ where: { ownerId: owner.id } });
     await prisma.apiIdempotencyKey.deleteMany({ where: { ownerId: owner.id } });
     await prisma.serviceAccount.deleteMany({ where: { ownerId: owner.id } });
