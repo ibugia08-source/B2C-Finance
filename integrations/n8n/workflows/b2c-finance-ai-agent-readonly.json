@@ -33,9 +33,9 @@
     },
     {
       "parameters": {
-        "content": "### 4 · Quem é e o que pode\n`B2C_WHATSAPP_USERS` (número → nome e perfil). Fora da lista = resposta genérica, **nenhum dado**.\nO perfil define as ferramentas liberadas (schemas/user-profiles.json): vai no prompt **e** trava a URL da ferramenta.",
+        "content": "### 4–5 · Quem é e o que pode\nA **API** resolve o número pelo vínculo cadastrado em Configurações → Integrações → WhatsApp. Sem vínculo = resposta genérica, **nenhum dado**.\nFerramentas = scopes que a API liberou (conta ∩ RBAC do usuário): vão no prompt, travam a URL e cada chamada leva `X-B2C-Identity` — a API recorta de novo.",
         "height": 330,
-        "width": 520,
+        "width": 700,
         "color": 4
       },
       "name": "Nota: identificação e permissões",
@@ -140,16 +140,58 @@
     },
     {
       "parameters": {
-        "jsCode": "// ETAPA 4 — Resolver usuário e permissões.\n// Diretório: B2C_WHATSAPP_USERS (JSON número → { name, profile }).\n// Perfis e ferramentas: schemas/user-profiles.json (embutido abaixo pelo gerador).\n// Número fora do diretório → authorized = false (resposta genérica, nenhum dado).\nconst PERFIS = {\n  \"admin\": {\n    \"label\": \"Administrador\",\n    \"tools\": [\n      \"buscar_clientes\",\n      \"consultar_cliente\",\n      \"consultar_status_cliente\",\n      \"consultar_dashboard\",\n      \"consultar_recebimentos\",\n      \"consultar_despesas\",\n      \"consultar_caixa\",\n      \"consultar_upsells\",\n      \"consultar_rotina\",\n      \"gerar_relatorio_diario\",\n      \"gerar_relatorio_mensal\"\n    ]\n  },\n  \"financeiro\": {\n    \"label\": \"Financeiro\",\n    \"tools\": [\n      \"buscar_clientes\",\n      \"consultar_cliente\",\n      \"consultar_status_cliente\",\n      \"consultar_dashboard\",\n      \"consultar_recebimentos\",\n      \"consultar_despesas\",\n      \"consultar_caixa\",\n      \"consultar_rotina\",\n      \"gerar_relatorio_diario\",\n      \"gerar_relatorio_mensal\"\n    ]\n  },\n  \"comercial\": {\n    \"label\": \"Comercial\",\n    \"tools\": [\n      \"buscar_clientes\",\n      \"consultar_cliente\",\n      \"consultar_status_cliente\",\n      \"consultar_upsells\",\n      \"consultar_rotina\"\n    ]\n  },\n  \"leitura\": {\n    \"label\": \"Leitura\",\n    \"tools\": [\n      \"buscar_clientes\",\n      \"consultar_cliente\",\n      \"consultar_status_cliente\",\n      \"consultar_dashboard\"\n    ]\n  }\n};\nlet diretorio;\ntry {\n  diretorio = JSON.parse($env.B2C_WHATSAPP_USERS || '{}');\n} catch (e) {\n  throw new Error('B2C_WHATSAPP_USERS não é um JSON válido — ver integrations/n8n/ENV.example.');\n}\nconst normalizado = Object.fromEntries(Object.entries(diretorio).map(([num, u]) => [String(num).replace(/\\D/g, ''), u]));\nreturn $input.all().map((item) => {\n  const u = normalizado[item.json.from];\n  const perfil = u && PERFIS[u.profile];\n  return {\n    json: {\n      ...item.json,\n      authorized: Boolean(u && perfil),\n      userName: u ? u.name : null,\n      profile: perfil ? u.profile : null,\n      profileLabel: perfil ? perfil.label : null,\n      allowedTools: perfil ? perfil.tools : [],\n      motivo: !u ? 'numero_fora_do_diretorio' : !perfil ? 'perfil_desconhecido' : null,\n    },\n  };\n});"
+        "method": "POST",
+        "url": "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-B2C-Source",
+              "value": "whatsapp"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ 'n8n-' + $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ channel: 'WHATSAPP', externalIdentifier: '+' + $json.from }) }}",
+        "options": {}
       },
-      "name": "Resolver usuário e permissões",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "API: resolver identidade",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         880,
         300
       ],
-      "notes": "Número → usuário e perfil (B2C_WHATSAPP_USERS).",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURAR_B2C_FINANCE_API",
+          "name": "B2C Finance API"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "notes": "POST /integrations/resolve-identity: número → usuário vinculado.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem\n// nem da IA). O usuário é o do VÍNCULO cadastrado no B2C Finance.\n// Ferramentas liberadas = as do catálogo cujo scope a API devolveu em allowedScopes.\nconst FERRAMENTA_SCOPE = {\n  \"buscar_clientes\": \"clients.read\",\n  \"consultar_cliente\": \"clients.read\",\n  \"consultar_status_cliente\": \"client_status.read\",\n  \"consultar_dashboard\": \"dashboard.read\",\n  \"consultar_recebimentos\": \"receivables.read\",\n  \"consultar_despesas\": \"expenses.read\",\n  \"consultar_caixa\": \"cash.read\",\n  \"consultar_upsells\": \"upsells.read\",\n  \"consultar_rotina\": \"routine.read\",\n  \"gerar_relatorio_diario\": \"reports.read\",\n  \"gerar_relatorio_mensal\": \"reports.read\"\n};\nconst mensagens = $('Identificar número').all();\nreturn $input.all().map((item, i) => {\n  const msg = mensagens[i] ? mensagens[i].json : {};\n  const r = item.json || {};\n  if (r.success === true && r.data && r.data.user) {\n    const scopes = r.data.allowedScopes || [];\n    return {\n      json: {\n        ...msg,\n        authorized: true,\n        identityId: r.data.identityId,\n        userId: r.data.user.id,\n        userName: r.data.user.name,\n        roleLabel: r.data.user.roleLabel,\n        allowedScopes: scopes,\n        allowedTools: Object.keys(FERRAMENTA_SCOPE).filter((t) => scopes.includes(FERRAMENTA_SCOPE[t])),\n        motivo: null,\n      },\n    };\n  }\n  // 404 identity_not_found / 403 agency_scope_not_supported / falha técnica.\n  const texto = JSON.stringify(r.error || r);\n  const motivo = texto.includes('identity_not_found') ? 'numero_nao_vinculado'\n    : texto.includes('agency_scope_not_supported') ? 'usuario_restrito_a_agencia'\n    : 'erro_tecnico';\n  return { json: { ...msg, authorized: false, identityId: null, allowedTools: [], motivo } };\n});"
+      },
+      "name": "Carregar permissões",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        300
+      ],
+      "notes": "Ferramentas = scopes que a API liberou para o usuário.",
       "notesInFlow": true
     },
     {
@@ -180,10 +222,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1060,
+        1240,
         300
       ],
-      "notes": "Fora do diretório → resposta genérica.",
+      "notes": "Número não vinculado → resposta genérica.",
       "notesInFlow": true
     },
     {
@@ -214,7 +256,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1240,
+        1420,
         240
       ],
       "notes": "Áudio, imagem etc. → pede texto.",
@@ -228,10 +270,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
+        1600,
         240
       ],
-      "notes": "Sessão, data de hoje e ferramentas do perfil.",
+      "notes": "Sessão, data de hoje e ferramentas do usuário.",
       "notesInFlow": true
     },
     {
@@ -239,7 +281,7 @@
         "promptType": "define",
         "text": "={{ $json.text }}",
         "options": {
-          "systemMessage": "=Você é o assistente financeiro do B2C Finance, atendendo a equipe da agência pelo WhatsApp. Esta versão é SOMENTE LEITURA.\n\n## Fonte da verdade\n- A API do B2C Finance, acessada pelas suas ferramentas, é a ÚNICA fonte operacional. Tudo o que você afirmar sobre clientes, valores, datas, status ou totais precisa ter vindo de uma ferramenta NESTA conversa.\n- Não invente dados. Se a ferramenta não trouxe, diga que não encontrou ou que não tem a informação. Não estime, não arredonde para \"mais ou menos\", não complete lacunas.\n- Não invente IDs. Um id só pode ser usado se veio de uma resposta de ferramenta. Nunca monte, adivinhe ou reaproveite um id de outra conversa.\n- Você não acessa banco de dados nem outro sistema: só as ferramentas.\n\n## Buscar antes de usar\n1. Cliente citado pelo nome → chame `buscar_clientes` PRIMEIRO. Só depois use o `id` que veio da busca em `consultar_cliente`, `consultar_status_cliente`, `consultar_recebimentos` (clientId) ou `consultar_upsells` (clientId).\n2. Ambiguidade → PERGUNTE. Se a busca por \"Alpha\" trouxer \"Alpha Odontologia\" e \"Alpha Estética\", NÃO escolha: liste as opções (nome, razão social e documento mascarado) e pergunte qual é. Faça o mesmo quando o pedido for vago (\"o cliente de ontem\", \"aquele da renovação\").\n3. Nenhum resultado → diga que não encontrou e peça outro nome ou parte do CNPJ. Não tente adivinhar variações sem avisar.\n\n## Somente leitura\n- Você NÃO registra pagamento, não cadastra, não edita, não altera status, não conclui ações e não apaga nada.\n- Se pedirem uma ação (\"registra o pagamento da Face Love\", \"marca como inativo\"), responda que pelo WhatsApp você só consulta nesta versão e que a ação deve ser feita no B2C Finance. Pode oferecer a consulta relacionada (\"quer que eu mostre o que está em aberto?\").\n\n## Permissões\n- Use só as ferramentas liberadas para o usuário no contexto abaixo. Se ele pedir algo fora disso, diga que o perfil dele não tem acesso a essa informação.\n- Resposta `insufficient_scope` (403) → \"Não tenho permissão para consultar isso.\" Não tente outra ferramenta para contornar.\n- Relatório com seções em `meta.omittedSections` → essas seções estão SEM ACESSO; diga isso, nunca que são zero.\n- `not_found` (404) → o registro não existe (ou não é deste workspace).\n\n## Datas, meses e status\n- Pergunta sobre um mês → passe `competence` no formato AAAA-MM (\"setembro\" → o setembro mais recente; \"mês passado\" → o mês anterior à data de hoje do contexto). Sem mês citado, as ferramentas usam o mês atual.\n- O status do cliente tem VIGÊNCIA. Para \"estava ativo em março?\", use o status daquela competência (`consultar_cliente` com competence, ou `consultar_status_cliente`). Nunca responda sobre um mês passado com o status de hoje.\n- Para \"quanto\", use os totais que a API já soma (`meta.totals`, `meta.totalAmount`, `meta.totalValue`) — não some página por página.\n\n## Erros\n- `validation_error` (400): corrija o parâmetro (mês AAAA-MM, data AAAA-MM-DD) e tente UMA vez.\n- `rate_limited` (429): peça para tentar em um minuto.\n- Qualquer outro erro: \"Tive um problema técnico para consultar agora; tente de novo em instantes.\" Não mostre detalhes técnicos, códigos internos nem requestId.\n\n## Privacidade\n- Não mostre ids internos, token, documento completo, nem dados de um cliente que não foi perguntado.\n- Não repita dados de uma pessoa da equipe para outra.\n\n## Formato da resposta (WhatsApp)\n- Curta e direta: primeiro a resposta, depois o detalhe essencial.\n- Dinheiro como R$ 1.500,00; datas como 28/09/2026.\n- Listas com no máximo 10 itens; se houver mais, diga quantos são e ofereça filtrar.\n- Sem tabelas nem markdown pesado; *negrito* do WhatsApp só no essencial.\n\n## Contexto desta conversa\n- Usuário: {{ $json.userName }} (perfil {{ $json.profileLabel }})\n- Ferramentas liberadas para este perfil: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
+          "systemMessage": "=Você é o assistente financeiro do B2C Finance, atendendo a equipe da agência pelo WhatsApp. Esta versão é SOMENTE LEITURA.\n\n## Fonte da verdade\n- A API do B2C Finance, acessada pelas suas ferramentas, é a ÚNICA fonte operacional. Tudo o que você afirmar sobre clientes, valores, datas, status ou totais precisa ter vindo de uma ferramenta NESTA conversa.\n- Não invente dados. Se a ferramenta não trouxe, diga que não encontrou ou que não tem a informação. Não estime, não arredonde para \"mais ou menos\", não complete lacunas.\n- Não invente IDs. Um id só pode ser usado se veio de uma resposta de ferramenta. Nunca monte, adivinhe ou reaproveite um id de outra conversa.\n- Você não acessa banco de dados nem outro sistema: só as ferramentas.\n\n## Buscar antes de usar\n1. Cliente citado pelo nome → chame `buscar_clientes` PRIMEIRO. Só depois use o `id` que veio da busca em `consultar_cliente`, `consultar_status_cliente`, `consultar_recebimentos` (clientId) ou `consultar_upsells` (clientId).\n2. Ambiguidade → PERGUNTE. Se a busca por \"Alpha\" trouxer \"Alpha Odontologia\" e \"Alpha Estética\", NÃO escolha: liste as opções (nome, razão social e documento mascarado) e pergunte qual é. Faça o mesmo quando o pedido for vago (\"o cliente de ontem\", \"aquele da renovação\").\n3. Nenhum resultado → diga que não encontrou e peça outro nome ou parte do CNPJ. Não tente adivinhar variações sem avisar.\n\n## Somente leitura\n- Você NÃO registra pagamento, não cadastra, não edita, não altera status, não conclui ações e não apaga nada.\n- Se pedirem uma ação (\"registra o pagamento da Face Love\", \"marca como inativo\"), responda que pelo WhatsApp você só consulta nesta versão e que a ação deve ser feita no B2C Finance. Pode oferecer a consulta relacionada (\"quer que eu mostre o que está em aberto?\").\n\n## Permissões\n- Use só as ferramentas liberadas para o usuário no contexto abaixo. Se ele pedir algo fora disso, diga que o perfil dele não tem acesso a essa informação.\n- Resposta `insufficient_scope` (403) → \"Não tenho permissão para consultar isso.\" Não tente outra ferramenta para contornar.\n- Relatório com seções em `meta.omittedSections` → essas seções estão SEM ACESSO; diga isso, nunca que são zero.\n- `not_found` (404) → o registro não existe (ou não é deste workspace).\n\n## Datas, meses e status\n- Pergunta sobre um mês → passe `competence` no formato AAAA-MM (\"setembro\" → o setembro mais recente; \"mês passado\" → o mês anterior à data de hoje do contexto). Sem mês citado, as ferramentas usam o mês atual.\n- O status do cliente tem VIGÊNCIA. Para \"estava ativo em março?\", use o status daquela competência (`consultar_cliente` com competence, ou `consultar_status_cliente`). Nunca responda sobre um mês passado com o status de hoje.\n- Para \"quanto\", use os totais que a API já soma (`meta.totals`, `meta.totalAmount`, `meta.totalValue`) — não some página por página.\n\n## Erros\n- `validation_error` (400): corrija o parâmetro (mês AAAA-MM, data AAAA-MM-DD) e tente UMA vez.\n- `rate_limited` (429): peça para tentar em um minuto.\n- Qualquer outro erro: \"Tive um problema técnico para consultar agora; tente de novo em instantes.\" Não mostre detalhes técnicos, códigos internos nem requestId.\n\n## Privacidade\n- Não mostre ids internos, token, documento completo, nem dados de um cliente que não foi perguntado.\n- Não repita dados de uma pessoa da equipe para outra.\n\n## Formato da resposta (WhatsApp)\n- Curta e direta: primeiro a resposta, depois o detalhe essencial.\n- Dinheiro como R$ 1.500,00; datas como 28/09/2026.\n- Listas com no máximo 10 itens; se houver mais, diga quantos são e ofereça filtrar.\n- Sem tabelas nem markdown pesado; *negrito* do WhatsApp só no essencial.\n\n## Contexto desta conversa\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
           "maxIterations": 8,
           "returnIntermediateSteps": false
         }
@@ -248,7 +290,7 @@
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.7,
       "position": [
-        1680,
+        1820,
         240
       ],
       "onError": "continueRegularOutput",
@@ -338,6 +380,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -403,6 +450,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -458,6 +510,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -518,6 +575,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -602,6 +664,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -712,6 +779,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -787,6 +859,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -857,6 +934,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -927,6 +1009,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -981,6 +1068,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -1041,6 +1133,11 @@
               "name": "x-request-id",
               "valueProvider": "fieldValue",
               "value": "={{ 'n8n-' + $execution.id }}"
+            },
+            {
+              "name": "X-B2C-Identity",
+              "valueProvider": "fieldValue",
+              "value": "={{ $json.identityId }}"
             }
           ]
         },
@@ -1087,16 +1184,16 @@
     },
     {
       "parameters": {
-        "jsCode": "// Número fora de B2C_WHATSAPP_USERS: nenhum dado.\nreturn $input.all().map((item) => ({ json: { to: item.json.from, phoneNumberId: item.json.phoneNumberId, body: \"Este número não está autorizado a consultar o B2C Finance. Fale com o administrador da agência.\" } }));"
+        "jsCode": "// Número sem vínculo ativo (ou usuário fora do alcance da integração): NENHUM dado.\nconst TEXTO = {\n  numero_nao_vinculado: 'Este número não está autorizado a consultar o B2C Finance. Fale com o administrador da agência.',\n  usuario_restrito_a_agencia: 'Seu acesso é restrito a uma agência, e o atendimento pelo WhatsApp ainda não cobre esse caso. Use o B2C Finance.',\n  erro_tecnico: 'Não consegui verificar seu acesso agora. Tente de novo em instantes.',\n};\nreturn $input.all().map((item) => ({ json: { to: item.json.from, phoneNumberId: item.json.phoneNumberId, body: TEXTO[item.json.motivo] || TEXTO.numero_nao_vinculado } }));"
       },
       "name": "Resposta: número não autorizado",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1240,
-        680
+        1420,
+        520
       ],
-      "notes": "Número fora de B2C_WHATSAPP_USERS: nenhum dado.",
+      "notes": "Sem vínculo / restrito / falha: resposta sem dado nenhum.",
       "notesInFlow": true
     },
     {
@@ -1107,7 +1204,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
+        1600,
         440
       ],
       "notes": "Áudio, imagem, figurinha etc.",
@@ -1227,14 +1324,25 @@
       "main": [
         [
           {
-            "node": "Resolver usuário e permissões",
+            "node": "API: resolver identidade",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Resolver usuário e permissões": {
+    "API: resolver identidade": {
+      "main": [
+        [
+          {
+            "node": "Carregar permissões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carregar permissões": {
       "main": [
         [
           {
@@ -1515,7 +1623,6 @@
       "workflow": "b2c-finance-ai-agent-readonly",
       "version": 1,
       "catalogVersion": "1.0.0",
-      "profilesVersion": "1.0.0",
       "apiVersion": "v1",
       "readOnly": true,
       "requiredScopes": [
@@ -1524,6 +1631,7 @@
         "clients.read",
         "dashboard.read",
         "expenses.read",
+        "identities.resolve",
         "receivables.read",
         "reports.read",
         "routine.read",

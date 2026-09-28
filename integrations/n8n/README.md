@@ -10,13 +10,12 @@ integrations/n8n/
 ├── ENV.example                       variáveis (sem segredo real)
 ├── CHANGELOG.md
 ├── workflows/
-│   ├── b2c-finance-ai-agent-readonly.json WhatsApp → usuário/perfil → AI Agent (11 ferramentas GET) → WhatsApp
+│   ├── b2c-finance-ai-agent-readonly.json WhatsApp → identidade (API) → AI Agent (11 ferramentas GET) → WhatsApp
 │   ├── daily-morning-report.json          relatório da manhã por WhatsApp (cron)
 │   ├── daily-evening-report.json          relatório da noite por WhatsApp (cron)
 │   └── sistema.teste-conexao.v1.json      /health + /me + conferência de scopes
 ├── schemas/
 │   ├── agent-tools.json              catálogo das ferramentas do agente (fonte de verdade)
-│   ├── user-profiles.json            perfis → ferramentas liberadas por pessoa
 │   └── agent-tools.schema.json       JSON Schema do catálogo
 ├── examples/
 │   ├── system-prompt.md              instruções do agente (vão para o workflow)
@@ -80,7 +79,7 @@ Os workflows chegam **desativados** e com as credenciais **por ligar**: os nós 
 
 1. **Crie a integração.** No B2C Finance, como administrador, abra **Configurações → Integrações (API) → Nova integração** e preencha:
    - **Nome:** `B2C Finance AI Agent`.
-   - **Scopes:** marque **só os de leitura** que o agente usa: `clients.read`, `client_status.read`, `receivables.read`, `expenses.read`, `cash.read`, `upsells.read`, `dashboard.read`, `routine.read`, `reports.read`. Nenhum scope de escrita.
+   - **Scopes:** marque **só os de leitura** que o agente usa, mais `identities.resolve` (para identificar quem fala): `identities.resolve`, `clients.read`, `client_status.read`, `receivables.read`, `expenses.read`, `cash.read`, `upsells.read`, `dashboard.read`, `routine.read`, `reports.read`. Nenhum scope de escrita.
    - **Validade:** 180 dias.
 2. **Guarde o token.** Ele aparece **uma única vez**: copie direto para o passo 3.
 3. **Crie a credencial no n8n.** Em **Credentials → New → Header Auth**, preencha:
@@ -105,14 +104,18 @@ O token **nunca** vai em variável de ambiente, em nó, em expressão nem no Git
    | `WHATSAPP_WEBHOOK_SECRET` | O **App Secret** do app na Meta. Valida a assinatura (§8). |
    | `WHATSAPP_VERIFY_TOKEN` | Um texto longo aleatório que você inventa. |
    | `WHATSAPP_PHONE_NUMBER_ID` | O id do número na Meta. |
-   | `B2C_WHATSAPP_USERS` | O diretório de quem pode consultar: número em E.164 sem `+` → nome e perfil, em JSON numa linha. Perfis: `admin`, `financeiro`, `comercial`, `leitura` ([`schemas/user-profiles.json`](./schemas/user-profiles.json)). |
 
 3. **Configure o webhook no painel da Meta.** Em **WhatsApp → Configuration → Webhook**, preencha:
    - **Callback URL:** a URL de produção do webhook `b2c-finance-ai-agent` do workflow, por exemplo `https://SEU-N8N/webhook/b2c-finance-ai-agent`.
    - **Verify token:** o mesmo `WHATSAPP_VERIFY_TOKEN`. O nó "Webhook WhatsApp (verificação GET)" responde o desafio.
    - **Assine o campo `messages`.**
 
-**Número fora do diretório:** recebe só uma resposta genérica e **nenhum dado** ("não autorizado"). Enquanto a delegação por usuário não existir na API, **esse diretório é quem decide quem pode consultar, e o quê**. O perfil limita as ferramentas: a restrição vai no prompt **e** trava a URL da ferramenta, então uma ferramenta fora do perfil nem chega à API. Mantenha o diretório curto e revise quando alguém sair da equipe.
+4. **Vincule os números da equipe.** No B2C Finance, em **Configurações → Integrações → WhatsApp → Vincular WhatsApp**, escolha o usuário e digite o número. Quem pode consultar, e o quê, é decidido **pelo B2C Finance**:
+   - o workflow pergunta à API quem é o dono do número (`POST /integrations/resolve-identity`);
+   - o agente atende com o **RBAC desse usuário**, limitado aos scopes da integração;
+   - cada chamada leva `X-B2C-Identity`, e a API confere de novo.
+
+   **Número sem vínculo:** recebe só uma resposta genérica e **nenhum dado**. Ao desligar alguém da equipe, **desative o usuário** ou **desvincule o número**. Os dois cortam o acesso na hora. Detalhes: [`docs/N8N_READONLY_AGENT.md`](../../docs/N8N_READONLY_AGENT.md) §4.
 
 > Se usar outro provedor de WhatsApp (Evolution API, Z-API, Twilio), troque três nós: "Validar assinatura (Meta)" (assinatura do provedor), "Normalizar payload" (formato da mensagem) e "Responder no WhatsApp" (endpoint e corpo de envio). O agente e as ferramentas não mudam.
 
@@ -121,7 +124,7 @@ O token **nunca** vai em variável de ambiente, em nó, em expressão nem no Git
 1. **Crie a credencial.** Em **Credentials → New → OpenAI**, com o nome `OpenAI` e a chave da conta (`OPENAI_API_KEY`, que fica só na credencial).
 2. **Escolha o modelo.** O nó "Modelo de IA" vem com `gpt-4o-mini` e temperatura 0.2, porque respostas factuais pedem temperatura baixa. Qualquer modelo com **tool calling** serve.
 3. **Para usar outro provedor:** troque o nó por outro chat model do n8n (Anthropic, Azure OpenAI, Gemini) e ligue-o na entrada *Chat Model* do agente. As ferramentas e o prompt não mudam.
-4. **Instruções do agente.** O prompt está em [`examples/system-prompt.md`](./examples/system-prompt.md) e já vai dentro do nó "AI Agent B2C Finance (somente leitura)", junto com o contexto de quem pergunta: nome, perfil, ferramentas liberadas e a data de hoje. Para mudar as instruções, edite o `.md` e rode `npm run n8n:build`, ou edite no n8n e exporte (§6). Regras principais:
+4. **Instruções do agente.** O prompt está em [`examples/system-prompt.md`](./examples/system-prompt.md) e já vai dentro do nó "AI Agent B2C Finance (somente leitura)", junto com o contexto de quem pergunta: nome e papel (vindos da API), ferramentas liberadas e a data de hoje. Para mudar as instruções, edite o `.md` e rode `npm run n8n:build`, ou edite no n8n e exporte (§6). Regras principais:
    - buscar o cliente antes de consultar e **perguntar** se houver mais de um resultado;
    - usar o status **da competência** para meses passados;
    - usar os totais que a API já calcula;
@@ -156,7 +159,7 @@ O catálogo usa JSON Schema, o mesmo formato de `parameters`/`input_schema` das 
 4. **Teste a segurança.** Estes três casos **não** podem chegar ao agente:
    - payload com assinatura errada ou sem assinatura: descartado, sem resposta;
    - número fora do diretório: recebe só a resposta genérica;
-   - ferramenta fora do perfil: não chega à API, e o agente diz que o perfil não tem acesso;
+   - ferramenta que o usuário não pode usar: não chega à API (e, se chegasse, a API responderia 403 `user_forbidden`);
    - a mesma mensagem reenviada pela Meta (mesmo `messageId`): não gera segunda resposta;
    - pedido de escrita ("registra o pagamento da Face Love"): o agente explica que não pode.
 5. **Confira no B2C Finance.** Em **Configurações → Integrações → Atividades da IA/API**, cada consulta aparece com a origem **WhatsApp**. As ferramentas enviam `X-B2C-Source: whatsapp` e `x-request-id = n8n-<id da execução>`, que ligam a atividade à execução no n8n.
@@ -244,7 +247,8 @@ O segredo `B2C_WEBHOOK_SECRET` vai ser gerado na tela de Integrações quando a 
 - **Travas antes e em volta do agente:**
   - assinatura do webhook;
   - diretório de usuários;
-  - perfil (no prompt e na URL de cada ferramenta);
+  - identidade resolvida pela API (vínculo no B2C Finance) e delegação `X-B2C-Identity` em cada chamada;
+  - ferramentas liberadas pelo RBAC do usuário (no prompt e na URL de cada ferramenta);
   - descarte de mensagens repetidas;
   - o prompt, que proíbe escrita, inventar dados ou ids e expor dados de quem não foi perguntado.
 - **Nenhum segredo no Git:** `npm run n8n:check` e o CI barram tokens (`b2c_live_…`, `sk-…`, `EAA…`, `Bearer …`) e ids reais de credencial.

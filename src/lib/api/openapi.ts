@@ -74,6 +74,14 @@ const PARAMETERS = {
     schema: str(undefined, { pattern: "^[A-Za-z0-9._:-]{1,255}$" }),
     example: "wa_message_3EB0C4A1F2",
   },
+  Identity: {
+    name: "X-B2C-Identity",
+    in: "header",
+    required: false,
+    description:
+      "Delegação: id do vínculo devolvido por `POST /integrations/resolve-identity`. A API recorta os scopes pelo RBAC do usuário vinculado (conta ∩ usuário) e o registra como ator. Exige `identities.resolve` na integração. Inválido/desativado/de outro workspace → 403 `invalid_identity`; usuário sem a permissão → 403 `user_forbidden`.",
+    schema: str(undefined, { pattern: "^[A-Za-z0-9_-]{1,64}$" }),
+  },
   Source: {
     name: "x-b2c-source",
     in: "header",
@@ -118,6 +126,7 @@ const SCHEMAS: Record<string, Obj> = {
               "insufficient_scope", "validation_error", "not_found", "rate_limited", "internal_error",
               "idempotency_key_required", "idempotency_key_reused", "idempotency_in_progress", "unprocessable",
               "duplicate", "possible_duplicate", "invalid_state", "competence_closed", "retroactive_requires_confirmation",
+              "identity_not_found", "invalid_identity", "user_forbidden", "agency_scope_not_supported",
             ],
           }),
           message: str("Mensagem em português para humanos."),
@@ -471,6 +480,24 @@ const SCHEMAS: Record<string, Obj> = {
     key: str(), text: str(), priority: str(undefined, { enum: ["alta", "media", "baixa"] }),
     done: { const: true }, alreadyDone: bool("Já estava concluída (nada mudou)."),
   }),
+  IdentityResolveRequest: obj(
+    {
+      channel: { const: "WHATSAPP" },
+      externalIdentifier: str("Telefone como veio do WhatsApp. Com \"+\" o código do país é lido do número; sem ele, 10–11 dígitos = Brasil. A variante do nono dígito é aceita.", {
+        minLength: 8, maxLength: 40, example: "+5571999990000",
+      }),
+    },
+    ["channel", "externalIdentifier"],
+    { additionalProperties: false, description: "Só o número. `userId` (ou qualquer outro campo) é recusado: quem decide o usuário é o vínculo cadastrado pelo administrador." }
+  ),
+  IdentityResolution: obj({
+    identityId: str("Id do vínculo — mande em `X-B2C-Identity` nas chamadas seguintes."),
+    channel: { const: "WHATSAPP" },
+    user: obj({ id: str(), name: str(), role: str(), roleLabel: str() }),
+    permissions: { ...arr(str()), description: "Permissões do RBAC do usuário que importam para a integração." },
+    allowedScopes: { ...arr(str(undefined, { enum: API_SCOPES })), description: "Scopes da integração ∩ RBAC do usuário: o que ela pode fazer POR ele." },
+    delegation: obj({ header: { const: "X-B2C-Identity" }, value: str() }),
+  }),
   ServiceAccountMe: obj({
     type: { const: "service_account" }, id: str(), name: str(),
     tokenPrefix: str("Parte pública do token.", { example: "b2c_live_k3j9x2ma" }),
@@ -598,7 +625,7 @@ function op(o: {
       description: (o.description ?? "") + scopeTxt,
       security: [{ bearerAuth: o.scope ? [o.scope] : [] }],
       "x-required-scope": o.scope,
-      parameters: [refParam("RequestId"), refParam("Source"), ...(o.params ?? [])],
+      parameters: [refParam("RequestId"), refParam("Source"), refParam("Identity"), ...(o.params ?? [])],
       responses: {
         "200": o.ok,
         "400": refResp("BadRequest"),
@@ -634,7 +661,7 @@ function writeOp(o: {
         `\n\n**Scope obrigatório:** \`${o.scope}\`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.`,
       security: [{ bearerAuth: [o.scope] }],
       "x-required-scope": o.scope,
-      parameters: [refParam("IdempotencyKey"), refParam("RequestId"), refParam("Source"), ...(o.params ?? [])],
+      parameters: [refParam("IdempotencyKey"), refParam("RequestId"), refParam("Source"), refParam("Identity"), ...(o.params ?? [])],
       requestBody: {
         required: true,
         content: { "application/json": { schema: o.body.schema, example: o.body.example } },
@@ -940,6 +967,40 @@ PATHS["/routine/actions/{id}/complete"] = writeOp({
   ok: sucesso(ref("RoutineActionResult")),
 });
 
+PATHS["/integrations/resolve-identity"] = {
+  post: {
+    operationId: "resolveIdentity",
+    tags: ["Integração"],
+    summary: "Identificar quem está falando (WhatsApp → usuário)",
+    description:
+      "Resolve o número pelo VÍNCULO cadastrado em Configurações → Integrações → WhatsApp e devolve o usuário, as permissões relevantes e os scopes que a integração pode usar em nome dele. Número não vinculado, vínculo desativado ou usuário inativo → 404. Usuário restrito a uma agência → 403 (ainda não suportado). É uma consulta (sem Idempotency-Key); POST para o telefone não ir para a URL.\n\n**Scope obrigatório:** `identities.resolve`.",
+    security: [{ bearerAuth: ["identities.resolve"] }],
+    "x-required-scope": "identities.resolve",
+    parameters: [refParam("RequestId"), refParam("Source")],
+    requestBody: {
+      required: true,
+      content: { "application/json": { schema: ref("IdentityResolveRequest"), example: { channel: "WHATSAPP", externalIdentifier: "+5571999990000" } } },
+    },
+    responses: {
+      "200": sucesso(ref("IdentityResolution"), {
+        exemplo: {
+          identityId: "cmuwa0001", channel: "WHATSAPP",
+          user: { id: "cmuuser01", name: "Raiane", role: "FINANCEIRO", roleLabel: "Financeiro" },
+          permissions: ["clientes.visualizar", "recebimentos.visualizar"],
+          allowedScopes: ["clients.read", "client_status.read", "receivables.read"],
+          delegation: { header: "X-B2C-Identity", value: "cmuwa0001" },
+        },
+      }),
+      "400": refResp("BadRequest"),
+      "401": refResp("Unauthorized"),
+      "403": refResp("Forbidden"),
+      "404": refResp("NotFound"),
+      "429": refResp("RateLimited"),
+      "500": refResp("InternalError"),
+    },
+  },
+};
+
 const DESCRICAO = `API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).
 
 ## Versionamento
@@ -960,6 +1021,9 @@ A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigênci
 - a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header \`Idempotent-Replayed: true\` e \`meta.idempotency.replayed = true\`;
 - repetir enquanto a primeira ainda roda → 409 \`idempotency_in_progress\`; mesma chave com outros dados → 422 \`idempotency_key_reused\`; escrita sem a chave → 400 \`idempotency_key_required\`;
 - guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.
+
+## Quem está falando (delegação)
+Para agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em \`POST /integrations/resolve-identity\` e manda o \`identityId\` em \`X-B2C-Identity\`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.
 
 ## Trilha de atividades
 Toda chamada (exceto \`/health\`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (\`X-B2C-Source\`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.
@@ -987,6 +1051,7 @@ export function buildOpenApiSpec(serverUrl = "https://b2-c-finance.vercel.app/ap
       { name: "Upsell", description: "Oportunidades de venda adicional." },
       { name: "Painéis", description: "Indicadores oficiais e rotina do dia." },
       { name: "Relatórios", description: "Resumo do dia e da competência; seções seguem os scopes." },
+      { name: "Integração", description: "Quem está falando: número de WhatsApp → usuário e delegação por identidade." },
     ],
     security: [{ bearerAuth: [] }],
     paths: PATHS,

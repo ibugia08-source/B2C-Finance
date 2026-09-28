@@ -352,6 +352,27 @@ Além dessas verificações:
 
 **Códigos de erro das escritas:** `idempotency_key_required`, `idempotency_key_reused`, `idempotency_in_progress`, `duplicate`, `possible_duplicate`, `invalid_state`, `competence_closed`, `retroactive_requires_confirmation`, `unprocessable`.
 
+## 4.1 Quem está falando: identidade e delegação
+
+**Resolver o número:** `POST /integrations/resolve-identity`, com o scope `identities.resolve` e o corpo `{ "channel": "WHATSAPP", "externalIdentifier": "+5571999990000" }`. Só o número: `userId` dá 400.
+
+- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → WhatsApp (tabela `MessagingIdentity`).
+- **O que devolve:**
+  - `identityId`;
+  - o usuário (id, nome, papel);
+  - as permissões relevantes;
+  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário.
+- **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.
+
+**Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:
+
+1. **Recarrega o vínculo** no workspace da integração e confere que ele e o usuário estão ativos.
+2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).
+   - Rota fora do que o usuário pode dá 403 `user_forbidden`.
+   - Nos relatórios, as seções que ele não vê entram em `omittedSections`.
+3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API.
+4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.
+
 ## 5. Implementação
 
 - **Onde está o código:**

@@ -14,7 +14,8 @@ Webhook WhatsApp (POST)                       responde 200 na hora (a Meta reenv
   → Validar assinatura (Meta)                 HMAC do corpo cru; inválida = descarta
   → Normalizar payload                        uma mensagem por item; ignora "entregue/lido"
   → Identificar número                        E.164; descarta mensagem repetida (messageId)
-  → Resolver usuário e permissões             B2C_WHATSAPP_USERS → nome, perfil, ferramentas
+  → API: resolver identidade                  POST /integrations/resolve-identity (só o número)
+  → Carregar permissões                       ferramentas = scopes que a API liberou para o usuário
   → Usuário autorizado? ──não──→ Resposta: número não autorizado ─┐
   → Mensagem de texto?  ──não──→ Resposta: só texto ──────────────┤
   → Montar contexto do agente                 sessão, data de hoje, ferramentas liberadas
@@ -58,7 +59,7 @@ A fonte das ferramentas é [`integrations/n8n/schemas/agent-tools.json`](../inte
 
 ## 3. O que o prompt garante
 
-O prompt está em [`integrations/n8n/examples/system-prompt.md`](../integrations/n8n/examples/system-prompt.md) e é embutido no nó do agente pelo gerador. Ao final, o nó acrescenta o **contexto da conversa**: usuário, perfil, ferramentas liberadas e a data de hoje no fuso da Bahia (para "mês passado" e "ontem").
+O prompt está em [`integrations/n8n/examples/system-prompt.md`](../integrations/n8n/examples/system-prompt.md) e é embutido no nó do agente pelo gerador. Ao final, o nó acrescenta o **contexto da conversa**: usuário e papel (vindos da API), ferramentas liberadas e a data de hoje no fuso da Bahia (para "mês passado" e "ontem").
 
 | Regra | Como aparece no prompt |
 |---|---|
@@ -68,39 +69,57 @@ O prompt está em [`integrations/n8n/examples/system-prompt.md`](../integrations
 | Buscar antes de usar ID | "Cliente citado pelo nome → chame `buscar_clientes` PRIMEIRO." |
 | Informar ambiguidade | "Se a busca por "Alpha" trouxer "Alpha Odontologia" e "Alpha Estética", NÃO escolha: liste as opções … e pergunte qual é." |
 | Não executar escrita | "Você NÃO registra pagamento, não cadastra, não edita, não altera status …", e oferece a consulta relacionada. |
-| Respeitar permissões | Usar só as ferramentas do perfil. `insufficient_scope` → "Não tenho permissão". Seção omitida em relatório = sem acesso, nunca zero. |
+| Respeitar permissões | Usar só as ferramentas liberadas para o usuário. `insufficient_scope` → "Não tenho permissão". Seção omitida em relatório = sem acesso, nunca zero. |
 | Status com vigência | Mês passado → status **daquela** competência, nunca o de hoje. |
 
 O mesmo prompt também cobre formato de WhatsApp (curto, R$ 1.500,00, datas dd/mm/aaaa, até 10 itens), privacidade (sem ids internos ou documento completo) e erros (sem detalhes técnicos).
 
 ## 4. Identificação do usuário e permissões
 
-Hoje a API ainda **não** resolve "número de telefone → usuário". A delegação por usuário está planejada em [`API_IMPLEMENTATION_PLAN.md`](./API_IMPLEMENTATION_PLAN.md) §8.3. Até lá, a identificação fica no n8n.
+**Quem está falando é decidido pelo B2C Finance, não pelo workflow nem pela IA.**
 
-**Diretório de usuários:**
+**Vínculo:**
 
-- A variável é `B2C_WHATSAPP_USERS`, um JSON de número para nome e perfil:
-  ```
-  B2C_WHATSAPP_USERS={"5571999990000":{"name":"Raiane","profile":"financeiro"}}
-  ```
-- Número fora do diretório recebe **só** uma resposta genérica, sem nenhum dado, e a mensagem não chega ao agente.
+- O administrador vincula o número de cada pessoa ao usuário dela em **Configurações → Integrações → WhatsApp**.
+- A tabela é `MessagingIdentity`: canal `WHATSAPP` + telefone normalizado → usuário.
+- Há **um** vínculo ativo por número em cada workspace, garantido por índice único parcial no banco.
+- Desvincular corta o atendimento **na hora**; a linha fica guardada para auditoria.
+- Vincular e desvincular entram no `AuditLog`.
 
-**Perfis:** definidos em [`integrations/n8n/schemas/user-profiles.json`](../integrations/n8n/schemas/user-profiles.json).
+**Resolução:** a cada mensagem, o nó "API: resolver identidade" chama `POST /api/v1/integrations/resolve-identity` com **só** o número.
 
-| Perfil | Ferramentas |
+- A API encontra o vínculo ativo do workspace da integração e devolve:
+  - `identityId`;
+  - o usuário (id, nome, papel);
+  - as **permissões relevantes** do RBAC;
+  - os **`allowedScopes`**, que são os scopes da integração ∩ o que o RBAC do usuário cobre.
+- O corpo aceita só `channel` e `externalIdentifier`. Um `userId` (ou qualquer outro campo) dá **400**, então ninguém escolhe o usuário pela requisição.
+- **Nono dígito:** a Meta às vezes manda o celular brasileiro sem o 9 depois do DDD. A API aceita as duas formas para o mesmo vínculo.
+
+**Rejeição:** número sem vínculo ativo, vínculo desativado ou usuário inativo dão **404**. O workflow responde só "não autorizado", sem nenhum dado, e a mensagem **não chega ao agente**.
+
+**Usuário restrito a uma agência:** é recusado com **403 `agency_scope_not_supported`**. A API de leitura ainda não aplica o recorte por agência, e atender essa pessoa mostraria a carteira inteira.
+
+**Permissões:** o nó "Carregar permissões" libera as ferramentas do catálogo cujo scope veio em `allowedScopes`. Por exemplo:
+
+| Papel | Ferramentas liberadas |
 |---|---|
-| `admin` | todas |
-| `financeiro` | todas, exceto upsell |
-| `comercial` | clientes, status, upsell, rotina |
-| `leitura` | clientes, status, dashboard |
+| `LEITURA` | Clientes e status. Sem o dashboard financeiro, que exige `dashboard.ver_financeiro`. |
+| `FINANCEIRO` | Tudo, exceto upsell. |
+| `COMERCIAL` | Clientes, status e upsell. |
+
+Ajustes finos da matriz de permissões do usuário valem automaticamente.
 
 **Onde as permissões são aplicadas**, da mais forte para a mais fraca:
 
 | Camada | Onde fica | O que garante |
 |---|---|---|
-| Scopes da integração | API | Teto de **todo** o workflow. A integração do agente só tem scopes `*.read`; escrita responde 403 mesmo que alguém altere o workflow. |
-| Perfil na URL da ferramenta | Workflow | Ferramenta fora do perfil troca a base da URL por um host inválido e **não chega à API**. O modelo recebe o erro "ferramenta-nao-liberada-para-este-perfil". |
-| Perfil no prompt | Modelo | O agente sabe o que pode usar e explica ao usuário quando algo está fora do perfil. |
+| Scopes da integração | API | Teto de **todo** o workflow (só `*.read` + `identities.resolve`). |
+| **Delegação `X-B2C-Identity`** | API | Toda ferramenta manda o `identityId`. A API recarrega o vínculo no **mesmo workspace**, confere que está ativo e que o usuário está ativo, e **recorta os scopes pelo RBAC do usuário**. Chamada fora do que o usuário pode dá **403 `user_forbidden`**, mesmo que alguém altere o workflow. Id inválido, desativado ou de outro workspace dá **403 `invalid_identity`**. O usuário fica registrado como **ator** (`actorUserId`) em Atividades da IA/API. |
+| URL da ferramenta | Workflow | Ferramenta não liberada troca a base da URL por um host inválido e **nem chega à API**. |
+| Prompt | Modelo | O agente sabe o que pode usar e explica quando algo está fora do acesso do usuário. |
+
+O `identityId` vem da resposta da API, nunca da mensagem ou da IA. As ferramentas o recebem de `$json.identityId`, e o modelo só preenche parâmetros de consulta (nome buscado, mês, filtros).
 
 ## 5. Como testar antes de ativar
 
@@ -116,7 +135,7 @@ Hoje a API ainda **não** resolve "número de telefone → usuário". A delegaç
 | "e o Alpha?" (dois clientes Alpha) | **Pergunta** qual Alpha, listando as opções. Não escolhe. |
 | "estava ativa em agosto?" | Usa o status de **agosto** (competência), não o de hoje. |
 | "registra o pagamento da Face Love" | Diz que só consulta nesta versão; não chama nada de escrita. |
-| Perfil `comercial` pergunta do caixa | Diz que o perfil não tem acesso; a API não é chamada. |
+| Usuário sem acesso ao caixa pergunta do caixa | Diz que não tem acesso; a API não é chamada (e, se fosse, responderia 403 `user_forbidden`). |
 | Número fora do diretório | Recebe só "não autorizado". |
 | POST sem assinatura ou com assinatura errada | Nada segue adiante. |
 | Mesma mensagem reenviada (mesmo `messageId`) | Uma resposta só. |
@@ -130,7 +149,6 @@ Depois de passar nos casos:
 
 - **Fontes versionadas:**
   - `schemas/agent-tools.json` (ferramentas);
-  - `schemas/user-profiles.json` (perfis);
   - `examples/system-prompt.md` (instruções).
 - **Regenerar:** `npm run n8n:build` gera o workflow a partir dessas três fontes.
 - **Edição feita no n8n:** exporte com `scripts/export.sh`, que normaliza o JSON e roda o verificador de segredos.
@@ -139,7 +157,7 @@ Depois de passar nos casos:
     - ferramentas contra a OpenAPI (só GET, scope certo, só parâmetros aceitos);
     - o fluxo nó a nó;
     - ausência de nós de banco/Supabase/Prisma;
-    - a trava por perfil;
+    - permissões vindas da API (execução real do nó "Carregar permissões");
     - prompt com as regras;
     - notas presentes;
   - `npm run n8n:check`, que bloqueia token ou chave versionados.
@@ -165,5 +183,13 @@ Depois de passar nos casos:
 | Texto | O modelo recebeu as 11 ferramentas e o contexto do usuário. `buscar_clientes` consultou a API e a resposta foi enviada. |
 | Mesma mensagem reenviada | Nenhuma segunda resposta. |
 | Perfil `comercial` + `consultar_caixa` | Zero chamadas a `/cash/summary` na API; o modelo recebeu o erro de ferramenta não liberada. |
+
+**Identidade resolvida pela API** (depois da troca do diretório em variável pelo vínculo no B2C Finance), no mesmo ambiente:
+
+| Cenário | Resultado |
+|---|---|
+| Número vinculado | `resolve-identity` 200; a ferramenta chamou `/search` com `X-B2C-Identity`, e a atividade registrou o **usuário vinculado como ator**. |
+| Número sem vínculo | 404; resposta genérica "não autorizado" e nenhuma chamada do agente. |
+| Trilha | O telefone aparece só mascarado (`5571•••••0001`). |
 
 **O que não foi coberto:** um modelo de IA real, porque o teste usou um modelo simulado que só chama `buscar_clientes`. A qualidade das respostas e a obediência às regras do prompt precisam do teste manual da seção 5, com o modelo escolhido.

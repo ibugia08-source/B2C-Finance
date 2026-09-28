@@ -108,8 +108,9 @@ describe("workflows versionados", () => {
     expect(prox("Webhook WhatsApp (POST)")).toBe("Validar assinatura (Meta)");
     expect(prox("Validar assinatura (Meta)")).toBe("Normalizar payload");
     expect(prox("Normalizar payload")).toBe("Identificar número");
-    expect(prox("Identificar número")).toBe("Resolver usuário e permissões");
-    expect(prox("Resolver usuário e permissões")).toBe("Usuário autorizado?");
+    expect(prox("Identificar número")).toBe("API: resolver identidade");
+    expect(prox("API: resolver identidade")).toBe("Carregar permissões");
+    expect(prox("Carregar permissões")).toBe("Usuário autorizado?");
     expect(prox("Usuário autorizado?", 0)).toBe("Mensagem de texto?");
     expect(prox("Usuário autorizado?", 1)).toBe("Resposta: número não autorizado"); // não passa pelo agente
     expect(prox("Mensagem de texto?", 0)).toBe("Montar contexto do agente");
@@ -131,6 +132,8 @@ describe("workflows versionados", () => {
       expect(n.parameters.toolDescription).toBe(t.description);
       expect(n.credentials.httpHeaderAuth).toEqual({ id: "CONFIGURAR_B2C_FINANCE_API", name: "B2C Finance API" });
       expect(n.parameters.parametersHeaders.values.find((h: any) => h.name === "X-B2C-Source").value).toBe("whatsapp");
+      // Delegação: toda ferramenta leva o vínculo resolvido pela API.
+      expect(n.parameters.parametersHeaders.values.find((h: any) => h.name === "X-B2C-Identity").value).toBe("={{ $json.identityId }}");
       expect(wf.connections[n.name].ai_tool[0][0].node).toBe(N_AGENTE);
     }
   });
@@ -157,8 +160,10 @@ describe("workflows versionados", () => {
       "@n8n/n8n-nodes-langchain.memoryBufferWindow", "@n8n/n8n-nodes-langchain.toolHttpRequest",
     ]);
     for (const n of wf.nodes) expect(permitidos.has(n.type), `${n.name}: ${n.type}`).toBe(true);
+    // HTTP fora das ferramentas: só a resolução de identidade (API B2C) e o envio ao WhatsApp.
     for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest")) {
-      expect(String(n.parameters.url)).toContain("WHATSAPP_API_URL"); // o único HTTP "de saída" é a resposta
+      const url = String(n.parameters.url);
+      expect(url === "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity" || url.includes("WHATSAPP_API_URL"), url).toBe(true);
     }
   });
 
@@ -169,21 +174,35 @@ describe("workflows versionados", () => {
     expect(js("Validar assinatura (Meta)")).toMatch(/x-hub-signature-256[\s\S]*timingSafeEqual/);
     expect(js("Validar assinatura (Meta)")).toContain("WHATSAPP_WEBHOOK_SECRET");
     expect(js("Identificar número")).toContain("$getWorkflowStaticData");
-    expect(js("Resolver usuário e permissões")).toContain("B2C_WHATSAPP_USERS");
+    // Identidade vem da API, pelo NÚMERO — nenhum userId sai do workflow.
+    const resolve = wf.nodes.find((n: any) => n.name === "API: resolver identidade");
+    expect(resolve.parameters.method).toBe("POST");
+    expect(resolve.parameters.jsonBody).toBe("={{ JSON.stringify({ channel: 'WHATSAPP', externalIdentifier: '+' + $json.from }) }}");
+    expect(resolve.parameters.jsonBody).not.toMatch(/userId/);
+    expect(resolve.onError).toBe("continueRegularOutput");
+    expect(JSON.stringify(wf)).not.toContain("B2C_WHATSAPP_USERS");
   });
 
-  it("perfis: toda ferramenta citada existe; admin tem todas; perfil embutido = schemas/user-profiles.json", () => {
-    const perfis = ler("schemas/user-profiles.json").profiles;
-    const nomes = catalogo.tools.map((t: any) => t.name);
-    for (const [perfil, p] of Object.entries<any>(perfis)) {
-      for (const t of p.tools) expect(nomes, `${perfil}: ${t}`).toContain(t);
-    }
-    expect([...perfis.admin.tools].sort()).toEqual([...nomes].sort());
-    const js = ler(AGENTE).nodes.find((n: any) => n.name === "Resolver usuário e permissões").parameters.jsCode as string;
-    for (const [perfil, p] of Object.entries<any>(perfis)) {
-      expect(js).toContain(`"${perfil}"`);
-      for (const t of p.tools) expect(js).toContain(`"${t}"`);
-    }
+  it("permissões vêm da API: ferramenta liberada = scope devolvido em allowedScopes", async () => {
+    const wf = ler(AGENTE);
+    const js = wf.nodes.find((n: any) => n.name === "Carregar permissões").parameters.jsCode as string;
+    for (const t of catalogo.tools) expect(js).toContain(`"${t.name}": "${t.scope}"`);
+    const msg = { from: "5571999990000", text: "oi", tipo: "text", phoneNumberId: "P" };
+    const $ = () => ({ all: () => [{ json: msg }] });
+    const rodar = (resposta: any) =>
+      new Function("$", "$input", `return (async () => { ${js} })();`)($, { all: () => [{ json: resposta }] });
+    const ok = await rodar({
+      success: true,
+      data: { identityId: "idv1", user: { id: "u1", name: "Raiane", roleLabel: "Financeiro" }, allowedScopes: ["clients.read", "receivables.read"] },
+    });
+    expect(ok[0].json).toMatchObject({ authorized: true, identityId: "idv1", userName: "Raiane", from: "5571999990000" });
+    expect(ok[0].json.allowedTools.sort()).toEqual(["buscar_clientes", "consultar_cliente", "consultar_recebimentos"]);
+    const semVinculo = await rodar({ error: { message: '404 - {"error":{"code":"identity_not_found"}}' } });
+    expect(semVinculo[0].json).toMatchObject({ authorized: false, allowedTools: [], motivo: "numero_nao_vinculado", identityId: null });
+    const agencia = await rodar({ error: { message: '403 - {"error":{"code":"agency_scope_not_supported"}}' } });
+    expect(agencia[0].json.motivo).toBe("usuario_restrito_a_agencia");
+    const falha = await rodar({ error: { message: "ECONNREFUSED" } });
+    expect(falha[0].json).toMatchObject({ authorized: false, motivo: "erro_tecnico" });
   });
 
   it("o prompt versionado está no agente, com as regras pedidas; o workflow tem notas", () => {
@@ -204,7 +223,7 @@ describe("workflows versionados", () => {
   it("o teste de conexão confere exatamente os scopes que o catálogo usa", () => {
     const wf = ler("workflows/sistema.teste-conexao.v1.json");
     const codigo = wf.nodes.find((n: any) => n.name === "Conferir scopes").parameters.jsCode;
-    const usados = [...new Set(catalogo.tools.map((t: any) => t.scope))].sort();
+    const usados = [...new Set([...catalogo.tools.map((t: any) => t.scope), "identities.resolve"])].sort();
     expect(codigo).toContain(JSON.stringify(usados));
   });
 });
@@ -214,7 +233,7 @@ describe("sem segredo versionado", () => {
     const { verificar } = await import("../integrations/n8n/scripts/check-secrets.mjs");
     expect(verificar()).toEqual([]);
     const env = readFileSync(join(RAIZ, "ENV.example"), "utf8");
-    for (const v of ["B2C_FINANCE_API_URL", "B2C_FINANCE_API_TOKEN", "WHATSAPP_API_URL", "WHATSAPP_API_TOKEN", "OPENAI_API_KEY", "B2C_WHATSAPP_USERS"]) {
+    for (const v of ["B2C_FINANCE_API_URL", "B2C_FINANCE_API_TOKEN", "WHATSAPP_API_URL", "WHATSAPP_API_TOKEN", "OPENAI_API_KEY"]) {
       expect(env).toMatch(new RegExp(`^${v}=`, "m"));
     }
     expect(env).toMatch(/^B2C_FINANCE_API_TOKEN=b2c_live_XXXXXXXX_COLE/m);

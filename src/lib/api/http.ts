@@ -5,6 +5,7 @@ import type { DomainContext } from "@/lib/engines/domain";
 import { DomainNotFoundError } from "@/lib/engines/domain";
 import { ApiError, apiDomainContext, authenticateApiToken, requireApiScope, type ApiAuth } from "./auth";
 import { origemDaChamada, registrarAtividade } from "./activity";
+import { delegar } from "./delegation";
 import { chaveDeIdempotencia, concluirChave, guardavel, hashDoPedido, liberarChave, reservarChave, type Reserva } from "./idempotency";
 import type { WriteOperationKey } from "./activity-meta";
 
@@ -192,6 +193,7 @@ export function defineEndpoint<
       await registrarAtividade({
         ownerId: r.ownerId,
         serviceAccountId: r.serviceAccountId,
+        actorUserId: auth?.delegacao?.userId ?? null,
         source,
         kind,
         action,
@@ -225,7 +227,16 @@ export function defineEndpoint<
         return apiFailure(res.error, requestId);
       }
       auth = res.auth;
-      if (opts.scope) requireApiScope(auth, opts.scope);
+      // Delegação: a integração age em nome do usuário do vínculo (os scopes
+      // viram conta ∩ RBAC dele). Ver lib/api/delegation.
+      const identidade = req.headers.get("x-b2c-identity");
+      if (identidade !== null) auth = await delegar(auth, identidade);
+      if (opts.scope) {
+        if (auth.delegacao && !auth.scopes.includes(opts.scope) && auth.delegacao.scopesDaConta.includes(opts.scope)) {
+          throw new ApiError(403, "user_forbidden", `${auth.delegacao.userName} não tem permissão para isto no B2C Finance.`, opts.scope);
+        }
+        requireApiScope(auth, opts.scope);
+      }
 
       // Parâmetros desconhecidos são recusados (schemas `.strict()`): um
       // filtro digitado errado que fosse ignorado devolveria a lista inteira
@@ -332,7 +343,7 @@ export function defineEndpoint<
       if (auth) {
         await trilha({
           ownerId: auth.ownerId, serviceAccountId: auth.serviceAccountId,
-          result: err.status === 401 || err.status === 403 ? "DENIED" : "ERROR",
+          result: err.status === 401 || err.status === 403 || err.code === "identity_not_found" ? "DENIED" : "ERROR",
           httpStatus: err.status, errorCode: err.code,
         });
       }

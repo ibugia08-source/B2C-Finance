@@ -120,6 +120,8 @@ const OWNED_MODELS = new Set<string>([
   // da chave rodam sem escopo (com ownerId explícito); a tela lê escopada.
   "ApiActivity",
   "ApiIdempotencyKey",
+  // Número de WhatsApp → usuário (28/09/2026).
+  "MessagingIdentity",
 ]);
 
 // Valor impossível → quando não há dono resolvido, nada casa (fail-closed):

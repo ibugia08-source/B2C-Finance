@@ -126,6 +126,7 @@ O catálogo fica em `src/lib/api/scopes.ts`. O formato é `recurso.acao`, em ing
 | `dashboard.read` | Indicadores | `dashboard.visualizar`, `ver_financeiro` |
 | `routine.read` | Rotina do dia | `rotina.visualizar` |
 | `reports.read` | Relatórios. Cada relatório também exige os scopes das permissões dele. | `relatorios.visualizar` |
+| `identities.resolve` | Resolver número de WhatsApp → usuário (`POST /integrations/resolve-identity`) e agir em nome dele (`X-B2C-Identity`, com os scopes recortados pelo RBAC do usuário) | — (da integração, não delegável) |
 
 **Regras:**
 

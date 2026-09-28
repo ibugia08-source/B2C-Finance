@@ -2,7 +2,6 @@
 /**
  * Gera os workflows a partir das fontes versionadas:
  *   schemas/agent-tools.json    → uma ferramenta HTTP (GET) por item do catálogo
- *   schemas/user-profiles.json  → perfis (ferramentas liberadas por pessoa)
  *   examples/system-prompt.md   → instruções do agente
  *
  *   node integrations/n8n/scripts/build-workflows.mjs    (npm run n8n:build)
@@ -21,7 +20,6 @@ import { fileURLToPath } from "node:url";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const catalogo = JSON.parse(readFileSync(join(RAIZ, "schemas/agent-tools.json"), "utf8"));
-const perfis = JSON.parse(readFileSync(join(RAIZ, "schemas/user-profiles.json"), "utf8"));
 const prompt = readFileSync(join(RAIZ, "examples/system-prompt.md"), "utf8").trim();
 
 // Ids PLACEHOLDER, um por credencial: na importação o n8n liga pelo nome e
@@ -36,7 +34,8 @@ const N = {
   assinatura: "Validar assinatura (Meta)",
   normalizar: "Normalizar payload",
   identificar: "Identificar número",
-  resolver: "Resolver usuário e permissões",
+  resolver: "API: resolver identidade",
+  permissoes: "Carregar permissões",
   autorizado: "Usuário autorizado?",
   texto: "Mensagem de texto?",
   contexto: "Montar contexto do agente",
@@ -62,6 +61,8 @@ const cabecalhos = {
     values: [
       { name: "X-B2C-Source", valueProvider: "fieldValue", value: "whatsapp" },
       { name: "x-request-id", valueProvider: "fieldValue", value: "={{ 'n8n-' + $execution.id }}" },
+      // Delegação: a API recorta cada chamada pelo RBAC de quem está falando.
+      { name: "X-B2C-Identity", valueProvider: "fieldValue", value: "={{ $json.identityId }}" },
     ],
   },
 };
@@ -181,32 +182,40 @@ for (const item of $input.all()) {
 vistos.ids = vistos.ids.slice(-500);
 return saida;`;
 
-const JS_RESOLVER = `// ETAPA 4 — Resolver usuário e permissões.
-// Diretório: B2C_WHATSAPP_USERS (JSON número → { name, profile }).
-// Perfis e ferramentas: schemas/user-profiles.json (embutido abaixo pelo gerador).
-// Número fora do diretório → authorized = false (resposta genérica, nenhum dado).
-const PERFIS = ${JSON.stringify(Object.fromEntries(Object.entries(perfis.profiles).map(([k, p]) => [k, { label: p.label, tools: p.tools }])), null, 2)};
-let diretorio;
-try {
-  diretorio = JSON.parse($env.B2C_WHATSAPP_USERS || '{}');
-} catch (e) {
-  throw new Error('B2C_WHATSAPP_USERS não é um JSON válido — ver integrations/n8n/ENV.example.');
-}
-const normalizado = Object.fromEntries(Object.entries(diretorio).map(([num, u]) => [String(num).replace(/\\D/g, ''), u]));
-return $input.all().map((item) => {
-  const u = normalizado[item.json.from];
-  const perfil = u && PERFIS[u.profile];
-  return {
-    json: {
-      ...item.json,
-      authorized: Boolean(u && perfil),
-      userName: u ? u.name : null,
-      profile: perfil ? u.profile : null,
-      profileLabel: perfil ? perfil.label : null,
-      allowedTools: perfil ? perfil.tools : [],
-      motivo: !u ? 'numero_fora_do_diretorio' : !perfil ? 'perfil_desconhecido' : null,
-    },
-  };
+// Ferramenta → scope (do catálogo): a ferramenta só é liberada se a API
+// devolveu o scope dela em allowedScopes (conta ∩ RBAC do usuário).
+const FERRAMENTA_SCOPE = Object.fromEntries(catalogo.tools.map((t) => [t.name, t.scope]));
+
+const JS_PERMISSOES = `// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
+// nem da IA). O usuário é o do VÍNCULO cadastrado no B2C Finance.
+// Ferramentas liberadas = as do catálogo cujo scope a API devolveu em allowedScopes.
+const FERRAMENTA_SCOPE = ${JSON.stringify(FERRAMENTA_SCOPE, null, 2)};
+const mensagens = $('${N.identificar}').all();
+return $input.all().map((item, i) => {
+  const msg = mensagens[i] ? mensagens[i].json : {};
+  const r = item.json || {};
+  if (r.success === true && r.data && r.data.user) {
+    const scopes = r.data.allowedScopes || [];
+    return {
+      json: {
+        ...msg,
+        authorized: true,
+        identityId: r.data.identityId,
+        userId: r.data.user.id,
+        userName: r.data.user.name,
+        roleLabel: r.data.user.roleLabel,
+        allowedScopes: scopes,
+        allowedTools: Object.keys(FERRAMENTA_SCOPE).filter((t) => scopes.includes(FERRAMENTA_SCOPE[t])),
+        motivo: null,
+      },
+    };
+  }
+  // 404 identity_not_found / 403 agency_scope_not_supported / falha técnica.
+  const texto = JSON.stringify(r.error || r);
+  const motivo = texto.includes('identity_not_found') ? 'numero_nao_vinculado'
+    : texto.includes('agency_scope_not_supported') ? 'usuario_restrito_a_agencia'
+    : 'erro_tecnico';
+  return { json: { ...msg, authorized: false, identityId: null, allowedTools: [], motivo } };
 });`;
 
 const JS_CONTEXTO = `// ETAPA 5 — Contexto do agente: quem pergunta, o que pode usar e a data de
@@ -283,7 +292,8 @@ const nota = (nome, conteudo, pos, largura, altura, cor) => ({
 });
 
 const ferramentas = catalogo.tools.map(ferramenta);
-const scopesUsados = [...new Set(catalogo.tools.map((t) => t.scope))].sort();
+// O agente usa as ferramentas do catálogo E a resolução de identidade.
+const scopesUsados = [...new Set([...catalogo.tools.map((t) => t.scope), "identities.resolve"])].sort();
 
 const agente = {
   name: "B2C Finance · AI Agent (somente leitura)",
@@ -300,8 +310,8 @@ const agente = {
     ),
     nota(
       "Nota: identificação e permissões",
-      `### 4 · Quem é e o que pode\n\`B2C_WHATSAPP_USERS\` (número → nome e perfil). Fora da lista = resposta genérica, **nenhum dado**.\nO perfil define as ferramentas liberadas (schemas/user-profiles.json): vai no prompt **e** trava a URL da ferramenta.`,
-      [700, 180], 520, 330, 4
+      `### 4–5 · Quem é e o que pode\nA **API** resolve o número pelo vínculo cadastrado em Configurações → Integrações → WhatsApp. Sem vínculo = resposta genérica, **nenhum dado**.\nFerramentas = scopes que a API liberou (conta ∩ RBAC do usuário): vão no prompt, travam a URL e cada chamada leva \`X-B2C-Identity\` — a API recorta de novo.`,
+      [700, 180], 700, 330, 4
     ),
     nota(
       "Nota: agente e ferramentas",
@@ -326,10 +336,40 @@ const agente = {
     code(N.assinatura, JS_ASSINATURA, [220, 300], "HMAC X-Hub-Signature-256; inválida = descarta."),
     code(N.normalizar, JS_NORMALIZAR, [440, 300], "Payload da Meta → uma mensagem por item."),
     code(N.identificar, JS_IDENTIFICAR, [660, 300], "Número E.164 + descarte de mensagem repetida."),
-    code(N.resolver, JS_RESOLVER, [880, 300], "Número → usuário e perfil (B2C_WHATSAPP_USERS)."),
-    se(N.autorizado, "={{ $json.authorized }}", [1060, 300], "Fora do diretório → resposta genérica."),
-    se(N.texto, "={{ $json.tipo === 'text' && $json.text.length > 0 }}", [1240, 240], "Áudio, imagem etc. → pede texto."),
-    code(N.contexto, JS_CONTEXTO, [1440, 240], "Sessão, data de hoje e ferramentas do perfil."),
+    {
+      parameters: {
+        method: "POST",
+        url: "={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity",
+        authentication: "genericCredentialType",
+        genericAuthType: "httpHeaderAuth",
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: "X-B2C-Source", value: "whatsapp" },
+            { name: "x-request-id", value: "={{ 'n8n-' + $execution.id }}" },
+          ],
+        },
+        sendBody: true,
+        specifyBody: "json",
+        // Só o NÚMERO (com "+": a Meta já manda o código do país). O usuário
+        // quem define é o vínculo no B2C Finance — nada da mensagem ou da IA.
+        jsonBody: "={{ JSON.stringify({ channel: 'WHATSAPP', externalIdentifier: '+' + $json.from }) }}",
+        options: {},
+      },
+      name: N.resolver,
+      type: "n8n-nodes-base.httpRequest",
+      typeVersion: 4.2,
+      position: [880, 300],
+      credentials: CRED_B2C,
+      onError: "continueRegularOutput",
+      alwaysOutputData: true,
+      notes: "POST /integrations/resolve-identity: número → usuário vinculado.",
+      notesInFlow: true,
+    },
+    code(N.permissoes, JS_PERMISSOES, [1060, 300], "Ferramentas = scopes que a API liberou para o usuário."),
+    se(N.autorizado, "={{ $json.authorized }}", [1240, 300], "Número não vinculado → resposta genérica."),
+    se(N.texto, "={{ $json.tipo === 'text' && $json.text.length > 0 }}", [1420, 240], "Áudio, imagem etc. → pede texto."),
+    code(N.contexto, JS_CONTEXTO, [1600, 240], "Sessão, data de hoje e ferramentas do usuário."),
     {
       parameters: {
         promptType: "define",
@@ -338,7 +378,7 @@ const agente = {
           systemMessage:
             "=" +
             prompt +
-            "\n\n## Contexto desta conversa\n- Usuário: {{ $json.userName }} (perfil {{ $json.profileLabel }})\n- Ferramentas liberadas para este perfil: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
+            "\n\n## Contexto desta conversa\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)",
           maxIterations: 8,
           returnIntermediateSteps: false,
         },
@@ -346,7 +386,7 @@ const agente = {
       name: N.agente,
       type: "@n8n/n8n-nodes-langchain.agent",
       typeVersion: 1.7,
-      position: [1680, 240],
+      position: [1820, 240],
       onError: "continueRegularOutput",
       notes: "Escolhe as ferramentas (GET na API) e redige a resposta. Somente leitura.",
       notesInFlow: true,
@@ -372,8 +412,13 @@ const agente = {
     },
     ...ferramentas,
     code(N.interpretar, JS_INTERPRETAR, [2000, 240], "Formata para o WhatsApp; erro → mensagem neutra."),
-    resposta(N.naoAutorizado, "Este número não está autorizado a consultar o B2C Finance. Fale com o administrador da agência.", [1240, 420 + 380 * 0 + 260], "Número fora de B2C_WHATSAPP_USERS: nenhum dado."),
-    resposta(N.soTexto, "Por enquanto eu entendo só mensagens de texto. Pode escrever a sua pergunta?", [1440, 440 + 0], "Áudio, imagem, figurinha etc."),
+    code(
+      N.naoAutorizado,
+      `// Número sem vínculo ativo (ou usuário fora do alcance da integração): NENHUM dado.\nconst TEXTO = {\n  numero_nao_vinculado: 'Este número não está autorizado a consultar o B2C Finance. Fale com o administrador da agência.',\n  usuario_restrito_a_agencia: 'Seu acesso é restrito a uma agência, e o atendimento pelo WhatsApp ainda não cobre esse caso. Use o B2C Finance.',\n  erro_tecnico: 'Não consegui verificar seu acesso agora. Tente de novo em instantes.',\n};\nreturn $input.all().map((item) => ({ json: { to: item.json.from, phoneNumberId: item.json.phoneNumberId, body: TEXTO[item.json.motivo] || TEXTO.numero_nao_vinculado } }));`,
+      [1420, 520],
+      "Sem vínculo / restrito / falha: resposta sem dado nenhum."
+    ),
+    resposta(N.soTexto, "Por enquanto eu entendo só mensagens de texto. Pode escrever a sua pergunta?", [1600, 440], "Áudio, imagem, figurinha etc."),
     {
       parameters: {
         method: "POST",
@@ -422,7 +467,8 @@ const agente = {
     [N.assinatura]: { main: [[{ node: N.normalizar, type: "main", index: 0 }]] },
     [N.normalizar]: { main: [[{ node: N.identificar, type: "main", index: 0 }]] },
     [N.identificar]: { main: [[{ node: N.resolver, type: "main", index: 0 }]] },
-    [N.resolver]: { main: [[{ node: N.autorizado, type: "main", index: 0 }]] },
+    [N.resolver]: { main: [[{ node: N.permissoes, type: "main", index: 0 }]] },
+    [N.permissoes]: { main: [[{ node: N.autorizado, type: "main", index: 0 }]] },
     [N.autorizado]: {
       main: [[{ node: N.texto, type: "main", index: 0 }], [{ node: N.naoAutorizado, type: "main", index: 0 }]],
     },
@@ -446,7 +492,6 @@ const agente = {
       workflow: "b2c-finance-ai-agent-readonly",
       version: 1,
       catalogVersion: catalogo.version,
-      profilesVersion: perfis.version,
       apiVersion: catalogo.apiVersion,
       readOnly: true,
       requiredScopes: scopesUsados,

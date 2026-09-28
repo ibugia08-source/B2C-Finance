@@ -25,8 +25,17 @@ export type ApiAuth = {
   name: string;
   ownerId: string;
   tokenPrefix: string;
+  /** Scopes EFETIVOS da chamada (com delegação: conta ∩ RBAC do usuário). */
   scopes: string[];
   principal: Principal;
+  /** Delegação (X-B2C-Identity): em nome de quem a integração age. */
+  delegacao?: {
+    identityId: string;
+    userId: string;
+    userName: string;
+    /** Scopes da CONTA antes do recorte pelo usuário. */
+    scopesDaConta: string[];
+  };
 };
 
 export type ApiErrorCode =
@@ -48,6 +57,10 @@ export type ApiErrorCode =
   | "invalid_state"
   | "competence_closed"
   | "retroactive_requires_confirmation"
+  | "identity_not_found"
+  | "invalid_identity"
+  | "user_forbidden"
+  | "agency_scope_not_supported"
   | "internal_error";
 
 export class ApiError extends Error {

@@ -2,6 +2,15 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-28 (4)
+
+- **Identidade pela API:** o agente não usa mais o diretório `B2C_WHATSAPP_USERS` nem `schemas/user-profiles.json` (removidos). A sequência passou a ser:
+  1. "API: resolver identidade" (`POST /integrations/resolve-identity`, só o número);
+  2. "Carregar permissões" (ferramentas = `allowedScopes` da API);
+  3. `X-B2C-Identity` em toda ferramenta; a API recorta pelo RBAC do usuário e o registra como ator.
+- A integração do agente precisa do scope `identities.resolve`, e o teste de conexão confere isso.
+- O número é vinculado em **Configurações → Integrações → WhatsApp**.
+
 ## 2026-09-28 (3)
 
 - `workflows/daily-morning-report.json` e `workflows/daily-evening-report.json`: relatórios por WhatsApp.

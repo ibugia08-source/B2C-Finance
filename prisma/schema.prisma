@@ -182,6 +182,9 @@ model User {
   // Ajustes finos de permissão por usuário (diferenças vs. o padrão do papel).
   permissions UserPermission[]
 
+  // Números de WhatsApp (e outros canais) vinculados a este usuário.
+  messagingIdentities MessagingIdentity[] @relation("MessagingIdentities")
+
   // ===== Recorte de dados (03 §1.1) =====
   // DECIDIDO 19.11 (31/08): só DOIS recortes existem — a carteira inteira do
   // workspace, ou UMA agência. O escopo "meus clientes" da spec caiu porque
@@ -4205,4 +4208,38 @@ model ApiIdempotencyKey {
 
   @@unique([serviceAccountId, key])
   @@index([expiresAt])
+}
+
+// ===========================================================================
+// IDENTIDADE DE MENSAGERIA (28/09/2026) — docs/N8N_READONLY_AGENT.md
+// Número de WhatsApp → usuário do B2C Finance. Migration ADITIVA.
+// ===========================================================================
+
+enum MessagingChannel {
+  WHATSAPP
+}
+
+/// Vínculo de um identificador externo (telefone do WhatsApp) com um USUÁRIO
+/// do workspace. É o que a integração (n8n) consulta para saber QUEM está
+/// falando — nunca o que a IA ou a mensagem dizem. Um identificador ativo por
+/// canal em cada workspace (índice único PARCIAL, na migration); desvincular
+/// desativa (a linha fica para auditoria) e libera o número.
+model MessagingIdentity {
+  id                 String           @id @default(cuid())
+  ownerId            String
+  userId             String
+  user               User             @relation("MessagingIdentities", fields: [userId], references: [id], onDelete: Cascade)
+  channel            MessagingChannel
+  /// WhatsApp: telefone só com dígitos, com país (E.164 sem "+"), ex.: 5571999990000.
+  externalIdentifier String
+  isActive           Boolean          @default(true)
+  createdById        String
+  deactivatedAt      DateTime?        @db.Timestamptz(3)
+  deactivatedById    String?
+  lastResolvedAt     DateTime?        @db.Timestamptz(3)
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@index([ownerId, channel, externalIdentifier])
+  @@index([userId])
 }

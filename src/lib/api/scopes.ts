@@ -82,6 +82,16 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
       { id: "reports.read", label: "Executar relatórios" },
     ],
   },
+  {
+    key: "integration",
+    label: "Integração",
+    scopes: [
+      {
+        id: "identities.resolve",
+        label: "Identificar quem fala (WhatsApp → usuário) e agir com as permissões dele",
+      },
+    ],
+  },
 ];
 
 export const API_SCOPES: string[] = API_SCOPE_GROUPS.flatMap((g) => g.scopes.map((s) => s.id));
@@ -171,4 +181,46 @@ export const PERMISSION_TO_SCOPE: Readonly<Record<string, string>> = {
 export function scopePermite(scopes: readonly string[], permission: string): boolean {
   const scope = PERMISSION_TO_SCOPE[permission];
   return !!scope && scopes.includes(scope);
+}
+
+/**
+ * SCOPE → PERMISSÕES DO RBAC que um USUÁRIO precisa ter para a integração
+ * agir em nome dele com aquele scope (delegação via X-B2C-Identity).
+ * Todas as permissões da lista são exigidas. Scope sem entrada aqui NUNCA
+ * é delegável (ex.: identities.resolve — é da máquina, não da pessoa).
+ */
+export const SCOPE_REQUIRES_PERMISSIONS: Readonly<Record<string, readonly string[]>> = {
+  "clients.read": ["clientes.visualizar"],
+  "clients.create": ["clientes.criar"],
+  "clients.update": ["clientes.editar"],
+  "client_status.read": ["clientes.visualizar"],
+  "client_status.write": ["clientes.alterar_status"],
+  "receivables.read": ["recebimentos.visualizar"],
+  "receivables.register_payment": ["recebimentos.registrar_pagamento"],
+  "expenses.read": ["despesas.visualizar"],
+  "expenses.create": ["despesas.criar"],
+  "expenses.update": ["despesas.editar"],
+  "expenses.pay": ["despesas.marcar_como_paga"],
+  "cash.read": ["caixa.visualizar"],
+  "upsells.read": ["upsell.visualizar"],
+  "upsells.create": ["upsell.criar"],
+  "upsells.update": ["upsell.editar"],
+  "dashboard.read": ["dashboard.visualizar", "dashboard.ver_financeiro"],
+  "routine.read": ["rotina.visualizar"],
+  "routine.write": ["rotina.concluir_acao"],
+  "reports.read": ["relatorios.visualizar"],
+};
+
+/**
+ * Scopes EFETIVOS quando a integração age por um usuário: os da conta de
+ * serviço ∩ os que o RBAC da pessoa cobre. Nunca amplia nada.
+ */
+export function scopesDoUsuario(
+  scopesDaConta: readonly string[],
+  pode: (permission: string) => boolean
+): string[] {
+  return scopesDaConta.filter((s) => {
+    const exige = SCOPE_REQUIRES_PERMISSIONS[s];
+    return !!exige && exige.every(pode);
+  });
 }
