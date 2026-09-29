@@ -22,7 +22,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  RAIZ_N8N as RAIZ, catalogo, conhecimento, CRED_B2C, CRED_WA, CRED_IA, CRED_QDRANT, BLOQUEADA, cabecalhosDe, ferramentaDeEscrita,
+  RAIZ_N8N as RAIZ, catalogo, ferramentasDoCanal, conhecimento, CRED_B2C, CRED_WA, CRED_IA, CRED_QDRANT, BLOQUEADA, cabecalhosDe, ferramentaDeEscrita,
   ferramenta, code, se, nota, apiDeControle, jsPermissoes, colecao, embeddings, ferramentaConhecimento, montarPrompt,
 } from "./lib/pecas.mjs";
 
@@ -52,6 +52,8 @@ const N = {
 };
 
 const cabecalhos = cabecalhosDe("whatsapp");
+// Ferramentas de consulta do WhatsApp (a de inadimplência, por ora, é só do Telegram).
+const ferramentasWA = ferramentasDoCanal("whatsapp");
 
 // ---------------------------------------------------------------------------
 // Código dos nós (JavaScript do nó Code)
@@ -126,7 +128,7 @@ return saida;`;
 
 // Ferramenta → scope (do catálogo): a ferramenta só é liberada se a API
 // devolveu o scope dela em allowedScopes (conta ∩ RBAC do usuário).
-const FERRAMENTA_SCOPE = Object.fromEntries(catalogo.tools.map((t) => [t.name, t.scope]));
+const FERRAMENTA_SCOPE = Object.fromEntries(ferramentasWA.map((t) => [t.name, t.scope]));
 
 const JS_PERMISSOES = `// ETAPA 5 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
 // nem da IA). O usuário é o do VÍNCULO cadastrado no B2C Finance.
@@ -198,9 +200,9 @@ const resposta = (nome, texto, pos, nota) => ({
   notesInFlow: true,
 });
 
-const ferramentas = catalogo.tools.map((t, i) => ferramenta(t, i));
+const ferramentas = ferramentasWA.map((t, i) => ferramenta(t, i));
 // O agente usa as ferramentas do catálogo E a resolução de identidade.
-const scopesUsados = [...new Set([...catalogo.tools.map((t) => t.scope), "identities.resolve"])].sort();
+const scopesUsados = [...new Set([...ferramentasWA.map((t) => t.scope), "identities.resolve"])].sort();
 
 const agente = {
   name: "B2C Finance · AI Agent (somente leitura)",
@@ -443,7 +445,7 @@ const NE = {
 
 // Ferramenta → scopes exigidos (TODOS). Escrita = scope da operação + agent_actions.manage.
 const FERRAMENTA_SCOPES = {
-  ...Object.fromEntries(catalogo.tools.map((t) => [t.name, [t.scope]])),
+  ...Object.fromEntries(ferramentasWA.map((t) => [t.name, [t.scope]])),
   ...Object.fromEntries(escrita.tools.map((t) => [t.name, [t.scope, "agent_actions.manage"]])),
 };
 
@@ -539,10 +541,10 @@ return $input.all().map((item, i) => {
 });`;
 
 const ferramentasEscrita = escrita.tools.map((t, i) => ferramentaDeEscrita(t, i, "whatsapp"));
-const ferramentasLeitura = catalogo.tools.map((t, i) => ({ ...ferramenta(t, i, "whatsapp"), position: [1500 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180] }));
+const ferramentasLeitura = ferramentasWA.map((t, i) => ({ ...ferramenta(t, i, "whatsapp"), position: [1500 + (i % 6) * 170, 620 + Math.floor(i / 6) * 180] }));
 const todasFerramentas = [...ferramentasLeitura, ...ferramentasEscrita];
 const scopesEscrita = [
-  ...new Set([...catalogo.tools.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
+  ...new Set([...ferramentasWA.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
 ].sort();
 
 const naoAutorizado = agente.nodes.find((n) => n.name === N.naoAutorizado);

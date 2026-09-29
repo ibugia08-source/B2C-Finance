@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
 import { defineEndpoint } from "@/lib/api/http";
-import { SCOPE_REQUIRES_PERMISSIONS, scopesDoUsuario } from "@/lib/api/scopes";
+import { PERMISSOES_FINAS_DA_INTEGRACAO, SCOPE_REQUIRES_PERMISSIONS, scopesDoUsuario } from "@/lib/api/scopes";
 import { resolverIdentidade } from "@/lib/services/messaging-identities";
 import { mascararIdentificador } from "@/lib/messaging/channels";
 
@@ -51,7 +51,9 @@ export const POST = defineEndpoint(
     }
     const allowedScopes = scopesDoUsuario(auth.scopes, r.pode);
     // Só as permissões que importam para a integração (não o RBAC inteiro).
-    const relevantes = [...new Set(Object.values(SCOPE_REQUIRES_PERMISSIONS).flat())].filter(r.pode).sort();
+    const relevantes = [...new Set([...Object.values(SCOPE_REQUIRES_PERMISSIONS).flat(), ...PERMISSOES_FINAS_DA_INTEGRACAO])]
+      .filter(r.pode)
+      .sort();
     return {
       data: {
         authorized: true,

@@ -24,6 +24,8 @@
           "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$" },
           "description": { "type": "string", "minLength": 40, "description": "Texto que o MODELO lê para decidir quando usar a ferramenta." },
           "scope": { "type": "string", "pattern": "^[a-z_]+\\.[a-z_]+$" },
+          "userPermission": { "type": "string", "description": "Permissão FINA do RBAC exigida do usuário do vínculo além do scope (ex.: recebimentos.ver_inadimplencia). A API confere de novo." },
+          "channels": { "type": "array", "items": { "enum": ["telegram", "whatsapp"] }, "description": "Canais cujos agentes recebem a ferramenta. Ausente = todos." },
           "http": {
             "type": "object",
             "required": ["method", "path", "query"],

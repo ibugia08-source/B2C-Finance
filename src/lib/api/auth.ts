@@ -35,6 +35,8 @@ export type ApiAuth = {
     userName: string;
     /** Scopes da CONTA antes do recorte pelo usuário. */
     scopesDaConta: string[];
+    /** RBAC do usuário (papel + ajustes da matriz) — para permissões finas. */
+    pode: (permission: string) => boolean;
   };
 };
 

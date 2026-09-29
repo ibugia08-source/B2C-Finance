@@ -48,6 +48,7 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 ## O que ele faz
 
 **Consulta direto (READ):**
+- inadimplência atual (no Telegram): quem deve hoje, de qualquer mês, igual à tela Inadimplência — só para quem tem "Ver inadimplência";
 - buscar cliente pelo nome ou documento;
 - detalhe e histórico de status do cliente;
 - indicadores do mês (dashboard);
@@ -107,6 +108,16 @@ Uma pergunta pode precisar das duas. Em "o MRR caiu?", o número vem da API e a 
 - **Avisos** (recebimento, inadimplência, renovação, despesa vencendo) já podem ser marcados, mas o envio automático ainda não está ligado.
 
 Toda ação fica registrada em **Configurações → Integrações → Atividades da IA/API**, com o nome de quem confirmou e o canal (Telegram ou WhatsApp).
+
+## Inadimplência: três coisas diferentes
+
+| Pergunta | O que o agente consulta |
+|---|---|
+| "Quem está inadimplente?" (sem mês) | A inadimplência **de hoje**, de todas as competências — a mesma lista e os mesmos totais da tela Inadimplência. |
+| "Inadimplentes de agosto" | As cobranças **de agosto** que estão vencidas hoje. O agente diz esse recorte. |
+| "O que tenho para cobrar hoje?" | A **fila de cobrança da Rotina**: uma seleção priorizada do dia, não a lista completa. |
+
+A resposta sempre traz a data da posição e separa **clientes** de **cobranças** ("12 clientes, 19 cobranças vencidas"). Se a lista for longa, o agente mostra os principais e diz o total. Se a consulta falhar, ele diz que não conseguiu consultar; nunca responde "zero".
 
 ## Respostas típicas
 

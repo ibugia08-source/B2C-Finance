@@ -48,7 +48,7 @@ npm run dev            # http://localhost:3100
 
 | Comando | Descrição |
 |---|---|
-| `npm run dev` / `build` / `start` | ciclo Next.js (`build` roda `prisma migrate deploy`) |
+| `npm run dev` / `build` / `start` | ciclo Next.js (`build` = `scripts/vercel-build.mjs`: `prisma migrate deploy` + bootstrap + `next build`; com `B2C_SKIP_DB_STEPS=<última migration>` publica só o código — ver `docs/AMBIENTES.md`) |
 | `npm run build:ci` | build sem aplicar migrations |
 | `npm run db:seed` | seed inicial (admin, categorias, regras) — create-only |
 | `npm run prisma:migrate` / `prisma:studio` | ferramentas Prisma |

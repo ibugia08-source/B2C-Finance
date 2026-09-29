@@ -177,6 +177,7 @@ Passo a passo e ordem de implantação: [`docs/TELEGRAM_INTEGRATION.md`](TELEGRA
 - [ ] Connection test passou
 - [ ] readonly importado
 - [ ] readonly testado
+- [ ] "Liste os clientes inadimplentes" bate com a tela Inadimplência (clientes e valor, mesma data)
 - [ ] readonly ativado
 - [ ] Destinatários marcados em Canais → Envios
 - [ ] morning report testado

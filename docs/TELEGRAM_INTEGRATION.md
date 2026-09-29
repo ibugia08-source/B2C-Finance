@@ -177,6 +177,7 @@ A identidade é o **Telegram User ID** (um número, ex.: `123456789`). O @userna
 4. **No privado com o bot:**
    - `/start`, `/help`, `/status`;
    - "Quanto recebemos hoje?", "Qual nosso MRR?", "Explique MRR e TCV.";
+   - "Liste os clientes inadimplentes": a resposta deve dizer a posição de hoje e o total de clientes e valor, **iguais aos da tela Inadimplência**; se a lista for parcial, deve dizer quantos são no total;
    - um nome de cliente ambíguo (o agente deve perguntar qual);
    - uma mensagem num grupo com o bot (só a orientação de usar o privado);
    - `/start` de alguém sem vínculo (só o ID, nenhum dado).
@@ -221,6 +222,31 @@ A identidade é o **Telegram User ID** (um número, ex.: `123456789`). O @userna
 | Parar tudo | Desative todos os workflows de Telegram | O bot para de responder |
 
 Mantenha o somente leitura **importado e desativado** como fallback.
+
+## 9b. Atualizar um workflow que JÁ está publicado (n8n 2.x)
+
+**Não use "Import from File" nem `n8n import:workflow` num workflow publicado.**
+- O JSON do repositório não tem o ID nem as credenciais da sua instância; importá-lo cria um **workflow duplicado**.
+- No n8n 2.x, importar por cima de um ID existente **despublica** o workflow.
+
+O caminho seguro é a API pública, validado num n8n 2.39.7:
+
+1. **Backup:** `GET /api/v1/workflows/<id>` → salve o JSON **fora do repositório**. Ele tem o ID, as credenciais (id e nome, nunca o segredo), os settings e `activeVersionId`, que é a versão para voltar.
+2. **Merge:**
+
+   ```
+   node integrations/n8n/scripts/preparar-atualizacao-workflow.mjs --id <id> --atual <backup> --novo <json do repo> --saida <pasta fora do repo>
+   ```
+
+   - Gera `corpo-put.json` e `relatorio.md`, preservando ID, nome, settings, ids de nó, `webhookId`, posições e credenciais.
+   - Mantém customizações da instância em nós que o repositório não mudou.
+   - **Para em conflito:** se um nó foi customizado na instância e também mudou no repositório, exige `--resolver "<nó>=novo|atual"`.
+3. **Rascunho:** `PUT /api/v1/workflows/<id>?publishIfActive=false` com o corpo. **Sem `publishIfActive=false`, o n8n 2.x republica na hora.** A versão publicada continua no ar; a resposta traz o `versionId` novo.
+4. **Revisão** no editor (histórico de versões).
+5. **Publicar:** `POST /api/v1/workflows/<id>/publish` com `{"versionId": "<novo>"}`, ou "Publish" no editor. O webhook do Telegram é re-registrado com a mesma URL e o mesmo segredo.
+6. **Voltar:** `POST /api/v1/workflows/<id>/publish` com `{"versionId": "<activeVersionId do backup>"}`.
+
+**API key do n8n:** crie uma só para isso, com `workflow:read`, `workflow:update` e `workflow:activate`. Guarde-a numa variável do seu terminal, nunca em arquivo nem em chat, e revogue ao terminar.
 
 ## 10. Segurança: o que já está garantido
 

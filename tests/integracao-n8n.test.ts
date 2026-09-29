@@ -37,9 +37,11 @@ function queryDaOperacao(op: any): string[] {
 }
 
 describe("catálogo de ferramentas do agente", () => {
-  it("tem exatamente as 11 ferramentas de leitura pedidas", () => {
+  it("tem as 11 ferramentas de leitura pedidas + consultar_inadimplencia (Telegram, 29/09/2026)", () => {
     expect(catalogo.readOnly).toBe(true);
-    expect(catalogo.tools.map((t: any) => t.name).sort()).toEqual([...ESPERADAS].sort());
+    expect(catalogo.tools.map((t: any) => t.name).sort()).toEqual([...ESPERADAS, "consultar_inadimplencia"].sort());
+    const inad = catalogo.tools.find((t: any) => t.name === "consultar_inadimplencia");
+    expect(inad).toMatchObject({ scope: "receivables.read", userPermission: "recebimentos.ver_inadimplencia", channels: ["telegram"] });
   });
 
   it("cada ferramenta aponta para um GET da OpenAPI, com o scope e os parâmetros da rota", () => {
@@ -191,7 +193,9 @@ describe("workflows versionados", () => {
   it("permissões vêm da API: ferramenta liberada = scope devolvido em allowedScopes", async () => {
     const wf = ler(AGENTE);
     const js = wf.nodes.find((n: any) => n.name === "Carregar permissões").parameters.jsCode as string;
-    for (const t of catalogo.tools) expect(js).toContain(`"${t.name}": "${t.scope}"`);
+    // WhatsApp: as ferramentas do canal (a de inadimplência, por ora, é só do Telegram).
+    for (const t of catalogo.tools.filter((x: any) => !x.channels || x.channels.includes("whatsapp"))) expect(js).toContain(`"${t.name}": "${t.scope}"`);
+    expect(js).not.toContain("consultar_inadimplencia");
     const msg = { from: "5571999990000", text: "oi", tipo: "text", phoneNumberId: "P" };
     const $ = () => ({ all: () => [{ json: msg }] });
     const rodar = (resposta: any) =>

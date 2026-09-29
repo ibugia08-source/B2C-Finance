@@ -42,6 +42,6 @@ export async function delegar(auth: ApiAuth, identityId: string): Promise<ApiAut
       auth.principal.kind === "system"
         ? { ...auth.principal, name: `${auth.principal.name} por ${r.user.name}`, serviceAccount: sa ? { ...sa, scopes } : undefined }
         : auth.principal,
-    delegacao: { identityId: r.identityId, userId: r.user.id, userName: r.user.name, scopesDaConta: auth.scopes },
+    delegacao: { identityId: r.identityId, userId: r.user.id, userName: r.user.name, scopesDaConta: auth.scopes, pode: r.pode },
   };
 }

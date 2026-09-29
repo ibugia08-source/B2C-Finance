@@ -14,6 +14,13 @@ export const RAIZ_REPO = join(RAIZ_N8N, "..", "..");
 export const lerJson = (rel) => JSON.parse(readFileSync(join(RAIZ_N8N, rel), "utf8"));
 
 export const catalogo = lerJson("schemas/agent-tools.json");
+
+/** Ferramentas de consulta que os agentes de um canal recebem (`channels` ausente = todos). */
+export const ferramentasDoCanal = (canal) => catalogo.tools.filter((t) => !t.channels || t.channels.includes(canal));
+
+/** Ferramenta → permissões finas do RBAC exigidas além do scope (catálogo: `userPermission`). */
+export const permissoesDasFerramentas = (tools) =>
+  Object.fromEntries(tools.filter((t) => t.userPermission).map((t) => [t.name, [t.userPermission]]));
 export const conhecimento = lerJson("knowledge/b2c-finance-knowledge.json");
 
 // Ids PLACEHOLDER, um por credencial: na importação o n8n liga pelo nome e
@@ -227,8 +234,16 @@ export const apiDeControle = (nome, metodo, caminho, pos, nota, extra = {}) => (
  * Ferramenta liberada = a API devolveu TODOS os scopes dela em allowedScopes
  * (conta ∩ RBAC do usuário).
  */
-export const jsPermissoes = (noMensagens, mapa, cabecalho) => `${cabecalho}
-const FERRAMENTA_SCOPES = ${JSON.stringify(mapa, null, 2)};
+export const jsPermissoes = (noMensagens, mapa, cabecalho, permissoes = null) => `${cabecalho}
+const FERRAMENTA_SCOPES = ${JSON.stringify(mapa, null, 2)};${
+  permissoes && Object.keys(permissoes).length
+    ? `
+// Além do scope, algumas ferramentas exigem uma permissão FINA do RBAC da
+// pessoa (a mesma da tela) — a API devolve as dela em data.permissions e
+// confere de novo na chamada.
+const FERRAMENTA_PERMISSOES = ${JSON.stringify(permissoes, null, 2)};`
+    : ""
+}
 const mensagens = $('${noMensagens}').all();
 return $input.all().map((item, i) => {
   const msg = mensagens[i] ? mensagens[i].json : {};
@@ -244,7 +259,11 @@ return $input.all().map((item, i) => {
         userName: r.data.user.name,
         roleLabel: r.data.user.roleLabel,
         allowedScopes: scopes,
-        allowedTools: Object.keys(FERRAMENTA_SCOPES).filter((t) => FERRAMENTA_SCOPES[t].every((s) => scopes.includes(s))),
+        allowedTools: Object.keys(FERRAMENTA_SCOPES).filter((t) => FERRAMENTA_SCOPES[t].every((s) => scopes.includes(s))${
+          permissoes && Object.keys(permissoes).length
+            ? " && (FERRAMENTA_PERMISSOES[t] || []).every((p) => (r.data.permissions || []).includes(p))"
+            : ""
+        }),
         motivo: null,
       },
     };

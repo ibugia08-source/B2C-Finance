@@ -1,8 +1,9 @@
+import type { Prisma } from "@prisma/client";
 import { BILLING_AWAITING_STATUSES, BILLING_OPEN_STATUSES } from "@/lib/billing-status";
 import { prisma } from "@/lib/prisma";
 import { toNumber as n } from "@/lib/format";
 import { resolveOwnerId } from "@/lib/auth/owner-scope";
-import { hojeCivil } from "@/lib/civil-date";
+import { chaveDiaCivil, hojeCivil } from "@/lib/civil-date";
 
 /**
  * Métricas de cobrança. Convenções:
@@ -43,6 +44,28 @@ export async function markOverdueBillings(): Promise<number> {
 
 // ===== Inadimplência (aging) ========================================
 
+/**
+ * REGRA ÚNICA DA INADIMPLÊNCIA ATUAL (29/09/2026) — usada pela tela
+ * /inadimplencia e pela API (GET /api/v1/receivables/delinquency).
+ *
+ * Cobrança vencida = ainda em aberto (PENDING, PARTIAL ou OVERDUE) E
+ *  · já marcada OVERDUE, ou
+ *  · com vencimento ANTES de hoje (dia civil da Bahia).
+ *
+ * É exatamente o conjunto que a tela mostrava depois de `markOverdueBillings`
+ * (que só troca PENDING/PARTIAL vencidas para OVERDUE) — mas derivado na
+ * leitura, SEM escrever: vale para a API (GET não grava) e para a tela mesmo
+ * dentro da janela de 1 h do throttle da marcação. Fora dela ficam: paga,
+ * removida do mês (CANCELED) e renegociada (a dívida virou acordo). Sem corte
+ * de competência: dívida de meses anteriores continua inadimplência.
+ */
+export function filtroDeCobrancaVencida(hoje: Date = hojeCivil()): Prisma.BillingWhereInput {
+  return {
+    status: { in: [...BILLING_OPEN_STATUSES] },
+    OR: [{ status: "OVERDUE" }, { dueDate: { lt: hoje } }],
+  };
+}
+
 export type AgingBucket = "1-15" | "16-30" | "31-60" | "60+";
 
 export type DelinquentClient = {
@@ -61,9 +84,19 @@ export type DelinquentClient = {
   oldestOpenAmount: number;
 };
 
-export async function getDelinquentClients(): Promise<DelinquentClient[]> {
+export async function getDelinquentClients(
+  opts: {
+    /** Instante de referência (padrão: agora). Define o "hoje" civil. */
+    agora?: Date;
+    /** Recorte adicional (ex.: só uma competência) — nunca afrouxa a regra. */
+    where?: Prisma.BillingWhereInput;
+    /** Último contato de cobrança (a tela usa; a API não precisa). */
+    comContato?: boolean;
+  } = {}
+): Promise<DelinquentClient[]> {
+  const today = hojeCivil(opts.agora);
   const billings = await prisma.billing.findMany({
-    where: { status: "OVERDUE" },
+    where: { AND: [filtroDeCobrancaVencida(today), opts.where ?? {}] },
     select: {
       id: true,
       clientId: true,
@@ -76,7 +109,6 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
   if (billings.length === 0) return [];
 
   const byClient = new Map<string, DelinquentClient>();
-  const today = hojeCivil();
 
   for (const b of billings) {
     // Clamp: cobrança com paidTotal acima do valor (legado) não pode abater
@@ -110,7 +142,7 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
   }
 
   // Último contato de cobrança por cliente (1 query)
-  const contacts = await prisma.collectionHistory.findMany({
+  const contacts = opts.comContato === false ? [] : await prisma.collectionHistory.findMany({
     where: { clientId: { in: Array.from(byClient.keys()) } },
     orderBy: { contactedAt: "desc" },
     select: { clientId: true, contactedAt: true, status: true },
@@ -125,9 +157,10 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
 
   const out = Array.from(byClient.values());
   for (const c of out) {
+    // Dia CIVIL do vencimento (partes UTC), como no ciclo de Recebimentos.
     c.daysOverdue = Math.max(
       1,
-      Math.floor((today.getTime() - c.oldestDueDate.getTime()) / 86_400_000)
+      Math.floor((today.getTime() - chaveDiaCivil(c.oldestDueDate)) / 86_400_000)
     );
     c.bucket =
       c.daysOverdue <= 15
@@ -138,5 +171,11 @@ export async function getDelinquentClients(): Promise<DelinquentClient[]> {
             ? "31-60"
             : "60+";
   }
-  return out.sort((a, b) => b.totalOverdue - a.totalOverdue);
+  // Ordem determinística (paginação da API): maior saldo, depois nome e id.
+  return out.sort(
+    (a, b) =>
+      b.totalOverdue - a.totalOverdue ||
+      a.clientName.localeCompare(b.clientName, "pt-BR") ||
+      a.clientId.localeCompare(b.clientId)
+  );
 }

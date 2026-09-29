@@ -1,7 +1,7 @@
 {
   "$schema": "./agent-tools.schema.json",
   "catalog": "b2c-finance-agent-tools",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": "v1",
   "readOnly": true,
   "description": "Ferramentas que o AI Agent do n8n pode chamar na API B2C Finance V1. Todas são SOMENTE LEITURA (GET). Cada ferramenta aponta para um endpoint da OpenAPI (/api/openapi.json) e exige o scope indicado na integração (Configurações → Integrações). O teste tests/integracao-n8n.test.ts confere este arquivo contra a OpenAPI.",
@@ -77,7 +77,7 @@
     },
     {
       "name": "consultar_recebimentos",
-      "description": "Cobranças (recebimentos). Filtre por cliente (clientId de buscar_clientes), status e janela. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Janela: competence (padrão: mês atual) OU dateFrom+dateTo (vencimento). meta.totals traz a soma do filtro inteiro — use para responder \"quanto\".",
+      "description": "Cobranças (recebimentos) de UMA JANELA: competence (padrão: o mês atual) OU dateFrom+dateTo (vencimento, até 400 dias). NÃO use para \"quem está inadimplente\" / \"quem deve\" / \"lista de inadimplentes\": para isso use consultar_inadimplencia (posição atual, todas as competências), se estiver entre as suas ferramentas; se não estiver, diga que não consegue trazer a lista completa por aqui. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE (vencida), DELINQUENT (SÓ as escaladas manualmente — não é toda a inadimplência), PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Lista vazia vale SÓ para a janela consultada (meta.window) — nunca diga que não existe nada fora dela. meta.totals traz a soma do filtro inteiro (não some páginas); informe sempre a janela usada.",
       "scope": "receivables.read",
       "http": { "method": "GET", "path": "/receivables", "query": ["clientId", "status", "competence", "dateFrom", "dateTo", "page", "pageSize"] },
       "inputSchema": {
@@ -94,6 +94,24 @@
         "additionalProperties": false
       },
       "responsePath": "data[] + meta.totals"
+    },
+    {
+      "name": "consultar_inadimplencia",
+      "description": "INADIMPLÊNCIA ATUAL — quem deve hoje, por cliente, com a MESMA regra da tela Inadimplência: cobranças em aberto vencidas antes de hoje, de QUALQUER competência (inclui dívidas de meses anteriores). Use para \"liste os clientes inadimplentes\", \"quem está devendo\", \"quanto está vencido\". Sem competence = toda a inadimplência; com competence = só as cobranças daquela competência que estão vencidas hoje (diga esse recorte ao responder). Um item por cliente (saldo vencido, nº de cobranças, dias de atraso). meta.totals.clients e meta.totals.overdueAmount cobrem o filtro inteiro — use-os para o total, nunca a soma de uma página; meta.asOf é a data da posição. Lista vazia com success=true = ninguém inadimplente naquele recorte; erro = não diga zero.",
+      "scope": "receivables.read",
+      "userPermission": "recebimentos.ver_inadimplencia",
+      "channels": ["telegram"],
+      "http": { "method": "GET", "path": "/receivables/delinquency", "query": ["competence", "page", "pageSize"] },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "competence": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])$", "description": "Só se o usuário citar um mês: AAAA-MM (recorte: cobranças daquela competência vencidas hoje). Sem mês = não envie." },
+          "page": { "type": "integer", "minimum": 1, "default": 1 },
+          "pageSize": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        },
+        "additionalProperties": false
+      },
+      "responsePath": "data[] + meta.totals + meta.asOf + meta.scope"
     },
     {
       "name": "consultar_despesas",
@@ -142,7 +160,7 @@
     },
     {
       "name": "consultar_rotina",
-      "description": "Rotina do dia: ações prioritárias (com chave e se já foi concluída), cobranças vencidas e a vencer, pagamentos vencidos e a vencer, renovações pendentes do mês, caixa e upsells abertos. Use para \"o que tenho para hoje?\".",
+      "description": "Rotina do dia: ações prioritárias (com chave e se já foi concluída), cobranças vencidas e a vencer, pagamentos vencidos e a vencer, renovações pendentes do mês, caixa e upsells abertos. Use para \"o que tenho para hoje?\". É uma FILA DE TRABALHO do dia (pode omitir clientes já tratados ou removidos da fila) — nunca a use como lista completa de inadimplentes.",
       "scope": "routine.read",
       "http": { "method": "GET", "path": "/routine/daily", "query": [] },
       "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },

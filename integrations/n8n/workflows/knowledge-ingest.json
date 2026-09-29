@@ -371,7 +371,7 @@
     "b2c": {
       "workflow": "knowledge-ingest",
       "version": 1,
-      "knowledgeVersion": "1.0.0+b7120bd0425a",
+      "knowledgeVersion": "1.0.0+5c189ea26dc2",
       "collection": "b2c_finance_conhecimento",
       "embeddingModel": "text-embedding-3-small",
       "requiredScopes": [

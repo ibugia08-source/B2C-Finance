@@ -111,7 +111,7 @@ export type OperacaoBloqueada = keyof typeof OPERACOES_BLOQUEADAS;
 /** Ferramentas de consulta do agente (schemas/agent-tools.json). */
 export const FERRAMENTAS_DE_LEITURA = [
   "buscar_clientes", "consultar_cliente", "consultar_status_cliente", "consultar_dashboard",
-  "consultar_recebimentos", "consultar_despesas", "consultar_caixa", "consultar_upsells",
+  "consultar_recebimentos", "consultar_inadimplencia", "consultar_despesas", "consultar_caixa", "consultar_upsells",
   "consultar_rotina", "gerar_relatorio_diario", "gerar_relatorio_mensal",
 ] as const;
 

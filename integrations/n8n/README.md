@@ -20,7 +20,7 @@ integrations/n8n/
 │   ├── b2c-finance-ai-agent-readonly.json WhatsApp → identidade (API) → AI Agent (11 ferramentas GET) → WhatsApp
 │   ├── knowledge-ingest.json              indexa a base de conhecimento no Qdrant (manual; serve aos dois canais)
 │   ├── b2c-finance-telegram-agent.json    Telegram (mensagem ou botão) → identidade → botão: GET/confirm/cancel na API | AI Agent (11 GET + 10 que propõem + conhecimento) → prévia com [Confirmar] [Cancelar]
-│   ├── b2c-finance-telegram-agent-readonly.json Telegram → identidade (API) → AI Agent (11 GET + conhecimento) → Telegram
+│   ├── b2c-finance-telegram-agent-readonly.json Telegram → identidade (API) → AI Agent (12 GET, inclui consultar_inadimplencia, + conhecimento) → Telegram
 │   ├── telegram-connection-test.json      Telegram + API + identidade + Qdrant (manual)
 │   ├── telegram-daily-morning-report.json relatório da manhã no Telegram: destinatários pela API, um por pessoa com o RBAC dela
 │   ├── telegram-daily-evening-report.json relatório da noite no Telegram (idem + ações do agente)

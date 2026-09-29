@@ -1136,7 +1136,7 @@
             "description": "Status derivado.",
             "schema": {
               "type": "string",
-              "description": "Um ou mais, separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED; atalho `open` = UPCOMING, OVERDUE, DELINQUENT, PARTIAL."
+              "description": "Um ou mais, separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED; atalho `open` = UPCOMING, OVERDUE, DELINQUENT, PARTIAL. `DELINQUENT` = só as escaladas manualmente (não é toda a inadimplência — para isso use `/receivables/delinquency`)."
             },
             "example": "open"
           },
@@ -1273,6 +1273,278 @@
                       "paidAmount": 0,
                       "openAmount": 1500
                     }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/receivables/delinquency": {
+      "get": {
+        "operationId": "getDelinquency",
+        "tags": [
+          "Recebimentos"
+        ],
+        "summary": "Inadimplência atual (por cliente)",
+        "description": "A POSIÇÃO ATUAL da inadimplência, com a mesma regra da tela Inadimplência: cobrança em aberto (pendente, parcial ou vencida) com vencimento antes de hoje (dia civil, America/Bahia) ou já marcada vencida — de QUALQUER competência. Fora: paga, removida do mês, renegociada. Sem `competence` = tudo; com `competence` = só as cobranças daquela competência que estão vencidas hoje. Um registro por cliente (sem telefone/documento); `meta.totals` cobre o filtro inteiro, não a página; ordem: maior saldo, nome, id. Leitura pura. Em nome de uma pessoa (X-B2C-Identity), ela precisa também de \"Ver inadimplência\" (`recebimentos.ver_inadimplencia`) — senão 403 `user_forbidden`.\n\n**Scope obrigatório:** `receivables.read`.",
+        "security": [
+          {
+            "bearerAuth": [
+              "receivables.read"
+            ]
+          }
+        ],
+        "x-required-scope": "receivables.read",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Identity"
+          },
+          {
+            "name": "competence",
+            "in": "query",
+            "required": false,
+            "description": "Recorte opcional: só cobranças desta competência (vencidas hoje). Sem ele: todas as competências.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            },
+            "example": "2026-08"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "client": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ]
+                          },
+                          "overdueAmount": {
+                            "type": "number",
+                            "description": "Valor em reais, 2 casas."
+                          },
+                          "billingCount": {
+                            "type": "integer"
+                          },
+                          "oldestDueDate": {
+                            "type": "string",
+                            "description": "Data de calendário (AAAA-MM-DD).",
+                            "format": "date"
+                          },
+                          "daysOverdue": {
+                            "type": "integer"
+                          },
+                          "agingBucket": {
+                            "type": "string",
+                            "enum": [
+                              "1-15",
+                              "16-30",
+                              "31-60",
+                              "60+"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "client",
+                          "overdueAmount",
+                          "billingCount",
+                          "oldestDueDate",
+                          "daysOverdue",
+                          "agingBucket"
+                        ]
+                      }
+                    },
+                    "meta": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ListMeta"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "asOf": {
+                              "type": "string",
+                              "description": "Data de calendário (AAAA-MM-DD).",
+                              "format": "date"
+                            },
+                            "scope": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "all_open",
+                                    "competence"
+                                  ]
+                                },
+                                "competence": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "competence",
+                                "description"
+                              ]
+                            },
+                            "rule": {
+                              "type": "string"
+                            },
+                            "totals": {
+                              "type": "object",
+                              "properties": {
+                                "clients": {
+                                  "type": "integer"
+                                },
+                                "overdueAmount": {
+                                  "type": "number",
+                                  "description": "Valor em reais, 2 casas."
+                                },
+                                "billings": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "clients",
+                                "overdueAmount",
+                                "billings"
+                              ]
+                            },
+                            "sort": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "asOf",
+                            "scope",
+                            "rule",
+                            "totals",
+                            "sort"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                },
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "client": {
+                        "id": "cmu1a2b3c0001xyz",
+                        "name": "Face Love Estética"
+                      },
+                      "overdueAmount": 3000,
+                      "billingCount": 2,
+                      "oldestDueDate": "2026-08-10",
+                      "daysOverdue": 50,
+                      "agingBucket": "31-60"
+                    },
+                    {
+                      "client": {
+                        "id": "cmu1a2b3c0002xyz",
+                        "name": "Alpha Odontologia"
+                      },
+                      "overdueAmount": 700,
+                      "billingCount": 1,
+                      "oldestDueDate": "2026-09-20",
+                      "daysOverdue": 9,
+                      "agingBucket": "1-15"
+                    }
+                  ],
+                  "meta": {
+                    "requestId": "n8n-exec-4812",
+                    "generatedAt": "2026-09-28T13:00:00.000Z",
+                    "pagination": {
+                      "page": 1,
+                      "pageSize": 50,
+                      "total": 1,
+                      "totalPages": 1
+                    },
+                    "asOf": "2026-09-29",
+                    "scope": {
+                      "kind": "all_open",
+                      "competence": null,
+                      "description": "Toda a inadimplência em aberto hoje, de qualquer competência"
+                    },
+                    "rule": "Cobrança em aberto (pendente, parcial ou vencida) com vencimento antes de hoje ou já marcada vencida; fora: paga, removida do mês e renegociada. Mesma regra da tela Inadimplência.",
+                    "totals": {
+                      "clients": 2,
+                      "overdueAmount": 3700,
+                      "billings": 3
+                    },
+                    "sort": "overdueAmount desc, client.name asc, client.id asc"
                   }
                 }
               }

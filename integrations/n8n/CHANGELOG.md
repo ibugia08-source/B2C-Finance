@@ -2,6 +2,17 @@
 
 Formato: data · arquivo · mudança. Mudança **incompatível** da API gera `vN+1` do workflow, que convive com o anterior até a troca.
 
+## 2026-09-29 — Inadimplência no agente do Telegram (correção)
+
+- **Problema (execução 45564):** para "Liste os clientes inadimplentes", o agente chamou `consultar_recebimentos` com `status=DELINQUENT`. A API usou a competência padrão (o mês atual), e `DELINQUENT` são só as cobranças escaladas manualmente. Resultado: lista vazia e "não há inadimplentes", enquanto a tela mostrava a inadimplência de todas as competências.
+- **Nova ferramenta `consultar_inadimplencia`** (só nos agentes do Telegram): `GET /receivables/delinquency`.
+  - Posição atual, com a mesma regra da tela: todas as competências, um item por cliente, totais do filtro inteiro, data da posição e recorte.
+  - Liberada só a quem tem `receivables.read` **e** "Ver inadimplência" (`userPermission` no catálogo; a API devolve a permissão em `permissions`).
+- **Catálogo 1.1.0:** a descrição de `consultar_recebimentos` agora diz que `DELINQUENT` não é toda a inadimplência e que lista vazia vale só para a janela; a de `consultar_rotina` diz que ela é uma fila de trabalho.
+- **Prompt (`prompt-base`):** seção "Inadimplência, vencidos e cobrança" (recorte, vazio ≠ zero global, lista parcial com total, números só da API).
+- **Workflows do WhatsApp:** sem ferramenta nova. Mudaram só as duas descrições, a versão do catálogo e, no agente com escrita, o prompt.
+- **Reimportar:** `b2c-finance-telegram-agent-readonly.json` (e `b2c-finance-telegram-agent.json`, se usado).
+
 ## 2026-09-29 — Fase 16 · bloco 3: hardening e preparação da implantação
 
 - **Agentes do Telegram:**

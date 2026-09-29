@@ -612,7 +612,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Cobranças (recebimentos). Filtre por cliente (clientId de buscar_clientes), status e janela. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT, PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Janela: competence (padrão: mês atual) OU dateFrom+dateTo (vencimento). meta.totals traz a soma do filtro inteiro — use para responder \"quanto\".",
+        "toolDescription": "Cobranças (recebimentos) de UMA JANELA: competence (padrão: o mês atual) OU dateFrom+dateTo (vencimento, até 400 dias). NÃO use para \"quem está inadimplente\" / \"quem deve\" / \"lista de inadimplentes\": para isso use consultar_inadimplencia (posição atual, todas as competências), se estiver entre as suas ferramentas; se não estiver, diga que não consegue trazer a lista completa por aqui. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE (vencida), DELINQUENT (SÓ as escaladas manualmente — não é toda a inadimplência), PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Lista vazia vale SÓ para a janela consultada (meta.window) — nunca diga que não existe nada fora dela. meta.totals traz a soma do filtro inteiro (não some páginas); informe sempre a janela usada.",
         "method": "GET",
         "url": "={{ ($json.allowedTools || []).includes('consultar_recebimentos') ? $env.B2C_FINANCE_API_URL : 'https://ferramenta-nao-liberada-para-este-perfil.invalid' }}/receivables",
         "authentication": "genericCredentialType",
@@ -991,7 +991,7 @@
     },
     {
       "parameters": {
-        "toolDescription": "Rotina do dia: ações prioritárias (com chave e se já foi concluída), cobranças vencidas e a vencer, pagamentos vencidos e a vencer, renovações pendentes do mês, caixa e upsells abertos. Use para \"o que tenho para hoje?\".",
+        "toolDescription": "Rotina do dia: ações prioritárias (com chave e se já foi concluída), cobranças vencidas e a vencer, pagamentos vencidos e a vencer, renovações pendentes do mês, caixa e upsells abertos. Use para \"o que tenho para hoje?\". É uma FILA DE TRABALHO do dia (pode omitir clientes já tratados ou removidos da fila) — nunca a use como lista completa de inadimplentes.",
         "method": "GET",
         "url": "={{ ($json.allowedTools || []).includes('consultar_rotina') ? $env.B2C_FINANCE_API_URL : 'https://ferramenta-nao-liberada-para-este-perfil.invalid' }}/routine/daily",
         "authentication": "genericCredentialType",
@@ -1622,7 +1622,7 @@
     "b2c": {
       "workflow": "b2c-finance-ai-agent-readonly",
       "version": 1,
-      "catalogVersion": "1.0.0",
+      "catalogVersion": "1.1.0",
       "apiVersion": "v1",
       "readOnly": true,
       "requiredScopes": [

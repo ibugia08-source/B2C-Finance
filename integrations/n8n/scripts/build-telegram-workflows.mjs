@@ -19,9 +19,13 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  RAIZ_N8N, lerJson, catalogo, conhecimento, CRED_B2C, CRED_TELEGRAM, CRED_QDRANT, ferramenta, ferramentaDeEscrita, code, se, nota, apiDeControle,
+  RAIZ_N8N, lerJson, catalogo, ferramentasDoCanal, permissoesDasFerramentas, conhecimento, CRED_B2C, CRED_TELEGRAM, CRED_QDRANT, ferramenta, ferramentaDeEscrita, code, se, nota, apiDeControle,
   jsPermissoes, embeddings, ferramentaConhecimento, montarPrompt, modeloIA, memoriaDaConversa, JS_HOJE,
 } from "./lib/pecas.mjs";
+
+/** Ferramentas de consulta do Telegram (inclui consultar_inadimplencia). */
+const ferramentasTG = ferramentasDoCanal("telegram");
+const PERMISSOES_TG = permissoesDasFerramentas(ferramentasTG);
 
 // Nomes dos nós (referenciados em expressões — um lugar só).
 const T = {
@@ -143,7 +147,7 @@ export const JS_EXTRAIR = `// ETAPA 3 — Telegram User ID de quem escreveu (mes
 // nunca o @username — que a API usa para achar o vínculo.
 return $input.all().filter((item) => !!item.json.fromId).map((item) => ({ json: { ...item.json, externalIdentifier: item.json.fromId } }));`;
 
-const FERRAMENTA_SCOPES = Object.fromEntries(catalogo.tools.map((t) => [t.name, [t.scope]]));
+const FERRAMENTA_SCOPES = Object.fromEntries(ferramentasTG.map((t) => [t.name, [t.scope]]));
 
 const JS_PERMISSOES = jsPermissoes(
   T.extrair,
@@ -151,7 +155,8 @@ const JS_PERMISSOES = jsPermissoes(
   `// ETAPA 4 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
 // nem da IA). O usuário é o do VÍNCULO (Configurações → Integrações → Canais).
 // Ferramenta liberada = a API devolveu o scope dela em allowedScopes
-// (conta ∩ RBAC do usuário). Não existe scope "de Telegram".`
+// (conta ∩ RBAC do usuário). Não existe scope "de Telegram".`,
+  PERMISSOES_TG
 );
 
 export const JS_ROTEIRO = `// ETAPA 5 — O que responder SEM IA: não vinculado, /start, /help, /status,
@@ -349,11 +354,11 @@ const enviarTelegram = (nome, pos, chatId = "={{ $json.chatId }}") => ({
 // Agente somente leitura
 // ---------------------------------------------------------------------------
 
-const ferramentas = catalogo.tools.map((t, i) => ({
+const ferramentas = ferramentasTG.map((t, i) => ({
   ...ferramenta(t, i, "telegram"),
   position: [2160 + (i % 6) * 170, 700 + Math.floor(i / 6) * 180],
 }));
-const scopesLeitura = [...new Set([...catalogo.tools.map((t) => t.scope), "identities.resolve"])].sort();
+const scopesLeitura = [...new Set([...ferramentasTG.map((t) => t.scope), "identities.resolve"])].sort();
 
 const contextoDoPrompt =
   "\n\n## Contexto desta conversa\n- Canal: Telegram (conversa privada)\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)";
@@ -572,7 +577,7 @@ return saida;`;
 
 // Ferramenta → scopes exigidos (TODOS). Escrita = scope da operação + agent_actions.manage.
 const FERRAMENTA_SCOPES_ESCRITA = {
-  ...Object.fromEntries(catalogo.tools.map((t) => [t.name, [t.scope]])),
+  ...Object.fromEntries(ferramentasTG.map((t) => [t.name, [t.scope]])),
   ...Object.fromEntries(escrita.tools.map((t) => [t.name, [t.scope, "agent_actions.manage"]])),
 };
 const FERRAMENTAS_DE_ESCRITA = escrita.tools.map((t) => t.name);
@@ -582,7 +587,8 @@ const JS_PERMISSOES_ESCRITA = jsPermissoes(
   FERRAMENTA_SCOPES_ESCRITA,
   `// ETAPA 4 — Carregar permissões a partir da RESPOSTA DA API (nunca da mensagem
 // nem da IA). Ferramenta liberada = a API devolveu TODOS os scopes dela
-// (conta ∩ RBAC do usuário). Escrita exige o scope da operação + agent_actions.manage.`
+// (conta ∩ RBAC do usuário). Escrita exige o scope da operação + agent_actions.manage.`,
+  PERMISSOES_TG
 );
 
 export const JS_ROTEIRO_ESCRITA = `// ETAPA 5 — O que NÃO vai para a IA: não vinculado, botões, /start, /help,
@@ -834,7 +840,7 @@ const editarPrevia = (nome, pos) => ({
   notesInFlow: true,
 });
 
-const ferramentasLeituraTg = catalogo.tools.map((t, i) => ({
+const ferramentasLeituraTg = ferramentasTG.map((t, i) => ({
   ...ferramenta(t, i, "telegram"),
   position: [2360 + (i % 6) * 170, 1100 + Math.floor(i / 6) * 180],
 }));
@@ -844,7 +850,7 @@ const ferramentasEscritaTg = escrita.tools.map((t, i) => ({
 }));
 const todasFerramentasTg = [...ferramentasLeituraTg, ...ferramentasEscritaTg];
 const scopesEscritaTg = [
-  ...new Set([...catalogo.tools.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
+  ...new Set([...ferramentasTG.map((t) => t.scope), ...escrita.tools.map((t) => t.scope), "identities.resolve", "agent_actions.manage"]),
 ].sort();
 
 const contextoDoPromptEscrita =

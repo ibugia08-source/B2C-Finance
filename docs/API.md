@@ -184,6 +184,33 @@ Retorna os indicadores oficiais do mês. Eles saem do **mesmo motor de métricas
 - **Item:** `id`, `client`, `description`, `competence`, `amount`, `paidAmount`, `openAmount`, `dueDate`, `paidAt`, `status`, `daysLate`, `kind`, `revenueType`, `installmentNumber` e `collectionStatus`.
 - **Totais:** `meta.totals` traz `{ amount, paidAmount, openAmount }` do filtro inteiro, não só da página.
 - **Detalhe:** inclui `notes` e `payments[]`.
+- **`DELINQUENT` não é "toda a inadimplência":** são só as cobranças escaladas manualmente para inadimplência. E esta rota sempre olha uma janela, que por padrão é o mês atual. Lista vazia aqui não quer dizer que ninguém deve. Para a posição de inadimplência, use `GET /receivables/delinquency`.
+
+### 3.5b `GET /receivables/delinquency` — inadimplência atual
+
+A **posição de hoje**, com a **mesma regra e a mesma função** da tela Inadimplência (`filtroDeCobrancaVencida` + `getDelinquentClients`, em `src/lib/services/billing-metrics.ts`).
+
+- **Regra:** cobrança em aberto (`PENDING`, `PARTIAL` ou `OVERDUE`) com vencimento **antes de hoje**, pelo dia civil de America/Bahia, ou já marcada `OVERDUE`. Vale para **qualquer competência**. Ficam fora a paga, a removida do mês e a renegociada.
+- **Sem gravação:** o vencimento é derivado na leitura. Não roda `markOverdueBillings` nem `ensureMonthlyBillings`.
+
+| Parâmetro | Descrição |
+|---|---|
+| `competence` | Opcional, `AAAA-MM`. **Recorte:** só as cobranças daquela competência que estão vencidas hoje. Sem ele, considera todas as competências. |
+| `page`, `pageSize` | Paginação (padrão 1 e 50; máximo 200). |
+
+- **Item (um por cliente):** `client { id, name }`, `overdueAmount`, `billingCount`, `oldestDueDate`, `daysOverdue`, `agingBucket` (`1-15`, `16-30`, `31-60`, `60+`). Não traz telefone, documento nem outros dados pessoais.
+- **Meta:**
+  - `asOf`: a data da posição;
+  - `scope`: `all_open` ou `competence`, com a descrição;
+  - `rule`: a regra aplicada;
+  - `totals { clients, overdueAmount, billings }`: do filtro **inteiro**, não da página;
+  - `sort`: maior saldo, depois nome e id (ordem determinística);
+  - `pagination`.
+- **Acesso:** scope `receivables.read`. Em nome de uma pessoa (`X-B2C-Identity`), ela precisa também de **"Ver inadimplência"** (`recebimentos.ver_inadimplencia`), como na tela; sem isso, `403 user_forbidden`. A resolução de identidade devolve essa permissão em `permissions`, e é ela que libera a ferramenta `consultar_inadimplencia` no agente.
+- **Não confundir com:**
+  - `/receivables?status=OVERDUE`: vencidas de uma janela;
+  - `status=DELINQUENT`: só as escaladas manualmente;
+  - a fila de cobrança da Rotina do dia, que é priorizada e omite quem já foi tratado ou removido no dia.
 
 ### 3.6 `GET /expenses` e `GET /expenses/:id`
 

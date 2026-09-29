@@ -34,6 +34,18 @@ npm run dev
 Para voltar ao local, `cp .env.example .env`. O arquivo `.env` é o único
 seletor de ambiente — não há flag escondida.
 
+## Publicar em produção SEM migration e SEM bootstrap
+
+A Vercel roda `npm run build` (`vercel.json`), que é `scripts/vercel-build.mjs`:
+
+- **Padrão:** `prisma generate` → `prisma migrate deploy` → `tsx prisma/bootstrap.ts` → `next build`.
+- **Publicação só de código:** defina no ambiente de build da Vercel `B2C_SKIP_DB_STEPS=<nome da última migration do repositório>` (ex.: `20260929100000_messaging_identity_preferences`). O build roda só `prisma generate` → `next build`, e o log mostra "publicação SÓ DE CÓDIGO".
+- **Trava:** o valor tem de ser **exatamente** a migration mais nova do commit publicado.
+  - Se o commit trouxer migration nova, o build **falha** (não pula em silêncio): código que depende de coluna nova não pode ir sem a migration.
+  - `1` ou nome inexistente também falha.
+- **Depois da publicação,** remova a variável, a menos que a regra passe a ser "nunca migrar no deploy". Nesse caso cada migration precisa de um procedimento próprio e revisado.
+- `npm run build:ci` continua sendo o build sem banco do CI; ele não substitui o `build` da Vercel.
+
 ## A guarda dos scripts (`scripts/guard.ts`)
 
 Todo script que **altera dados** chama `assertDestructiveAllowed()` e só roda

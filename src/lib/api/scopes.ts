@@ -228,6 +228,14 @@ export const SCOPE_REQUIRES_PERMISSIONS: Readonly<Record<string, readonly string
 };
 
 /**
+ * Permissões FINAS que a integração precisa conhecer além dos scopes: rotas
+ * que exigem mais que o scope (`permissaoDoUsuario` em defineEndpoint). A
+ * resolução de identidade as devolve em `permissions` para o agente saber
+ * quais ferramentas oferecer — a rota confere de novo.
+ */
+export const PERMISSOES_FINAS_DA_INTEGRACAO: readonly string[] = ["recebimentos.ver_inadimplencia"];
+
+/**
  * Scopes EFETIVOS quando a integração age por um usuário: os da conta de
  * serviço ∩ os que o RBAC da pessoa cobre. Nunca amplia nada.
  */

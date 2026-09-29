@@ -167,6 +167,12 @@ export type EndpointOptions<Q, P, B> = {
    * infraestrutura nova. Complementa o limite por IP do middleware.
    */
   limitePorUsuario?: { max: number; janelaSegundos: number };
+  /**
+   * Permissão FINA do RBAC exigida do usuário do vínculo, além do scope (ex.:
+   * a tela de Inadimplência exige `recebimentos.ver_inadimplencia`, mais que
+   * "ver recebimentos"). Sem delegação vale só o scope da integração.
+   */
+  permissaoDoUsuario?: string;
 };
 
 /** Quantas chamadas desta ação o usuário fez na janela (tentativas recusadas não contam). */
@@ -257,6 +263,9 @@ export function defineEndpoint<
           throw new ApiError(403, "user_forbidden", `${auth.delegacao.userName} não tem permissão para isto no B2C Finance.`, opts.scope);
         }
         requireApiScope(auth, opts.scope);
+      }
+      if (opts.permissaoDoUsuario && auth.delegacao && !auth.delegacao.pode(opts.permissaoDoUsuario)) {
+        throw new ApiError(403, "user_forbidden", `${auth.delegacao.userName} não tem permissão para isto no B2C Finance.`, opts.scope ?? undefined);
       }
       if (opts.limitePorUsuario && auth.delegacao) {
         const { max, janelaSegundos } = opts.limitePorUsuario;

@@ -833,7 +833,7 @@ const PATHS: Record<string, Obj> = {
       refParam("Competence"),
       q("dateFrom", data(), "Vencimento a partir de (junto com dateTo).", "2026-09-01"),
       q("dateTo", data(), "Vencimento até (inclusivo).", "2026-09-30"),
-      q("status", str(`Um ou mais, separados por vírgula: ${RECEIVABLE_STATUSES.join(", ")}; atalho \`open\` = UPCOMING, OVERDUE, DELINQUENT, PARTIAL.`), "Status derivado.", "open"),
+      q("status", str(`Um ou mais, separados por vírgula: ${RECEIVABLE_STATUSES.join(", ")}; atalho \`open\` = UPCOMING, OVERDUE, DELINQUENT, PARTIAL. \`DELINQUENT\` = só as escaladas manualmente (não é toda a inadimplência — para isso use \`/receivables/delinquency\`).`), "Status derivado.", "open"),
       q("clientId", str(), "Só deste cliente."),
       ...PAG,
     ],
@@ -847,6 +847,46 @@ const PATHS: Record<string, Obj> = {
         status: { code: "OVERDUE", label: "Vencido" }, daysLate: 18, kind: "MRR", revenueType: "MRR", installmentNumber: null, collectionStatus: "NOT_CONTACTED",
       }],
     }),
+  }),
+  "/receivables/delinquency": op({
+    id: "getDelinquency", tag: "Recebimentos", summary: "Inadimplência atual (por cliente)", scope: "receivables.read",
+    description:
+      "A POSIÇÃO ATUAL da inadimplência, com a mesma regra da tela Inadimplência: cobrança em aberto (pendente, parcial ou vencida) com vencimento antes de hoje (dia civil, America/Bahia) ou já marcada vencida — de QUALQUER competência. Fora: paga, removida do mês, renegociada. Sem `competence` = tudo; com `competence` = só as cobranças daquela competência que estão vencidas hoje. Um registro por cliente (sem telefone/documento); `meta.totals` cobre o filtro inteiro, não a página; ordem: maior saldo, nome, id. Leitura pura. Em nome de uma pessoa (X-B2C-Identity), ela precisa também de \"Ver inadimplência\" (`recebimentos.ver_inadimplencia`) — senão 403 `user_forbidden`.",
+    params: [
+      q("competence", str(undefined, { pattern: "^\\d{4}-(0[1-9]|1[0-2])$" }), "Recorte opcional: só cobranças desta competência (vencidas hoje). Sem ele: todas as competências.", "2026-08"),
+      ...PAG,
+    ],
+    ok: sucesso(
+      arr(obj({
+        client: obj({ id: str(), name: str() }, ["id", "name"]),
+        overdueAmount: dinheiro(),
+        billingCount: { type: "integer" },
+        oldestDueDate: data(),
+        daysOverdue: { type: "integer" },
+        agingBucket: str(undefined, { enum: ["1-15", "16-30", "31-60", "60+"] }),
+      }, ["client", "overdueAmount", "billingCount", "oldestDueDate", "daysOverdue", "agingBucket"])),
+      {
+        lista: true,
+        metaExtra: obj({
+          asOf: data(),
+          scope: obj({ kind: str(undefined, { enum: ["all_open", "competence"] }), competence: { type: ["string", "null"] }, description: str() }),
+          rule: str(),
+          totals: obj({ clients: { type: "integer" }, overdueAmount: dinheiro(), billings: { type: "integer" } }, ["clients", "overdueAmount", "billings"]),
+          sort: str(),
+        }, ["asOf", "scope", "rule", "totals", "sort"]),
+        metaExemplo: {
+          asOf: "2026-09-29",
+          scope: { kind: "all_open", competence: null, description: "Toda a inadimplência em aberto hoje, de qualquer competência" },
+          rule: "Cobrança em aberto (pendente, parcial ou vencida) com vencimento antes de hoje ou já marcada vencida; fora: paga, removida do mês e renegociada. Mesma regra da tela Inadimplência.",
+          totals: { clients: 2, overdueAmount: 3700, billings: 3 },
+          sort: "overdueAmount desc, client.name asc, client.id asc",
+        },
+        exemplo: [
+          { client: { id: "cmu1a2b3c0001xyz", name: "Face Love Estética" }, overdueAmount: 3000, billingCount: 2, oldestDueDate: "2026-08-10", daysOverdue: 50, agingBucket: "31-60" },
+          { client: { id: "cmu1a2b3c0002xyz", name: "Alpha Odontologia" }, overdueAmount: 700, billingCount: 1, oldestDueDate: "2026-09-20", daysOverdue: 9, agingBucket: "1-15" },
+        ],
+      }
+    ),
   }),
   "/receivables/{id}": op({
     id: "getReceivable", tag: "Recebimentos", summary: "Cobrança e pagamentos", scope: "receivables.read", notFound: true,

@@ -50,6 +50,7 @@ export const API_READ_ACTIONS: Record<string, string> = {
   "clients.status_history": "Consultou histórico de status",
   "receivables.list": "Consultou recebimentos",
   "receivables.get": "Consultou recebimento",
+  "receivables.delinquency": "Consultou a inadimplência",
   "expenses.list": "Consultou despesas",
   "expenses.get": "Consultou despesa",
   "cash.summary": "Consultou o caixa",

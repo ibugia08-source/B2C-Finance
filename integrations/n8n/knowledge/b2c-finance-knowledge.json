@@ -1,6 +1,6 @@
 {
   "catalog": "b2c-finance-knowledge",
-  "version": "1.0.0+b7120bd0425a",
+  "version": "1.0.0+5c189ea26dc2",
   "principle": "RAG = conhecimento e documentação. API = dados atuais e verdade operacional. Nenhum trecho desta base é fonte de saldo, MRR, clientes ativos, recebimentos, despesas, status atual ou inadimplência.",
   "collection": "b2c_finance_conhecimento",
   "embedding": {
@@ -16,8 +16,8 @@
       "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
       "categoria": "agente",
       "atualizado_em": "2026-09-29",
-      "sha256": "83fc93d2810fd82dd575f88cb12a877817d1b7f65c7a30098d6edf10b8a9edf8",
-      "trechos": 10
+      "sha256": "1dd5908f8565c7485336af645a7de0fdba3590c6781c8238ebc824c58c755a9e",
+      "trechos": 11
     },
     {
       "id": "metricas",
@@ -79,8 +79,8 @@
       "titulo": "API B2C Finance V1",
       "categoria": "api",
       "atualizado_em": "2026-09-29",
-      "sha256": "12d58f4ebbbde2c25fecff9633a9c173a2a9ec6790800d63b90461a483d82de6",
-      "trechos": 24
+      "sha256": "cfdda813dc9deacf3715c1675f56bbf098455007a8dde38d8949b70e7e2b0189",
+      "trechos": 26
     }
   ],
   "trechos": [
@@ -138,7 +138,7 @@
     },
     {
       "id": "agente#005",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: O que ele faz\n\n**Consulta direto (READ):**\n- buscar cliente pelo nome ou documento;\n- detalhe e histórico de status do cliente;\n- indicadores do mês (dashboard);\n- recebimentos, despesas e caixa;\n- oportunidades de upsell;\n- rotina do dia;\n- relatórios do dia e do mês.\n**Prepara e pede confirmação (WRITE_CONFIRMATION), na versão com escrita:**\n- **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.\n- **Recebimentos:** registrar pagamento recebido.\n- **Despesas:** lançar, editar (em aberto), marcar como paga.\n- **Upsell:** cadastrar e atualizar oportunidade em aberto.\n- **Rotina:** concluir ação da rotina de hoje.\n**Nunca faz (BLOCKED):**\n- excluir cliente, recebimento, pagamento ou despesa;\n- reabrir competência;\n- alterar permissões ou gerenciar usuários;\n- alterar o plano de contas.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: O que ele faz\n\n**Consulta direto (READ):**\n- inadimplência atual (no Telegram): quem deve hoje, de qualquer mês, igual à tela Inadimplência — só para quem tem \"Ver inadimplência\";\n- buscar cliente pelo nome ou documento;\n- detalhe e histórico de status do cliente;\n- indicadores do mês (dashboard);\n- recebimentos, despesas e caixa;\n- oportunidades de upsell;\n- rotina do dia;\n- relatórios do dia e do mês.\n**Prepara e pede confirmação (WRITE_CONFIRMATION), na versão com escrita:**\n- **Clientes:** cadastrar, editar dados cadastrais, alterar status com data de vigência.\n- **Recebimentos:** registrar pagamento recebido.\n- **Despesas:** lançar, editar (em aberto), marcar como paga.\n- **Upsell:** cadastrar e atualizar oportunidade em aberto.\n- **Rotina:** concluir ação da rotina de hoje.\n**Nunca faz (BLOCKED):**\n- excluir cliente, recebimento, pagamento ou despesa;\n- reabrir competência;\n- alterar permissões ou gerenciar usuários;\n- alterar o plano de contas.",
       "metadata": {
         "docId": "agente",
         "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
@@ -190,6 +190,19 @@
     },
     {
       "id": "agente#009",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Inadimplência: três coisas diferentes\n\n| Pergunta | O que o agente consulta |\n|---|---|\n| \"Quem está inadimplente?\" (sem mês) | A inadimplência **de hoje**, de todas as competências — a mesma lista e os mesmos totais da tela Inadimplência. |\n| \"Inadimplentes de agosto\" | As cobranças **de agosto** que estão vencidas hoje. O agente diz esse recorte. |\n| \"O que tenho para cobrar hoje?\" | A **fila de cobrança da Rotina**: uma seleção priorizada do dia, não a lista completa. |\nA resposta sempre traz a data da posição e separa **clientes** de **cobranças** (\"12 clientes, 19 cobranças vencidas\"). Se a lista for longa, o agente mostra os principais e diz o total. Se a consulta falhar, ele diz que não conseguiu consultar; nunca responde \"zero\".",
+      "metadata": {
+        "docId": "agente",
+        "titulo": "O Agente B2C Finance (Telegram e WhatsApp)",
+        "categoria": "agente",
+        "secao": "Inadimplência: três coisas diferentes",
+        "fonte": "docs/AI_AGENT.md",
+        "atualizado_em": "2026-09-29",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "agente#010",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Respostas típicas\n\n- **Sem permissão:** \"Você não possui permissão para acessar essa informação.\"\n- **Não encontrou:** \"Não encontrei o registro solicitado.\" Para cliente, o agente pede outro nome ou parte do CNPJ; ele não adivinha.\n- **Recusa de regra:** \"Não foi possível concluir: \" + o motivo dado pelo B2C Finance (ex.: \"essa cobrança já está quitada\").\n- **Problema técnico:** \"Não consegui concluir essa consulta agora. A tentativa foi registrada.\" O agente não mostra detalhes técnicos.\n- **B2C Finance fora do ar:** \"Não consegui acessar os dados do B2C Finance neste momento. Tente novamente em alguns minutos.\" O agente nunca troca o dado atual por um texto da base de conhecimento.\n- **Mensagens demais em pouco tempo:** \"Muitas mensagens em pouco tempo. Aguarde um minuto e tente de novo.\" É uma proteção contra flood e laços de automação.\n- **Base de conhecimento fora do ar:** o agente avisa que não conseguiu consultar a documentação e continua respondendo perguntas de dados pela API.\n- **Pergunta sobre regra que não está no sistema** (desconto, multa por atraso): o agente diz que isso não está registrado no B2C Finance.",
       "metadata": {
         "docId": "agente",
@@ -202,7 +215,7 @@
       }
     },
     {
-      "id": "agente#010",
+      "id": "agente#011",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: O Agente B2C Finance (Telegram e WhatsApp)\nSeção: Limites conhecidos\n\n- **A confirmação não passa pela IA.** Se a pessoa perguntar logo depois \"registrou?\", o agente consulta a API para responder.\n- **Valores e situações sempre de novo:** o agente não guarda números de uma conversa para outra; consulta a API a cada pergunta.",
       "metadata": {
         "docId": "agente",
@@ -1100,7 +1113,7 @@
     },
     {
       "id": "api#012",
-      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.5 `GET /receivables` e `GET /receivables/:id`\n\n| Parâmetro | Descrição |\n|---|---|\n| `competence` | `AAAA-MM`. Cobranças da competência. É a janela padrão, com a competência atual. |\n| `dateFrom`, `dateTo` | Janela por **vencimento**, com as duas datas inclusivas e máximo de 400 dias. Os dois são obrigatórios juntos e não se combinam com `competence`. |\n| `status` | Um ou mais, separados por vírgula: `UPCOMING`, `PAID`, `PAID_LATE`, `PAID_OTHER_MONTH`, `OVERDUE`, `DELINQUENT`, `PARTIAL`, `REMOVED`, `RENEGOTIATED`. O atalho `open` equivale a `UPCOMING`, `OVERDUE`, `DELINQUENT` e `PARTIAL`. |\n| `clientId` | Só as cobranças deste cliente. |\n- **Status:** é o mesmo da tela de Recebimentos (`cycleStatusOf`), **derivado na hora** a partir do vencimento. Uma cobrança pendente com vencimento passado já sai como `OVERDUE`, mesmo que o job ainda não a tenha marcado.\n- **Canceladas e renegociadas:**\n  - Cobranças removidas do mês (`REMOVED`) só aparecem quando pedidas.\n  - `RENEGOTIATED` é a dívida já acordada: não conta como vencida e tem `openAmount` igual a 0.\n- **Item:** `id`, `client`, `description`, `competence`, `amount`, `paidAmount`, `openAmount`, `dueDate`, `paidAt`, `status`, `daysLate`, `kind`, `revenueType`, `installmentNumber` e `collectionStatus`.\n- **Totais:** `meta.totals` traz `{ amount, paidAmount, openAmount }` do filtro inteiro, não só da página.\n- **Detalhe:** inclui `notes` e `payments[]`.",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.5 `GET /receivables` e `GET /receivables/:id`\n\n| Parâmetro | Descrição |\n|---|---|\n| `competence` | `AAAA-MM`. Cobranças da competência. É a janela padrão, com a competência atual. |\n| `dateFrom`, `dateTo` | Janela por **vencimento**, com as duas datas inclusivas e máximo de 400 dias. Os dois são obrigatórios juntos e não se combinam com `competence`. |\n| `status` | Um ou mais, separados por vírgula: `UPCOMING`, `PAID`, `PAID_LATE`, `PAID_OTHER_MONTH`, `OVERDUE`, `DELINQUENT`, `PARTIAL`, `REMOVED`, `RENEGOTIATED`. O atalho `open` equivale a `UPCOMING`, `OVERDUE`, `DELINQUENT` e `PARTIAL`. |\n| `clientId` | Só as cobranças deste cliente. |\n- **Status:** é o mesmo da tela de Recebimentos (`cycleStatusOf`), **derivado na hora** a partir do vencimento. Uma cobrança pendente com vencimento passado já sai como `OVERDUE`, mesmo que o job ainda não a tenha marcado.\n- **Canceladas e renegociadas:**\n  - Cobranças removidas do mês (`REMOVED`) só aparecem quando pedidas.\n  - `RENEGOTIATED` é a dívida já acordada: não conta como vencida e tem `openAmount` igual a 0.\n- **Item:** `id`, `client`, `description`, `competence`, `amount`, `paidAmount`, `openAmount`, `dueDate`, `paidAt`, `status`, `daysLate`, `kind`, `revenueType`, `installmentNumber` e `collectionStatus`.\n- **Totais:** `meta.totals` traz `{ amount, paidAmount, openAmount }` do filtro inteiro, não só da página.\n- **Detalhe:** inclui `notes` e `payments[]`.\n- **`DELINQUENT` não é \"toda a inadimplência\":** são só as cobranças escaladas manualmente para inadimplência. E esta rota sempre olha uma janela, que por padrão é o mês atual. Lista vazia aqui não quer dizer que ninguém deve. Para a posição de inadimplência, use `GET /receivables/delinquency`.",
       "metadata": {
         "docId": "api",
         "titulo": "API B2C Finance V1",
@@ -1113,6 +1126,32 @@
     },
     {
       "id": "api#013",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.5b `GET /receivables/delinquency` — inadimplência atual\n\nA **posição de hoje**, com a **mesma regra e a mesma função** da tela Inadimplência (`filtroDeCobrancaVencida` + `getDelinquentClients`, em `src/lib/services/billing-metrics.ts`).\n- **Regra:** cobrança em aberto (`PENDING`, `PARTIAL` ou `OVERDUE`) com vencimento **antes de hoje**, pelo dia civil de America/Bahia, ou já marcada `OVERDUE`. Vale para **qualquer competência**. Ficam fora a paga, a removida do mês e a renegociada.\n- **Sem gravação:** o vencimento é derivado na leitura. Não roda `markOverdueBillings` nem `ensureMonthlyBillings`.\n| Parâmetro | Descrição |\n|---|---|\n| `competence` | Opcional, `AAAA-MM`. **Recorte:** só as cobranças daquela competência que estão vencidas hoje. Sem ele, considera todas as competências. |\n| `page`, `pageSize` | Paginação (padrão 1 e 50; máximo 200). |",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.5b `GET /receivables/delinquency` — inadimplência atual",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-29",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#014",
+      "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.5b `GET /receivables/delinquency` — inadimplência atual\n\n- **Item (um por cliente):** `client { id, name }`, `overdueAmount`, `billingCount`, `oldestDueDate`, `daysOverdue`, `agingBucket` (`1-15`, `16-30`, `31-60`, `60+`). Não traz telefone, documento nem outros dados pessoais.\n- **Meta:**\n  - `asOf`: a data da posição;\n  - `scope`: `all_open` ou `competence`, com a descrição;\n  - `rule`: a regra aplicada;\n  - `totals { clients, overdueAmount, billings }`: do filtro **inteiro**, não da página;\n  - `sort`: maior saldo, depois nome e id (ordem determinística);\n  - `pagination`.\n- **Acesso:** scope `receivables.read`. Em nome de uma pessoa (`X-B2C-Identity`), ela precisa também de **\"Ver inadimplência\"** (`recebimentos.ver_inadimplencia`), como na tela; sem isso, `403 user_forbidden`. A resolução de identidade devolve essa permissão em `permissions`, e é ela que libera a ferramenta `consultar_inadimplencia` no agente.\n- **Não confundir com:**\n  - `/receivables?status=OVERDUE`: vencidas de uma janela;\n  - `status=DELINQUENT`: só as escaladas manualmente;\n  - a fila de cobrança da Rotina do dia, que é priorizada e omite quem já foi tratado ou removido no dia.",
+      "metadata": {
+        "docId": "api",
+        "titulo": "API B2C Finance V1",
+        "categoria": "api",
+        "secao": "3. Endpoints › 3.5b `GET /receivables/delinquency` — inadimplência atual",
+        "fonte": "docs/API.md",
+        "atualizado_em": "2026-09-29",
+        "tipo": "conhecimento"
+      }
+    },
+    {
+      "id": "api#015",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.6 `GET /expenses` e `GET /expenses/:id`\n\n| Parâmetro | Descrição |\n|---|---|\n| `dateFrom`, `dateTo` | Janela pela **data do lançamento**, inclusiva. O padrão é o mês atual. |\n| `status` | `pendente`, `pago`, `cancelado` ou `vencida`. `vencida` é pendente com vencimento antes de hoje, a mesma regra da tela. `pendente` exclui as vencidas. |\n| `category` | Id ou nome da categoria. |\n- **O que entra:** só lançamentos do tipo despesa.\n- **Item:** `id`, `description`, `amount`, `date`, `dueDate`, `status` (o derivado), `rawStatus`, `category`, `type`, `recurrence`, `recurring`, `paymentMethod`, `client` e `account`.\n- **Totais:** `meta.totalAmount` soma o filtro inteiro.",
       "metadata": {
         "docId": "api",
@@ -1125,7 +1164,7 @@
       }
     },
     {
-      "id": "api#014",
+      "id": "api#016",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.7 `GET /cash/summary`\n\nUsa as mesmas fontes da tela Caixa (`getLiquidez` e `getCashSummary`).\n- **Posição de hoje:** `available`, `accountsBalance`, `commitments` e `breakdown[]`.\n- **Próximos 30 dias:** `next30Days`.\n- **`projection`:** saldo projetado. A receber vencido **não entra** no saldo projetado e aparece em separado.\n- **`month`:** entradas, saídas e projeções de 30, 60 e 90 dias.",
       "metadata": {
         "docId": "api",
@@ -1138,7 +1177,7 @@
       }
     },
     {
-      "id": "api#015",
+      "id": "api#017",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.8 `GET /upsells`\n\n| Parâmetro | Descrição |\n|---|---|\n| `status` | `OPPORTUNITY`, `NEGOTIATION`, `WON`, `LOST` ou `PAUSED`. |\n| `clientId` | Id do cliente. |\n| `responsible` | Nome do responsável, sem diferenciar maiúsculas. O B2C Finance grava o responsável do upsell como **texto**, sem vínculo a um usuário, por isso não existe filtro `responsibleId`. |\n- **Totais:** `meta.totalValue` soma o valor potencial do filtro inteiro.",
       "metadata": {
         "docId": "api",
@@ -1151,7 +1190,7 @@
       }
     },
     {
-      "id": "api#016",
+      "id": "api#018",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.9 `GET /routine/daily`\n\nRetorna a rotina do dia, com o **mesmo montador** da tela Rotina (`montarRotinaDoDia`).\n- **Conteúdo:** `actions[]`, `collections` (vencidos e próximos), `payments` (vencidos e próximos), `renewals`, `cash` e `openUpsells`.\n- **Seções limitadas pelos scopes:** cada seção só é preenchida se a conta tiver o scope da área:\n  - `receivables.read` → cobranças;\n  - `expenses.read` → pagamentos;\n  - `cash.read` → caixa;\n  - `clients.read` → renovações;\n  - `upsells.read` → upsell.\n- **Diferença para a tela:** a API **não** marca cobranças como vencidas antes de montar a rotina, porque isso seria uma escrita. A fila de cobrança usa o vencimento, então o conteúdo é o mesmo.",
       "metadata": {
         "docId": "api",
@@ -1164,7 +1203,7 @@
       }
     },
     {
-      "id": "api#017",
+      "id": "api#019",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.10 `GET /reports/daily?date=AAAA-MM-DD` e `GET /reports/monthly?competence=AAAA-MM`\n\nOs relatórios exigem `reports.read`. **Cada seção** depende também do scope da área dela; o relatório não é um atalho para ler o que o scope não permite. As seções omitidas aparecem em `meta.omittedSections`.\n- **Diário** (padrão: hoje):\n  | Seção | Conteúdo | Scope exigido |\n  |---|---|---|\n  | `receivables` | Cobranças que vencem no dia e pagamentos confirmados no dia | `receivables.read` |\n  | `expenses` | Despesas que vencem no dia (ou lançadas no dia, quando não têm vencimento) | `expenses.read` |\n  | `expenses.paid` | Despesas **marcadas como pagas** no dia (pela trilha de auditoria, porque a despesa não guarda data de pagamento) | `expenses.read` |\n  | `clients` | Mudanças de status com vigência no dia (`statusChanges`) e **registradas** no dia (`statusChangesRecorded`); clientes com entrada no dia (`newClients`) e **cadastrados** no dia (`createdClients`) | `clients.read` ou `client_status.read` |\n  | `upsells` | Oportunidades **criadas** e **vendidas** no dia | `upsells.read` |\n- **Mensal** (padrão: a competência atual):\n  | Seção | Conteúdo | Scope exigido |\n  |---|---|---|\n  | `closing` | Estado do fechamento da competência | — (sempre incluída) |\n  | `indicators` | Os mesmos indicadores de `/dashboard/summary` | `dashboard.read` |\n  | `portfolio` | Carteira por status **na competência** | `clients.read` ou `client_status.read` |\n  | `receivables` | Contagem, totais e divisão por status | `receivables.read` |\n  | `expenses` | Total e divisão por status | `expenses.read` |",
       "metadata": {
         "docId": "api",
@@ -1177,7 +1216,7 @@
       }
     },
     {
-      "id": "api#018",
+      "id": "api#020",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 3. Endpoints › 3.11 `GET /search?q=…&type=client`\n\nServe para o agente descobrir de qual cliente o usuário está falando. Exemplo: `GET /search?q=face%20love&type=client`.\n| Parâmetro | Descrição |\n|---|---|\n| `q` | De 2 a 100 caracteres. |\n| `type` | `client` (padrão). É o único tipo nesta versão. |\n| `limit` | De 1 a 25 (padrão 10). |\n- **Casamento:**\n  - Considera nome, razão social e documento.\n  - **Ignora acento, maiúsculas e espaços:** `facelove estetica` acha \"Face Love Estética\".\n  - Para o documento, bastam 4 dígitos ou mais.\n- **Ordem:** por relevância (`score` de 0 a 100) e, em empate, por nome.\n- **Resultado:** traz só o necessário para desambiguar:\n```json\n{ \"type\": \"client\", \"id\": \"cm…\", \"name\": \"Face Love Estética\", \"legalName\": \"Face Love Clínica Ltda\",\n  \"document\": \"**.***.***/0001-90\", \"status\": { \"code\": \"ACTIVE\", \"label\": \"Ativo\" }, \"modality\": \"MRR\", \"score\": 90 }\n```\n- **Status:** o `status` é o de **hoje**.\n- **Máscara do documento:** o CNPJ mostra filial e dígitos verificadores; o CPF mostra só os dígitos verificadores.\n- **Total:** `meta.total` diz quantos clientes casaram. Se houver vários, o agente deve perguntar ao usuário qual deles.",
       "metadata": {
         "docId": "api",
@@ -1190,7 +1229,7 @@
       }
     },
     {
-      "id": "api#019",
+      "id": "api#021",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\nToda escrita:\n- exige o **scope** próprio e o header **`Idempotency-Key`**;\n- roda no **dono da integração**:\n  - `ownerId` no corpo é recusado (400);\n  - id de outro dono dá 404;\n- chama a **mesma função de domínio da tela**;\n- grava o **AuditLog** (diferença campo a campo) e a linha em **Atividades da IA/API**;\n- devolve a **entidade resultante**;\n- **invalida o cache** das telas afetadas.\nOs corpos são validados com Zod em modo estrito: campo desconhecido dá 400. Os schemas e exemplos completos estão na OpenAPI (`/api/docs`).\n| Método e rota | Scope | Função de domínio | Resposta |\n|---|---|---|---|\n| `POST /clients` | `clients.create` | `salvarCliente` (duplicidade, MRR/TCV, contrato e cobranças) | 201, com o cliente (igual a `GET /clients/:id`) |\n| `PATCH /clients/:id` | `clients.update` | `salvarCliente` (sem mudar status) | 200, com o cliente |\n| `POST /clients/:id/status-changes` | `client_status.write` | `changeClientStatus` (linha do tempo) | 201, com `change` e `statusHistory` |\n| `POST /receivables/:id/payments` | `receivables.register_payment` | `registerPayment` (motor de Recebimentos) | 201, com `payment` e `receivable` |\n| `POST /expenses` | `expenses.create` | `salvarDespesa` | 201, com a despesa |\n| `PATCH /expenses/:id` | `expenses.update` | `salvarDespesa` | 200, com a despesa |\n| `POST /expenses/:id/pay` | `expenses.pay` | `setExpenseStatus` (motor) | 200, com `alreadyPaid` e `expense` |\n| `POST /upsells` | `upsells.create` | `salvarUpsell` | 201, com a oportunidade |\n| `PATCH /upsells/:id` | `upsells.update` | `salvarUpsell` | 200, com a oportunidade |\n| `POST /routine/actions/:id/complete` | `routine.write` | `concluirAcaoDaRotina` | 200, com a ação |\n`GET /upsells/:id` (`upsells.read`) também entrou, para ler o que foi escrito.",
       "metadata": {
         "docId": "api",
@@ -1203,7 +1242,7 @@
       }
     },
     {
-      "id": "api#020",
+      "id": "api#022",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\n**Fora da V1, de propósito:**\n- `DELETE` de qualquer coisa (clientes, cobranças, despesas, pagamentos);\n- reabrir competência;\n- gerir usuários e permissões;\n- decidir o funil do upsell (Vendido/Recusado lança ou cancela cobrança e pede a pergunta da tela);\n- despesa de cartão;\n- editar despesa paga ou a série de uma recorrência.\n**Status do cliente:**\n- **Nunca** muda por `PATCH /clients/:id`. O campo `status` no PATCH responde 400 e aponta para `POST /clients/:id/status-changes`.\n- O corpo da alteração é `{ \"status\": \"INACTIVE\", \"effectiveFrom\": \"2026-10-01\", \"reason\": \"…\" }`, e a mudança entra na linha do tempo:\n| Vigência | O que acontece |\n|---|---|\n| Hoje | Vale já. |\n| Futura | Fica programada; o status de hoje não muda. |\n| Mês passado | Exige `\"allowRetroactive\": true`, porque reescreve a carteira daquele mês. |\n| Competência fechada | 422 `competence_closed`. |\n**Pagamento:** antes do motor, a API confere:\n| Verificação | Regra | Se falhar |\n|---|---|---|\n| Dono | A cobrança pertence ao dono da integração. | 404 |\n| Estado | Cobrança quitada, removida ou renegociada não recebe. | 422 `invalid_state` |\n| Valor | Maior que zero, com no máximo 2 casas. Valor acima do saldo só com `\"allowOverpayment\": true` (o excedente vira crédito do cliente, como na tela). | 400 / 422 |\n| Data | `paidAt` não pode ser futura. O padrão é hoje. | 422 |\n| Competência | O mês do caixa (o do pagamento) não pode estar fechado. | 422 `competence_closed` |\n| Duplicidade | Já existe pagamento com o mesmo valor e a mesma data nesta cobrança. Para registrar mesmo assim, envie `\"allowDuplicate\": true`. | 409 `possible_duplicate` |\nAlém dessas verificações:",
       "metadata": {
         "docId": "api",
@@ -1216,7 +1255,7 @@
       }
     },
     {
-      "id": "api#021",
+      "id": "api#023",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4. Escritas controladas\n\n- O pagamento grava a identidade externa `api` + integração + Idempotency-Key, então a **trava única do banco** também impede o mesmo pedido de virar dois pagamentos.\n- O registro roda em **transação** no motor.\n**Upsell:**\n- **Campos:** `clientId`, `serviceId` ou `description`, `amount`, `responsibleId`, `expectedCloseDate`, `notes`, e `status` só do funil aberto (`OPPORTUNITY`, `NEGOTIATION`, `PAUSED`).\n- **`responsibleId`:** é o **colaborador** (o mesmo cadastro do responsável do cliente). O nome dele é gravado, e sem ele o responsável é herdado do cliente.\n- **Transação:** a oportunidade e os serviços dela são gravados na mesma transação.\n**Transações:**\n- Pagamento, pagar despesa e alteração de status já eram transacionais nos motores.\n- Despesa com recorrência passou a nascer numa transação (antes, uma falha no meio deixava a série pela metade).\n- O cadastro de cliente segue a regra da tela: cadastro primeiro, relação e onboarding depois, sem derrubar o cadastro se esses complementos falharem.\n**Códigos de erro das escritas:** `idempotency_key_required`, `idempotency_key_reused`, `idempotency_in_progress`, `duplicate`, `possible_duplicate`, `invalid_state`, `competence_closed`, `retroactive_requires_confirmation`, `unprocessable`.",
       "metadata": {
         "docId": "api",
@@ -1229,7 +1268,7 @@
       }
     },
     {
-      "id": "api#022",
+      "id": "api#024",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n**Resolver quem fala:** `POST /integrations/resolve-identity`, com o scope `identities.resolve`. O corpo é só o canal e o identificador:\n| Canal | `externalIdentifier` | Exemplo |\n|---|---|---|\n| `TELEGRAM` | Telegram User ID (`message.from.id`), só dígitos. O @username é recusado (400): ele muda e não identifica ninguém. | `{ \"channel\": \"TELEGRAM\", \"externalIdentifier\": \"123456789\" }` |\n| `WHATSAPP` | Telefone como veio (a variante do nono dígito é aceita). | `{ \"channel\": \"WHATSAPP\", \"externalIdentifier\": \"+5571999990000\" }` |\n`userId`, `ownerId` ou qualquer outro campo no corpo dá 400. Quem decide o usuário é o vínculo, nunca o chamador.\n- **O que a API faz:** resolve pelo **vínculo** cadastrado em Configurações → Integrações → Canais (tabela `MessagingIdentity`, genérica por canal; `metadata` guarda só dados de exibição, como o @username).\n- **O que devolve:**\n  - `authorized: true` e `identityId`;\n  - o usuário (id, nome, papel);\n  - as permissões relevantes;\n  - `allowedScopes`, os scopes da integração ∩ o RBAC do usuário. Não existe scope por canal.\n- **Recusas:** sem vínculo, vínculo desativado ou usuário inativo dão 404 `identity_not_found`. Usuário restrito a uma agência dá 403 `agency_scope_not_supported`.\n- **Por que não devolve `ownerId`:** o dono já é o da integração (vem do token) e nunca é aceito de quem chama. Devolvê-lo só convidaria a reenviá-lo.\n**Agir em nome da pessoa:** mande `X-B2C-Identity: <identityId>` em qualquer rota. A API faz quatro coisas:",
       "metadata": {
         "docId": "api",
@@ -1242,7 +1281,7 @@
       }
     },
     {
-      "id": "api#023",
+      "id": "api#025",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.1 Quem está falando: identidade e delegação\n\n1. **Recarrega o vínculo** no workspace da integração e confere que ele e o usuário estão ativos.\n2. **Recorta os scopes** pelo RBAC do usuário (`SCOPE_REQUIRES_PERMISSIONS`, em `src/lib/api/scopes.ts`).\n   - Rota fora do que o usuário pode dá 403 `user_forbidden`.\n   - Nos relatórios, as seções que ele não vê entram em `omittedSections`.\n3. **Registra o usuário como ator** (`actorUserId`) em Atividades da IA/API, com a origem do header `X-B2C-Source` (`telegram`, `whatsapp`, `n8n`).\n4. **Recusa id inválido,** desativado ou de outro workspace (403 `invalid_identity`). Sem `identities.resolve` na integração, a resposta é 403.\n**Quem recebe relatórios e avisos:** `GET /integrations/recipients?channel=TELEGRAM&purpose=…`, também com `identities.resolve`.\n- `purpose`: `morning_report`, `evening_report` ou um aviso (`payment.received`, `receivable.overdue`, `client.renewal.upcoming`, `expense.due_soon`).\n- Devolve `today` e `timezone` (o fuso oficial da operação) e `recipients`: `identityId`, `externalIdentifier` (no Telegram, o chat privado) e `userName`.\n- Só entra quem tem a preferência **ligada** no vínculo (Configurações → Integrações → Canais → Envios; padrão desligado), com vínculo e usuário ativos e com o RBAC do conteúdo (relatório: `reports.read`; aviso: a leitura da área). Usuário restrito a uma agência fica de fora.\n- O relatório de cada pessoa é montado com `X-B2C-Identity` = o `identityId` dela, ou seja, com o RBAC dela.",
       "metadata": {
         "docId": "api",
@@ -1255,7 +1294,7 @@
       }
     },
     {
-      "id": "api#024",
+      "id": "api#026",
       "text": "[Conhecimento B2C Finance — conceito/regra, não dado atual]\nDocumento: API B2C Finance V1\nSeção: 4.2 Ações do agente com confirmação\n\nO agente (Telegram ou WhatsApp) não escreve direto. Ele propõe em `POST /agent/pending-actions`; a API monta a prévia a partir do estado atual e guarda a `PendingAction`, no canal do vínculo.\n| Canal | Como o usuário confirma | Corpo de `POST /agent/pending-actions/{id}/confirm` | `Idempotency-Key` |\n|---|---|---|---|\n| Telegram | Toque em **Confirmar** (botão com `confirm:<actionId>`) | `{ \"messageId\": \"<update_id>\", \"via\": \"button\" }` | `telegram:<update_id>:<actionId>` |\n| WhatsApp | \"SIM <código>\" | `{ \"messageId\": \"<id da mensagem>\", \"confirmationCode\": \"4821\" }` | `wa:<messageId>:<actionId>` |\n- `GET /agent/pending-actions/{id}` mostra a ação só ao usuário dela (outro usuário, vínculo ou workspace: 404); vencida aparece como `EXPIRED`. O Telegram consulta antes de confirmar ou cancelar pelo botão.\n- A confirmação por botão só vale para ação do canal TELEGRAM. O mesmo update repetido é replay; outro toque numa ação já decidida dá 409 `action_not_pending` e nunca executa de novo.\n- No Telegram, a resposta da proposta não traz o código.\n- **Limite por usuário do vínculo:** 20 propostas e 30 confirmações/cancelamentos por minuto. Acima disso, 429 `rate_limited` com `Retry-After: 60`. Soma-se ao limite por IP (120/min) do middleware.\n- **`meta.onBehalfOf.identityId`:** toda resposta de sucesso com `X-B2C-Identity` diz em nome de qual vínculo a API respondeu. Quem monta algo por pessoa, como o relatório do Telegram, deve conferir isso antes de entregar.\nA execução usa a **rota de escrita oficial**, com o RBAC do usuário do vínculo. As operações bloqueadas (excluir, reabrir competência, permissões, usuários, plano de contas) respondem 403 `operation_blocked`. Detalhes em [`docs/N8N_AGENT_WRITE_ACTIONS.md`](N8N_AGENT_WRITE_ACTIONS.md).",
       "metadata": {
         "docId": "api",
