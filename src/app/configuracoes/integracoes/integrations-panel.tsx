@@ -38,15 +38,15 @@ export function IntegrationsPanel({ rows, gerencia }: { rows: IntegracaoRow[]; g
   const [erro, setErro] = useState<string | null>(null);
   const [pendente, start] = useTransition();
 
-  function rotacionar(r: IntegracaoRow) {
+  async function rotacionar(r: IntegracaoRow) {
+    const ok = await confirmAction({
+      title: `Rotacionar a chave de “${r.name}”?`,
+      description:
+        "Um token novo é gerado e o atual para de funcionar na hora. Atualize a credencial no n8n logo em seguida.",
+      confirmLabel: "Rotacionar",
+    });
+    if (!ok) return;
     start(async () => {
-      const ok = await confirmAction({
-        title: `Rotacionar a chave de “${r.name}”?`,
-        description:
-          "Um token novo é gerado e o atual para de funcionar na hora. Atualize a credencial no n8n logo em seguida.",
-        confirmLabel: "Rotacionar",
-      });
-      if (!ok) return;
       setErro(null);
       const res = await rotacionarIntegracaoAction(r.id);
       if (res.ok) setToken({ nome: r.name, valor: res.token });
@@ -54,15 +54,15 @@ export function IntegrationsPanel({ rows, gerencia }: { rows: IntegracaoRow[]; g
     });
   }
 
-  function revogar(r: IntegracaoRow) {
+  async function revogar(r: IntegracaoRow) {
+    const ok = await confirmAction({
+      title: `Revogar “${r.name}”?`,
+      description: "A integração perde o acesso imediatamente e não pode ser reativada.",
+      confirmLabel: "Revogar",
+      destructive: true,
+    });
+    if (!ok) return;
     start(async () => {
-      const ok = await confirmAction({
-        title: `Revogar “${r.name}”?`,
-        description: "A integração perde o acesso imediatamente e não pode ser reativada.",
-        confirmLabel: "Revogar",
-        destructive: true,
-      });
-      if (!ok) return;
       setErro(null);
       const res = await revogarIntegracaoAction(r.id);
       if (!res.ok) setErro(res.error);
