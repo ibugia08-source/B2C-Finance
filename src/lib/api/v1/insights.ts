@@ -161,7 +161,8 @@ export async function relatorioDiario(date: string, scopes: string[]) {
         },
       }),
       prisma.payment.findMany({
-        where: { paidAt: instantesDoDia(date), status: "CONFIRMED" },
+        // paidAt é uma data civil (gravada à meia-noite), não o instante do registro.
+        where: { paidAt: diaCivilUtc(date), status: "CONFIRMED" },
         orderBy: { paidAt: "asc" },
         select: {
           id: true, amount: true, paidAt: true, method: true,

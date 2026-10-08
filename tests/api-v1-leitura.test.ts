@@ -373,6 +373,12 @@ describe("painéis e relatórios", () => {
     expect(r.status).toBe(200);
     expect(r.body.meta.omittedSections).toEqual([]);
     expect(r.body.data.receivables.dueToday.items.map((x: any) => x.id)).toEqual(expect.arrayContaining([ids.b1, ids.b2]));
+    expect(r.body.data.receivables.received).toMatchObject({ count: 1, amount: 800 });
+    expect(r.body.data.receivables.received.items.map((x: any) => x.billingId)).toContain(ids.b2);
+    const diaAnterior = new Date(Date.UTC(ANO, MES - 1, 0)).toISOString().slice(0, 10);
+    const anterior = await chamar(reportsDaily, `/reports/daily?date=${diaAnterior}`);
+    expect(anterior.status).toBe(200);
+    expect(anterior.body.data.receivables.received.items.map((x: any) => x.billingId)).not.toContain(ids.b2);
     const soRel = await chave(A, ["reports.read"]);
     const parcial = await chamar(reportsDaily, `/reports/daily?date=${COMP}-01`, soRel);
     expect(parcial.body.meta.omittedSections).toEqual(["receivables", "expenses", "clients", "upsells"]);
