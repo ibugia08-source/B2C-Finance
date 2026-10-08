@@ -36,6 +36,36 @@ async function rodar(nome: string, itens: any[], nos: Record<string, any[]> = {}
 }
 
 describe("Telegram · agente com escrita (workflow)", () => {
+  it("'quanto recebemos hoje' usa pagamentos confirmados do relatório, nunca cobranças que vencem", async () => {
+    const [pedido] = await rodar("Roteiro da mensagem", [{
+      authorized: true, tipo: "text", text: "Quanto recebemos hoje?", chatId: 12,
+      allowedTools: ["gerar_relatorio_diario"],
+    }]);
+    expect(pedido.rota).toBe("recebidos_hoje");
+    expect(prox(wf, "Rota", 5)).toEqual(["API: relatório diário para recebidos"]);
+    const [resposta] = await rodar("Formatar pagamentos recebidos hoje", [{
+      success: true, data: { date: pedido.dataConsulta, receivables: {
+        dueToday: { amount: 3400, count: 4 }, received: { amount: 1200, count: 1 },
+      } }, meta: { omittedSections: [] },
+    }], { "Roteiro da mensagem": [pedido] });
+    expect(resposta.texto).toContain("R$ 1.200,00");
+    expect(resposta.texto).not.toContain("3.400,00");
+    expect(resposta.texto).toContain("1 pagamento(s) confirmado(s)");
+  });
+
+  it("cadastro Telegram aceita prospect por nome e transmite o objeto para a API sem o parser JSON do n8n", () => {
+    const t = no(wf, "cadastrar_cliente");
+    const corpo = t.parameters.jsonBody as string;
+    expect(corpo).toContain("JSON.parse($fromAI('input'");
+    expect(corpo).toContain("initialStatus");
+    const expr = corpo.replace(/^=\{\{/, "").replace(/\}\}$/, "");
+    const parsed = JSON.parse(new Function("$fromAI", `return ${expr};`)((chave: string) => {
+      expect(chave).toBe("input");
+      return JSON.stringify({ name: "Cliente Exemplo", initialStatus: "PROSPECT" });
+    }));
+    expect(parsed).toEqual({ operation: "clients.create", input: { name: "Cliente Exemplo", initialStatus: "PROSPECT" } });
+  });
+
   it("existe, está desativado e escuta mensagens E botões (callback_query)", () => {
     expect(wf.active).toBe(false);
     const g = no(wf, "Telegram: receber mensagem ou botão");
@@ -72,6 +102,19 @@ describe("Telegram · agente com escrita (workflow)", () => {
     // Nenhum nó HTTP fora das ferramentas escreve no negócio: só pending-actions e resolve-identity.
     for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest" && x.parameters.method === "POST")) {
       expect(n.parameters.url).toMatch(/\/integrations\/resolve-identity$|\/agent\/pending-actions\/\{\{ \$json\.actionId \}\}\/(confirm|cancel)$/);
+    }
+  });
+
+  it("usa uma credencial B2C de escrita separada da credencial do fallback", () => {
+    const b2c = wf.nodes.filter((n: any) => n.credentials?.httpHeaderAuth);
+    expect(b2c.length).toBeGreaterThan(15);
+    for (const n of b2c) expect(n.credentials.httpHeaderAuth).toEqual({
+      id: "CONFIGURAR_B2C_FINANCE_API_ESCRITA",
+      name: "B2C Finance API — escrita Telegram",
+    });
+    const fallback = ler("b2c-finance-telegram-agent-readonly.json");
+    for (const n of fallback.nodes.filter((x: any) => x.credentials?.httpHeaderAuth)) {
+      expect(n.credentials.httpHeaderAuth.name).toBe("B2C Finance API");
     }
   });
 
@@ -202,13 +245,48 @@ describe("Telegram · agente com escrita (workflow)", () => {
     expect(ag.rota).toBe("agente");
   });
 
-  it("'sim' digitado com ação aguardando reenvia a prévia com botões; sem ação, segue para o agente", async () => {
+  it("paginação de inadimplentes mantém vínculo e permissão e não corta a resposta", async () => {
+    expect(prox(wf, "Rota", 4)).toEqual(["É clique em Ver mais?", "API: página de inadimplentes"]);
+    expect(prox(wf, "É clique em Ver mais?", 0)).toEqual(["Telegram: confirmar Ver mais"]);
+    expect(prox(wf, "API: página de inadimplentes")).toEqual(["Formatar página de inadimplentes"]);
+    expect(prox(wf, "Formatar página de inadimplentes")).toEqual(["Telegram: enviar página de inadimplentes"]);
+    const base = { tipo: "callback", callbackData: "inad:2", authorized: true, allowedTools: ["consultar_inadimplencia"] };
+    expect((await rodar("Roteiro da mensagem", [base]))[0]).toMatchObject({ rota: "inadimplencia", pagina: 2 });
+    expect((await rodar("Roteiro da mensagem", [{ ...base, allowedTools: [] }]))[0].rota).toBe("botao");
+    expect((await rodar("Roteiro da mensagem", [{ ...base, authorized: false }]))[0].rota).toBe("botao");
+    expect((await rodar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste os clientes inadimplentes" }]))[0]).toMatchObject({ rota: "inadimplencia", pagina: 1 });
+    expect((await rodar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste os inadimplentes de setembro de 2026" }]))[0]).toMatchObject({ rota: "inadimplencia", competencia: "2026-09" });
+    expect((await rodar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste quais clientes ativos ainda não pagaram no mês de outubro" }]))[0].rota).toBe("responder");
+    const api = no(wf, "API: página de inadimplentes").parameters;
+    expect(api.method).toBe("GET");
+    expect(api.url).toContain("/receivables/delinquency{{ $json.competencia ? '?competence='");
+    expect(api.queryParameters.parameters).toContainEqual({ name: "pageSize", value: "10" });
+    expect(api.headerParameters.parameters).toContainEqual({ name: "X-B2C-Identity", value: "={{ $json.identityId }}" });
+    const clientes = Array.from({ length: 18 }, (_, i) => ({ client: { name: `Cliente ${i + 1}` }, overdueAmount: 100, billingCount: 1, daysOverdue: 1 }));
+    const meta = { asOf: "2026-09-29", scope: { kind: "all_open" }, totals: { clients: 18, billings: 18, overdueAmount: 1800 } };
+    const p1 = (await rodar("Formatar página de inadimplentes", [{ success: true, data: clientes.slice(0, 10), meta }], { "Roteiro da mensagem": [{ chatId: 1, pagina: 1 }] }))[0];
+    const p2 = (await rodar("Formatar página de inadimplentes", [{ success: true, data: clientes.slice(10), meta }], { "Roteiro da mensagem": [{ chatId: 1, pagina: 2 }] }))[0];
+    expect(p1.nextPage).toBe(2);
+    expect(p1.text).not.toContain("Cliente 11");
+    expect(p2.nextPage).toBeNull();
+    expect(p2.text).toContain("Cliente 18");
+    expect(no(wf, "Telegram: enviar página de inadimplentes").parameters.inlineKeyboard.rows[0].row.buttons[0].additionalFields.callback_data).toBe("={{ $json.nextCallbackData }}");
+    expect(js("Formatar para o Telegram")).toContain("const MAX_PARTES = 0");
+    expect(js("Formatar para o Telegram")).not.toContain("Resposta longa — peça um recorte menor");
+  });
+
+  it("'sim' digitado com ação aguardando reenvia a prévia com botões; sem ação, responde sem IA", async () => {
     const msg = { chatId: 9, text: "sim", identityId: "i" };
     const com = (await rodar("Decidir resposta em texto", [{ success: true, data: [{ actionId: "a1", status: "PENDING", message: "Encontrei:\n*X*\n\nToque em *Confirmar* ou *Cancelar*." }] }], { "Roteiro da mensagem": [msg] }))[0];
     expect(com).toMatchObject({ pendente: true, actionId: "a1", chatId: 9 });
     expect(com.text).toContain("<b>Confirmar</b>");
     const sem = (await rodar("Decidir resposta em texto", [{ success: true, data: [] }], { "Roteiro da mensagem": [msg] }))[0];
     expect(sem.pendente).toBe(false);
+    expect(sem.texto).toContain("Não há ação aguardando confirmação");
+    expect(prox(wf, "Há ação aguardando?", 1)).toEqual(["Formatar para o Telegram"]);
+    const falha = (await rodar("Decidir resposta em texto", [{ success: false, error: { code: "upstream_error" } }], { "Roteiro da mensagem": [msg] }))[0];
+    expect(falha).toMatchObject({ pendente: false, falhaApi: true });
+    expect(falha.texto).toContain("Não consegui verificar");
   });
 
   it("depois da IA: proposta desta mensagem → prévia da API com botões; senão, o texto", async () => {
@@ -217,7 +295,10 @@ describe("Telegram · agente com escrita (workflow)", () => {
     expect(p).toMatchObject({ comPrevia: true, actionId: "a9", chatId: 3 });
     expect(p.text).toContain("<b>Face Love</b>");
     const [t] = await rodar("Interpretar resposta do agente", [{ success: true, data: [] }], { "Juntar resposta e contexto": [ctx] });
-    expect(t).toMatchObject({ comPrevia: false, output: "Preparei a confirmação." });
+    expect(t).toMatchObject({ comPrevia: false });
+    expect(t.output).toContain("Nada foi alterado");
+    const [normal] = await rodar("Interpretar resposta do agente", [{ success: true, data: [] }], { "Juntar resposta e contexto": [{ ...ctx, output: "Encontrei dois clientes. Qual deles?" }] });
+    expect(normal.output).toBe("Encontrei dois clientes. Qual deles?");
   });
 
   it("prompt: base + escrita, confirmação por botões no Telegram, regras de status temporal e bloqueio", () => {

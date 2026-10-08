@@ -183,6 +183,9 @@ Passo a passo e ordem de implantação: [`docs/TELEGRAM_INTEGRATION.md`](TELEGRA
 - [ ] morning report testado
 - [ ] evening report testado
 - [ ] write agent importado
+- [ ] integração e credencial `B2C Finance API — escrita Telegram` próprias (23 scopes incluindo `receivables.remove_from_month`), sem reutilizar nem ampliar a credencial somente leitura
+- [ ] todos os nós HTTP do agente com escrita ligados à credencial própria; nenhum nó ligado ao fallback
+- [ ] paginação `Ver mais` da inadimplência validada nas duas páginas no agente com escrita
 - [ ] write agent testado
 - [ ] confirmação testada
 - [ ] cancelamento testado
@@ -190,6 +193,7 @@ Passo a passo e ordem de implantação: [`docs/TELEGRAM_INTEGRATION.md`](TELEGRA
 - [ ] ação bloqueada testada
 - [ ] write agent ativado (readonly desativado antes)
 - [ ] readonly mantido como fallback (importado e desativado)
+- [ ] se não houver homologação, proposta e cancelamento validados antes de criar qualquer dado sintético; impactos em métricas e trilha revisados antes de confirmar teste em produção
 
 ### 3.4 Meta (WhatsApp Cloud API — opcional)
 

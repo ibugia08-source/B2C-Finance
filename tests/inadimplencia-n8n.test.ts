@@ -37,7 +37,7 @@ describe("consultar_inadimplencia nos agentes do Telegram", () => {
       expect(cab["X-B2C-Source"]).toBe("telegram");
       expect(cab["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
       expect(t.parameters.toolDescription).toContain("QUALQUER competência");
-      expect(t.credentials.httpHeaderAuth.id).toBe("CONFIGURAR_B2C_FINANCE_API");
+      expect(t.credentials.httpHeaderAuth.id).toBe(w === TG_LEITURA ? "CONFIGURAR_B2C_FINANCE_API" : "CONFIGURAR_B2C_FINANCE_API_ESCRITA");
     }
   });
 
@@ -73,6 +73,80 @@ describe("consultar_inadimplencia nos agentes do Telegram", () => {
   });
 });
 
+describe("Ver mais na lista de inadimplentes do agente somente leitura", () => {
+  const executar = async (nome: string, itens: any[], contexto?: any) => {
+    const js = no(TG_LEITURA, nome).parameters.jsCode as string;
+    const $ = () => ({ all: () => [{ json: contexto }] });
+    return await new Function("$input", "$", `return (async () => { ${js} })();`)(
+      { all: () => itens.map((json) => ({ json })) }, $
+    ) as any[];
+  };
+
+  it("clique e mensagem passam novamente pelo vínculo e permissões; página não autorizada não chega à API", async () => {
+    expect(no(TG_LEITURA, "Telegram: receber mensagem").parameters.updates).toEqual(["message", "callback_query"]);
+    const [clique] = await executar("Normalizar update", [{ update_id: 7, callback_query: {
+      id: "cb7", data: "inad:2", from: { id: 42, is_bot: false },
+      message: { message_id: 9, chat: { id: 42, type: "private" } },
+    } }]);
+    expect(clique.json).toMatchObject({ fromId: "42", chatType: "private", callbackData: "inad:2", tipo: "callback" });
+    expect(TG_LEITURA.connections["Deduplicar update (update_id)"].main[0][0].node).toBe("Chat privado?");
+    expect(TG_LEITURA.connections["Extrair Telegram User ID"].main[0][0].node).toBe("API: resolver identidade");
+    expect(TG_LEITURA.connections["Carregar permissões"].main[0][0].node).toBe("Roteiro da mensagem");
+    const base = { ...clique.json, authorized: true, allowedTools: ["consultar_inadimplencia"] };
+    const [pagina2] = await executar("Roteiro da mensagem", [base]);
+    expect(pagina2.json).toMatchObject({ rota: "inadimplencia", pagina: 2 });
+    const [bloqueado] = await executar("Roteiro da mensagem", [{ ...base, allowedTools: [] }]);
+    expect(bloqueado.json.rota).toBe("responder");
+    const [inicio] = await executar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste os clientes inadimplentes", callbackData: undefined }]);
+    expect(inicio.json).toMatchObject({ rota: "inadimplencia", pagina: 1 });
+    const [comMes] = await executar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste os inadimplentes de setembro", callbackData: undefined }]);
+    expect(comMes.json).toMatchObject({ rota: "inadimplencia", competencia: "2026-09", pagina: 1 });
+    const [naoPagaram] = await executar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste quais clientes ativos ainda não pagaram no mês de outubro" }]);
+    expect(naoPagaram.json).toMatchObject({ rota: "responder" });
+    expect(naoPagaram.json.texto).toContain("ainda vão vencer");
+    const [outubro] = await executar("Roteiro da mensagem", [{ ...base, tipo: "text", text: "Liste os inadimplentes de outubro de 2026" }]);
+    expect(outubro.json).toMatchObject({ rota: "inadimplencia", competencia: "2026-10", pagina: 1 });
+    const [cliqueOutubro] = await executar("Roteiro da mensagem", [{ ...base, tipo: "callback", callbackData: "inad:2:2026-10" }]);
+    expect(cliqueOutubro.json).toMatchObject({ rota: "inadimplencia", competencia: "2026-10", pagina: 2 });
+  });
+
+  it("busca 10 por página na API B2C e apresenta todos os 18 itens em duas páginas com botão só na primeira", async () => {
+    const api = no(TG_LEITURA, "API: página de inadimplentes");
+    expect(api.parameters).toMatchObject({ method: "GET", authentication: "genericCredentialType" });
+    expect(api.parameters.url).toContain("/receivables/delinquency{{ $json.competencia ? '?competence='");
+    expect(api.parameters.queryParameters.parameters).toEqual([
+      { name: "page", value: "={{ $json.pagina }}" }, { name: "pageSize", value: "10" },
+    ]);
+    const headers = Object.fromEntries(api.parameters.headerParameters.parameters.map((h: any) => [h.name, h.value]));
+    expect(headers["X-B2C-Source"]).toBe("telegram");
+    expect(headers["X-B2C-Identity"]).toBe("={{ $json.identityId }}");
+    const todos = Array.from({ length: 18 }, (_, i) => ({ client: { name: i === 0 ? "Cliente <A>" : `Cliente ${i + 1}` }, overdueAmount: 100 + i, billingCount: 1, daysOverdue: i + 1 }));
+    const meta = { asOf: "2026-09-29", scope: { kind: "all_open" }, totals: { clients: 18, billings: 19, overdueAmount: 28440 } };
+    const [primeira] = await executar("Formatar página de inadimplentes", [{ success: true, data: todos.slice(0, 10), meta }], { chatId: 42, pagina: 1 });
+    const [segunda] = await executar("Formatar página de inadimplentes", [{ success: true, data: todos.slice(10), meta }], { chatId: 42, pagina: 2 });
+    expect(primeira.json.nextPage).toBe(2);
+    expect(primeira.json.nextCallbackData).toBe("inad:2");
+    expect(segunda.json.nextPage).toBeNull();
+    expect(primeira.json.text).toContain("Cliente &lt;A&gt;");
+    expect(primeira.json.text).not.toContain("Cliente 11");
+    expect(segunda.json.text).toContain("Cliente 18");
+    expect(segunda.json.text).not.toContain("Cliente 1 —");
+    for (const pagina of [primeira, segunda]) {
+      expect(pagina.json.text).toContain("18 clientes");
+      expect(pagina.json.text).toContain("19 cobranças vencidas");
+      expect(pagina.json.text).toContain("28.440,00");
+      expect(pagina.json.text).toContain("29/09/2026");
+    }
+    const enviar = no(TG_LEITURA, "Telegram: enviar página de inadimplentes");
+    expect(enviar.parameters.replyMarkup).toContain("$json.nextPage ? 'inlineKeyboard' : 'none'");
+    expect(enviar.parameters.inlineKeyboard.rows[0].row.buttons[0]).toMatchObject({ text: "Ver mais", additionalFields: { callback_data: "={{ $json.nextCallbackData }}" } });
+    const [periodoErrado] = await executar("Formatar página de inadimplentes", [{ success: true, data: [], meta }], { chatId: 42, pagina: 1, competencia: "2026-10" });
+    expect(periodoErrado.json.text).toContain("período diferente");
+    const [comPeriodo] = await executar("Formatar página de inadimplentes", [{ success: true, data: todos.slice(0, 10), meta: { ...meta, scope: { kind: "competence", competence: "2026-10" } } }], { chatId: 42, pagina: 1, competencia: "2026-10" });
+    expect(comPeriodo.json.nextCallbackData).toBe("inad:2:2026-10");
+  });
+});
+
 describe("WhatsApp preservado", () => {
   it("os agentes do WhatsApp mantêm as mesmas ferramentas (sem a nova)", () => {
     for (const f of ["b2c-finance-ai-agent-readonly.json", "b2c-finance-ai-agent.json"]) {
@@ -86,9 +160,9 @@ describe("WhatsApp preservado", () => {
 describe("descrições e prompt", () => {
   it("consultar_recebimentos: DELINQUENT não é toda a inadimplência; vazio vale só para a janela; aponta a ferramenta certa", () => {
     const d = no(TG_LEITURA, "consultar_recebimentos").parameters.toolDescription as string;
-    expect(d).toContain("DELINQUENT (SÓ as escaladas manualmente — não é toda a inadimplência)");
-    expect(d).toContain("NÃO use para \"quem está inadimplente\"");
-    expect(d).toContain("Lista vazia vale SÓ para a janela consultada");
+    expect(d).toContain("DELINQUENT (só escaladas manualmente)");
+    expect(d).toContain("NÃO use para 'quem está inadimplente'");
+    expect(d).toContain("Lista vazia vale só para meta.window");
     expect(d).toContain("consultar_inadimplencia");
     expect(no(TG_LEITURA, "consultar_rotina").parameters.toolDescription).toContain("nunca a use como lista completa de inadimplentes");
   });
@@ -102,7 +176,7 @@ describe("descrições e prompt", () => {
         "Resultado vazio vale só para o recorte consultado",
         "Erro ou consulta incompleta → diga que não conseguiu consultar, nunca \"zero\"",
         "Sempre informe o recorte e a data da posição",
-        "nunca some só a página para dar o total",
+        "nunca some só a página",
         "nunca da base de conhecimento nem da memória da conversa",
         "é a fila de trabalho do dia",
       ]) expect(p, trecho).toContain(trecho);

@@ -347,6 +347,7 @@ const ROTAS: Record<OperacaoDoAgente, () => Promise<(req: Request, r?: any) => P
   "clients.update": async () => (await import("@/app/api/v1/clients/[id]/route")).PATCH,
   "client_status.change": async () => (await import("@/app/api/v1/clients/[id]/status-changes/route")).POST,
   "payments.register": async () => (await import("@/app/api/v1/receivables/[id]/payments/route")).POST,
+  "receivables.remove_from_month": async () => (await import("@/app/api/v1/receivables/[id]/remove-from-month/route")).POST,
   "expenses.create": async () => (await import("@/app/api/v1/expenses/route")).POST,
   "expenses.update": async () => (await import("@/app/api/v1/expenses/[id]/route")).PATCH,
   "expenses.pay": async () => (await import("@/app/api/v1/expenses/[id]/pay/route")).POST,

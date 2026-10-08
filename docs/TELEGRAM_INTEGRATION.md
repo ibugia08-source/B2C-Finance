@@ -2,8 +2,7 @@
 
 Guia para colocar o agente do B2C Finance no Telegram, numa instância real do n8n. Vale para quem for fazer a implantação (pessoa ou agente de código).
 
-- **O que já está pronto no repositório:** a API, a tela de vínculos e os workflows, **todos desativados**.
-- **O que falta:** criar o bot, as credenciais no n8n, importar, testar e ativar.
+- **O que já está pronto no repositório:** a API, a tela de vínculos e os workflows exportados com `active: false`. A publicação real de cada workflow deve ser conferida no n8n; o estado do JSON não indica o estado da instância.
 - **Referência técnica** (como cada parte funciona): [`docs/TELEGRAM.md`](TELEGRAM.md).
 - **Checklist de release:** [`docs/AI_AGENT_RELEASE_CHECKLIST.md`](AI_AGENT_RELEASE_CHECKLIST.md), seção Telegram.
 
@@ -37,10 +36,10 @@ WhatsApp ─┘                         └→ Qdrant (conhecimento, nunca dado 
 | 12 | Testar os relatórios | [7](#7-relatórios-diários) |
 | 13 | Ativar os relatórios | [7](#7-relatórios-diários) |
 | 14 | Importar o agente com escrita | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
-| 15 | Testar a escrita controlada | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
-| 16 | Desativar o somente leitura | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
-| 17 | Ativar o agente com escrita | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
-| 18 | Manter o somente leitura importado, para rollback | [9](#9-rollback) |
+| 15 | Validar estrutura, credenciais e fluxos simulados com o agente ainda desativado | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
+| 16 | Desativar o somente leitura e ativar o agente com escrita | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
+| 17 | Testar a escrita controlada ponta a ponta e verificar a trilha | [8](#8-agente-com-escrita-substitui-o-somente-leitura) |
+| 18 | Manter o somente leitura importado e desativado, para rollback | [9](#9-rollback) |
 
 ---
 
@@ -62,12 +61,13 @@ Opcional, no BotFather: `/setdescription` e `/setcommands` com `start`, `help` e
 
 ### 2.1 Credenciais
 
-Crie as quatro credenciais **com estes nomes exatos**. Os workflows referenciam as credenciais pelo nome, com ids placeholder (`CONFIGURAR_…`), então nenhum id de outra instância impede a importação.
+Crie as quatro credenciais do agente somente leitura e a quinta credencial exclusiva do agente com escrita **com estes nomes exatos**. Os workflows referenciam as credenciais pelo nome, com ids placeholder (`CONFIGURAR_…`), então nenhum id de outra instância impede a importação.
 
 | Nome da credencial | Tipo no n8n | O que preencher |
 |---|---|---|
 | `Telegram Bot` | Telegram API | **Access Token** = o Bot Token. Base URL: deixe o padrão (`https://api.telegram.org`). |
 | `B2C Finance API` | Header Auth | **Name** = `Authorization`; **Value** = `Bearer ` + o token da integração (passo 3.1). |
+| `B2C Finance API — escrita Telegram` | Header Auth | Mesmo cabeçalho, mas com token de uma integração **separada** com os scopes de leitura, integração e escrita. Vincule apenas ao agente com escrita. Preserve `B2C Finance API` para o fallback somente leitura. |
 | `OpenAI` | OpenAI | A chave do provedor do modelo. |
 | `Qdrant (conhecimento)` | Qdrant API | **URL** e **API Key** do Qdrant do passo 4. |
 
@@ -106,7 +106,7 @@ Configurações → Integrações → **API** → Nova integração.
 
 - **Scopes de leitura:** `clients.read`, `client_status.read`, `receivables.read`, `expenses.read`, `cash.read`, `upsells.read`, `dashboard.read`, `routine.read`, `reports.read`.
 - **Integração:** `identities.resolve`, `knowledge.read`.
-- **Escrita (só para o agente com escrita):** `agent_actions.manage`, `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
+- **Escrita (só para o agente com escrita):** `agent_actions.manage`, `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `receivables.remove_from_month`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
 - O token aparece **uma vez**: copie direto para a credencial "B2C Finance API".
 - **Como validar:** o teste de conexão (passo 5) chama `/health` e `/me` e diz se falta algum scope.
 
@@ -177,7 +177,7 @@ A identidade é o **Telegram User ID** (um número, ex.: `123456789`). O @userna
 4. **No privado com o bot:**
    - `/start`, `/help`, `/status`;
    - "Quanto recebemos hoje?", "Qual nosso MRR?", "Explique MRR e TCV.";
-   - "Liste os clientes inadimplentes": a resposta deve dizer a posição de hoje e o total de clientes e valor, **iguais aos da tela Inadimplência**; se a lista for parcial, deve dizer quantos são no total;
+   - "Liste os clientes inadimplentes": a primeira página traz até 10 clientes, a data da posição, o total de clientes, cobranças e valor, **iguais aos da tela Inadimplência**. Se houver mais, toque em **Ver mais** até a última página; cada clique consulta a API novamente com o vínculo e as permissões atuais, e nenhuma página é apresentada como lista completa antes do fim;
    - um nome de cliente ambíguo (o agente deve perguntar qual);
    - uma mensagem num grupo com o bot (só a orientação de usar o privado);
    - `/start` de alguém sem vínculo (só o ID, nenhum dado).
@@ -194,10 +194,11 @@ A identidade é o **Telegram User ID** (um número, ex.: `123456789`). O @userna
 
 ## 8. Agente com escrita (substitui o somente leitura)
 
-1. Na integração, acrescente os **scopes de escrita** (passo 3.1) e rode o teste de conexão de novo: "Ações com confirmação: OK".
-2. Importe `b2c-finance-telegram-agent.json` e ligue as credenciais. **Não ative ainda.**
-3. **Troca:** desative o somente leitura e, em seguida, ative o com escrita. A ativação registra o webhook dele (mensagens **e** botões) no lugar do anterior.
-4. **Teste logo após ativar**, com uma cobrança de teste:
+1. Crie uma **nova** integração para o agente com escrita, com os 11 scopes de leitura/integração e os 12 scopes de escrita (incluindo `receivables.remove_from_month`). Mantenha a integração somente leitura inalterada. Copie o token diretamente para a credencial `B2C Finance API — escrita Telegram` no n8n; não o salve no repositório nem no chat. Execute uma **cópia** do teste de conexão apontada para essa credencial: "Ações com confirmação: OK". Preserve o teste e a credencial do agente somente leitura.
+2. Importe `b2c-finance-telegram-agent.json` como **novo workflow desativado**. Ligue a credencial nova em todos os nós HTTP da API; Telegram Bot, OpenAI e Qdrant podem usar as credenciais existentes. Confira que nenhum nó HTTP do agente completo usa a credencial somente leitura. Salve sem publicar.
+3. Valide o grafo e as permissões com entradas simuladas antes da troca: consultas, `Ver mais`, prévia, cancelamento, confirmação duplicada, acesso negado e falha da API. O bot real só entrega updates ao workflow cujo webhook está ativo; `Test workflow` no agente desativado não prova o caminho Telegram ponta a ponta enquanto o bot usa o webhook do somente leitura.
+4. **Troca controlada:** registre o ID e a versão dos dois workflows. Desative o somente leitura e, em seguida, publique/ative o com escrita. A ativação registra o webhook dele (mensagens **e** botões) no lugar do anterior. Deixe pronto o rollback da seção 9.
+5. **Teste logo após ativar**, com registros explicitamente marcados como teste:
    - "A <cliente de teste> pagou <valor> hoje." → prévia com **[Confirmar] [Cancelar]**; confira que nada foi gravado;
    - **Cancelar** → "Cancelado. Nada foi alterado.";
    - peça de novo → **Confirmar** → resultado real na própria mensagem, sem os botões;
@@ -207,8 +208,12 @@ A identidade é o **Telegram User ID** (um número, ex.: `123456789`). O @userna
    - "Registre uma despesa de R$ 350 do Canva" (o agente pergunta o que faltar);
    - "Exclua <cliente>" → recusa, sem prévia;
    - um usuário de perfil restrito pedindo o caixa → "Você não possui permissão…".
-5. Confira em **Atividades**: `agent_actions.propose`, `agent_actions.confirm` e a escrita (ex.: `payments.register`) com origem Telegram e o nome da pessoa.
-6. Se algo sair errado, faça o rollback (seção 9).
+6. Confira em **Atividades**: `agent_actions.propose`, `agent_actions.confirm` e a escrita (ex.: `payments.register`) com origem Telegram e o nome da pessoa.
+7. Se algo sair errado, faça o rollback (seção 9).
+
+**Cenário isolado quando não há dados de teste:** use uma instância de homologação separada, se disponível. Uma etiqueta `TESTE` em cliente/cobrança da produção **não** isola métricas, inadimplência, relatórios ou auditoria. Sem homologação, valide no ambiente real primeiro somente leitura, prévia e cancelamento (sem confirmar); crie um cliente/cobrança sintéticos em produção e confirme uma transação apenas depois de revisar explicitamente o impacto, o modo de desfazer e a trilha que permanecerá. Não use cliente ou cobrança reais como substitutos de teste.
+
+**Roteiro mínimo sem homologação:** peça pelo bot a proposta de cadastrar `TESTE AGENTE TELEGRAM 2026-09-29` como **prospecção**, sem CPF/CNPJ, contato, contrato, valor ou cobrança, com nota `Registro sintético para validar o agente Telegram; não é cliente real`. Revise a prévia e toque primeiro em **Cancelar**: o nome não deve aparecer na carteira e a atividade deve registrar somente proposta e cancelamento. Uma segunda proposta pode testar o botão **Confirmar**, mas isso cria um registro na produção e exige revisão explícita antes do toque; depois confira o cliente e a idempotência. Testes de pagamento, despesa paga ou cobrança dependem de uma cobrança/conta sintética própria e de revisão separada, pois alteram os números financeiros e deixam trilha de auditoria.
 
 ## 9. Rollback
 

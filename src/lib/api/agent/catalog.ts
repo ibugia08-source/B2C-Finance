@@ -56,6 +56,11 @@ export const OPERACOES_DE_ESCRITA = {
     method: "POST", path: "/receivables/{id}/payments", target: "receivable",
     pergunta: "Deseja registrar?", feito: "Pagamento registrado",
   },
+  "receivables.remove_from_month": {
+    risk: "WRITE_CONFIRMATION", tool: "remover_cobranca_do_mes", scope: "receivables.remove_from_month",
+    method: "POST", path: "/receivables/{id}/remove-from-month", target: "receivable",
+    pergunta: "Deseja remover esta cobrança deste mês?", feito: "Cobrança removida do mês",
+  },
   "expenses.create": {
     risk: "WRITE_CONFIRMATION", tool: "criar_despesa", scope: "expenses.create",
     method: "POST", path: "/expenses", target: null,

@@ -25,9 +25,10 @@
       "risk": "WRITE_CONFIRMATION",
       "scope": "clients.create",
       "target": null,
-      "description": "PROPÕE o cadastro de um cliente novo (não grava: gera a prévia que o usuário confirma). Antes, use buscar_clientes para ver se ele já existe. Só preencha o que o usuário disse.",
+      "description": "PROPÕE o cadastro de um cliente novo (não grava: gera a prévia que o usuário confirma). Antes, use buscar_clientes para ver se ele já existe. Se o usuário não definiu se é prospect/lead ou ativo MRR/TCV, PERGUNTE antes de chamar. MRR exige valor mensal e dia de pagamento; TCV exige valor total, prazo e data de entrada. Prospect/lead explícito aceita só nome e initialStatus. Só preencha o que o usuário disse.",
       "input": {
         "name": { "type": "string", "description": "Nome do cliente (obrigatório)." },
+        "initialStatus": { "type": "string", "description": "ACTIVE para cliente ativo; LEAD ou PROSPECT somente se o usuário pedir lead/prospecção. Para LEAD/PROSPECT não invente modalidade ou contrato." },
         "legalName": { "type": "string", "description": "Razão social." },
         "document": { "type": "string", "description": "CNPJ ou CPF." },
         "email": { "type": "string", "description": "E-mail." },
@@ -97,6 +98,18 @@
         "notes": { "type": "string", "description": "Observação." }
       },
       "required": ["amount"]
+    },
+    {
+      "name": "remover_cobranca_do_mes",
+      "operation": "receivables.remove_from_month",
+      "risk": "WRITE_CONFIRMATION",
+      "scope": "receivables.remove_from_month",
+      "target": { "type": "receivable", "description": "Id exato da cobrança não paga, obtido em consultar_recebimentos com clientId e competence." },
+      "description": "PROPÕE remover apenas uma cobrança não paga de uma competência aberta. Primeiro identifique o cliente e consulte as cobranças da competência pedida; se houver mais de uma, pergunte qual. Peça o motivo antes de propor. Nunca escolha cobrança paga, parcialmente paga, renegociada ou já removida. Não exclui cliente, contrato nem pagamento.",
+      "input": {
+        "reason": { "type": "string", "description": "Motivo da remoção informado pelo usuário, obrigatório; não invente." }
+      },
+      "required": ["reason"]
     },
     {
       "name": "criar_despesa",

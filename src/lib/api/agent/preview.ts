@@ -11,6 +11,9 @@ import { ApiError } from "../auth";
 import { ClientCreateBody, ClientPatchBody, StatusChangeBody, entradaDoCadastro } from "../v1/clients-write";
 import { ClientInputSchema } from "@/lib/services/client-service";
 import { PaymentBody } from "../v1/payments-write";
+import { RemoveReceivableBody } from "../v1/receivables-remove";
+import { assertPeriodAllows } from "@/lib/services/closing-period";
+import { toCompetence } from "@/lib/competence";
 import { ExpenseCreateBody, ExpensePatchBody, ExpensePayBody } from "../v1/expenses-write";
 import { UpsellCreateBody, UpsellPatchBody } from "../v1/upsells-write";
 import type { OperacaoDoAgente } from "./catalog";
@@ -48,6 +51,7 @@ export const CORPO_DA_OPERACAO: Record<OperacaoDoAgente, z.ZodTypeAny> = {
   "clients.update": ClientPatchBody,
   "client_status.change": StatusChangeBody,
   "payments.register": PaymentBody,
+  "receivables.remove_from_month": RemoveReceivableBody,
   "expenses.create": ExpenseCreateBody,
   "expenses.update": ExpensePatchBody,
   "expenses.pay": ExpensePayBody,
@@ -258,6 +262,43 @@ const PREVIEWS: Record<OperacaoDoAgente, Montador> = {
       rotulo: cob.client.name, valor: b.amount,
       // A data do preview é a da execução (não "hoje" de quando confirmar).
       payload: { ...b, paidAt },
+    };
+  },
+
+  async "receivables.remove_from_month"(_ctx, id, b: z.output<typeof RemoveReceivableBody>) {
+    const cob = await prisma.billing.findFirst({
+      where: { id: id! },
+      select: {
+        id: true, status: true, amount: true, paidTotal: true, description: true,
+        competenceYear: true, competenceMonth: true, dueDate: true, updatedAt: true,
+        payments: { where: { status: "CONFIRMED" }, select: { id: true }, take: 1 },
+        applications: { select: { id: true }, take: 1 },
+        client: { select: { name: true } },
+      },
+    });
+    if (!cob) throw naoEncontrado("Cobrança");
+    if (cob.status === "CANCELED") throw estadoInvalido("Esta cobrança já foi removida do mês.");
+    if (cob.status === "RENEGOTIATED") throw estadoInvalido("Cobrança renegociada não pode ser removida por esta ação.");
+    if (cob.status !== "PENDING" && cob.status !== "OVERDUE") throw estadoInvalido("Somente cobranças em aberto e sem pagamento podem ser removidas.");
+    if (Number(cob.paidTotal) > 0 || cob.payments.length || cob.applications.length) {
+      throw estadoInvalido("Esta cobrança tem pagamento registrado. Verifique o recebimento no B2C Finance antes de removê-la.");
+    }
+    const periodo = await assertPeriodAllows("REVENUE_RECOGNIZED", toCompetence(cob.competenceYear, cob.competenceMonth));
+    if (!periodo.ok) throw new ApiError(422, "competence_closed", periodo.error);
+    return {
+      titulo: "Encontrei:",
+      linhas: [
+        `*${cob.client.name}*`,
+        `Cobrança: ${cob.description}`,
+        `Competência: ${competencia(cob.competenceYear, cob.competenceMonth)}`,
+        `Valor: ${reais(cob.amount)}`,
+        `Vencimento: ${formatDateBR(cob.dueDate)}`,
+        `Recebido: ${reais(cob.paidTotal)}`,
+        `Motivo: ${b.reason}`,
+        "Apenas esta cobrança sairá do mês; cliente, contrato e histórico serão preservados.",
+      ],
+      estado: { status: cob.status, amount: Number(cob.amount), paidTotal: Number(cob.paidTotal), updatedAt: cob.updatedAt.toISOString() },
+      rotulo: cob.client.name, valor: Number(cob.amount), payload: b,
     };
   },
 

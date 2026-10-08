@@ -136,7 +136,7 @@ A validade é de 10 minutos, ajustável com `B2C_PENDING_ACTION_TTL_MINUTES` (1 
 1. **Importe** `b2c-finance-ai-agent.json`. O webhook é `/webhook/b2c-finance-ai-agent-v2`; o somente leitura continua em `/webhook/b2c-finance-ai-agent`. Só um deles deve estar ligado ao número da Meta.
 2. **Na integração** (Configurações → Integrações), além dos scopes de leitura e de `identities.resolve`, marque:
    - `agent_actions.manage`;
-   - os scopes de escrita que o agente pode usar: `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
+   - os scopes de escrita que o agente pode usar: `clients.create`, `clients.update`, `client_status.write`, `receivables.register_payment`, `receivables.remove_from_month`, `expenses.create`, `expenses.update`, `expenses.pay`, `upsells.create`, `upsells.update`, `routine.write`.
 
    O teste de conexão mostra `faltandoParaEscrita`.
 3. **Credenciais e variáveis** são as mesmas do agente somente leitura (`integrations/n8n/README.md`), mais a credencial "Qdrant (conhecimento)" da base de conhecimento (`docs/AI_AGENT_KNOWLEDGE.md`). O prompt do agente vive em `docs/AI_AGENT_SYSTEM_PROMPT.md`.

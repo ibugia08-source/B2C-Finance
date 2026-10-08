@@ -475,7 +475,7 @@ describe("agente com escrita controlada", () => {
     const leitura = wf.nodes.filter((n: any) => n.type === "@n8n/n8n-nodes-langchain.toolHttpRequest");
     const escritaNos = wf.nodes.filter((n: any) => n.type === "n8n-nodes-base.httpRequestTool");
     expect(leitura).toHaveLength(11);
-    expect(escritaNos).toHaveLength(10);
+    expect(escritaNos).toHaveLength(cat.tools.length);
     for (const n of leitura) expect(n.parameters.method, n.name).toBe("GET");
     for (const t of cat.tools) {
       const n = no(t.name);
@@ -794,7 +794,7 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
   it("fluxo: gatilho → normalizar → dedupe → privado? → Telegram User ID → API → permissões → roteiro → agente → formatar → enviar", () => {
     const prox = (n: string, saida = 0) => wf.connections[n].main[saida][0].node;
     expect(no(wf, "Telegram: receber mensagem").type).toBe("n8n-nodes-base.telegramTrigger");
-    expect(no(wf, "Telegram: receber mensagem").parameters.updates).toEqual(["message"]);
+    expect(no(wf, "Telegram: receber mensagem").parameters.updates).toEqual(["message", "callback_query"]);
     expect(prox("Telegram: receber mensagem")).toBe("Normalizar update");
     expect(prox("Normalizar update")).toBe("Deduplicar update (update_id)");
     expect(prox("Deduplicar update (update_id)")).toBe("Chat privado?");
@@ -804,6 +804,11 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     expect(prox("Extrair Telegram User ID")).toBe("API: resolver identidade");
     expect(prox("API: resolver identidade")).toBe("Carregar permissões");
     expect(prox("Carregar permissões")).toBe("Roteiro da mensagem");
+    expect(prox("Roteiro da mensagem")).toBe("Pediu lista de inadimplentes?");
+    expect(wf.connections["Pediu lista de inadimplentes?"].main[0].map((x: any) => x.node)).toEqual(["É clique em Ver mais?", "API: página de inadimplentes"]);
+    expect(prox("Pediu lista de inadimplentes?", 1)).toBe("Pediu pagamentos recebidos hoje?");
+    expect(prox("Pediu pagamentos recebidos hoje?", 0)).toBe("API: relatório diário para recebidos");
+    expect(prox("Pediu pagamentos recebidos hoje?", 1)).toBe("Vai para o agente?");
     expect(prox("Vai para o agente?", 0)).toBe("Montar contexto do agente");
     expect(prox("Vai para o agente?", 1)).toBe("Formatar para o Telegram");
     expect(prox("AI Agent B2C Finance (Telegram, somente leitura)")).toBe("Juntar resposta e contexto");
@@ -837,9 +842,9 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     const conh = no(wf, "consultar_conhecimento");
     expect(conh.parameters).toMatchObject({ mode: "retrieve-as-tool" });
     expect(conh.parameters.qdrantCollection.value).toBe(pacote.collection);
-    // HTTP fora das ferramentas: só a resolução de identidade.
+    // HTTP fora das ferramentas: identidade e página de inadimplentes, ambos na API B2C.
     for (const n of wf.nodes.filter((x: any) => x.type === "n8n-nodes-base.httpRequest")) {
-      expect(n.parameters.url).toBe("={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity");
+      expect(["={{ $env.B2C_FINANCE_API_URL }}/integrations/resolve-identity", "={{ $env.B2C_FINANCE_API_URL }}/receivables/delinquency{{ $json.competencia ? '?competence=' + encodeURIComponent($json.competencia) : '' }}", "={{ $env.B2C_FINANCE_API_URL }}/reports/daily?date={{ encodeURIComponent($json.dataConsulta) }}"]).toContain(n.parameters.url);
     }
     const texto = JSON.stringify(wf.nodes.filter((n: any) => n.type !== "n8n-nodes-base.stickyNote").map((n: any) => ({ ...n, notes: undefined, parameters: { ...n.parameters, options: { ...(n.parameters?.options ?? {}), systemMessage: undefined } } }))).toLowerCase();
     for (const proibido of ["supabase", "prisma", "postgres", "database_url", "agent/pending-actions", "/payments", "status-changes"]) {
@@ -929,12 +934,11 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     expect(falha.json.text).toBe("Não consegui concluir essa consulta agora. A tentativa foi registrada.");
   });
 
-  it("limite do Telegram: divide por parágrafo em 'Parte i/n' (≤ 4096), no máximo 4 partes, sem cortar no meio da palavra", async () => {
+  it("limite do Telegram: divide por parágrafo em 'Parte i/n' (≤ 4096), sem truncar nem cortar palavras", async () => {
     const paragrafo = (i: number) => `Cliente ${i}: ` + "palavra ".repeat(60).trim();
     const longo = Array.from({ length: 40 }, (_, i) => paragrafo(i)).join("\n\n");
     const partes = await rodar("Formatar para o Telegram", [{ chatId: 9, output: longo }]);
     expect(partes.length).toBeGreaterThan(1);
-    expect(partes.length).toBeLessThanOrEqual(4);
     partes.forEach((p: any, i: number) => {
       expect(p.json.chatId).toBe(9);
       expect(p.json.text.length).toBeLessThanOrEqual(4096);
@@ -944,9 +948,10 @@ describe("Telegram: agente somente leitura e teste de conexão", () => {
     expect(todas).toContain("Cliente 0: palavra");
     expect(todas).not.toMatch(/palavr\n|palav$/);
     const muitoLongo = Array.from({ length: 200 }, (_, i) => paragrafo(i)).join("\n\n");
-    const cortado = await rodar("Formatar para o Telegram", [{ chatId: 9, output: muitoLongo }]);
-    expect(cortado).toHaveLength(4);
-    expect(cortado[3].json.text).toContain("peça um recorte menor");
+    const completo = await rodar("Formatar para o Telegram", [{ chatId: 9, output: muitoLongo }]);
+    expect(completo.length).toBeGreaterThan(4);
+    expect(completo.map((p: any) => p.json.text).join("\n")).toContain("Cliente 199: palavra");
+    expect(completo.map((p: any) => p.json.text).join("\n")).not.toContain("peça um recorte menor");
     // Uma linha só, gigante, sem espaço: ainda assim respeita o limite.
     const linhaUnica = await rodar("Formatar para o Telegram", [{ chatId: 9, output: "x".repeat(9000) }]);
     for (const p of linhaUnica) expect(p.json.text.length).toBeLessThanOrEqual(4096);
