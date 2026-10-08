@@ -19,6 +19,7 @@ export type WriteOperation = {
  */
 export const API_WRITE_OPERATIONS = {
   "payments.register": { scope: "receivables.register_payment", label: "Pagamento registrado", entityType: "Billing" },
+  "receivables.remove_from_month": { scope: "receivables.remove_from_month", label: "Cobrança removida do mês", entityType: "Billing" },
   "clients.create": { scope: "clients.create", label: "Cliente cadastrado", entityType: "Client" },
   "expenses.create": { scope: "expenses.create", label: "Despesa lançada", entityType: "Transaction" },
   "expenses.pay": { scope: "expenses.pay", label: "Despesa marcada como paga", entityType: "Transaction" },

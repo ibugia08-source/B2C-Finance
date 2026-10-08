@@ -38,6 +38,15 @@ const T = {
   resolver: "API: resolver identidade",
   permissoes: "Carregar permissões",
   roteiro: "Roteiro da mensagem",
+  listaInad: "Pediu lista de inadimplentes?",
+  callbackInad: "É clique em Ver mais?",
+  responderCallbackInad: "Telegram: confirmar Ver mais",
+  apiInad: "API: página de inadimplentes",
+  formatarInad: "Formatar página de inadimplentes",
+  enviarInad: "Telegram: enviar página de inadimplentes",
+  recebidosHoje: "Pediu pagamentos recebidos hoje?",
+  apiRecebidosHoje: "API: relatório diário para recebidos",
+  formatarRecebidosHoje: "Formatar pagamentos recebidos hoje",
   vaiAgente: "Vai para o agente?",
   contexto: "Montar contexto do agente",
   agente: "AI Agent B2C Finance (Telegram, somente leitura)",
@@ -54,17 +63,72 @@ const T = {
   registrar: "Registrar falha da API",
 };
 
+// Consultas de inadimplência ficam fora da IA: competência e paginação não
+// podem depender da memória do modelo. "Não pagaram" é ambíguo (em aberto
+// inclui parcelas ainda não vencidas), portanto pede o recorte ao usuário.
+const JS_CLASSIFICAR_INADIMPLENCIA = String.raw`
+  const pergunta = m.text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const pedeLista = /\b(?:list\w*|quais|quem|mostr\w*|exib\w*|relacion\w*)\b/.test(pergunta);
+  if (pedeLista && /\b(?:nao pagaram|ainda nao pag\w*|sem pagamento)\b/.test(pergunta)) {
+    return responder('Você quer as cobranças em aberto do mês (inclusive as que ainda vão vencer) ou só os clientes inadimplentes, com cobranças já vencidas? Informe também o mês e ano se quiser um período específico.');
+  }
+  if (pedeLista && /\b(?:inadimplent\w*|devendo|devedores)\b/.test(pergunta)) {
+    if (!(m.allowedTools || []).includes('consultar_inadimplencia')) return responder('Você não possui permissão para acessar essa informação.');
+    const hoje = ${JS_HOJE};
+    const anoAtual = Number(hoje.slice(0, 4));
+    const mesAtual = Number(hoje.slice(5, 7));
+    const nomes = ['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const mesNome = nomes.findIndex((nome) => new RegExp('\\b' + nome + '\\b').test(pergunta));
+    const mesNumerico = /\b(20\d{2})[-/](0?[1-9]|1[0-2])\b/.exec(pergunta);
+    const anoExplicito = /\b20\d{2}\b/.exec(pergunta);
+    let competencia = null;
+    if (mesNumerico) competencia = mesNumerico[1] + '-' + mesNumerico[2].padStart(2, '0');
+    else if (mesNome >= 0) competencia = String(anoExplicito ? Number(anoExplicito[0]) : anoAtual) + '-' + String(mesNome + 1).padStart(2, '0');
+    else if (/\bmes passado\b/.test(pergunta)) competencia = new Date(Date.UTC(anoAtual, mesAtual - 2, 1)).toISOString().slice(0, 7);
+    else if (/\b(?:mes que vem|proximo mes)\b/.test(pergunta)) competencia = new Date(Date.UTC(anoAtual, mesAtual, 1)).toISOString().slice(0, 7);
+    else if (/\b(?:este mes|mes atual)\b/.test(pergunta)) competencia = hoje.slice(0, 7);
+    else if (/\b(?:no mes|do mes|em um mes)\b/.test(pergunta)) return responder('Qual mês e ano você quer consultar? Exemplo: setembro de 2026.');
+    return { json: { ...m, rota: 'inadimplencia', pagina: 1, competencia } };
+  }
+`;
+
+// Esta pergunta financeira precisa de um fato contábil, não de interpretação
+// da IA: vencimentos do dia não são pagamentos efetivamente confirmados.
+const JS_CLASSIFICAR_RECEBIDOS_HOJE = String.raw`
+  const pRecebidos = m.text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/\b(?:quanto\s+(?:recebemos|entrou)|pagamentos?\s+recebidos?|recebimentos?\s+confirmados?)\s+hoje\b/.test(pRecebidos)) {
+    if (!(m.allowedTools || []).includes('gerar_relatorio_diario')) return responder('Você não possui permissão para acessar essa informação.');
+    return { json: { ...m, rota: 'recebidos_hoje', dataConsulta: ${JS_HOJE} } };
+  }
+`;
+
 // ---------------------------------------------------------------------------
 // Código dos nós
 // ---------------------------------------------------------------------------
 
-export const JS_NORMALIZAR = `// ETAPA 1 — Normalizar o update do Telegram em UMA mensagem por item.
-// Só "message" (texto ou não). Outros updates (edições, posts de canal,
-// callbacks) não chegam aqui: o gatilho escuta só "message".
+export const JS_NORMALIZAR = `// ETAPA 1 — Normalizar mensagem ou clique em Ver mais.
+// A identidade de ambos é sempre o Telegram User ID (from.id).
 const COMANDOS = ['/start', '/help', '/status'];
 const saida = [];
 for (const item of $input.all()) {
   const u = item.json || {};
+  if (u.callback_query) {
+    const cq = u.callback_query;
+    const de = cq.from || null;
+    const msg = cq.message || null;
+    saida.push({ json: {
+      updateId: u.update_id,
+      messageId: 'tg:cb:' + cq.id,
+      callbackQueryId: String(cq.id),
+      callbackData: typeof cq.data === 'string' ? cq.data.slice(0, 64) : '',
+      chatId: msg && msg.chat ? msg.chat.id : null,
+      chatType: msg && msg.chat ? String(msg.chat.type || '') : '',
+      fromId: de && !de.is_bot && de.id ? String(de.id) : null,
+      isBot: !!(de && de.is_bot),
+      tipo: 'callback', text: '', comando: null,
+    } });
+    continue;
+  }
   const m = u.message;
   if (!m || !m.chat) continue;
   const de = m.from || null;
@@ -194,8 +258,16 @@ return $input.all().map((item) => {
   if (m.comando === '/status') {
     return responder('*B2C Finance conectado*\\nUsuário: ' + m.userName + '\\nPerfil: ' + (m.roleLabel || '—'));
   }
+  if (m.tipo === 'callback') {
+    const botao = /^inad:(\\d{1,3})(?::(20\\d{2}-(?:0[1-9]|1[0-2])))?$/.exec(m.callbackData || '');
+    if (!botao || Number(botao[1]) < 2 || Number(botao[1]) > 100) return responder('Este botão não está mais disponível. Peça a lista novamente.');
+    if (!(m.allowedTools || []).includes('consultar_inadimplencia')) return responder('Você não possui permissão para acessar essa informação.');
+    return { json: { ...m, rota: 'inadimplencia', pagina: Number(botao[1]), competencia: botao[2] || null } };
+  }
   if (m.comando === 'desconhecido') return responder('Comando não reconhecido. Mande /help para ver o que eu faço.');
   if (m.tipo !== 'text' || !m.text.trim()) return responder('Por enquanto eu entendo só mensagens de texto. Pode escrever a sua pergunta?');
+  ${JS_CLASSIFICAR_INADIMPLENCIA}
+  ${JS_CLASSIFICAR_RECEBIDOS_HOJE}
   return { json: { ...m, rota: 'agente' } };
 });`;
 
@@ -225,6 +297,63 @@ const html = (s) => esc(s)
   .replace(/\\*([^*\\n]+)\\*/g, '<b>$1</b>')
   .replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');`;
 
+/** Página de inadimplência montada com dados da API, sem resumir pela IA. */
+export const JS_FORMATAR_INADIMPLENTES = `// Um clique consulta a API novamente com o vínculo e as permissões atuais.
+${JS_HTML}
+const ctxs = $('${T.roteiro}').all();
+const dinheiro = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+return $input.all().map((item, i) => {
+  const ctx = (ctxs[i] || ctxs[0] || {}).json || {};
+  const r = item.json || {};
+  const base = { chatId: ctx.chatId, nextPage: null };
+  if (r.success !== true || !Array.isArray(r.data) || !r.meta || !r.meta.totals) {
+    return { json: { ...base, text: 'Não consegui consultar a inadimplência agora. Tente novamente em alguns minutos.' } };
+  }
+  const meta = r.meta;
+  const totais = meta.totals;
+  const pagina = Number(ctx.pagina) || 1;
+  const tamanho = 10;
+  const paginas = Math.max(1, Math.ceil(Number(totais.clients || 0) / tamanho));
+  if (pagina > paginas) return { json: { ...base, text: 'A lista mudou desde a página anterior. Peça a lista novamente.' } };
+  const data = /^\\d{4}-\\d{2}-\\d{2}$/.test(meta.asOf || '')
+    ? meta.asOf.slice(8, 10) + '/' + meta.asOf.slice(5, 7) + '/' + meta.asOf.slice(0, 4)
+    : 'hoje';
+  const competencia = ctx.competencia || null;
+  if ((meta.scope && meta.scope.competence || null) !== competencia) {
+    return { json: { ...base, text: 'A API devolveu um período diferente do solicitado. Nenhuma lista foi enviada. Tente novamente.' } };
+  }
+  const recorte = competencia ? 'cobranças de ' + competencia + ' vencidas hoje' : 'todas as competências';
+  const linhas = [
+    '<b>Clientes inadimplentes</b> — posição de ' + esc(data) + ' (' + esc(recorte) + ')',
+    '<b>' + Number(totais.clients || 0) + ' clientes</b>, ' + Number(totais.billings || 0) + ' cobranças vencidas, <b>' + dinheiro(totais.overdueAmount) + '</b> em aberto.',
+  ];
+  if (!r.data.length) linhas.push('Nenhum cliente nesta página.');
+  for (let n = 0; n < r.data.length; n++) {
+    const c = r.data[n];
+    const nome = c && c.client && c.client.name ? c.client.name : 'Cliente sem nome';
+    linhas.push((pagina - 1) * tamanho + n + 1 + '. ' + esc(nome) + ' — ' + dinheiro(c.overdueAmount) + ' (' + Number(c.billingCount || 0) + ' cobrança(s), ' + Number(c.daysOverdue || 0) + ' dia(s) de atraso)');
+  }
+  linhas.push('Página ' + pagina + '/' + paginas + ' · ' + Math.min(pagina * tamanho, Number(totais.clients || 0)) + ' de ' + Number(totais.clients || 0) + ' clientes.');
+  return { json: { ...base, text: linhas.join('\\n'), nextPage: pagina < paginas ? pagina + 1 : null, nextCallbackData: pagina < paginas ? 'inad:' + (pagina + 1) + (competencia ? ':' + competencia : '') : null } };
+});`;
+
+export const JS_FORMATAR_RECEBIDOS_HOJE = `// O total vem de pagamentos CONFIRMADOS no dia, não das cobranças vencendo.
+const mensagens = $('${T.roteiro}').all();
+const dinheiro = (n) => Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+return $input.all().map((item, i) => {
+  const m = (mensagens[i] || mensagens[0] || {}).json || {};
+  const r = item.json || {};
+  const data = String(m.dataConsulta || '');
+  const dataBr = /^\\d{4}-\\d{2}-\\d{2}$/.test(data) ? data.slice(8, 10) + '/' + data.slice(5, 7) + '/' + data.slice(0, 4) : 'hoje';
+  const recebidos = r.success === true && r.data && r.data.date === data && r.data.receivables && r.data.receivables.received;
+  if (Array.isArray(r.meta && r.meta.omittedSections) && r.meta.omittedSections.includes('receivables'))
+    return { json: { chatId: m.chatId, texto: 'Você não possui permissão para consultar pagamentos recebidos.' } };
+  if (!recebidos || typeof recebidos.amount !== 'number' || !Number.isFinite(recebidos.amount) ||
+      typeof recebidos.count !== 'number' || !Number.isInteger(recebidos.count) || recebidos.count < 0)
+    return { json: { chatId: m.chatId, texto: 'Não consegui consultar os pagamentos confirmados de ' + dataBr + ' agora. Tente novamente em alguns minutos.' } };
+  return { json: { chatId: m.chatId, texto: 'Em ' + dataBr + ', recebemos ' + dinheiro(recebidos.amount) + ' em ' + Number(recebidos.count) + ' pagamento(s) confirmado(s), segundo o relatório diário do B2C Finance. Cobranças apenas com vencimento hoje não entram nesse valor.' } };
+});`;
+
 /**
  * SAÍDA SEGURA PARA O TELEGRAM (HTML).
  *  · TODO texto é escapado (&, <, >) ANTES de virar HTML: nada que venha da
@@ -232,8 +361,8 @@ const html = (s) => esc(s)
  *  · depois, só negrito (entre um ou dois asteriscos) → <b> e `código` → <code>;
  *  · limite do Telegram: 4096 caracteres por mensagem. Quebra por parágrafo,
  *    depois por linha, depois no espaço (medindo DEPOIS do escape, sem partir
- *    emoji); ordem preservada, nada repetido; no agente, no máximo 4 partes
- *    ("Parte 1/3") com aviso; nos relatórios, até 10 (sem truncar na prática);
+ *    emoji); ordem preservada, nada repetido; respostas do agente são enviadas
+ *    integralmente em partes ("Parte 1/3"); os relatórios mantêm o limite próprio;
  *  · sem texto (erro do modelo/ferramenta) → mensagem neutra, sem detalhe técnico.
  */
 export const jsFormatar = (maxPartes = 4) => `// ETAPA 8 — Formatar para o Telegram (HTML seguro + divisão em partes).
@@ -289,17 +418,17 @@ return $input.all().flatMap((item) => {
   let texto = typeof j.texto === 'string' ? j.texto : j.output;
   if (typeof texto !== 'string' || !texto.trim()) texto = FALHA;
   let partes = partir(semTabela(texto.trim()));
-  if (partes.length > MAX_PARTES) {
+  ${maxPartes > 0 ? `if (partes.length > MAX_PARTES) {
     partes = partes.slice(0, MAX_PARTES);
     partes[MAX_PARTES - 1] += '\\n\\n(Resposta longa — peça um recorte menor para ver o resto.)';
-  }
+  }` : ''}
   return partes.map((p, i) => ({
     json: { chatId: j.chatId, falhaApi: j.falhaApi === true, text: (partes.length > 1 ? '<i>Parte ' + (i + 1) + '/' + partes.length + '</i>\\n' : '') + html(p) },
   }));
 });`;
 
-/** Agente: até 4 partes (resposta de chat longa demais pede recorte). */
-export const JS_FORMATAR = jsFormatar(4);
+/** Agente: não cortar respostas; o Telegram recebe todas as partes. */
+export const JS_FORMATAR = jsFormatar(0);
 
 // ---------------------------------------------------------------------------
 // Nós do Telegram
@@ -350,6 +479,29 @@ const enviarTelegram = (nome, pos, chatId = "={{ $json.chatId }}") => ({
   notesInFlow: true,
 });
 
+const enviarPaginaInadimplentes = (nome, pos) => {
+  const no = enviarTelegram(nome, pos);
+  no.parameters.replyMarkup = "={{ $json.nextPage ? 'inlineKeyboard' : 'none' }}";
+  no.parameters.inlineKeyboard = { rows: [{ row: { buttons: [{
+    text: "Ver mais",
+    additionalFields: { callback_data: "={{ $json.nextCallbackData }}" },
+  }] } }] };
+  no.notes = "Página da API com botão Ver mais apenas quando houver próxima página.";
+  return no;
+};
+
+const confirmarPaginaInadimplentes = (nome, pos) => ({
+  parameters: { resource: "callback", operation: "answerQuery", queryId: "={{ $json.callbackQueryId }}", additionalFields: { text: "Buscando a próxima página…" } },
+  name: nome,
+  type: "n8n-nodes-base.telegram",
+  typeVersion: 1.2,
+  position: pos,
+  credentials: CRED_TELEGRAM,
+  onError: "continueRegularOutput",
+  notes: "Encerra a animação do botão; a página chega em uma nova mensagem.",
+  notesInFlow: true,
+});
+
 // ---------------------------------------------------------------------------
 // Agente somente leitura
 // ---------------------------------------------------------------------------
@@ -361,7 +513,19 @@ const ferramentas = ferramentasTG.map((t, i) => ({
 const scopesLeitura = [...new Set([...ferramentasTG.map((t) => t.scope), "identities.resolve"])].sort();
 
 const contextoDoPrompt =
-  "\n\n## Contexto desta conversa\n- Canal: Telegram (conversa privada)\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)";
+  "\n\n## Contexto desta conversa\n- Canal: Telegram (conversa privada)\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)\n\n## Regra específica do Telegram para listas (prevalece sobre o formato geral)\nQuando a pessoa pedir uma lista, não substitua os itens por um resumo dos principais. Apresente todos os itens obtidos e consulte as páginas seguintes quando a API indicar mais páginas. Se a consulta não puder ser concluída, diga explicitamente quantos itens faltam; nunca chame a parte recebida de lista completa. A lista de inadimplentes usa um fluxo próprio com botão Ver mais, totais e data diretamente da API.";
+
+const apiPaginaInadimplentes = apiDeControle(T.apiInad, "GET", "/receivables/delinquency", [1760, -260], "Página atual de inadimplência, com identidade e RBAC revalidados.", { fonte: "telegram" });
+const apiRecebidosHoje = apiDeControle(T.apiRecebidosHoje, "GET", "/reports/daily", [1800, 500], "Pagamentos confirmados no dia; não confundir com vencimentos.", { fonte: "telegram" });
+apiRecebidosHoje.parameters.url = "={{ $env.B2C_FINANCE_API_URL }}/reports/daily?date={{ encodeURIComponent($json.dataConsulta) }}";
+// O n8n pode serializar um parâmetro vazio como competence=, que a API
+// rejeita. Só acrescentar competence à URL quando houver mês explícito.
+apiPaginaInadimplentes.parameters.url = "={{ $env.B2C_FINANCE_API_URL }}/receivables/delinquency{{ $json.competencia ? '?competence=' + encodeURIComponent($json.competencia) : '' }}";
+apiPaginaInadimplentes.parameters.sendQuery = true;
+apiPaginaInadimplentes.parameters.queryParameters = { parameters: [
+  { name: "page", value: "={{ $json.pagina }}" },
+  { name: "pageSize", value: "10" },
+] };
 
 const agenteLeitura = {
   name: "B2C Finance · Telegram · AI Agent (somente leitura)",
@@ -386,7 +550,7 @@ const agenteLeitura = {
       `### 6–8 · Agente e resposta\nDados atuais: GET na API (ferramentas). Conceitos: \`consultar_conhecimento\` (Qdrant) — nunca número atual. Se o Qdrant cair, só essa ferramenta falha; as consultas à API seguem.\nSaída em **HTML** com escape de todo conteúdo dinâmico, dividida em partes (limite de 4096 do Telegram).`,
       [1900, 160], 1300, 1100, 6
     ),
-    gatilhoTelegram(T.gatilho, "b2c-finance-telegram-agent-readonly", [0, 300]),
+    gatilhoTelegram(T.gatilho, "b2c-finance-telegram-agent-readonly", [0, 300], ["message", "callback_query"]),
     code(T.normalizar, JS_NORMALIZAR, [200, 300], "Update → uma mensagem (id, chat, tipo, comando)."),
     code(T.dedupe, JS_DEDUPE, [400, 300], "Mesmo update_id não é processado duas vezes."),
     se(T.privado, "={{ $json.chatType === 'private' && !!$json.fromId }}", [600, 300], "Só conversa privada, com pessoa (não bot)."),
@@ -401,6 +565,15 @@ const agenteLeitura = {
     }),
     code(T.permissoes, JS_PERMISSOES, [1200, 300], "Ferramentas = scopes que a API liberou para o usuário."),
     code(T.roteiro, JS_ROTEIRO, [1400, 300], "Não vinculado, /start, /help, /status: sem IA."),
+    se(T.listaInad, "={{ $json.rota === 'inadimplencia' }}", [1600, 300], "Lista sem mês: página da API, sem resumo pela IA."),
+    se(T.callbackInad, "={{ $json.tipo === 'callback' }}", [1800, -420], "O clique recebe confirmação imediata."),
+    confirmarPaginaInadimplentes(T.responderCallbackInad, [2000, -420]),
+    apiPaginaInadimplentes,
+    code(T.formatarInad, JS_FORMATAR_INADIMPLENTES, [1980, -260], "Todos os itens desta página, totais e data da API."),
+    enviarPaginaInadimplentes(T.enviarInad, [2200, -260]),
+    se(T.recebidosHoje, "={{ $json.rota === 'recebidos_hoje' }}", [1700, 500], "Recebidos hoje: relatório diário, sem inferência da IA."),
+    apiRecebidosHoje,
+    code(T.formatarRecebidosHoje, JS_FORMATAR_RECEBIDOS_HOJE, [2000, 500], "Somente pagamentos confirmados; vencimentos não contam."),
     se(T.vaiAgente, "={{ $json.rota === 'agente' }}", [1600, 300], "Pergunta de verdade → agente; o resto já tem resposta."),
     code(T.contexto, JS_CONTEXTO, [1800, 240], "Sessão, data de hoje e ferramentas do usuário."),
     {
@@ -445,7 +618,17 @@ const agenteLeitura = {
     [T.extrair]: { main: [[{ node: T.resolver, type: "main", index: 0 }]] },
     [T.resolver]: { main: [[{ node: T.permissoes, type: "main", index: 0 }]] },
     [T.permissoes]: { main: [[{ node: T.roteiro, type: "main", index: 0 }]] },
-    [T.roteiro]: { main: [[{ node: T.vaiAgente, type: "main", index: 0 }]] },
+    [T.roteiro]: { main: [[{ node: T.listaInad, type: "main", index: 0 }]] },
+    [T.listaInad]: { main: [[
+      { node: T.callbackInad, type: "main", index: 0 },
+      { node: T.apiInad, type: "main", index: 0 },
+    ], [{ node: T.recebidosHoje, type: "main", index: 0 }]] },
+    [T.recebidosHoje]: { main: [[{ node: T.apiRecebidosHoje, type: "main", index: 0 }], [{ node: T.vaiAgente, type: "main", index: 0 }]] },
+    [T.apiRecebidosHoje]: { main: [[{ node: T.formatarRecebidosHoje, type: "main", index: 0 }]] },
+    [T.formatarRecebidosHoje]: { main: [[{ node: T.formatar, type: "main", index: 0 }]] },
+    [T.callbackInad]: { main: [[{ node: T.responderCallbackInad, type: "main", index: 0 }], []] },
+    [T.apiInad]: { main: [[{ node: T.formatarInad, type: "main", index: 0 }]] },
+    [T.formatarInad]: { main: [[{ node: T.enviarInad, type: "main", index: 0 }]] },
     [T.vaiAgente]: { main: [[{ node: T.contexto, type: "main", index: 0 }], [{ node: T.formatar, type: "main", index: 0 }]] },
     [T.contexto]: { main: [[{ node: T.agente, type: "main", index: 0 }]] },
     [T.agente]: { main: [[{ node: T.juntar, type: "main", index: 0 }]] },
@@ -613,7 +796,13 @@ const RESPOSTA_A_ACAO = /^\\s*(?:sim|s|confirmo|confirmar|confirma|ok|pode|pode 
 return $input.all().map((item) => {
   const m = item.json;
   const responder = (texto) => ({ json: { ...m, rota: 'responder', texto } });
-  if (m.tipo === 'callback') return { json: { ...m, rota: 'botao' } };
+  if (m.tipo === 'callback') {
+    const pagina = /^inad:(\\d{1,3})(?::(20\\d{2}-(?:0[1-9]|1[0-2])))?$/.exec(m.callbackData || '');
+    if (m.authorized && pagina && Number(pagina[1]) >= 2 && Number(pagina[1]) <= 100 && (m.allowedTools || []).includes('consultar_inadimplencia')) {
+      return { json: { ...m, rota: 'inadimplencia', pagina: Number(pagina[1]), competencia: pagina[2] || null } };
+    }
+    return { json: { ...m, rota: 'botao' } };
+  }
   if (!m.authorized) {
     if (m.motivo === 'numero_nao_vinculado') {
       return responder('Olá! Seu Telegram ainda não está vinculado ao B2C Finance.\\n\\nSeu identificador Telegram é:\\n*' + m.fromId + '*\\n\\nSolicite a um administrador que vincule este ID ao seu usuário no B2C Finance.');
@@ -642,19 +831,22 @@ return $input.all().map((item) => {
   if (m.comando === 'desconhecido') return responder('Comando não reconhecido. Mande /help para ver o que eu faço.');
   if (m.tipo !== 'text' || !m.text.trim()) return responder('Por enquanto eu entendo só mensagens de texto. Pode escrever o seu pedido?');
   if (RESPOSTA_A_ACAO.test(m.text)) return { json: { ...m, rota: 'resposta_em_texto' } };
+  ${JS_CLASSIFICAR_INADIMPLENCIA}
+  ${JS_CLASSIFICAR_RECEBIDOS_HOJE}
   return { json: { ...m, rota: 'agente' } };
 });`;
 
 export const JS_DECIDIR_TEXTO = `// "sim"/"não" digitado: com ação AGUARDANDO, reenvia a prévia com os botões
 // (a confirmação é pelo toque — nunca por texto solto). Sem ação aguardando,
-// é conversa normal e segue para o agente.
+// responde de modo determinístico, sem enviar uma palavra solta à IA.
 ${JS_HTML}
 const msgs = $('${W.roteiro}').all();
 return $input.all().map((item, i) => {
   const m = (msgs[i] || msgs[0]).json;
   const r = item.json || {};
+  if (r.success !== true || !Array.isArray(r.data)) return { json: { ...m, pendente: false, falhaApi: true, texto: 'Não consegui verificar se há uma ação aguardando. Tente novamente em alguns minutos; nenhuma ação foi confirmada por esta mensagem.' } };
   const acao = r.success === true && Array.isArray(r.data) ? r.data.find((a) => a.status === 'PENDING') : null;
-  if (!acao) return { json: { ...m, pendente: false } };
+  if (!acao) return { json: { ...m, pendente: false, texto: 'Não há ação aguardando confirmação. Para alterar algo, faça um novo pedido; a confirmação só vale pelo botão na prévia.' } };
   return {
     json: {
       pendente: true,
@@ -768,7 +960,13 @@ return $input.all().map((item, i) => {
   if (proposta && (proposta.message || proposta.preview)) {
     return { json: { comPrevia: true, chatId: ctx.chatId, actionId: proposta.actionId, text: html(proposta.message || proposta.preview) } };
   }
-  return { json: { comPrevia: false, chatId: ctx.chatId, output: ctx.output } };
+  // A IA pode afirmar que criou uma prévia sem ter chamado a API. Sem ação
+  // PENDING oficial, nunca entregue uma afirmação de que há botões ou ação.
+  const saida = typeof ctx.output === 'string' ? ctx.output : '';
+  const afirmaPrevia = /(?:preparei|pronta|criada|dispon[ií]vel|segue|enviei).{0,100}(?:pr[eé]via|confirma[cç][aã]o|bot[oõ]es)|(?:pr[eé]via|confirma[cç][aã]o).{0,100}(?:abaixo|acima|bot[oõ]es)/i.test(saida);
+  const afirmaEscrita = /\b(?:executei|cadastrei|registrei|gravei|atualizei|conclu[ií]|j[aá] fiz|foi feito)\b/i.test(saida);
+  const erroConsulta = r.success !== true || !Array.isArray(r.data);
+  return { json: { comPrevia: false, chatId: ctx.chatId, output: erroConsulta || afirmaPrevia || afirmaEscrita ? 'Não consegui preparar ou verificar a prévia desta ação. Nada foi alterado. Refaça o pedido; se persistir, confira no B2C Finance.' : saida } };
 });`;
 
 const enviarPrevia = (nome, pos) => ({
@@ -854,7 +1052,10 @@ const scopesEscritaTg = [
 ].sort();
 
 const contextoDoPromptEscrita =
-  "\n\n## Contexto desta conversa\n- Canal: Telegram (conversa privada)\n- Confirmação: a prévia oficial vai com os botões Confirmar e Cancelar; o usuário TOCA no botão (não existe código para digitar no Telegram)\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)";
+  "\n\n## Contexto desta conversa\n- Canal: Telegram (conversa privada)\n- Confirmação: a prévia oficial vai com os botões Confirmar e Cancelar; o usuário TOCA no botão (não existe código para digitar no Telegram)\n- Usuário (vínculo verificado pela API): {{ $json.userName }} — {{ $json.roleLabel }}\n- Ferramentas liberadas para este usuário: {{ $json.allowedTools.join(', ') }}\n- Base de conhecimento: consultar_conhecimento (conceitos e procedimentos; nunca dados atuais)\n- Hoje: {{ $json.hoje }} (competência atual {{ $json.competenciaAtual }}, fuso America/Bahia)\n\n## Regra específica do Telegram para listas (prevalece sobre o formato geral)\nQuando a pessoa pedir uma lista, não substitua os itens por um resumo dos principais. Apresente todos os itens obtidos e consulte as páginas seguintes quando a API indicar mais páginas. Se a consulta não puder ser concluída, diga explicitamente quantos itens faltam; nunca chame a parte recebida de lista completa. A lista de inadimplentes usa um fluxo próprio com botão Ver mais, totais e data diretamente da API.";
+
+const apiPaginaInadimplentesEscrita = { ...apiPaginaInadimplentes, position: [1820, 900] };
+const apiRecebidosHojeEscrita = { ...apiRecebidosHoje, position: [1820, 1080] };
 
 const conecta = (de, para, saida = 0) => ({ de, para, saida });
 const ligacoes = [
@@ -875,10 +1076,18 @@ const ligacoes = [
   conecta(W.rota, W.formatar, 1),
   conecta(W.rota, W.interpretarBotao, 2),
   conecta(W.rota, W.pendenteTexto, 3),
+  conecta(W.rota, W.callbackInad, 4),
+  conecta(W.rota, W.apiInad, 4),
+  conecta(W.callbackInad, W.responderCallbackInad, 0),
+  conecta(W.apiInad, W.formatarInad),
+  conecta(W.formatarInad, W.enviarInad),
+  conecta(W.rota, W.apiRecebidosHoje, 5),
+  conecta(W.apiRecebidosHoje, W.formatarRecebidosHoje),
+  conecta(W.formatarRecebidosHoje, W.formatar),
   conecta(W.pendenteTexto, W.decidirTexto),
   conecta(W.decidirTexto, W.temPendente),
   conecta(W.temPendente, W.enviarPrevia, 0),
-  conecta(W.temPendente, W.contexto, 1),
+  conecta(W.temPendente, W.formatar, 1),
   conecta(W.interpretarBotao, W.botaoValido),
   conecta(W.botaoValido, W.consultarAcao, 0),
   conecta(W.botaoValido, W.respostaBotao, 1),
@@ -959,10 +1168,17 @@ const agenteEscrita = {
     }),
     code(W.permissoes, JS_PERMISSOES_ESCRITA, [1200, 300], "Ferramentas = scopes que a API liberou para o usuário."),
     code(W.roteiro, JS_ROTEIRO_ESCRITA, [1400, 300], "Não vinculado, botões, comandos, sim/não digitado."),
-    switchPor(W.rota, "rota", ["agente", "responder", "botao", "resposta_em_texto"], [1600, 300], "0 agente · 1 responder · 2 botão · 3 sim/não digitado"),
+    switchPor(W.rota, "rota", ["agente", "responder", "botao", "resposta_em_texto", "inadimplencia", "recebidos_hoje"], [1600, 300], "0 agente · 1 responder · 2 confirmar/cancelar · 3 sim/não digitado · 4 inadimplentes · 5 pagamentos recebidos"),
+    se(W.callbackInad, "={{ $json.tipo === 'callback' }}", [1820, 740], "O clique em Ver mais recebe confirmação imediata."),
+    confirmarPaginaInadimplentes(W.responderCallbackInad, [2040, 740]),
+    apiPaginaInadimplentesEscrita,
+    code(W.formatarInad, JS_FORMATAR_INADIMPLENTES, [2040, 900], "Todos os itens desta página, totais e data da API."),
+    enviarPaginaInadimplentes(W.enviarInad, [2260, 900]),
+    apiRecebidosHojeEscrita,
+    code(W.formatarRecebidosHoje, JS_FORMATAR_RECEBIDOS_HOJE, [2040, 1080], "Somente pagamentos confirmados; vencimentos não contam."),
     apiDeControle(W.pendenteTexto, "GET", "/agent/pending-actions?status=PENDING&limit=1", [1820, 700], "Há ação aguardando este usuário?", { fonte: "telegram" }),
     code(W.decidirTexto, JS_DECIDIR_TEXTO, [2040, 700], "Com ação aguardando: reenvia a prévia com botões."),
-    se(W.temPendente, "={{ $json.pendente === true }}", [2240, 700], "Sim → prévia com botões; não → agente."),
+    se(W.temPendente, "={{ $json.pendente === true }}", [2240, 700], "Sim → prévia com botões; não → aviso sem IA."),
     code(W.interpretarBotao, JS_INTERPRETAR_BOTAO, [1820, -300], "confirm:<id> / cancel:<id> — só referência."),
     se(W.botaoValido, "={{ $json.valido === true }}", [2020, -300], "Formato e vínculo ok?"),
     apiDeControle(W.consultarAcao, "GET", "/agent/pending-actions/{{ $json.actionId }}", [2220, -380], "A ação é deste usuário? Qual o estado? (API)", { fonte: "telegram" }),
@@ -1014,7 +1230,7 @@ const agenteEscrita = {
     code(W.interpretar, JS_INTERPRETAR_ESCRITA, [2660, 300], "Prévia da API (com botões) quando houve proposta."),
     se(W.temPrevia, "={{ $json.comPrevia === true }}", [2860, 300], "Proposta → prévia com botões; senão, texto."),
     enviarPrevia(W.enviarPrevia, [3100, 160]),
-    code(W.formatar, JS_FORMATAR, [3100, 460], "HTML seguro + partes (limite do Telegram)."),
+    code(W.formatar, JS_FORMATAR, [3100, 460], "HTML seguro + partes (limite do Telegram), sem truncar a resposta."),
     enviarTelegram(W.enviar, [3320, 460]),
     se(W.falhaApi, "={{ $node['Formatar para o Telegram'].json.falhaApi === true }}", [3540, 460], "O aviso era de API fora do ar?"),
     registrarFalha(W.registrar, [3760, 460]),
@@ -1049,6 +1265,15 @@ const agenteEscrita = {
   },
   tags: [],
 };
+
+// A versão com escrita recebe uma integração própria. O agente somente leitura
+// conserva sua credencial de 11 scopes para servir de fallback real.
+const CRED_B2C_ESCRITA = { id: "CONFIGURAR_B2C_FINANCE_API_ESCRITA", name: "B2C Finance API — escrita Telegram" };
+for (const no of agenteEscrita.nodes) {
+  if (no.credentials?.httpHeaderAuth?.name === CRED_B2C.httpHeaderAuth.name) {
+    no.credentials = { ...no.credentials, httpHeaderAuth: CRED_B2C_ESCRITA };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Teste de conexão do Telegram (manual): API, identidade, Qdrant → mensagem

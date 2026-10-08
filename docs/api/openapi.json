@@ -4,7 +4,7 @@
     "title": "B2C Finance API",
     "version": "1.0.0",
     "summary": "API V1 do B2C Finance: leitura e escritas controladas (contas de serviço com scopes).",
-    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, routine.write, reports.read, identities.resolve, knowledge.read, agent_actions.manage.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas e Idempotency-Key\nA V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por `POST /clients/{id}/status-changes`, com data de vigência. Toda escrita exige o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Quem está falando (delegação)\nPara agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em `POST /integrations/resolve-identity` e manda o `identityId` em `X-B2C-Identity`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.\n\n## Ações do agente com confirmação\nO agente (Telegram ou WhatsApp) não escreve direto: propõe em `POST /agent/pending-actions` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — \"SIM <código>\" no WhatsApp, botão Confirmar no Telegram — e a integração chama `POST /agent/pending-actions/{id}/confirm` com `Idempotency-Key: wa:<messageId>:<actionId>` ou `telegram:<update_id>:<actionId>`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
+    "description": "API oficial do B2C Finance para integrações (n8n, agente de WhatsApp).\n\n## Versionamento\nA versão está no caminho: `/api/v1`. Mudanças incompatíveis (remover campo, mudar significado) só em `/api/v2`; campos novos podem surgir na v1 — ignore os que não conhece.\n\n## Autenticação e dono dos dados\n- `Authorization: Bearer YOUR_API_TOKEN` — token de uma **conta de serviço** criada em Configurações → Integrações. Cookie de sessão não vale.\n- O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.\n\n## Scopes\nToda rota exige um scope (`x-required-scope`). Sem ele: 403 `insufficient_scope`. Não existe curinga; exclusões físicas, usuários, permissões e reabertura de competência não são concedíveis. A remoção lógica de uma cobrança não paga do mês tem scope restrito próprio. Scopes: clients.read, clients.create, clients.update, client_status.read, client_status.write, receivables.read, receivables.register_payment, receivables.remove_from_month, expenses.read, expenses.create, expenses.update, expenses.pay, cash.read, upsells.read, upsells.create, upsells.update, dashboard.read, routine.read, routine.write, reports.read, identities.resolve, knowledge.read, agent_actions.manage.\n\n## Status temporal e competências\nO status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.\n\n## Escritas e Idempotency-Key\nA V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, remoção lógica de uma cobrança não paga do mês, despesa, upsell, rotina). Não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por `POST /clients/{id}/status-changes`, com data de vigência. Toda escrita exige o header **`Idempotency-Key`** (1–255 caracteres `A-Z a-z 0-9 . _ : -`; ex.: o id da mensagem do WhatsApp, `wa_message_3EB0C4…`):\n- a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header `Idempotent-Replayed: true` e `meta.idempotency.replayed = true`;\n- repetir enquanto a primeira ainda roda → 409 `idempotency_in_progress`; mesma chave com outros dados → 422 `idempotency_key_reused`; escrita sem a chave → 400 `idempotency_key_required`;\n- guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.\n\n## Quem está falando (delegação)\nPara agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em `POST /integrations/resolve-identity` e manda o `identityId` em `X-B2C-Identity`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.\n\n## Ações do agente com confirmação\nO agente (Telegram ou WhatsApp) não escreve direto: propõe em `POST /agent/pending-actions` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — \"SIM <código>\" no WhatsApp, botão Confirmar no Telegram — e a integração chama `POST /agent/pending-actions/{id}/confirm` com `Idempotency-Key: wa:<messageId>:<actionId>` ou `telegram:<update_id>:<actionId>`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Exclusão física, reabertura de competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.\n\n## Trilha de atividades\nToda chamada (exceto `/health`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (`X-B2C-Source`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.\n\n## Contrato\nSucesso: `{ success: true, data, meta: { requestId, generatedAt } }`. Erro: `{ success: false, error: { code, message }, meta: { requestId } }`. Dinheiro em reais (número, 2 casas); datas de calendário `AAAA-MM-DD`; instantes ISO 8601 UTC. Parâmetro desconhecido = 400. 120 req/min por IP."
   },
   "servers": [
     {
@@ -3165,6 +3165,133 @@
                     },
                     "data": {
                       "$ref": "#/components/schemas/PaymentResult"
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/Meta"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/receivables/{id}/remove-from-month": {
+      "post": {
+        "operationId": "removeReceivableFromMonth",
+        "tags": [
+          "Recebimentos"
+        ],
+        "summary": "Remover cobrança não paga do mês",
+        "description": "Cancela apenas a cobrança indicada, preservando cliente, contrato e histórico. Exige motivo, competência aberta e ausência de pagamentos; quitada, parcial, renegociada ou já removida retorna 422. Para o agente, requer prévia e confirmação por botão.\n\n**Scope obrigatório:** `receivables.remove_from_month`. **Idempotency-Key obrigatória.** Registrada em Atividades da IA/API e no AuditLog.",
+        "security": [
+          {
+            "bearerAuth": [
+              "receivables.remove_from_month"
+            ]
+          }
+        ],
+        "x-required-scope": "receivables.remove_from_month",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/Source"
+          },
+          {
+            "$ref": "#/components/parameters/Identity"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "description": "Motivo da remoção, obrigatório."
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              },
+              "example": {
+                "reason": "Cobrança emitida em duplicidade"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sucesso.",
+            "headers": {
+              "x-request-id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Mesmo valor de meta.requestId."
+              },
+              "Idempotent-Replayed": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                },
+                "description": "true = repetição devolvida da 1ª execução."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "const": true
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ReceivableDetail"
                     },
                     "meta": {
                       "$ref": "#/components/schemas/Meta"
@@ -7772,6 +7899,7 @@
                 "client_status.write",
                 "receivables.read",
                 "receivables.register_payment",
+                "receivables.remove_from_month",
                 "expenses.read",
                 "expenses.create",
                 "expenses.update",
@@ -7972,6 +8100,7 @@
               "clients.update",
               "client_status.change",
               "payments.register",
+              "receivables.remove_from_month",
               "expenses.create",
               "expenses.update",
               "expenses.pay",
@@ -7982,6 +8111,7 @@
               "editar_cliente",
               "alterar_status_cliente",
               "registrar_pagamento",
+              "remover_cobranca_do_mes",
               "criar_despesa",
               "editar_despesa",
               "marcar_despesa_paga",
@@ -8163,6 +8293,7 @@
                 "client_status.write",
                 "receivables.read",
                 "receivables.register_payment",
+                "receivables.remove_from_month",
                 "expenses.read",
                 "expenses.create",
                 "expenses.update",
@@ -8416,6 +8547,11 @@
         {
           "scope": "receivables.register_payment",
           "description": "Registrar pagamento",
+          "write": true
+        },
+        {
+          "scope": "receivables.remove_from_month",
+          "description": "Remover cobrança não paga do mês",
           "write": true
         }
       ]

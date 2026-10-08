@@ -77,7 +77,7 @@
     },
     {
       "name": "consultar_recebimentos",
-      "description": "Cobranças (recebimentos) de UMA JANELA: competence (padrão: o mês atual) OU dateFrom+dateTo (vencimento, até 400 dias). NÃO use para \"quem está inadimplente\" / \"quem deve\" / \"lista de inadimplentes\": para isso use consultar_inadimplencia (posição atual, todas as competências), se estiver entre as suas ferramentas; se não estiver, diga que não consegue trazer a lista completa por aqui. status aceita vários separados por vírgula: UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE (vencida), DELINQUENT (SÓ as escaladas manualmente — não é toda a inadimplência), PARTIAL, REMOVED, RENEGOTIATED, ou o atalho open (tudo que ainda tem saldo). Lista vazia vale SÓ para a janela consultada (meta.window) — nunca diga que não existe nada fora dela. meta.totals traz a soma do filtro inteiro (não some páginas); informe sempre a janela usada.",
+      "description": "Cobranças de UMA JANELA por competência ou DATA DE VENCIMENTO, não por data em que o pagamento entrou. NUNCA use para responder 'quanto recebemos hoje': use gerar_relatorio_diario → data.receivables.received. NÃO use para 'quem está inadimplente' / 'quem deve' / 'lista de inadimplentes': para isso use consultar_inadimplencia (posição atual, todas as competências), se estiver entre as suas ferramentas; se não estiver, diga que não consegue trazer a lista completa por aqui. status aceita UPCOMING, PAID, PAID_LATE, PAID_OTHER_MONTH, OVERDUE, DELINQUENT (só escaladas manualmente), PARTIAL, REMOVED, RENEGOTIATED ou open. Lista vazia vale só para meta.window. meta.totals soma o filtro inteiro; informe a janela.",
       "scope": "receivables.read",
       "http": { "method": "GET", "path": "/receivables", "query": ["clientId", "status", "competence", "dateFrom", "dateTo", "page", "pageSize"] },
       "inputSchema": {
@@ -168,7 +168,7 @@
     },
     {
       "name": "gerar_relatorio_diario",
-      "description": "Resumo de um dia: cobranças que vencem e pagamentos recebidos; despesas do dia e despesas pagas no dia; mudanças de status (com vigência no dia e registradas no dia); clientes com entrada e cadastrados no dia; upsells criados e vendidos no dia. Seções sem permissão vêm listadas em meta.omittedSections — diga que não tem acesso, nunca que é zero.",
+      "description": "Resumo de um dia. Para 'quanto recebemos hoje/no dia', use SOMENTE data.receivables.received (pagamentos CONFIRMADOS pelo paidAt), nunca data.receivables.dueToday (cobranças com vencimento no dia). Também traz despesas, status, clientes e upsells. Seções sem permissão vêm em meta.omittedSections — diga que não tem acesso, nunca que é zero.",
       "scope": "reports.read",
       "http": { "method": "GET", "path": "/reports/daily", "query": ["date"] },
       "inputSchema": {

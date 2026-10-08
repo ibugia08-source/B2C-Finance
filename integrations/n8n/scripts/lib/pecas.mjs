@@ -118,10 +118,17 @@ export function ferramentaDeEscrita(t, i, fonte = "whatsapp") {
   // Operação FIXA no corpo: a ferramenta não escolhe outra operação.
   const partes = [`operation: '${t.operation}'`];
   if (t.target) partes.push(`targetId: $fromAI('targetId', '${aspas(t.target.description)}', 'string')`);
+  // O parser `json` de $fromAI exige objeto/array NÃO VAZIO antes de a
+  // ferramenta chamar a API. No cadastro, o modelo entregava `{}` até com
+  // nome/valor/dia na mensagem; a execução morria sem chegar à validação que
+  // informa os campos faltantes. Um texto JSON permite à API validar o objeto
+  // e devolver os erros de negócio. As demais operações preservam o contrato.
   partes.push(
     semInput
       ? "input: {}"
-      : `input: $fromAI('input', '${aspas(`Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`)}', 'json')`
+      : t.name === "cadastrar_cliente" && fonte === "telegram"
+        ? `input: JSON.parse($fromAI('input', '${aspas(`Texto JSON de um objeto com name e apenas os campos ditos pelo usuário; nunca use objeto vazio, invente dados ou envie markdown. Campos: ${campos}.`)}', 'string'))`
+        : `input: $fromAI('input', '${aspas(`Objeto JSON só com os campos que o usuário informou. Campos: ${campos}.`)}', 'json')`
   );
   return {
     parameters: {

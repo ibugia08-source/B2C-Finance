@@ -46,6 +46,7 @@ export const API_SCOPE_GROUPS: ApiScopeGroup[] = [
     scopes: [
       { id: "receivables.read", label: "Ler cobranças e recebimentos" },
       { id: "receivables.register_payment", label: "Registrar pagamento", write: true },
+      { id: "receivables.remove_from_month", label: "Remover cobrança não paga do mês", write: true },
     ],
   },
   {
@@ -209,6 +210,7 @@ export const SCOPE_REQUIRES_PERMISSIONS: Readonly<Record<string, readonly string
   "client_status.write": ["clientes.alterar_status"],
   "receivables.read": ["recebimentos.visualizar"],
   "receivables.register_payment": ["recebimentos.registrar_pagamento"],
+  "receivables.remove_from_month": ["recebimentos.excluir"],
   "expenses.read": ["despesas.visualizar"],
   "expenses.create": ["despesas.criar"],
   "expenses.update": ["despesas.editar"],

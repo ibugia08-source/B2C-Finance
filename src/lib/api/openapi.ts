@@ -1002,6 +1002,13 @@ PATHS["/receivables/{id}/payments"] = writeOp({
   body: { schema: ref("PaymentCreate"), example: { amount: 1500, paidAt: "2026-09-28", method: "PIX" } },
   ok: sucesso(ref("PaymentResult")),
 });
+PATHS["/receivables/{id}/remove-from-month"] = writeOp({
+  method: "post", id: "removeReceivableFromMonth", tag: "Recebimentos", summary: "Remover cobrança não paga do mês", scope: "receivables.remove_from_month",
+  description: "Cancela apenas a cobrança indicada, preservando cliente, contrato e histórico. Exige motivo, competência aberta e ausência de pagamentos; quitada, parcial, renegociada ou já removida retorna 422. Para o agente, requer prévia e confirmação por botão.",
+  params: ID, okStatus: "200",
+  body: { schema: obj({ reason: str("Motivo da remoção, obrigatório.") }, ["reason"]), example: { reason: "Cobrança emitida em duplicidade" } },
+  ok: sucesso(ref("ReceivableDetail")),
+});
 Object.assign(
   PATHS["/expenses"],
   writeOp({
@@ -1199,13 +1206,13 @@ A versão está no caminho: \`/api/v1\`. Mudanças incompatíveis (remover campo
 - O **dono dos dados (ownerId) é inferido da conta de serviço**. A API **não aceita ownerId** em parâmetro, header ou corpo — não há como pedir dados de outro workspace. Registro de outro dono responde 404.
 
 ## Scopes
-Toda rota exige um scope (\`x-required-scope\`). Sem ele: 403 \`insufficient_scope\`. Não existe curinga; exclusões, usuários, permissões e reabertura de competência não são concedíveis. Scopes: ${API_SCOPES.join(", ")}.
+Toda rota exige um scope (\`x-required-scope\`). Sem ele: 403 \`insufficient_scope\`. Não existe curinga; exclusões físicas, usuários, permissões e reabertura de competência não são concedíveis. A remoção lógica de uma cobrança não paga do mês tem scope restrito próprio. Scopes: ${API_SCOPES.join(", ")}.
 
 ## Status temporal e competências
 O status do cliente tem **vigência** (histórico com início e fim). Listas mostram o status **da competência pedida** — do último dia do mês, ou de hoje no mês corrente. Mudar um cliente para Inativo em outubro **não** altera o que setembro mostra: competências históricas são preservadas. Nunca use o status atual para responder sobre um mês passado.
 
 ## Escritas e Idempotency-Key
-A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, despesa, upsell, rotina) e nenhuma operação destrutiva: não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por \`POST /clients/{id}/status-changes\`, com data de vigência. Toda escrita exige o header **\`Idempotency-Key\`** (1–255 caracteres \`A-Z a-z 0-9 . _ : -\`; ex.: o id da mensagem do WhatsApp, \`wa_message_3EB0C4…\`):
+A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigência, pagamento, remoção lógica de uma cobrança não paga do mês, despesa, upsell, rotina). Não há DELETE, reabertura de competência nem gestão de usuários/permissões. Status do cliente nunca muda por PATCH — só por \`POST /clients/{id}/status-changes\`, com data de vigência. Toda escrita exige o header **\`Idempotency-Key\`** (1–255 caracteres \`A-Z a-z 0-9 . _ : -\`; ex.: o id da mensagem do WhatsApp, \`wa_message_3EB0C4…\`):
 - a mesma integração + a mesma chave executa a operação **uma vez**; a repetição devolve a resposta original com o header \`Idempotent-Replayed: true\` e \`meta.idempotency.replayed = true\`;
 - repetir enquanto a primeira ainda roda → 409 \`idempotency_in_progress\`; mesma chave com outros dados → 422 \`idempotency_key_reused\`; escrita sem a chave → 400 \`idempotency_key_required\`;
 - guardam-se sucessos e recusas de regra (422) por 30 dias; erro de servidor libera a chave para nova tentativa.
@@ -1214,7 +1221,7 @@ A V1 tem escritas CONTROLADAS (cadastro/edição de cliente, status com vigênci
 Para agir em nome de uma pessoa (ex.: quem mandou a mensagem no WhatsApp), a integração resolve o número em \`POST /integrations/resolve-identity\` e manda o \`identityId\` em \`X-B2C-Identity\`. A API recorta os scopes pelo RBAC dessa pessoa e a registra como ator. O usuário vem do VÍNCULO cadastrado pelo administrador — nunca de um campo enviado pelo chamador ou pela IA.
 
 ## Ações do agente com confirmação
-O agente (Telegram ou WhatsApp) não escreve direto: propõe em \`POST /agent/pending-actions\` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — "SIM <código>" no WhatsApp, botão Confirmar no Telegram — e a integração chama \`POST /agent/pending-actions/{id}/confirm\` com \`Idempotency-Key: wa:<messageId>:<actionId>\` ou \`telegram:<update_id>:<actionId>\`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Excluir, reabrir competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.
+O agente (Telegram ou WhatsApp) não escreve direto: propõe em \`POST /agent/pending-actions\` (a API monta a prévia a partir do estado atual e guarda a ação), o usuário confirma — "SIM <código>" no WhatsApp, botão Confirmar no Telegram — e a integração chama \`POST /agent/pending-actions/{id}/confirm\` com \`Idempotency-Key: wa:<messageId>:<actionId>\` ou \`telegram:<update_id>:<actionId>\`. A execução usa a rota de escrita oficial, com o RBAC do usuário. Exclusão física, reabertura de competência, permissões, usuários e plano de contas são BLOQUEADOS para o agente.
 
 ## Trilha de atividades
 Toda chamada (exceto \`/health\`) fica registrada para o dono do workspace em Configurações → Integrações → Atividades: integração, origem (\`X-B2C-Source\`), ação, entidade, resultado e requestId — nunca token nem segredo. Consultas ficam 30 dias; ações, 400.

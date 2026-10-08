@@ -67,12 +67,13 @@ describe("formatação para o Telegram (HTML)", () => {
     }
   });
 
-  it("agente: no máximo 4 partes, com aviso; texto vazio → mensagem neutra", async () => {
+  it("agente somente leitura: envia todas as partes sem truncar; texto vazio → mensagem neutra", async () => {
     const enorme = Array.from({ length: 60 }, (_, i) => `Parágrafo ${i} ` + "x ".repeat(400)).join("\n\n");
-    const partes = await rodar(agente, "Formatar para o Telegram", [{ chatId: 1, output: enorme }]);
-    expect(partes).toHaveLength(4);
-    expect(partes[3].text).toContain("peça um recorte menor");
-    const [vazio] = await rodar(agente, "Formatar para o Telegram", [{ chatId: 1, output: "" }]);
+    const partes = await rodar(leitura, "Formatar para o Telegram", [{ chatId: 1, output: enorme }]);
+    expect(partes.length).toBeGreaterThan(4);
+    expect(partes.map((p) => p.text).join("\n")).toContain("Parágrafo 59");
+    expect(partes.map((p) => p.text).join("\n")).not.toContain("peça um recorte menor");
+    const [vazio] = await rodar(leitura, "Formatar para o Telegram", [{ chatId: 1, output: "" }]);
     expect(vazio.text).toBe("Não consegui concluir essa consulta agora. A tentativa foi registrada.");
   });
 });
@@ -157,7 +158,7 @@ describe("credenciais e expressões", () => {
       }
     }
     expect([...nomes].sort()).toEqual([
-      "httpHeaderAuth:B2C Finance API", "openAiApi:OpenAI", "qdrantApi:Qdrant (conhecimento)", "telegramApi:Telegram Bot",
+      "httpHeaderAuth:B2C Finance API", "httpHeaderAuth:B2C Finance API — escrita Telegram", "openAiApi:OpenAI", "qdrantApi:Qdrant (conhecimento)", "telegramApi:Telegram Bot",
     ]);
   });
 

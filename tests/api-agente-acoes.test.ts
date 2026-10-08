@@ -140,10 +140,10 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe("classificação de risco", () => {
-  it("10 escritas com confirmação, 8 bloqueadas, leituras diretas", () => {
+  it("11 escritas com confirmação, 8 bloqueadas, leituras diretas", () => {
     expect(Object.values(OPERACOES_DE_ESCRITA).map((o) => o.tool).sort()).toEqual([
       "alterar_status_cliente", "atualizar_upsell", "cadastrar_cliente", "concluir_acao_rotina", "criar_despesa",
-      "criar_upsell", "editar_cliente", "editar_despesa", "marcar_despesa_paga", "registrar_pagamento",
+      "criar_upsell", "editar_cliente", "editar_despesa", "marcar_despesa_paga", "registrar_pagamento", "remover_cobranca_do_mes",
     ]);
     for (const [op, o] of Object.entries(OPERACOES_DE_ESCRITA)) {
       expect(classificarRisco(op)).toBe("WRITE_CONFIRMATION");

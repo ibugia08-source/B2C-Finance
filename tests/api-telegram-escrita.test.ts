@@ -308,6 +308,39 @@ describe("Cenários C–E — status futuro, bloqueio, upsell, cadastro, despesa
     expect(await runWithoutScope(async () => await prisma.client.findUnique({ where: { id: c.id } }))).not.toBeNull();
   });
 
+  it("remove só a cobrança não paga do mês após prévia e toque do administrador", async () => {
+    const { clientId, billingId } = await cobrancaAberta("Remoção Mensal");
+    const outro = await createBilling(A, clientId, { month: MES, year: ANO, amount: 300, revenueType: "ONE_TIME", description: `Outra ${randomUUID()}` });
+    const semMotivo = await propor(idt.admin, { operation: "remover_cobranca_do_mes", targetId: billingId, input: {} });
+    expect(semMotivo.status).toBe(400);
+    const semPermissao = await propor(idt.financeiro, { operation: "remover_cobranca_do_mes", targetId: billingId, input: { reason: "Duplicada" } });
+    expect(semPermissao.status).toBe(403);
+
+    const p = await propor(idt.admin, { operation: "remover_cobranca_do_mes", targetId: billingId, input: { reason: "Cobrança duplicada" } });
+    expect(p.status, JSON.stringify(p.body)).toBe(201);
+    expect(p.body.data.preview).toContain(`Competência: `);
+    expect(p.body.data.preview).toContain("Motivo: Cobrança duplicada");
+    expect((await runWithoutScope(async () => prisma.billing.findUnique({ where: { id: billingId } })))?.status).not.toBe("CANCELED");
+
+    const confirmado = await tocarConfirmar(idt.admin, p.body.data.actionId);
+    expect(confirmado.body.data?.status, JSON.stringify(confirmado.body)).toBe("EXECUTED");
+    const removida = await runWithoutScope(async () => prisma.billing.findUnique({ where: { id: billingId } }));
+    expect(removida?.status).toBe("CANCELED");
+    expect(removida?.cancelReason).toBe("Cobrança duplicada");
+    expect((await runWithoutScope(async () => prisma.billing.findUnique({ where: { id: outro.id } })))?.status).not.toBe("CANCELED");
+    expect(await runWithoutScope(async () => prisma.payment.count({ where: { billingId } }))).toBe(0);
+    expect(await runWithoutScope(async () => prisma.collectionHistory.count({ where: { billingId, actionType: "REMOVED" } }))).toBe(1);
+    expect((await tocarConfirmar(idt.admin, p.body.data.actionId)).body.error.code).toBe("action_not_pending");
+  });
+
+  it("recusa remover uma cobrança com pagamento, inclusive antes da prévia", async () => {
+    const { billingId } = await cobrancaAberta("Parcial Não Remover");
+    await runWithoutScope(async () => prisma.billing.update({ where: { id: billingId }, data: { status: "PARTIAL", paidTotal: 100 } }));
+    const p = await propor(idt.admin, { operation: "remover_cobranca_do_mes", targetId: billingId, input: { reason: "Teste" } });
+    expect(p.status).toBe(422);
+    expect(p.body.error.code).toBe("invalid_state");
+  });
+
   it("E: upsell de Google Ads R$ 800 — criação única mesmo com o botão tocado duas vezes", async () => {
     const c = await createMrrClient(A, { name: `Cliente X ${TAG}` });
     const p = await propor(idt.admin, { operation: "criar_upsell", input: { clientId: c.id, description: "Google Ads", amount: 800 } });
